@@ -42,7 +42,8 @@ const DAYS_OF_WEEK = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const HEATMAP_HOURS = [8, 10, 12, 14, 16, 18, 20, 22];
 
 export const DailySalesHeatmap: React.FC = () => {
-  const { orders, shifts, setActiveWebTab } = useTsosStore();
+  const { orders, shifts, setActiveWebTab, themeMode } = useTsosStore();
+  const isServepoint = themeMode === 'servepoint';
 
   const [selectedDayView, setSelectedDayView] = useState<string>('today');
   const [activeVisualization, setActiveVisualization] = useState<'chart' | 'matrix' | 'schedule'>('chart');
@@ -188,14 +189,38 @@ export const DailySalesHeatmap: React.FC = () => {
     return (hourlyData || []).reduce((acc, h) => acc + (h?.revenue || 0), 0);
   }, [hourlyData]);
 
-  // Color helper for heatmap cells
+  // Color helper for heatmap cells — ServePoint uses a deep-teal monochrome ramp;
+  // other themes keep the original warm orange ramp.
   const getCellBgColor = (revenue: number) => {
+    if (isServepoint) {
+      if (revenue >= 2800) return 'bg-[#0F3D3E] text-white'; // Deep Teal — peak
+      if (revenue >= 2000) return 'bg-[#2C6E64] text-white'; // Mid Teal — high
+      if (revenue >= 1400) return 'bg-[#8FA99B] text-white'; // Sage-dark — moderate
+      if (revenue >= 900) return 'bg-[#D9E2DD] text-[#0F3D3E]'; // Sage — light
+      if (revenue >= 500) return 'bg-[#E9EFEA] text-[#0F3D3E]'; // Soft sage
+      return 'bg-[#F6F5F2] text-[#969696] border border-[#E3E7E0]'; // Ivory — lightest
+    }
     if (revenue >= 2800) return 'bg-[#C2410C] text-white'; // Deep Amber Red
     if (revenue >= 2000) return 'bg-[#EA580C] text-white'; // Vibrant Orange
     if (revenue >= 1400) return 'bg-[#F97316] text-white'; // Standard Orange
     if (revenue >= 900) return 'bg-[#FED7AA] text-[#9A3412]'; // Light Orange
     if (revenue >= 500) return 'bg-[#FFEDD5] text-[#C2410C]'; // Soft Peach
     return 'bg-[#FFF9F2] text-[#78716C]'; // Lightest
+  };
+
+  // Theme-aware rush-ramp for the ComposedChart bar cells (inline SVG attrs
+  // bypass CSS remaps, so they must be set from JS).
+  const barFillFor = (revenue: number) => {
+    if (isServepoint) {
+      if (revenue >= 2000) return '#0F3D3E';
+      if (revenue >= 1400) return '#2C6E64';
+      if (revenue >= 800) return '#8FA99B';
+      return '#D9E2DD';
+    }
+    if (revenue >= 2000) return '#C2410C';
+    if (revenue >= 1400) return '#EA580C';
+    if (revenue >= 800) return '#F97316';
+    return '#FED7AA';
   };
 
   // Custom Recharts Tooltip
@@ -320,12 +345,12 @@ export const DailySalesHeatmap: React.FC = () => {
             <div className="flex flex-wrap items-center justify-between text-xs text-[#57534E] gap-2">
               <div className="flex items-center gap-3 flex-wrap">
                 <div className="flex items-center gap-1.5">
-                  <span className="w-3 h-3 rounded-xs bg-[#F97316]" />
+                  <span className="w-3 h-3 rounded-xs" style={{ backgroundColor: isServepoint ? '#8FA99B' : '#F97316' }} />
                   <span>Sales Revenue (₹)</span>
                 </div>
                 <div className="flex items-center gap-1.5">
-                  <span className="w-3 h-0.5 bg-[#2563EB]" />
-                  <span className="w-2 h-2 rounded-full bg-[#2563EB]" />
+                  <span className="w-3 h-0.5" style={{ backgroundColor: isServepoint ? '#B88E2F' : '#2563EB' }} />
+                  <span className="w-2 h-2 rounded-full" style={{ backgroundColor: isServepoint ? '#B88E2F' : '#2563EB' }} />
                   <span>Orders Placed</span>
                 </div>
                 <div className="flex items-center gap-1.5 text-[#B91C1C]">
@@ -346,19 +371,19 @@ export const DailySalesHeatmap: React.FC = () => {
                   data={hourlyData}
                   margin={{ top: 20, right: 20, bottom: 20, left: 10 }}
                 >
-                  <CartesianGrid strokeDasharray="3 3" stroke="#F5EFE6" vertical={false} />
+                  <CartesianGrid strokeDasharray="3 3" stroke={isServepoint ? '#E3E7E0' : '#F5EFE6'} vertical={false} />
                   <XAxis
                     dataKey="timeLabel"
-                    tick={{ fontSize: 11, fill: '#78716C' }}
-                    axisLine={{ stroke: '#E7DFD5' }}
+                    tick={{ fontSize: 11, fill: isServepoint ? '#6B6B6B' : '#78716C' }}
+                    axisLine={{ stroke: isServepoint ? '#E3E7E0' : '#E7DFD5' }}
                     tickLine={false}
                   />
                   {/* Left Y Axis: Revenue */}
                   <YAxis
                     yAxisId="left"
                     orientation="left"
-                    tick={{ fontSize: 11, fill: '#78716C' }}
-                    axisLine={{ stroke: '#E7DFD5' }}
+                    tick={{ fontSize: 11, fill: isServepoint ? '#6B6B6B' : '#78716C' }}
+                    axisLine={{ stroke: isServepoint ? '#E3E7E0' : '#E7DFD5' }}
                     tickLine={false}
                     tickFormatter={(val) => `₹${val}`}
                   />
@@ -366,7 +391,7 @@ export const DailySalesHeatmap: React.FC = () => {
                   <YAxis
                     yAxisId="right"
                     orientation="right"
-                    tick={{ fontSize: 11, fill: '#78716C' }}
+                    tick={{ fontSize: 11, fill: isServepoint ? '#6B6B6B' : '#78716C' }}
                     axisLine={false}
                     tickLine={false}
                     tickFormatter={(val) => `${val}`}
@@ -396,17 +421,9 @@ export const DailySalesHeatmap: React.FC = () => {
                     radius={[6, 6, 0, 0]}
                     maxBarSize={38}
                   >
-                    {hourlyData.map((entry, index) => {
-                      const fillColor =
-                        entry.revenue >= 2000
-                          ? '#C2410C' // Deep Peak Red-Orange
-                          : entry.revenue >= 1400
-                          ? '#EA580C' // High Rush Orange
-                          : entry.revenue >= 800
-                          ? '#F97316' // Moderate
-                          : '#FED7AA'; // Low
-                      return <Cell key={`cell-${index}`} fill={fillColor} />;
-                    })}
+                    {hourlyData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={barFillFor(entry.revenue)} />
+                    ))}
                   </Bar>
 
                   {/* Order Volume Line */}
@@ -414,10 +431,10 @@ export const DailySalesHeatmap: React.FC = () => {
                     yAxisId="right"
                     type="monotone"
                     dataKey="orders"
-                    stroke="#2563EB"
+                    stroke={isServepoint ? '#B88E2F' : '#2563EB'}
                     strokeWidth={2.5}
-                    dot={{ r: 3.5, fill: '#2563EB', stroke: '#FFFFFF', strokeWidth: 1.5 }}
-                    activeDot={{ r: 5, fill: '#1D4ED8' }}
+                    dot={{ r: 3.5, fill: isServepoint ? '#B88E2F' : '#2563EB', stroke: '#FFFFFF', strokeWidth: 1.5 }}
+                    activeDot={{ r: 5, fill: isServepoint ? '#967221' : '#1D4ED8' }}
                   />
                 </ComposedChart>
               </ResponsiveContainer>
@@ -498,11 +515,14 @@ export const DailySalesHeatmap: React.FC = () => {
               <div className="flex items-center gap-1.5 text-[10px] font-mono text-[#57534E]">
                 <span>Low (&lt;₹500)</span>
                 <span className="w-4 h-3 rounded-xs bg-[#FFF9F2] border border-[#E9E0D6]" />
-                <span className="w-4 h-3 rounded-xs bg-[#FFEDD5]" />
-                <span className="w-4 h-3 rounded-xs bg-[#FED7AA]" />
-                <span className="w-4 h-3 rounded-xs bg-[#F97316]" />
-                <span className="w-4 h-3 rounded-xs bg-[#EA580C]" />
-                <span className="w-4 h-3 rounded-xs bg-[#C2410C]" />
+                <span
+                  className="w-4 h-3 rounded-xs"
+                  style={{ backgroundColor: isServepoint ? '#F6F5F2' : '#FFEDD5', border: isServepoint ? '1px solid #E3E7E0' : undefined }}
+                />
+                <span className="w-4 h-3 rounded-xs" style={{ backgroundColor: isServepoint ? '#D9E2DD' : '#FED7AA' }} />
+                <span className="w-4 h-3 rounded-xs" style={{ backgroundColor: isServepoint ? '#8FA99B' : '#F97316' }} />
+                <span className="w-4 h-3 rounded-xs" style={{ backgroundColor: isServepoint ? '#2C6E64' : '#EA580C' }} />
+                <span className="w-4 h-3 rounded-xs" style={{ backgroundColor: isServepoint ? '#0F3D3E' : '#C2410C' }} />
                 <span>Peak (&gt;₹2,800)</span>
               </div>
             </div>

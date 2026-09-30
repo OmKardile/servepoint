@@ -1,6 +1,6 @@
 # TSOS Help & Credentials Reference
 
-- **Document Version**: 2.7.0 (2026-10-01)
+- **Document Version**: 2.7.1 (2026-10-01)
 
 ## 🔑 Login Credentials
 
@@ -18,6 +18,16 @@
 - **ServePoint** (owner Figma — EXACT tokens since v2.6.7/ADR-0012: ivory `#F6F5F2` canvas, signature sage `#D9E2DD` surfaces, deep-teal `#0F3D3E` primary, gold `#B88E2F` accent, near-black text, **Poppins**) is the **default theme for the authenticated app** since v2.6.6 (ADR-0011). The header toggle cycles `servepoint → tessera → dark`; `warm`/`obsidian` remain reachable via `setThemeMode()`.
 - **⚠️ Login screen is FROZEN (ADR-0010) and always renders in Tessera**: while logged out, the document is force-pinned to Tessera so the approved login look never changes — including the reserved Surface Pack illustrations, which wait for an explicit owner unfreeze. See [`decisions.md`](decisions.md) ADR-0010/0011.
 - Selection persists in `localStorage` under `tsos_theme_mode` (legacy `tessera` values migrate to `servepoint` once).
+
+---
+
+## 📊 Reports Analytics (v2.7.1)
+
+The **Reports, Sales & Unit Economics** screen is now fully ServePoint-themed, with two new owner-facing features:
+
+- **Week-over-Week comparison** — the *Current Week Daily Sales & Revenue Trend* chart draws a dashed **"Last Week (₹)"** curve behind this week's solid line. The highlights strip shows a **+% WoW** chip (green = growing, red = shrinking) next to Total Orders, the chart tooltip reveals *"Same day last week"* for every hovered day, and a footnote spells out the totals (e.g. *week-to-date ₹5,779 vs ₹1,608 (+259% WoW)*).
+- **Live Operational Pulse auto-refresh** — the *Live Operational Pulse* strip (last-60-min revenue, active tables, kitchen load, staff on shift) now refreshes itself **every 30 seconds**, with an "auto 30s" badge and a live "upd HH:MM:SS" timestamp.
+- **Rush heatmap in ServePoint teal** — the *Daily Sales Heatmap* bars and 7-Day Grid cells use a calm deep-teal intensity ramp (darkest = busiest) with the gold Orders line; the dashed red Peak Rush Threshold stays as the staffing alarm.
 
 ---
 

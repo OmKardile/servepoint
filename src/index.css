@@ -1115,6 +1115,58 @@
   background-color: rgba(184, 142, 47, 0.14) !important;
 }
 
+/* --- 5b. Deep warm ramp (peak cards, heat chrome) → teal/gold/danger --- */
+[data-theme="servepoint"] .text-\[\#C2410C\],
+[data-theme="servepoint"] .text-\[\#9A3412\] {
+  color: #967221 !important;
+}
+[data-theme="servepoint"] .bg-\[\#C2410C\] {
+  background-color: #0F3D3E !important;
+}
+[data-theme="servepoint"] .bg-\[\#EA580C\] {
+  background-color: #2C6E64 !important;
+}
+[data-theme="servepoint"] .hover\:bg-\[\#EA580C\]:hover {
+  background-color: #967221 !important;
+}
+[data-theme="servepoint"] .bg-\[\#FED7AA\],
+[data-theme="servepoint"] .bg-\[\#FFEDD5\],
+[data-theme="servepoint"] .bg-\[\#FFF7ED\],
+[data-theme="servepoint"] .bg-\[\#FFF4E5\] {
+  background-color: rgba(217, 226, 221, 0.7) !important;
+}
+[data-theme="servepoint"] .border-\[\#FED7AA\],
+[data-theme="servepoint"] .border-\[\#FDBA74\],
+[data-theme="servepoint"] .border-\[\#F5E8DC\],
+[data-theme="servepoint"] .border-\[\#FCD34D\],
+[data-theme="servepoint"] .border-\[\#FCD34D\]\/40 {
+  border-color: #E3E7E0 !important;
+}
+[data-theme="servepoint"] .ring-\[\#F97316\] {
+  --tw-ring-color: #B88E2F !important;
+}
+
+/* --- 5c. Cool blue accents → ServePoint info teal / deep teal --- */
+[data-theme="servepoint"] .bg-\[\#2563EB\] {
+  background-color: #0F3D3E !important;
+}
+[data-theme="servepoint"] .text-\[\#0369A1\],
+[data-theme="servepoint"] .text-\[\#0284C7\],
+[data-theme="servepoint"] .text-\[\#2563EB\] {
+  color: #2C7A7B !important;
+}
+[data-theme="servepoint"] .bg-\[\#E0F2FE\] {
+  background-color: rgba(44, 122, 123, 0.12) !important;
+}
+
+/* --- 5d. Danger red variants → exact ServePoint danger --- */
+[data-theme="servepoint"] .text-\[\#B91C1C\] {
+  color: #DC2626 !important;
+}
+[data-theme="servepoint"] .border-\[\#B91C1C\] {
+  border-color: #DC2626 !important;
+}
+
 /* --- 6. Borders → sage hairline --- */
 [data-theme="servepoint"] .border-\[\#E9E0D6\],
 [data-theme="servepoint"] .border-\[\#D5C9BD\],

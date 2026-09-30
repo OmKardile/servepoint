@@ -416,3 +416,32 @@ Unresolved Issues / Risks / Next-phase Priorities:
 2. Realtime POS→KDS end-to-end verification still open.
 3. Menu builder mutations still local-only; no automated tests.
 4. Reminder: MultiEdit applies sequentially and can partially apply on failure — verify state after each batch; byte-verify (sed|od) when echoes look doubled/stale (ANSI transport scrubber artifacts).
+
+---
+Task ID: 14
+Agent: glm-5.3
+Task: Cron webDevReview round — QA sweep (found critical sync bug) + cloud order UUID fix + ErrorBoundary + Reports/ReceiptModal explicit ServePoint + WhatsApp receipt sharing (v2.7.0)
+
+Work Log:
+- QA sweep first: port 3000 HTTP 200; Owner session alive; navigated POS/Reports/KDS via agent-browser. Found REAL bug: every sale logged `Supabase order insert failed: 22P02 invalid input syntax for type uuid: "loc-demo-01"` — orders NEVER reached the live cloud since v2.6.2, and every attempt polluted the offline queue. Also found React "no error boundary" warning (no boundary existed).
+- BUG FIX (src/lib/realtimeService.ts + store.ts call site): added cached `resolveCloudIds(tenantId, locationId, tenantSlug)` — resolves demo ids to live UUIDs exactly like menu hydration (tenant by slug `coolkafe`, location = tenant's first locations row; valid UUID pairs pass through). `syncOrderToSupabase` now takes optional tenantSlug (store passes `currentTenant?.slug || location.slug`); resolution failure queues locally instead of hammering Postgres. Added local→cloud order-id Map: successful inserts record `ord-… → cloud UUID` so `updateOrderStatus` (KDS bump) targets the right cloud row; unmapped non-UUID ids skip the cloud call (no more 22P02 from status updates). `PendingOfflineOrder` carries tenantSlug for deferred flushes; order_items insert uses resolved tenant UUID.
+- Post-fix verification: sale E2E error MOVED from 22P02 → `42501` RLS (anon INSERT policy on orders pending migration-001 re-run) — insert now REACHES the orders table with valid UUIDs. Discriminated the catch: 42501 → actionable console.info ("RLS blocked — re-run migration 001; order kept local + queued"); other errors keep full warning.
+- Added top-level ErrorBoundary (src/components/common/ErrorBoundary.tsx, wired in main.tsx): ServePoint recovery card — ivory canvas, sage AlertTriangle chip, deep-teal Reload CTA, Back-to-POS ghost, error message inspector. Closes the white-screen-on-crash QA gap.
+- Reports/Dashboard explicit ServePoint pass (frame 219:23581): white header + #E3E7E0 hairline + sage chip w/ gold BarChart3; gold #B88E2F→#967221 Export split-CTA (was Tessera chartreuse pill); white KPI cards ×4 (#E3E7E0 hairline, gold-border hover, #6B6B6B labels, Poppins bold #1A1A1A values — mono retired; sage icon chips w/ deep-teal glyphs); Savings = gold-tinted hero (#D9E2DD/70, #B88E2F/40 border, pressed-gold value); Top Items gold bars on sage/70 tracks; Payment tiles restrained trio (UPI sage/deep-teal, Cash gold-tint/pressed-gold, Card teal-tint/deep-teal) replacing warm orange/green/blue; Export modal white chrome + gold/teal/pressed-gold download CTAs; toast deep-teal w/ gold check. Tessera branches preserved everywhere.
+- OrderTypeBreakdown donut dual-palette: ServePoint = white card + #E3E7E0, slices Dine-In #0F3D3E / Takeaway #B88E2F / Delivery #8FA99B, ivory slice strokes, #1A1A1A center count, white tooltip; reads themeMode from store directly. Tessera branch untouched.
+- ReceiptModal explicit ServePoint (7th explicit surface): sage #D9E2DD header, white icon chip w/ gold printer, gold-tinted PAID badge (was emerald), paper-width selector w/ deep-teal active pill, gold tab underlines, ivory receipt canvas, white footer; Print = deep-teal #0F3D3E→#0B3132 w/ gold glyph; Next Sale = gold. Thermal bill/KOT previews intentionally stay monochrome paper.
+- NEW FEATURES in ReceiptModal: WhatsApp share (builds plain-text bill — cafe header/GSTIN/meta/items/totals/payment/footer; opens wa.me direct chat when guest phone on order, else share picker) + Copy-to-clipboard w/ feedback chips; shareFeedback banner merges with printFeedback.
+- Verified: npx tsc --noEmit → 0 errors; console --clear + fresh load → 0 errors / 0 warnings; full sale E2E in ServePoint (2 items ₹126 → UPI QR tender → Confirm → Order #105 PAID; receipt Copy → "Receipt copied to clipboard."; Next Sale resets); KDS shows #105 NEW → bump to PREPARING with zero UUID errors; Reports ServePoint visuals confirmed via screenshots (header/KPIs/donut white + teal/gold); theme cycle servepoint→dark→servepoint (Tessera Reports intact in dark); dev.log clean.
+- Docs: CHANGELOG [2.7.0] (old [2.6.9] heading preserved — heading-consumption pattern); compact.md 2.7.0 + v2.7.0 shipped paragraph; technical-documentation.md 2.7.0 + §8.2 Cloud UUID Resolution + explicit-surfaces extended (Reports/Dashboard + ReceiptModal); business-documentation.md 2.7.0; README §6 bullets (cloud order sync + ErrorBoundary); help.md 2.7.0 + new "🧾 Receipt Sharing" section. decisions.md unchanged (no new ADR — bugfix + ADR-0011/0012 continuation).
+- Commit 6aa8b84 pushed to main (2927a4a..6aa8b84); no stray auto-committer commits this round.
+
+Stage Summary:
+- v2.7.0 shipped: the POS→cloud pipeline is finally architecturally correct (UUID resolution + id map + guarded status updates + RLS-aware logging); Reports/Dashboard + ReceiptModal are the 7th/8th explicit ServePoint surfaces; receipts now share via WhatsApp/Copy; app has a crash safety net.
+- Cloud RLS note: orders INSERT still denied to anon (42501) until migration 001 is re-run — expected, queued locally, logged actionably.
+- Next highest-value explicit passes: WeeklySalesLineChart + DailySalesHeatmap + LiveOpsPulse inside Reports (still warm/Tessera mixes), then Orders two-pane per Bills frames, then SuperAdmin.
+
+Unresolved Issues / Risks / Next-phase Priorities:
+1. orders INSERT RLS (42501) + customers/offers anon 404 — both need migration 001 DDL/policies re-run on the live project (no Postgres connection string in sandbox; owner must run in Supabase SQL editor).
+2. Realtime POS→KDS cloud-path E2E still pending the RLS fix; local Zustand path verified again this round.
+3. Menu builder mutations local-only; no automated tests.
+4. MultiEdit applies sequentially — byte-verify (sed|od) when echoes look doubled/stale (transport scrubber artifacts).
