@@ -241,3 +241,28 @@ Unresolved Issues / Risks / Next-phase Priorities:
 4. VariantModal visually verified only in its pre-polish state (live DB items have no variants so the modal doesn't open for cloud menus; code is type-safe and conditional-safe — verify if variants are ever seeded).
 5. Next Tessera surfaces: OrdersScreen, SuperAdmin dashboard, Storefront/OrderTracking (diner-facing), Customers/Inventory/Menu/Tables/Offers/Shifts/Settings.
 6. No automated tests yet (Vitest + RTL: theme store, cart engine, RBAC, menu hydration mapper).
+
+---
+
+Task ID: 6-render-blueprint
+Agent: glm-5.3 (Z.ai Code)
+Task: User request — "configure render blueprint file properly; change create static site name to tsos-pos; does it has to be static site or web service?" Rewrite render.yaml, rename the service, and answer the static-vs-web-service question authoritatively (ADR-0008).
+
+Work Log:
+- Read existing `render.yaml`: found `tsos-cafe-pos` name, **hardcoded Supabase anon key committed to Git**, bare `npm run build` (would fail if Render doesn't auto-install deps — repo carries bun.lock which Render's npm flow doesn't consume), no Node version pin, no caching/security headers, no PR previews.
+- Rewrote `render.yaml` (v2.6.3): service renamed **`tsos-pos`**; `runtime: static` kept; build → `npm install --include=dev && npm run build`; `NODE_VERSION=22` pinned (Vite 8 needs ≥20.19/22.12); env vars `VITE_SUPABASE_URL` + `VITE_SUPABASE_ANON_KEY` → `sync: false` (Render prompts at apply time, keys out of Git; comment warns service_role key must never go here); headers: `/assets/*` immutable 1y cache (Vite content-hashed), `/index.html` no-cache (instant deploy propagation), global nosniff/referrer-policy/permissions-policy; `autoDeploy: true` + `pullRequestPreviewsEnabled: true` (free for static sites); SPA rewrite `/* → /index.html` preserved (deep links /coolkafe/pos, /:slug/t1?token=…, /track/:id, /superadmin).
+- Blueprint header comment documents **why Static Site not Web Service**: TSOS is a pure client-side Vite SPA — Postgres/Auth/Realtime/RLS all live in Supabase, so no Node server process is needed at runtime; Render free Web Services sleep after 15 min idle (50s+ cold starts unacceptable for cashier POS + diner QR scans) while static sites are free CDN assets that never sleep. Matches ADR-0008 (Web Service explicitly rejected there).
+- **Answered the user's question**: Static Site is correct for this architecture; a Web Service would only be warranted if TSOS later adds SSR, its own Node API/websocket layer, or server-side-secret operations.
+- Validated YAML with python yaml.safe_load (name/runtime/buildCommand/routes/envVars/headers all parse as intended).
+- Docs updated same turn: CHANGELOG ([2.6.3] entry), README §3 deployment bullet, technical-documentation (version 2.6.3 + §12.1 rewritten), business-documentation + help (version 2.6.3), decisions.md (ADR-0008 update note), compact.md (version + v2.6.3 activity).
+- No app code changed — dev server untouched (HTTP 200); TSOS UI unaffected.
+
+Stage Summary:
+- **v2.6.3 shipped**: production-grade `render.yaml` — service `tsos-pos`, secret-free Git history going forward, deterministic npm build on Node 22, immutable asset caching + security headers, auto-deploy + PR previews. Static-vs-Web-Service rationale now self-documents in the blueprint, README, tech-doc §12.1, decisions.md, and CHANGELOG.
+- To deploy: Render Dashboard → New + → Blueprint → select `OmKardile/tsos-alt` → fill the two prompted env vars → Create Resources.
+
+Unresolved Issues / Risks / Next-phase Priorities (unchanged from task 5):
+1. customers + offers live tables still 404 to anon (needs migration 001 DDL re-run — no Postgres connection string in sandbox).
+2. Realtime POS→KDS end-to-end verification still open.
+3. Next Tessera surfaces: OrdersScreen, SuperAdmin dashboard, Storefront/OrderTracking, then Customers/Inventory/Menu/Tables/Offers/Shifts/Settings.
+4. Menu builder mutations still local-only; no automated tests yet.

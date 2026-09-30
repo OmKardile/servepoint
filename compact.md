@@ -3,11 +3,12 @@
 > **Purpose**: Single-page dense summary of the current TSOS project state, for fast cold re-onboarding by any agent or contributor. Updated alongside every code change. For full chronological detail, see [`docs/compacts/`](docs/compacts/README.md) (7 compacts) and [`worklog.md`](worklog.md) (live agent handover).
 
 - **Project**: TSOS — The Cafe Operating System
-- **Version**: 2.6.2
+- **Version**: 2.6.3
 - **Repo**: https://github.com/OmKardile/tsos-alt
 - **Author**: Omkar Kardile <omkardile84@gmail.com>
-- **Last Updated**: 2026-09-30
-- **Default Theme**: Tessera (editorial dark / forest + chartreuse) — see [`CHANGELOG.md`](CHANGELOG.md) v2.6.0–v2.6.2
+- **Last Updated**: 2026-10-01
+- **Default Theme**: Tessera (editorial dark / forest + chartreuse) — see [`CHANGELOG.md`](CHANGELOG.md) v2.6.0–v2.6.3
+- **Render Blueprint**: `render.yaml` → Static Site **`tsos-pos`** (v2.6.3 hardened; keys via `sync: false`)
 
 ---
 
@@ -78,6 +79,8 @@ npm run dev   # or bun run dev
 
 ## Recent activity (live agent handover)
 See [`worklog.md`](worklog.md) for the chronological agent work log.
+
+**v2.6.3 (2026-10-01) shipped**: **Render blueprint hardened** — `render.yaml` rewritten: service renamed **`tsos-pos`** (was `tsos-cafe-pos`), hardcoded Supabase anon key removed from Git (`VITE_SUPABASE_URL`/`VITE_SUPABASE_ANON_KEY` now `sync: false` → prompted at apply time), build command `npm install --include=dev && npm run build` + `NODE_VERSION=22` (deterministic; repo has bun.lock which Render's npm flow ignores), immutable `/assets/*` cache + `no-cache` index.html + security headers (nosniff/referrer/permissions), `autoDeploy` + free PR previews. Blueprint header documents **why Static Site not Web Service** (pure SPA + Supabase backend; free Web Services sleep after 15 min → 50s+ cold starts vs static sites that never sleep) per ADR-0008. YAML validated; no app code changed.
 
 **v2.6.2 (2026-09-30) shipped**: **Live cloud menu + tender polish** — `loadMenuFromCloud()` in store.ts hydrates categories/menu_items from Supabase per tenant (resolves live tenant UUID by slug when currentTenant.id is a local seed id; falls back to seed menu when empty/unreachable). Live DB seeded: 4 categories + 7 menu_items for CoolKafe (anon-readable; POS/Menu/Storefront render cloud data — confirmed via console log + alphabetical sort). Fixed provisionTenant UUID bug (string ids like `cat_<slug>_coffee` silently failed against UUID PKs → crypto.randomUUID()). VariantModal + PaymentModal fully Tessera (forest shells, tessera-block shadows, status-palette method tiles, tessera-cta Confirm Payment, chartreuse confetti; QR kept white for scanning). E2E verified: live menu → cart → Charge/Pay → Escape closes PaymentModal (outstanding v2.5.0 test ✓) → UPI simulate → Order #104. tsc 0 errors, all routes clean.
 

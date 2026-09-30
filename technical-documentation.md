@@ -1,9 +1,9 @@
 # TSOS Technical Documentation & Architecture Specification
 
 - **System**: TSOS (The Cafe Operating System)
-- **Version**: 2.6.2
+- **Version**: 2.6.3
 - **Architect**: Lead Full-Stack Security & Platform Architect
-- **Updated**: September 30, 2026
+- **Updated**: October 1, 2026
 
 ---
 
@@ -355,10 +355,14 @@ A Recharts donut chart visualizing the split of orders by type: **Dine-In** (ora
 
 TSOS is architected as a decoupled client-side Single-Page Application (SPA) interfacing with a managed Supabase PostgreSQL backend. It supports dual enterprise cloud hosting deployments:
 
-### 12.1 Render Static Site (`render.yaml`)
-- **Runtime**: `static` (zero-cost edge CDN hosting).
-- **Zero Cold Starts**: Unlike Render Web Services (which spin down after 15 min on the free tier), Render Static Sites are globally distributed CDN assets and **never sleep**, guaranteeing immediate response times when diners scan table QR codes.
-- **Infrastructure-as-Code (IaC)**: Managed via [`render.yaml`](file:///d:/work/megatech/mega-tsos/render.yaml) using Render Blueprints.
+### 12.1 Render Static Site (`render.yaml`) — v2.6.3 blueprint
+- **Service name**: `tsos-pos` (renamed from `tsos-cafe-pos` in v2.6.3).
+- **Runtime**: `static` (zero-cost edge CDN hosting). **Static Site, not Web Service** — TSOS is a pure client-side SPA; all backend concerns (PostgreSQL, Auth, Realtime websockets, RLS) live in Supabase, so no Node server process is required at runtime. Unlike Render Web Services (which spin down after 15 min on the free tier and incur 50s+ cold starts), Static Sites are globally distributed CDN assets and **never sleep**, guaranteeing immediate response times when diners scan table QR codes.
+- **Infrastructure-as-Code (IaC)**: Managed via [`render.yaml`](render.yaml) using Render Blueprints (Dashboard → New + → Blueprint → select repo).
+- **Build**: `npm install --include=dev && npm run build` with `NODE_VERSION=22` pinned via env var (Vite 8 requires Node ≥ 20.19/22.12; devDependencies are installed explicitly so the build is deterministic).
+- **Headers**: `/assets/*` → `Cache-Control: public, max-age=31536000, immutable` (Vite content-hashed bundles); `/index.html` → `no-cache` (instant deploy propagation); global `X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy` security headers.
+- **Deploy semantics**: `autoDeploy: true` + `pullRequestPreviewsEnabled: true` (free for static sites).
+- **Secret hygiene**: `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` declared with `sync: false` — Render prompts for values at blueprint-apply time; keys are never committed. The anon key is RLS-protected by design; the `service_role` key must never be placed in client-facing configuration.
 - **Client-Side Routing Rewrite**:
   ```yaml
   routes:

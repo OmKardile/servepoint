@@ -75,6 +75,7 @@
 - **Alternatives rejected**: Render Web Service (sleeps after 15 min), Netlify, custom nginx.
 - **Consequences**: ✅ Free, no cold starts, deep-linkable QR URLs. ⚠️ Two configs to keep in sync.
 - **Full ADR**: [docs/decisions/0008-cloud-deployment-render-and-vercel.md](docs/decisions/0008-cloud-deployment-render-and-vercel.md)
+- **Update (v2.6.3, 2026-10-01)**: Blueprint hardened — service renamed **`tsos-pos`**; Supabase keys moved out of Git (`sync: false`, prompted at apply time); build pinned to `npm install --include=dev && npm run build` + `NODE_VERSION=22`; added immutable `/assets/*` caching, `no-cache` index.html, security headers, `autoDeploy` + free PR previews. Static-vs-Web-Service rationale (SPA + Supabase → no runtime server; free Web Services sleep, static sites never do) documented in the blueprint header itself.
 
 ---
 
