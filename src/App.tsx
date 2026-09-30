@@ -309,7 +309,7 @@ export default function App() {
     return (
       <>
         <Header onSignOut={handleSignOut} />
-        <SuperAdminScreen />
+        <SuperAdminScreen onSignOut={handleSignOut} />
       </>
     );
   }

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useTsosStore } from '../../lib/store';
 import { TenantBusiness, BusinessStatus, SubscriptionPlanId } from '../../types';
 import { SAAS_PLANS } from '../../data/saasSeedData';
@@ -36,11 +36,23 @@ export const BusinessDirectory: React.FC = () => {
     setImpersonatedTenant,
     setActiveSurface,
     setActiveWebTab,
+    selectedSuperAdminBusinessId,
+    setSelectedSuperAdminBusinessId,
   } = useTsosStore();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [planFilter, setPlanFilter] = useState<string>('all');
+
+  // Quick-jump consumer: when the Dashboard/Shell jumps to a tenant, pre-filter
+  // the directory to that business and clear the pending selection.
+  useEffect(() => {
+    if (!selectedSuperAdminBusinessId) return;
+    const target = tenantBusinesses.find((b) => b.id === selectedSuperAdminBusinessId);
+    if (target) setSearchQuery(target.name);
+    setSelectedSuperAdminBusinessId(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedSuperAdminBusinessId]);
 
   // Modals state
   const [editingBusiness, setEditingBusiness] = useState<TenantBusiness | null>(null);

@@ -25,6 +25,7 @@
 - Dynamic cart engine with split payments, loyalty redemption, and platform fee computation.
 - Thermal receipt preview and printing generator.
 - **Two-pane Orders Workspace (v2.7.2)**: the Orders Directory renders as a ServePoint bill browser — card list with status/date filters + combined-value summary on the left, full order detail pane (items, GST/fee totals, notes, loyalty) with one-tap **status advance** (KDS/cloud synced) and filtered **CSV ledger export** on the right.
+- **SuperAdmin Platform Dashboard (v2.8.0)**: the `/superadmin` console renders the ServePoint sidebar shell (gold active pills, profile card, quick tenant-jump search that lands pre-filtered in the Directory) and a 6-card analytics grid — dual-axis Daily Sales trend with a shared **Today/7d/30d range selector**, interactive **MRR-by-Plan donut** (hover swaps the center), Top/Busiest Tenants leaderboards with click-to-jump, a **Trial Radar** urgency strip, lifecycle/health/ops cards, and a one-click **CSV platform snapshot** export.
 
 ### 3. Kitchen Display System (`/:slug/kds`)
 - Live order queue organized by preparation stages (`new`, `preparing`, `ready`, `completed`).

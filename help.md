@@ -1,6 +1,6 @@
 # TSOS Help & Credentials Reference
 
-- **Document Version**: 2.7.2 (2026-10-01)
+- **Document Version**: 2.8.0 (2026-10-01)
 
 ## 🔑 Login Credentials
 
@@ -18,6 +18,18 @@
 - **ServePoint** (owner Figma — EXACT tokens since v2.6.7/ADR-0012: ivory `#F6F5F2` canvas, signature sage `#D9E2DD` surfaces, deep-teal `#0F3D3E` primary, gold `#B88E2F` accent, near-black text, **Poppins**) is the **default theme for the authenticated app** since v2.6.6 (ADR-0011). The header toggle cycles `servepoint → tessera → dark`; `warm`/`obsidian` remain reachable via `setThemeMode()`.
 - **⚠️ Login screen is FROZEN (ADR-0010) and always renders in Tessera**: while logged out, the document is force-pinned to Tessera so the approved login look never changes — including the reserved Surface Pack illustrations, which wait for an explicit owner unfreeze. See [`decisions.md`](decisions.md) ADR-0010/0011.
 - Selection persists in `localStorage` under `tsos_theme_mode` (legacy `tessera` values migrate to `servepoint` once).
+
+---
+
+## 🛰️ SuperAdmin Platform Console (v2.8.0)
+
+Log in as **Super Admin** and open `/superadmin` (or use the sidebar's *Switch to Cafe View* to come back). In the default theme the console matches the owner's ServePoint Dashboard frame:
+
+- **Navigate** — deep-teal sidebar with gold active pills: **Dashboard**, **Businesses** (count badge), **Provisioning Wizard**, **Subscriptions**, **Audit Trail** (count badge). The profile card at the bottom signs you out. On phones/tablets the sidebar becomes a scrollable pill strip at the top of the content.
+- **Jump to a tenant** — the "Jump to tenant..." search in the top bar matches business name, city, owner or slug; picking a result opens the Businesses Directory pre-filtered to that cafe.
+- **Read the dashboard** — Daily Sales shows platform orders (teal, left axis) and revenue (gold ₹, right axis); **MRR by Plan** donut swaps its center to any plan you hover; the sage tiles show Platform Orders and Recurring Revenue; Top/Busiest Tenants leaderboards click through to the Directory; the **Trials ending soon** strip flags trials running out (red ≤3 days, gold ≤7 days).
+- **Change the window** — the **Today / Last 7 Days / Last 30 Days** selector re-scales the trend chart, the Top-Tenants revenue and the banner GMV line. **Export CSV** downloads the full tenant snapshot (status, plan, rates, orders, revenue, trial/billing dates).
+- **Themes** — the sidebar shell is ServePoint-only; Tessera and dark mode keep the classic "TableSide" console (the toggle cycles servepoint → tessera → dark).
 
 ---
 

@@ -1167,6 +1167,76 @@
   border-color: #DC2626 !important;
 }
 
+/* --- 5e. SuperAdmin palette generalization (purple / green / amber / soft red)
+   so the Directory, Wizard, Subscriptions and Audit tabs ride the owner theme
+   without individual rewrites --- */
+[data-theme="servepoint"] .bg-\[\#7C3AED\] {
+  background-color: #0F3D3E !important;
+}
+[data-theme="servepoint"] .text-\[\#7C3AED\],
+[data-theme="servepoint"] .text-\[\#6B21A8\],
+[data-theme="servepoint"] .text-\[\#581C87\],
+[data-theme="servepoint"] .text-\[\#7E22CE\],
+[data-theme="servepoint"] .text-\[\#9333EA\],
+[data-theme="servepoint"] .text-\[\#A855F7\] {
+  color: #2C7A7B !important;
+}
+[data-theme="servepoint"] .bg-\[\#F5F3FF\],
+[data-theme="servepoint"] .bg-\[\#FAF5FF\],
+[data-theme="servepoint"] .bg-\[\#F3E8FF\] {
+  background-color: rgba(217, 226, 221, 0.7) !important;
+}
+[data-theme="servepoint"] .border-\[\#F3E8FF\],
+[data-theme="servepoint"] .border-\[\#E9D5FF\] {
+  border-color: #E3E7E0 !important;
+}
+[data-theme="servepoint"] .bg-\[\#DCFCE7\] {
+  background-color: rgba(217, 226, 221, 0.75) !important;
+}
+[data-theme="servepoint"] .bg-\[\#F0FDF4\],
+[data-theme="servepoint"] .bg-\[\#ECFDF5\] {
+  background-color: rgba(217, 226, 221, 0.55) !important;
+}
+[data-theme="servepoint"] .text-\[\#166534\],
+[data-theme="servepoint"] .text-\[\#15803D\],
+[data-theme="servepoint"] .text-\[\#14532D\],
+[data-theme="servepoint"] .text-\[\#16A34A\],
+[data-theme="servepoint"] .text-\[\#059669\],
+[data-theme="servepoint"] .text-\[\#10B981\] {
+  color: #17803D !important;
+}
+[data-theme="servepoint"] .border-\[\#BBF7D0\],
+[data-theme="servepoint"] .border-\[\#DCFCE7\] {
+  border-color: #E3E7E0 !important;
+}
+[data-theme="servepoint"] .bg-\[\#FEF3C7\],
+[data-theme="servepoint"] .bg-\[\#FFFBEB\] {
+  background-color: rgba(184, 142, 47, 0.14) !important;
+}
+[data-theme="servepoint"] .text-\[\#92400E\],
+[data-theme="servepoint"] .text-\[\#78350F\],
+[data-theme="servepoint"] .text-\[\#D97706\],
+[data-theme="servepoint"] .text-\[\#F59E0B\] {
+  color: #967221 !important;
+}
+[data-theme="servepoint"] .border-\[\#FDE68A\],
+[data-theme="servepoint"] .border-\[\#FEF3C7\] {
+  border-color: #E3E7E0 !important;
+}
+[data-theme="servepoint"] .bg-\[\#FEF2F2\] {
+  background-color: rgba(220, 38, 38, 0.08) !important;
+}
+[data-theme="servepoint"] .text-\[\#991B1B\],
+[data-theme="servepoint"] .text-\[\#7F1D1D\] {
+  color: #DC2626 !important;
+}
+[data-theme="servepoint"] .border-\[\#FEE2E2\] {
+  border-color: rgba(220, 38, 38, 0.25) !important;
+}
+[data-theme="servepoint"] .bg-\[\#F0E8DF\] {
+  background-color: #F1F4F0 !important;
+}
+
 /* --- 6. Borders → sage hairline --- */
 [data-theme="servepoint"] .border-\[\#E9E0D6\],
 [data-theme="servepoint"] .border-\[\#D5C9BD\],
