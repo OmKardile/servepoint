@@ -184,3 +184,33 @@ Unresolved Issues / Risks / Next-phase Priorities (delta from prior round):
 2. **Realtime verification** — now that live DB is connected, a future round should confirm that a new order inserted via POS appears in KDS instantly via Supabase Realtime.
 3. **No automated tests** — repo ships no tests; candidate next round: add Vitest + React Testing Library smoke tests for the auth flow, cart engine, RBAC guard, and the new useCountUp hook.
 4. **PaymentModal Escape** — tested VariantModal Escape (✓ confirmed). PaymentModal Escape uses the same pattern (gated on `!isProcessing`) but wasn't explicitly end-to-end tested this round because triggering it requires a full cart + "Charge / Pay" click flow. The code is symmetric to VariantModal so should work; verify in a future round.
+
+---
+
+Task ID: 4-tessera-chrome
+Agent: glm-5.3 (Z.ai Code)
+Task: Continue the Tessera UI redesign iterate→review→redesign loop. Sandbox had been RESET (fresh Next.js scaffold, no TSOS repo, no dev server) — first re-clone + restore, then redesign the next priority surfaces: Header → WebNavbar → PosScreen/CartDrawer → KDS. Update 7 docs, commit + push.
+
+Work Log:
+- **Sandbox recovery (new session)**: /home/z/my-project contained only the Next.js scaffold (git "Initial commit", no TSOS files, no worklog.md — /tmp had been cleaned). Re-cloned `OmKardile/tsos-alt` with the PAT into /home/z/tsos-clone, moved all repo files (incl. .git, .env.example, docs/, supabase/) into /home/z/my-project, preserved sandbox infra (.zscripts/, Caddyfile, skills/, download/, upload/). Recreated .env (DATABASE_URL + VITE_SUPABASE_URL + VITE_SUPABASE_ANON_KEY). Reset file modes (chmod 644 via git ls-files), restored .env.example from git. `bun install` → 248 packages.
+- **Recreated .zscripts/dev.sh + run-vite.sh** (the preserved ones were the sandbox's Next.js-flavored defaults referencing `bun run db:push` which doesn't exist in this Vite SPA). Dev server up: Vite 8.3.1 on :3000, HTTP 200, tsc 0 errors.
+- **Verified v2.6.0 baseline**: `data-theme="tessera"`, body bg #0A1410, h1 "TSOS Cafe Operating System" in Instrument Serif italic. Auth + POS render clean, zero console errors.
+- **Header.tsx redesign** (explicit `isTessera` conditionals, warm/dark untouched): TSOS brand pill → chartreuse block w/ `tessera-block` 3D shadow + uppercase tracking; tenant name serif italic; ₹0/mo emerald + fee chartreuse; outlet select/printer/audio/dark-toggle/profile chip → forest ghost style with chartreuse hover; Fast PIN → `tessera-cta`; profile dropdown → `tessera-block` + forest gradient card + uppercase chartreuse role badge + serif name; role avatars → Tessera status palette (SA #C084FC / owner #C5F82A / mgr #60A5FA / cashier #34D399); impersonation banner → #C084FC soft.
+- **WebNavbar.tsx redesign**: active tab → chartreuse tint block + NEW 2px chartreuse baseline marker; inactive → sage ghost; badges (KDS/Staff/Stock) → soft-tinted status chips (amber/emerald/rose 15%/40%); More dropdown → `tessera-block` forest panel; low-stock chip → rose soft. Added `tesseraBadge` field to tab type.
+- **PosScreen.tsx redesign**: status ribbon → forest surface w/ chartreuse outlet + emerald drawer chip + chartreuse tabular-nums clock; search input chartreuse focus; category pills → solid chartreuse active w/ `shadow-[2px_2px_0_#1F3D2E]`; menu cards → forest + chartreuse hover border + `hover:-translate-y-0.5` lift + layered shadow, uppercase chartreuse CUSTOMIZABLE badge, chartreuse tabular-nums prices, chartreuse-tint Add buttons (fill solid on hover); veg toggle/BT chip/empty state tuned.
+- **CartDrawer.tsx redesign**: forest drawer + moss dividers; chartreuse items pill; order-type segmented control w/ solid chartreuse active + block shadow; cart rows canvas-inset w/ chartreuse totals + notes; qty stepper forest inset; **Charge/Pay → full `tessera-cta`**; coupon Apply → `tessera-ghost`; coupon success/error emerald/rose soft.
+- **KDS**: added CSS §11 "KDS terminal zinc→forest remap" to index.css (maps #18181B/#121110/#0C0A09/#27272A/#FAFAFA/#A1A1AA/#71717A/#3F3F46/text-zinc-400/500 to forest palette under `[data-theme="tessera"]`) — converts the whole board without touching ticket internals, status accents preserved. Component flourishes: ChefHat tile + KITCHEN DISPLAY chip → chartreuse tint in tessera (amber otherwise). **Bug fix**: `hover:bg-[#FAFAFA]` (Settings/Inventory/Offers rows) used to flash near-white on forest cards → now resolves to #1A2E25.
+- **Browser QA**: variant modal → add Espresso → cart renders w/ Charge/Pay ₹126 tessera-cta (screenshot-verified); profile dropdown 3D shadow verified; KDS board forest-verified w/ live tickets; theme round-trip tessera→dark→tessera verified (dark correctly reverts to zinc/amber/orange chrome); error sweep across /, /coolkafe/{pos,kds,orders,reports,t1}, /superadmin → 0 page errors, console clean. tsc 0 errors throughout.
+- **7 docs updated same turn**: CHANGELOG ([2.6.1] entry), README (§5 Tessera default + polish note), technical-documentation (version 2.6.1 + new §6.5.5), business-documentation (version 2.6.1 + Product Design Updates note), decisions.md (ADR 0004 update note), help.md (version + Theme Appearance section), compact.md (version + v2.6.1 activity).
+
+Stage Summary:
+- **v2.6.1 shipped**: Tessera explicit polish now covers AuthScreen + Reports (v2.6.0) **plus** Header, WebNavbar, PosScreen, CartDrawer, KDS (v2.6.1). Remaining auto-mapped surfaces (Orders/Inventory/Menu/Tables/Customers/Offers/Shifts/Settings/SuperAdmin/Storefront) inherit via the override layer and look coherent, but lack explicit block-shadow/CTA flourishes — candidates for the next loop.
+- Sandbox restore procedure validated again (see 0-setup + this entry): clone → move → .env → file modes → .zscripts → bun install → dev.sh.
+- Commit: `feat(ui): v2.6.1 — Tessera chrome polish (Header, WebNavbar, POS, CartDrawer, KDS)` → pushed to origin/main.
+
+Unresolved Issues / Risks / Next-phase Priorities:
+1. Live DB seeding still outstanding (categories/menu_items empty → local fallback; customers/offers 404 to anon → re-run migration 001).
+2. Realtime POS→KDS end-to-end verification still pending.
+3. Next Tessera surfaces: OrdersScreen table, SuperAdmin dashboard, Storefront + OrderTracking (diner-facing!), then Customers/Inventory/Menu/Tables/Offers/Shifts/Settings.
+4. No automated tests (Vitest + RTL candidates: theme store, cart engine, RBAC).
+5. VariantModal + PaymentModal still orange-accent (`#F97316`) in tessera mode — natural next polish targets since they sit inside the redesigned POS flow.

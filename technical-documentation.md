@@ -1,7 +1,7 @@
 # TSOS Technical Documentation & Architecture Specification
 
 - **System**: TSOS (The Cafe Operating System)
-- **Version**: 2.6.0
+- **Version**: 2.6.1
 - **Architect**: Lead Full-Stack Security & Platform Architect
 - **Updated**: September 30, 2026
 
@@ -224,6 +224,13 @@ Theme state is managed in `src/lib/store.ts`:
 - `themeMode: ThemeMode` — `'tessera'` (default) | `'warm'` | `'dark'` | `'obsidian'`. Persisted in `localStorage` under `tsos_theme_mode`.
 - `setThemeMode(mode)` — sets the `data-theme` attribute on `<html>`, adds/removes the `tessera` / `dark` / `obsidian` classes.
 - `toggleThemeMode()` — cycles `tessera ↔ dark` (keeps the editorial dark language; `warm` is reachable via explicit `setThemeMode('warm')`).
+
+### 6.5.5 Explicit Surface Polish & KDS Terminal Remap (v2.6.1)
+Two complementary strategies are used to bring surfaces to full Tessera fidelity:
+
+1. **Explicit conditional classes** — components read `themeMode` from the store and compute `const isTessera = themeMode === 'tessera'`, then branch their Tailwind class strings. This preserves the warm/dark/obsidian palettes byte-for-byte while adding Tessera-only flourishes: `tessera-block` 3D offset shadows, `tessera-cta` primary actions, `tessera-ghost` secondary buttons, chartreuse baseline markers under active nav tabs, solid chartreuse category pills with `shadow-[2px_2px_0_#1F3D2E]`, soft-tinted status badges (15% fill / 40% border), serif italic tenant/user names, and the Tessera status palette for role avatars (`#C084FC`/`#C5F82A`/`#60A5FA`/`#34D399`). Applied to: `Header.tsx`, `WebNavbar.tsx`, `PosScreen.tsx`, `CartDrawer.tsx`, `KdsScreen.tsx` (header flourishes only).
+
+2. **CSS hex remap extension** (`src/index.css` §11) — the KDS board is an always-dark terminal built on zinc hexes (`#18181B`, `#121110`, `#0C0A09`, `#27272A`, `#FAFAFA`, `#A1A1AA`, `#71717A`, `#3F3F46`, `text-zinc-400/500`). Under `[data-theme="tessera"]` these remap to the forest palette (`#0F1D17` / `#0A1410` / `#142620` / `#F5F4EE` / `#9BB5A5` / `#6B8579` / `#2A4A37`), converting the entire board without touching its component code. The same section fixes a v2.6.0 defect where `hover:bg-[#FAFAFA]` (Settings/Inventory/Offers table rows) flashed near-white on forest cards — it now resolves to the forest hover surface `#1A2E25`.
 
 ---
 

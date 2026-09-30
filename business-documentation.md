@@ -1,7 +1,7 @@
 # TSOS Business & SaaS Strategy Documentation
 
 - **Product**: TSOS (The Cafe Operating System)
-- **Document Version**: 2.2.0
+- **Document Version**: 2.6.1
 - **Scope**: Multi-Tenant B2B SaaS Business Model, Unit Economics, Monetization & ROI
 
 ---
@@ -117,4 +117,7 @@ graph LR
 2. **Direct Supplier Marketplace**: Allow coffee bean roasters and dairy distributors to accept automated purchase orders directly from TSOS low-stock notifications.
 3. **Franchise Analytics Intelligence**: Benchmark top-selling SKUs, hourly staffing efficiency, and prep SLA across all participating franchise outlets.
 4. **Zero-Friction Hospitality Flow**: Eliminate native app installation barriers completely. Diners scan table QR stickers directly with their native smartphone camera to order in mobile browser tabs with 10-minute session security; counter terminals deploy on cross-platform Electron.js wrapping the web POS for direct USB/Serial thermal printing.
+
+### Product Design Updates (factual)
+- **2026-09-30 — v2.6.1**: Completed the Tessera editorial design rollout across the operator-facing daily surfaces: global header/navbar chrome, POS menu grid + cart drawer (chartreuse Charge/Pay checkout CTA), and the kitchen display board. Rationale: consistent brand identity across every screen a paying tenant sees during operating hours — the POS and KDS are the two surfaces staff interact with hundreds of times per shift. No pricing, fee-engine, or subscription changes.
 

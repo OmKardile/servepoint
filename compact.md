@@ -3,11 +3,11 @@
 > **Purpose**: Single-page dense summary of the current TSOS project state, for fast cold re-onboarding by any agent or contributor. Updated alongside every code change. For full chronological detail, see [`docs/compacts/`](docs/compacts/README.md) (7 compacts) and [`worklog.md`](worklog.md) (live agent handover).
 
 - **Project**: TSOS — The Cafe Operating System
-- **Version**: 2.6.0
+- **Version**: 2.6.1
 - **Repo**: https://github.com/OmKardile/tsos-alt
 - **Author**: Omkar Kardile <omkardile84@gmail.com>
 - **Last Updated**: 2026-09-30
-- **Default Theme**: Tessera (editorial dark / forest + chartreuse) — see [`CHANGELOG.md`](CHANGELOG.md) v2.6.0
+- **Default Theme**: Tessera (editorial dark / forest + chartreuse) — see [`CHANGELOG.md`](CHANGELOG.md) v2.6.0 + v2.6.1
 
 ---
 
@@ -78,6 +78,8 @@ npm run dev   # or bun run dev
 
 ## Recent activity (live agent handover)
 See [`worklog.md`](worklog.md) for the chronological agent work log.
+
+**v2.6.1 (2026-09-30) shipped**: **Tessera chrome polish** — explicit `isTessera` conditional styling shipped for Header (chartreuse TSOS brand block + `tessera-block` shadow, serif tenant name, Fast PIN as `tessera-cta`, forest profile dropdown), WebNavbar (chartreuse active tab + 2px baseline marker, soft-tinted status badges, `tessera-block` More dropdown), PosScreen (forest ribbon, chartreuse category pills with block shadow, lifted menu cards with chartreuse hover, chartreuse prices), CartDrawer (forest drawer, chartreuse items pill, `tessera-cta` Charge/Pay checkout). KDS board converted via new CSS zinc→forest remap (`src/index.css` §11) + chartreuse header flourishes. Bug fix: `hover:bg-[#FAFAFA]` white-flash on forest cards (Settings/Inventory/Offers). Theme round-trip tessera↔dark regression-verified in browser; tsc 0 errors; all routes console-clean.
 
 **v2.6.0 (2026-09-30) shipped**: **Tessera UI Kit redesign** — new `tessera` ThemeMode (default), Instrument Serif italic headlines + Inter body, deep forest surfaces (`#0A1410`/`#0F1D17`/`#1F3D2E`), vivid chartreuse action accent (`#C5F82A`), 3D isometric block-motif utilities (`.tessera-block`/`.tessera-cta`/`.tessera-ghost`/`.tessera-grain`). AuthScreen fully redesigned as Tessera showcase; Reports widgets (LiveOpsPulse, OrderTypeBreakdown, KPI cards) polished with explicit `tessera-block` shadows + chartreuse accents. CSS variable override layer maps every warm-cream hex to forest when `[data-theme="tessera"]`. Inspired by [uiverse.io/ui-kits/tessera](https://uiverse.io/ui-kits/tessera).
 

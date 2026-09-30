@@ -36,10 +36,11 @@
 - **Order Submission Guard**: Enforces `X-Table-Session-Token` on `POST /api/orders`, rejecting expired, spoofed, or settled tables.
 - **Frontend UX**: Live countdown timer (`mm:ss`) in header, 2-minute warning banner, and automatic security lock overlay at 00:00 with renewal handshake.
 
-### 5. Industrial Obsidian Mode (Global Single-Button Toggle)
-- High-contrast terminal design engineered for glare resistance and reduced eye strain under cafe and kitchen lighting.
-- Palette: Pitch obsidian `#0C0A09`, hairline borders `#292524`, phosphor amber `#F59E0B`, and emerald status glows `#10B981`.
-- Single-button toggle in the global navigation bar switches the entire system instantaneously.
+### 5. Tessera Editorial Theme (Default) + Industrial Obsidian Mode (Global Single-Button Toggle)
+- **Tessera (default since v2.6.0)**: editorial dark design pairing Instrument Serif italic headlines with Inter body, deep forest surfaces (`#0A1410`/`#0F1D17`), vivid chartreuse action accent (`#C5F82A`), and 3D isometric block-motif utilities (`.tessera-block` / `.tessera-cta` / `.tessera-ghost`). Since v2.6.1 the global chrome (Header, WebNavbar), POS (menu cards, CartDrawer, Charge/Pay CTA) and the KDS board carry explicit Tessera flourishes; warm/dark/obsidian palettes remain fully preserved behind conditional classes.
+- **Industrial Obsidian Mode**: high-contrast terminal design engineered for glare resistance and reduced eye strain under cafe and kitchen lighting.
+- Palette (Obsidian): Pitch obsidian `#0C0A09`, hairline borders `#292524`, phosphor amber `#F59E0B`, and emerald status glows `#10B981`.
+- Single-button toggle in the global navigation bar switches the entire system instantaneously (cycles `tessera ↔ dark`; `warm` reachable via explicit set).
 
 ### 6. Real-Time WebSockets & Offline Resiliency
 - **Supabase Realtime**: Instantaneous zero-reload ticket progression in KDS and live dining table status updates.

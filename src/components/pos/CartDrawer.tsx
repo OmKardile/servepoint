@@ -47,7 +47,10 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ onOpenPayment }) => {
     setRedeemedPoints,
     feeConfig,
     addCustomer,
+    themeMode,
   } = useTsosStore();
+
+  const isTessera = themeMode === 'tessera';
 
   const [couponCode, setCouponCode] = useState('');
   const [couponError, setCouponError] = useState('');
@@ -111,14 +114,20 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ onOpenPayment }) => {
   ];
 
   return (
-    <aside className="w-full lg:w-96 bg-white border-l border-[#E9E0D6] flex flex-col h-full shadow-xs">
+    <aside className={`w-full lg:w-96 border-l flex flex-col h-full ${
+      isTessera ? 'bg-[#0F1D17] border-[#1F3D2E]' : 'bg-white border-[#E9E0D6] shadow-xs'
+    }`}>
       {/* Drawer Header */}
-      <div className="p-4 border-b border-[#E9E0D6] bg-[#FFF9F2] space-y-3">
+      <div className={`p-4 border-b space-y-3 ${
+        isTessera ? 'border-[#1F3D2E] bg-[#0A1410]' : 'border-[#E9E0D6] bg-[#FFF9F2]'
+      }`}>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <ShoppingBag className="w-5 h-5 text-[#F97316]" />
-            <h2 className="font-bold text-base text-[#1C1917]">Current Order</h2>
-            <span className="text-xs bg-[#FFF1E6] text-[#F97316] font-semibold px-2 py-0.5 rounded-full">
+            <ShoppingBag className={`w-5 h-5 ${isTessera ? 'text-[#C5F82A]' : 'text-[#F97316]'}`} />
+            <h2 className={`font-bold text-base ${isTessera ? 'text-[#F5F4EE]' : 'text-[#1C1917]'}`}>Current Order</h2>
+            <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+              isTessera ? 'bg-[#C5F82A]/15 text-[#C5F82A] border border-[#C5F82A]/30' : 'bg-[#FFF1E6] text-[#F97316]'
+            }`}>
               {safeCart.reduce((sum, i) => sum + i.qty, 0)} items
             </span>
           </div>
@@ -126,7 +135,9 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ onOpenPayment }) => {
           {safeCart.length > 0 && (
             <button
               onClick={clearCart}
-              className="text-xs text-[#57534E] hover:text-[#B42318] flex items-center gap-1 transition-colors"
+              className={`text-xs flex items-center gap-1 transition-colors ${
+                isTessera ? 'text-[#6B8579] hover:text-[#F87171]' : 'text-[#57534E] hover:text-[#B42318]'
+              }`}
             >
               <Trash2 className="w-3 h-3" />
               <span>Clear</span>
@@ -136,16 +147,22 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ onOpenPayment }) => {
 
         {/* Order Type Selector */}
         <GuidanceTooltip guideKey="pos_order_type" position="bottom" className="w-full">
-          <div className="grid grid-cols-3 gap-1 bg-[#F5F0EB] p-1 rounded-xl w-full">
+          <div className={`grid grid-cols-3 gap-1 p-1 rounded-xl w-full ${
+            isTessera ? 'bg-[#0A1410] border border-[#2A4A37]' : 'bg-[#F5F0EB]'
+          }`}>
             {orderTypeOptions.map((opt) => {
               const isSelected = orderType === opt.type;
               return (
                 <button
                   key={opt.type}
                   onClick={() => setOrderType(opt.type)}
-                  className={`flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                  className={`flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-xs transition-all ${
                     isSelected
-                      ? 'bg-white text-[#1C1917] font-semibold shadow-xs'
+                      ? isTessera
+                        ? 'bg-[#C5F82A] text-[#0A1410] font-semibold shadow-[2px_2px_0_#1F3D2E]'
+                        : 'bg-white text-[#1C1917] font-semibold shadow-xs'
+                      : isTessera
+                      ? 'text-[#9BB5A5] hover:text-[#F5F4EE]'
                       : 'text-[#57534E] hover:text-[#1C1917]'
                   }`}
                 >
@@ -413,10 +430,18 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ onOpenPayment }) => {
       {/* Cart Items List */}
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
         {safeCart.length === 0 ? (
-          <div className="h-full flex flex-col items-center justify-center text-center p-6 text-[#A8A29E]">
-            <ShoppingBag className="w-12 h-12 stroke-[1.5] text-[#E9E0D6] mb-2" />
-            <div className="font-semibold text-sm text-[#57534E]">Order is Empty</div>
-            <div className="text-xs text-[#A8A29E] max-w-xs mt-1">
+          <div className={`h-full flex flex-col items-center justify-center text-center p-6 ${
+            isTessera ? 'text-[#6B8579]' : 'text-[#A8A29E]'
+          }`}>
+            <div className={`w-16 h-16 rounded-2xl flex items-center justify-center mb-3 ${
+              isTessera ? 'bg-[#142620] border border-[#2A4A37]' : ''
+            }`}>
+              <ShoppingBag className={`w-8 h-8 stroke-[1.5] ${isTessera ? 'text-[#2A4A37]' : 'text-[#E9E0D6]'}`} />
+            </div>
+            <div className={`font-serif italic text-lg ${isTessera ? 'text-[#F5F4EE]' : 'font-sans not-italic font-semibold text-sm text-[#57534E]'}`}>
+              Order is Empty
+            </div>
+            <div className={`text-xs max-w-xs mt-1 ${isTessera ? 'text-[#6B8579]' : 'text-[#A8A29E]'}`}>
               Select items from the menu grid to start building the order.
             </div>
           </div>
@@ -424,72 +449,94 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ onOpenPayment }) => {
           safeCart.map((item) => (
             <div
               key={item.id}
-              className="p-3 bg-white rounded-xl border border-[#E9E0D6] hover:border-[#D5C9BD] transition-all space-y-2"
+              className={`p-3 rounded-xl border transition-all space-y-2 ${
+                isTessera
+                  ? 'bg-[#0A1410] border-[#1F3D2E] hover:border-[#2A4A37]'
+                  : 'bg-white border-[#E9E0D6] hover:border-[#D5C9BD]'
+              }`}
             >
               <div className="flex items-start justify-between gap-2">
                 <div className="flex items-start gap-2">
                   <span
-                    className={`mt-1 w-2.5 h-2.5 rounded-xs border shrink-0 ${
-                      item.menu_item.is_veg ? 'border-emerald-600' : 'border-red-600'
-                    } flex items-center justify-center p-0.5`}
+                    className={`mt-1 w-2.5 h-2.5 rounded-xs border shrink-0 flex items-center justify-center p-0.5 ${
+                      item.menu_item.is_veg
+                        ? isTessera ? 'border-[#34D399]' : 'border-emerald-600'
+                        : isTessera ? 'border-[#F87171]' : 'border-red-600'
+                    }`}
                   >
                     <span
                       className={`w-1 h-1 rounded-full ${
-                        item.menu_item.is_veg ? 'bg-emerald-600' : 'bg-red-600'
+                        item.menu_item.is_veg
+                          ? isTessera ? 'bg-[#34D399]' : 'bg-emerald-600'
+                          : isTessera ? 'bg-[#F87171]' : 'bg-red-600'
                       }`}
                     />
                   </span>
                   <div>
-                    <h4 className="font-semibold text-xs text-[#1C1917] leading-tight">
+                    <h4 className={`font-semibold text-xs leading-tight ${
+                      isTessera ? 'text-[#F5F4EE]' : 'text-[#1C1917]'
+                    }`}>
                       {item.menu_item.name}
                     </h4>
                     {item.variant && (
-                      <div className="text-[10px] text-[#57534E]">Size: {item.variant.name}</div>
+                      <div className={`text-[10px] ${isTessera ? 'text-[#9BB5A5]' : 'text-[#57534E]'}`}>Size: {item.variant.name}</div>
                     )}
                     {(item.addons || []).map((a) => (
-                      <div key={a.addon_id} className="text-[10px] text-[#57534E]">
+                      <div key={a.addon_id} className={`text-[10px] ${isTessera ? 'text-[#9BB5A5]' : 'text-[#57534E]'}`}>
                         + {a.name} (+₹{a.price})
                       </div>
                     ))}
                     {item.notes && (
-                      <div className="text-[10px] text-[#F97316] italic">Note: "{item.notes}"</div>
+                      <div className={`text-[10px] italic ${isTessera ? 'text-[#C5F82A]' : 'text-[#F97316]'}`}>
+                        Note: "{item.notes}"
+                      </div>
                     )}
                   </div>
                 </div>
 
                 <div className="text-right shrink-0">
-                  <div className="font-mono font-bold text-xs text-[#1C1917]">
+                  <div className={`font-mono font-bold text-xs tabular-nums ${
+                    isTessera ? 'text-[#C5F82A]' : 'text-[#1C1917]'
+                  }`}>
                     ₹{item.item_total}
                   </div>
-                  <div className="text-[10px] text-[#A8A29E] font-mono">
+                  <div className={`text-[10px] font-mono ${isTessera ? 'text-[#6B8579]' : 'text-[#A8A29E]'}`}>
                     ₹{item.unit_price} each
                   </div>
                 </div>
               </div>
 
               {/* Item Qty Controls */}
-              <div className="flex items-center justify-between pt-1 border-t border-[#F5F0EB]">
+              <div className={`flex items-center justify-between pt-1 border-t ${
+                isTessera ? 'border-[#1F3D2E]' : 'border-[#F5F0EB]'
+              }`}>
                 <button
                   onClick={() => removeFromCart(item.id)}
-                  className="text-[10px] text-[#A8A29E] hover:text-[#B42318] flex items-center gap-1"
+                  className={`text-[10px] flex items-center gap-1 ${
+                    isTessera ? 'text-[#6B8579] hover:text-[#F87171]' : 'text-[#A8A29E] hover:text-[#B42318]'
+                  }`}
                 >
                   <Trash2 className="w-3 h-3" />
                   <span>Remove</span>
                 </button>
 
-                <div className="flex items-center gap-2 bg-[#F5F0EB] px-2 py-0.5 rounded-lg">
+                <div className={`flex items-center gap-2 px-2 py-0.5 rounded-lg ${
+                  isTessera ? 'bg-[#142620] border border-[#2A4A37]' : 'bg-[#F5F0EB]'
+                }`}>
                   <button
                     onClick={() => updateCartQty(item.id, -1)}
-                    className="text-[#57534E] hover:text-[#1C1917] p-0.5"
+                    className={`p-0.5 ${isTessera ? 'text-[#9BB5A5] hover:text-[#C5F82A]' : 'text-[#57534E] hover:text-[#1C1917]'}`}
                   >
                     <Minus className="w-3 h-3" />
                   </button>
-                  <span className="font-bold text-xs font-mono min-w-4 text-center">
+                  <span className={`font-bold text-xs font-mono min-w-4 text-center tabular-nums ${
+                    isTessera ? 'text-[#F5F4EE]' : ''
+                  }`}>
                     {item.qty}
                   </span>
                   <button
                     onClick={() => updateCartQty(item.id, 1)}
-                    className="text-[#57534E] hover:text-[#1C1917] p-0.5"
+                    className={`p-0.5 ${isTessera ? 'text-[#9BB5A5] hover:text-[#C5F82A]' : 'text-[#57534E] hover:text-[#1C1917]'}`}
                   >
                     <Plus className="w-3 h-3" />
                   </button>
@@ -502,17 +549,23 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ onOpenPayment }) => {
 
       {/* Cart Footer: Discount / Totals / Checkout */}
       {safeCart.length > 0 && (
-        <div className="p-4 border-t border-[#E9E0D6] bg-[#FFF9F2] space-y-3">
+        <div className={`p-4 border-t space-y-3 ${
+          isTessera ? 'border-[#1F3D2E] bg-[#0A1410]' : 'border-[#E9E0D6] bg-[#FFF9F2]'
+        }`}>
           {/* Coupon Form */}
           {appliedOffer ? (
-            <div className="flex items-center justify-between p-2 rounded-xl bg-[#E8F5EC] border border-[#A7F3D0] text-xs">
-              <div className="flex items-center gap-1.5 text-[#17803D] font-medium">
+            <div className={`flex items-center justify-between p-2 rounded-xl border text-xs ${
+              isTessera
+                ? 'bg-[#34D399]/10 border-[#34D399]/30'
+                : 'bg-[#E8F5EC] border-[#A7F3D0]'
+            }`}>
+              <div className={`flex items-center gap-1.5 font-medium ${isTessera ? 'text-[#34D399]' : 'text-[#17803D]'}`}>
                 <Tag className="w-3.5 h-3.5" />
                 <span>Coupon <strong>{appliedOffer.code}</strong> applied</span>
               </div>
               <button
                 onClick={removeOffer}
-                className="text-[11px] text-[#57534E] hover:text-[#B42318]"
+                className={`text-[11px] ${isTessera ? 'text-[#9BB5A5] hover:text-[#F87171]' : 'text-[#57534E] hover:text-[#B42318]'}`}
               >
                 Remove
               </button>
@@ -525,53 +578,67 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ onOpenPayment }) => {
                   value={couponCode}
                   onChange={(e) => setCouponCode(e.target.value)}
                   placeholder="Coupon code (e.g. WELCOME50)"
-                  className="flex-1 px-2.5 py-1.5 text-xs uppercase font-mono rounded-xl border border-[#E9E0D6] bg-white focus:border-[#F97316] focus:outline-hidden"
+                  className={`flex-1 px-2.5 py-1.5 text-xs uppercase font-mono rounded-xl border focus:outline-hidden ${
+                    isTessera
+                      ? 'border-[#2A4A37] bg-[#0F1D17] text-[#F5F4EE] placeholder:text-[#6B8579] focus:border-[#C5F82A]'
+                      : 'border-[#E9E0D6] bg-white focus:border-[#F97316]'
+                  }`}
                 />
                 <button
                   type="submit"
-                  className="px-3 py-1.5 rounded-xl bg-[#1C1917] text-white text-xs font-semibold hover:bg-black"
+                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors ${
+                    isTessera
+                      ? 'tessera-ghost rounded-lg'
+                      : 'bg-[#1C1917] text-white hover:bg-black'
+                  }`}
                 >
                   Apply
                 </button>
               </div>
-              {couponError && <div className="text-[10px] text-[#B42318]">{couponError}</div>}
-              {couponSuccess && <div className="text-[10px] text-[#17803D]">{couponSuccess}</div>}
+              {couponError && <div className={`text-[10px] ${isTessera ? 'text-[#F87171]' : 'text-[#B42318]'}`}>{couponError}</div>}
+              {couponSuccess && <div className={`text-[10px] ${isTessera ? 'text-[#34D399]' : 'text-[#17803D]'}`}>{couponSuccess}</div>}
             </form>
           )}
 
           {/* Subtotal, GST, Platform Fee */}
-          <div className="space-y-1 text-xs text-[#57534E]">
+          <div className={`space-y-1 text-xs ${isTessera ? 'text-[#9BB5A5]' : 'text-[#57534E]'}`}>
             <div className="flex justify-between">
               <span>Items Subtotal</span>
-              <span className="font-mono">₹{subtotal.toFixed(2)}</span>
+              <span className="font-mono tabular-nums">₹{subtotal.toFixed(2)}</span>
             </div>
             <div className="flex justify-between">
               <span>GST (5%)</span>
-              <span className="font-mono">₹{taxTotal.toFixed(2)}</span>
+              <span className="font-mono tabular-nums">₹{taxTotal.toFixed(2)}</span>
             </div>
             {discountTotal > 0 && (
-              <div className="flex justify-between text-[#17803D] font-medium">
+              <div className={`flex justify-between font-medium ${isTessera ? 'text-[#34D399]' : 'text-[#17803D]'}`}>
                 <span>Total Discount</span>
-                <span className="font-mono">- ₹{discountTotal.toFixed(2)}</span>
+                <span className="font-mono tabular-nums">- ₹{discountTotal.toFixed(2)}</span>
               </div>
             )}
             <GuidanceTooltip guideKey="pos_fee_engine" position="top" className="w-full">
               <div className="flex justify-between items-center text-xs w-full py-0.5">
                 <span className="flex items-center gap-1">
                   <span>TSOS Platform Fee</span>
-                  <span className="text-[10px] px-1.5 py-0.2 rounded-full font-medium bg-[#FFF1E6] text-[#F97316]">
+                  <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-medium ${
+                    isTessera ? 'bg-[#C5F82A]/10 text-[#C5F82A] border border-[#C5F82A]/30' : 'bg-[#FFF1E6] text-[#F97316]'
+                  }`}>
                     {feePayer === 'cafe' ? 'Absorbed by Cafe' : 'Paid by Customer'}
                   </span>
                 </span>
-                <span className="font-mono">
+                <span className="font-mono tabular-nums">
                   {feePayer === 'customer' ? `+ ₹${platformFee}` : '₹0.00'}
                 </span>
               </div>
             </GuidanceTooltip>
 
-            <div className="flex justify-between text-base font-bold text-[#1C1917] pt-2 border-t border-[#E9E0D6]">
+            <div className={`flex justify-between text-base font-bold pt-2 border-t ${
+              isTessera ? 'text-[#F5F4EE] border-[#2A4A37]' : 'text-[#1C1917] border-[#E9E0D6]'
+            }`}>
               <span>To Pay</span>
-              <span className="font-mono text-lg text-[#F97316]">₹{grandTotal}</span>
+              <span className={`font-mono text-lg tabular-nums ${isTessera ? 'text-[#C5F82A]' : 'text-[#F97316]'}`}>
+                ₹{grandTotal}
+              </span>
             </div>
           </div>
 
@@ -580,7 +647,11 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ onOpenPayment }) => {
             <button
               type="button"
               onClick={onOpenPayment}
-              className="w-full flex items-center justify-center gap-2 py-3 rounded-xl font-semibold text-sm bg-[#F97316] hover:bg-[#EA580C] text-white shadow-xs transition-colors"
+              className={`w-full flex items-center justify-center gap-2 py-3 rounded-xl font-semibold text-sm transition-colors ${
+                isTessera
+                  ? 'tessera-cta rounded-lg'
+                  : 'bg-[#F97316] hover:bg-[#EA580C] text-white shadow-xs'
+              }`}
             >
               <span>Charge / Pay (₹{grandTotal})</span>
               <ArrowRight className="w-4 h-4" />

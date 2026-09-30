@@ -927,7 +927,58 @@
   color: #C5F82A !important;
 }
 
-/* --- 11. Scrollbar on forest --- */
+/* --- 11. KDS terminal: zinc obsidian → forest terminal in Tessera --- */
+/* KDS is an always-dark surface built on zinc hexes; remap them to the
+   forest palette so the board matches the Tessera canvas. Also fixes a
+   v2.6.0 bug where hover:bg-[#FAFAFA] flashed near-white on forest cards. */
+[data-theme="tessera"] .bg-\[\#18181B\],
+.tessera .bg-\[\#18181B\] {
+  background-color: #0F1D17 !important;
+}
+[data-theme="tessera"] .bg-\[\#121110\],
+.tessera .bg-\[\#121110\] {
+  background-color: #0A1410 !important;
+}
+[data-theme="tessera"] .bg-\[\#0C0A09\],
+.tessera .bg-\[\#0C0A09\] {
+  background-color: #0A1410 !important;
+}
+[data-theme="tessera"] .bg-\[\#27272A\],
+.tessera .bg-\[\#27272A\] {
+  background-color: #142620 !important;
+}
+[data-theme="tessera"] .border-\[\#27272A\],
+.tessera .border-\[\#27272A\] {
+  border-color: #1F3D2E !important;
+}
+[data-theme="tessera"] .border-\[\#3F3F46\],
+.tessera .border-\[\#3F3F46\] {
+  border-color: #2A4A37 !important;
+}
+[data-theme="tessera"] .text-\[\#FAFAFA\],
+.tessera .text-\[\#FAFAFA\] {
+  color: #F5F4EE !important;
+}
+[data-theme="tessera"] .text-\[\#A1A1AA\],
+.tessera .text-\[\#A1A1AA\] {
+  color: #9BB5A5 !important;
+}
+[data-theme="tessera"] .text-\[\#71717A\],
+.tessera .text-\[\#71717A\] {
+  color: #6B8579 !important;
+}
+[data-theme="tessera"] .text-zinc-400,
+[data-theme="tessera"] .text-zinc-500,
+.tessera .text-zinc-400,
+.tessera .text-zinc-500 {
+  color: #6B8579 !important;
+}
+[data-theme="tessera"] .hover\:bg-\[\#FAFAFA\]:hover,
+.tessera .hover\:bg-\[\#FAFAFA\]:hover {
+  background-color: #1A2E25 !important;
+}
+
+/* --- 12. Scrollbar on forest --- */
 [data-theme="tessera"] ::-webkit-scrollbar-thumb,
 .tessera ::-webkit-scrollbar-thumb {
   background: #2A4A37;

@@ -36,6 +36,7 @@
 - **Decision**: System-wide **Obsidian Mode** (`#0C0A09` canvas, `#292524` borders, phosphor amber `#F59E0B`, emerald `#10B981`). Single header button toggles the whole app. State persisted in `localStorage` via Zustand.
 - **Alternatives rejected**: Per-screen dark mode, CSS `prefers-color-scheme`, no dark mode.
 - **Consequences**: ✅ Single-button consistency, glare-resistant. ⚠️ Every component must support both palettes.
+- **Update (2026-09-30, v2.6.0/2.6.1)**: The ThemeMode enum gained `'tessera'` (now the **default**) — an editorial dark forest/chartreuse design system. The single-toggle engine, `data-theme` attribute mechanism, and per-theme palettes are unchanged; Obsidian remains reachable via `setThemeMode('obsidian')`, and `toggleThemeMode()` now cycles `tessera ↔ dark`. Full Tessera flourishes shipped in v2.6.1 for Header, WebNavbar, PosScreen, CartDrawer and the KDS board (zinc→forest CSS remap, `src/index.css` §11).
 - **Full ADR**: [docs/decisions/0004-obsidian-terminal-theme-engine.md](docs/decisions/0004-obsidian-terminal-theme-engine.md)
 
 ---

@@ -55,7 +55,9 @@ export const KdsScreen: React.FC = () => {
     currentTenant,
     handleInboundOrder,
     handleInboundOrderStatus,
+    themeMode,
   } = useTsosStore();
+  const isTessera = themeMode === 'tessera';
   const [, setNow] = useState(Date.now());
   const [slaMode, setSlaMode] = useState<keyof typeof SLA_SETTINGS>('standard');
   const [selectedCourse, setSelectedCourse] = useState<CourseType>('all');
@@ -448,10 +450,14 @@ export const KdsScreen: React.FC = () => {
 
   return (
     <div className="flex-1 flex flex-col h-[calc(100vh-100px)] overflow-hidden bg-[#0C0A09] text-[#FAFAFA]">
-      {/* Top Header Bar: Obsidian Dark Surface */}
+      {/* Top Header Bar: Tessera Forest Surface */}
       <div className="p-3.5 bg-[#18181B] border-b border-[#27272A] flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2.5">
-          <div className="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center border border-amber-500/30 shadow-xs">
+          <div className={`w-10 h-10 rounded-xl flex items-center justify-center border shadow-xs ${
+            isTessera
+              ? 'bg-[#C5F82A]/15 text-[#C5F82A] border-[#C5F82A]/30'
+              : 'bg-amber-500/20 text-amber-400 border-amber-500/30'
+          }`}>
             <ChefHat className="w-5 h-5" />
           </div>
           <div>
@@ -459,7 +465,11 @@ export const KdsScreen: React.FC = () => {
               <h2 className="text-base font-black text-[#FAFAFA] tracking-wide">
                 Kitchen Display System (KDS)
               </h2>
-              <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded bg-[#27272A] text-zinc-400 border border-[#3F3F46]">
+              <span className={`text-[10px] font-mono uppercase px-2 py-0.5 rounded border ${
+                isTessera
+                  ? 'bg-[#C5F82A]/10 text-[#C5F82A] border-[#C5F82A]/30 tracking-widest'
+                  : 'bg-[#27272A] text-zinc-400 border-[#3F3F46]'
+              }`}>
                 Kitchen Display
               </span>
               {criticalOrdersCount > 0 && (

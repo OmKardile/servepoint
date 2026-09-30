@@ -1,5 +1,7 @@
 # TSOS Help & Credentials Reference
 
+- **Document Version**: 2.6.1 (2026-09-30)
+
 ## 🔑 Login Credentials
 
 | Role | Username / Email | Password | Access Level |
@@ -8,6 +10,14 @@
 | **Cafe Owner** | `owner@coolkafe.com` *(or `owner`)* | `demo123456` | Full workspace access (`/:slug/pos`, inventory, shifts, reports, settings) |
 | **Store Manager** | `manager@coolkafe.com` *(or `manager`)* | `demo123456` | Shift audits, recipe adjustments, register reconciliation |
 | **Counter Cashier** | `cashier@coolkafe.com` *(or `cashier`)* | `demo123456` | High-velocity counter POS billing & tender payments |
+
+---
+
+## 🎨 Theme Appearance
+
+- **Tessera** (editorial dark, forest + chartreuse) is the **default** theme since v2.6.0; since v2.6.1 the header, navbar, POS and KDS carry full Tessera styling.
+- The header **Dark Mode** button cycles `tessera ↔ dark`. The warm-cream and obsidian themes remain available to developers via `setThemeMode('warm' | 'obsidian')` (Zustand store).
+- Selection persists in `localStorage` under `tsos_theme_mode`. Clearing that key restores the Tessera default.
 
 ---
 
