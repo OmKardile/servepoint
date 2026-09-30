@@ -1,6 +1,6 @@
 # TSOS Help & Credentials Reference
 
-- **Document Version**: 2.7.1 (2026-10-01)
+- **Document Version**: 2.7.2 (2026-10-01)
 
 ## 🔑 Login Credentials
 
@@ -18,6 +18,17 @@
 - **ServePoint** (owner Figma — EXACT tokens since v2.6.7/ADR-0012: ivory `#F6F5F2` canvas, signature sage `#D9E2DD` surfaces, deep-teal `#0F3D3E` primary, gold `#B88E2F` accent, near-black text, **Poppins**) is the **default theme for the authenticated app** since v2.6.6 (ADR-0011). The header toggle cycles `servepoint → tessera → dark`; `warm`/`obsidian` remain reachable via `setThemeMode()`.
 - **⚠️ Login screen is FROZEN (ADR-0010) and always renders in Tessera**: while logged out, the document is force-pinned to Tessera so the approved login look never changes — including the reserved Surface Pack illustrations, which wait for an explicit owner unfreeze. See [`decisions.md`](decisions.md) ADR-0010/0011.
 - Selection persists in `localStorage` under `tsos_theme_mode` (legacy `tessera` values migrate to `servepoint` once).
+
+---
+
+## 🧾 Orders Workspace (v2.7.2)
+
+The **Orders → Orders Directory** tab is now a two-pane bill browser (matching the owner's ServePoint Figma) in the default theme:
+
+- **Browse** — the left list shows every order as a card (`Order #N` + status dot, table/type · items · customer, amount + time). Click a card to open its **full detail pane** on the right: status & payment chips, Details (Table / Items / Customer / Payment), the complete item list with add-ons, GST/fee/total breakdown, kitchen notes and loyalty points.
+- **Filter** — status pills (All / New / Preparing / Ready / Completed / Cancelled) plus a **date filter** (All Time / Today / Last 7 Days); the summary line under the title always shows how many orders are in view and their combined value. The search bar at the bottom of the list matches order #, customer or dish.
+- **Act** — active orders show a **"Move to Preparing/Ready/Completed"** button (same sync path as the KDS bump); completed orders show **"Print Invoice"**; the top actions open the Thermal Workstation or the quick receipt. **Export** downloads the filtered orders as a CSV ledger (Excel-friendly UTF-8).
+- **Themes** — the two-pane is ServePoint-only; Tessera and dark mode keep the classic dense table.
 
 ---
 

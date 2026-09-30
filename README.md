@@ -24,6 +24,7 @@
 - Multi-order types: Dine-In (interactive table floor plan), Takeaway, and Delivery.
 - Dynamic cart engine with split payments, loyalty redemption, and platform fee computation.
 - Thermal receipt preview and printing generator.
+- **Two-pane Orders Workspace (v2.7.2)**: the Orders Directory renders as a ServePoint bill browser — card list with status/date filters + combined-value summary on the left, full order detail pane (items, GST/fee totals, notes, loyalty) with one-tap **status advance** (KDS/cloud synced) and filtered **CSV ledger export** on the right.
 
 ### 3. Kitchen Display System (`/:slug/kds`)
 - Live order queue organized by preparation stages (`new`, `preparing`, `ready`, `completed`).
