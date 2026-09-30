@@ -35,6 +35,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
 }) => {
   const { createOrder, audioEnabled, location, currentTenant, redeemedPoints, selectedCustomerId, customers, themeMode } = useTsosStore();
   const isTessera = themeMode === 'tessera';
+  const isServepoint = themeMode === 'servepoint';
   const [selectedMethod, setSelectedMethod] = useState<PaymentMethod | 'split'>('upi');
   const [cashTendered, setCashTendered] = useState<number>(Math.ceil(grandTotal / 50) * 50 || 100);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -109,7 +110,11 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
         particleCount: 50,
         spread: 60,
         origin: { y: 0.7 },
-        colors: isTessera ? ['#C5F82A', '#34D399', '#F5F4EE'] : ['#F97316', '#17803D', '#7C3AED'],
+        colors: isTessera
+          ? ['#C5F82A', '#34D399', '#F5F4EE']
+          : isServepoint
+          ? ['#B88E2F', '#0F3D3E', '#D9E2DD']
+          : ['#F97316', '#17803D', '#7C3AED'],
       });
 
       setIsProcessing(false);
@@ -131,27 +136,43 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
       <div className={`rounded-2xl max-w-lg w-full overflow-hidden flex flex-col max-h-[92vh] ${
         isTessera
           ? 'bg-[#0F1D17] border border-[#2A4A37] tessera-block'
+          : isServepoint
+          ? 'bg-white border border-[#E3E7E0] shadow-[0_8px_30px_rgba(15,61,62,0.08)]'
           : 'bg-white border border-[#E9E0D6] shadow-2xl'
       }`}>
         {/* Header */}
         <div className={`p-4 border-b flex items-center justify-between ${
-          isTessera ? 'bg-[#0A1410] border-[#1F3D2E]' : 'bg-[#FFF9F2] border-[#E9E0D6]'
+          isTessera
+            ? 'bg-[#0A1410] border-[#1F3D2E]'
+            : isServepoint
+            ? 'bg-[#D9E2DD] border-[#E3E7E0]'
+            : 'bg-[#FFF9F2] border-[#E9E0D6]'
         }`}>
           <div>
-            <div className={`text-xs uppercase tracking-widest ${isTessera ? 'text-[#6B8579]' : 'text-[#57534E]'}`}>
+            <div className={`text-xs uppercase tracking-widest ${
+              isTessera ? 'text-[#6B8579]' : isServepoint ? 'text-[#6B6B6B]' : 'text-[#57534E]'
+            }`}>
               Complete Sale Tender
             </div>
-            <div className={`text-xl font-bold font-mono tabular-nums ${
-              isTessera ? 'text-[#C5F82A]' : 'text-[#1C1917]'
+            <div className={`text-xl tabular-nums ${
+              isTessera
+                ? 'font-bold font-mono text-[#C5F82A]'
+                : isServepoint
+                ? 'font-semibold text-[#1A1A1A]'
+                : 'font-bold font-mono text-[#1C1917]'
             }`}>
-              Amount to Collect: ₹{grandTotal.toFixed(2)}
+              Amount to Collect: <span className={isServepoint ? 'text-[#967221]' : undefined}>₹{grandTotal.toFixed(2)}</span>
             </div>
           </div>
           <button
             onClick={onClose}
             aria-label="Close payment dialog"
             className={`p-1.5 rounded-full transition-colors ${
-              isTessera ? 'hover:bg-[#142620] text-[#9BB5A5] hover:text-[#C5F82A]' : 'hover:bg-[#E9E0D6] text-[#57534E]'
+              isTessera
+                ? 'hover:bg-[#142620] text-[#9BB5A5] hover:text-[#C5F82A]'
+                : isServepoint
+                ? 'hover:bg-white text-[#6B6B6B] hover:text-[#DC2626]'
+                : 'hover:bg-[#E9E0D6] text-[#57534E]'
             }`}
           >
             <X className="w-5 h-5" />
@@ -169,9 +190,13 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                 selectedMethod === 'upi'
                   ? isTessera
                     ? 'border-[#C5F82A]/60 bg-[#C5F82A]/12 text-[#C5F82A] ring-1 ring-[#C5F82A]/40'
+                    : isServepoint
+                    ? 'border-[#B88E2F] bg-[#B88E2F]/10 text-[#967221] ring-1 ring-[#B88E2F]/40'
                     : 'border-[#F97316] bg-[#FFF1E6] text-[#F97316] ring-1 ring-[#F97316]'
                   : isTessera
                   ? 'border-[#2A4A37] hover:bg-[#142620] text-[#9BB5A5]'
+                  : isServepoint
+                  ? 'border-[#E3E7E0] hover:border-[#B88E2F]/50 hover:bg-[#F6F5F2] text-[#1A1A1A]'
                   : 'border-[#E9E0D6] hover:bg-[#F5F0EB] text-[#57534E]'
               }`}
             >
@@ -186,9 +211,13 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                 selectedMethod === 'cash'
                   ? isTessera
                     ? 'border-[#34D399]/60 bg-[#34D399]/12 text-[#34D399] ring-1 ring-[#34D399]/40'
+                    : isServepoint
+                    ? 'border-[#B88E2F] bg-[#B88E2F]/10 text-[#967221] ring-1 ring-[#B88E2F]/40'
                     : 'border-[#17803D] bg-[#E8F5EC] text-[#17803D] ring-1 ring-[#17803D]'
                   : isTessera
                   ? 'border-[#2A4A37] hover:bg-[#142620] text-[#9BB5A5]'
+                  : isServepoint
+                  ? 'border-[#E3E7E0] hover:border-[#B88E2F]/50 hover:bg-[#F6F5F2] text-[#1A1A1A]'
                   : 'border-[#E9E0D6] hover:bg-[#F5F0EB] text-[#57534E]'
               }`}
             >
@@ -203,9 +232,13 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                 selectedMethod === 'card'
                   ? isTessera
                     ? 'border-[#60A5FA]/60 bg-[#60A5FA]/12 text-[#60A5FA] ring-1 ring-[#60A5FA]/40'
+                    : isServepoint
+                    ? 'border-[#B88E2F] bg-[#B88E2F]/10 text-[#967221] ring-1 ring-[#B88E2F]/40'
                     : 'border-[#2563EB] bg-[#EFF6FF] text-[#2563EB] ring-1 ring-[#2563EB]'
                   : isTessera
                   ? 'border-[#2A4A37] hover:bg-[#142620] text-[#9BB5A5]'
+                  : isServepoint
+                  ? 'border-[#E3E7E0] hover:border-[#B88E2F]/50 hover:bg-[#F6F5F2] text-[#1A1A1A]'
                   : 'border-[#E9E0D6] hover:bg-[#F5F0EB] text-[#57534E]'
               }`}
             >
@@ -220,9 +253,13 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                 selectedMethod === 'split'
                   ? isTessera
                     ? 'border-[#C084FC]/60 bg-[#C084FC]/12 text-[#C084FC] ring-1 ring-[#C084FC]/40'
+                    : isServepoint
+                    ? 'border-[#B88E2F] bg-[#B88E2F]/10 text-[#967221] ring-1 ring-[#B88E2F]/40'
                     : 'border-[#7C3AED] bg-[#F5F3FF] text-[#7C3AED] ring-1 ring-[#7C3AED]'
                   : isTessera
                   ? 'border-[#2A4A37] hover:bg-[#142620] text-[#9BB5A5]'
+                  : isServepoint
+                  ? 'border-[#E3E7E0] hover:border-[#B88E2F]/50 hover:bg-[#F6F5F2] text-[#1A1A1A]'
                   : 'border-[#E9E0D6] hover:bg-[#F5F0EB] text-[#57534E]'
               }`}
             >
@@ -234,10 +271,14 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
           {/* UPI View */}
           {selectedMethod === 'upi' && (
             <div className={`p-4 rounded-xl border flex flex-col items-center text-center space-y-3 ${
-              isTessera ? 'bg-[#0A1410] border-[#1F3D2E]' : 'bg-[#FFF9F2] border-[#E9E0D6]'
+              isTessera
+                ? 'bg-[#0A1410] border-[#1F3D2E]'
+                : isServepoint
+                ? 'bg-[#D9E2DD] border-[#E3E7E0]'
+                : 'bg-[#FFF9F2] border-[#E9E0D6]'
             }`}>
               <div className={`p-3 rounded-xl border shadow-xs ${
-                isTessera ? 'bg-white border-[#2A4A37]' : 'bg-white border-[#E9E0D6]'
+                isTessera ? 'bg-white border-[#2A4A37]' : isServepoint ? 'bg-white border-[#E3E7E0]' : 'bg-white border-[#E9E0D6]'
               }`}>
                 {/* Visual BharatQR simulation with dynamic amount — kept light for scan reliability */}
                 <div className="w-40 h-40 bg-white flex flex-col items-center justify-center border-2 border-dashed border-[#1C1917] p-2 rounded-lg relative">
@@ -264,7 +305,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                   Scan with Google Pay, PhonePe, Paytm, or BHIM
                 </div>
                 <div className={`flex items-center justify-center gap-1.5 text-xs font-mono ${
-                  isTessera ? 'text-[#9BB5A5]' : 'text-[#57534E]'
+                  isTessera ? 'text-[#9BB5A5]' : isServepoint ? 'text-[#6B6B6B]' : 'text-[#57534E]'
                 }`}>
                   <span>VPA: {upiId}</span>
                   <button
@@ -274,12 +315,12 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                       setTimeout(() => setCopiedUpi(false), 2000);
                     }}
                     aria-label="Copy UPI VPA"
-                    className={`transition-colors ${isTessera ? 'hover:text-[#C5F82A]' : 'hover:text-[#1C1917]'}`}
+                    className={`transition-colors ${isTessera ? 'hover:text-[#C5F82A]' : isServepoint ? 'hover:text-[#967221]' : 'hover:text-[#1C1917]'}`}
                   >
                     <Copy className="w-3.5 h-3.5" />
                   </button>
                   {copiedUpi && (
-                    <span className={`text-[10px] font-bold ${isTessera ? 'text-[#34D399]' : 'text-[#17803D]'}`}>
+                    <span className={`text-[10px] font-bold ${isTessera ? 'text-[#34D399]' : isServepoint ? 'text-[#0F3D3E]' : 'text-[#17803D]'}`}>
                       Copied!
                     </span>
                   )}
@@ -293,6 +334,8 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${
                   isTessera
                     ? 'bg-[#34D399]/10 hover:bg-[#34D399]/20 text-[#34D399] border-[#34D399]/40'
+                    : isServepoint
+                    ? 'bg-white text-[#1A1A1A] border-[#E3E7E0] hover:border-[#B88E2F] hover:text-[#967221]'
                     : 'bg-[#E8F5EC] hover:bg-[#DCFCE7] text-[#166534] border-[#BBF7D0]'
                 }`}
               >
@@ -305,11 +348,15 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
           {/* Cash View */}
           {selectedMethod === 'cash' && (
             <div className={`p-4 rounded-xl border space-y-3 ${
-              isTessera ? 'bg-[#0A1410] border-[#1F3D2E]' : 'bg-[#F5F0EB] border-[#E9E0D6]'
+              isTessera
+                ? 'bg-[#0A1410] border-[#1F3D2E]'
+                : isServepoint
+                ? 'bg-[#F6F5F2] border-[#E3E7E0]'
+                : 'bg-[#F5F0EB] border-[#E9E0D6]'
             }`}>
               <div>
                 <label className={`block text-xs font-semibold uppercase tracking-wider mb-1.5 ${
-                  isTessera ? 'text-[#6B8579]' : 'text-[#57534E]'
+                  isTessera ? 'text-[#6B8579]' : isServepoint ? 'text-[#6B6B6B]' : 'text-[#57534E]'
                 }`}>
                   Cash Tendered (₹)
                 </label>
@@ -321,6 +368,8 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                     className={`w-full px-3 py-2 text-lg font-bold font-mono tabular-nums rounded-xl border focus:outline-none ${
                       isTessera
                         ? 'border-[#2A4A37] bg-[#0F1D17] text-[#F5F4EE] focus:border-[#C5F82A]'
+                        : isServepoint
+                        ? 'border-[#E3E7E0] bg-white text-[#1A1A1A] focus:border-[#B88E2F] focus:ring-2 focus:ring-[#B88E2F]/25'
                         : 'border-[#E9E0D6] bg-white text-[#1C1917]'
                     }`}
                   />
@@ -330,6 +379,8 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                     className={`px-3 py-2 text-xs font-semibold rounded-xl border transition-colors ${
                       isTessera
                         ? 'tessera-ghost rounded-lg'
+                        : isServepoint
+                        ? 'bg-[#0F3D3E] text-white border-[#0F3D3E] hover:bg-[#0B3132]'
                         : 'bg-white border-[#E9E0D6] hover:bg-[#E9E0D6]'
                     }`}
                   >
@@ -345,10 +396,12 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                     key={note}
                     type="button"
                     onClick={() => setCashTendered(note)}
-                    className={`px-3 py-1.5 text-xs font-mono font-bold rounded-lg border transition-colors tabular-nums ${
+                    className={`px-3 py-1.5 text-xs rounded-lg border transition-colors tabular-nums ${
                       isTessera
-                        ? 'bg-[#0F1D17] border-[#2A4A37] text-[#F5F4EE] hover:border-[#34D399]/60 hover:text-[#34D399]'
-                        : 'bg-white border-[#E9E0D6] hover:border-[#17803D] hover:bg-[#E8F5EC] text-[#1C1917]'
+                        ? 'font-mono font-bold bg-[#0F1D17] border-[#2A4A37] text-[#F5F4EE] hover:border-[#34D399]/60 hover:text-[#34D399]'
+                        : isServepoint
+                        ? 'font-semibold bg-white border-[#E3E7E0] text-[#1A1A1A] hover:border-[#B88E2F] hover:bg-[#B88E2F]/10'
+                        : 'font-mono font-bold bg-white border-[#E9E0D6] hover:border-[#17803D] hover:bg-[#E8F5EC] text-[#1C1917]'
                     }`}
                   >
                     ₹{note}
@@ -357,16 +410,16 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
               </div>
 
               <div className={`p-3 rounded-xl border flex items-center justify-between ${
-                isTessera ? 'bg-[#0F1D17] border-[#2A4A37]' : 'bg-white border-[#E9E0D6]'
+                isTessera ? 'bg-[#0F1D17] border-[#2A4A37]' : isServepoint ? 'bg-white border-[#E3E7E0]' : 'bg-white border-[#E9E0D6]'
               }`}>
-                <span className={`text-xs font-semibold ${isTessera ? 'text-[#9BB5A5]' : 'text-[#57534E]'}`}>
+                <span className={`text-xs font-semibold ${isTessera ? 'text-[#9BB5A5]' : isServepoint ? 'text-[#6B6B6B]' : 'text-[#57534E]'}`}>
                   Change Due to Return
                 </span>
                 <span
                   className={`text-xl font-bold font-mono tabular-nums ${
                     cashTendered >= grandTotal
-                      ? isTessera ? 'text-[#34D399]' : 'text-[#17803D]'
-                      : isTessera ? 'text-[#F87171]' : 'text-[#B42318]'
+                      ? isTessera ? 'text-[#34D399]' : isServepoint ? 'text-[#0F3D3E]' : 'text-[#17803D]'
+                      : isTessera ? 'text-[#F87171]' : isServepoint ? 'text-[#DC2626]' : 'text-[#B42318]'
                   }`}
                 >
                   ₹{cashChange.toFixed(2)}
@@ -378,13 +431,17 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
           {/* Card View */}
           {selectedMethod === 'card' && (
             <div className={`p-4 rounded-xl border text-center space-y-2 ${
-              isTessera ? 'bg-[#60A5FA]/8 border-[#60A5FA]/30' : 'bg-[#EFF6FF] border-[#BFDBFE]'
+              isTessera
+                ? 'bg-[#60A5FA]/8 border-[#60A5FA]/30'
+                : isServepoint
+                ? 'bg-[#D9E2DD] border-[#E3E7E0]'
+                : 'bg-[#EFF6FF] border-[#BFDBFE]'
             }`}>
-              <CreditCard className={`w-8 h-8 mx-auto ${isTessera ? 'text-[#60A5FA]' : 'text-[#2563EB]'}`} />
-              <div className={`text-sm font-semibold ${isTessera ? 'text-[#F5F4EE]' : 'text-[#1C1917]'}`}>
+              <CreditCard className={`w-8 h-8 mx-auto ${isTessera ? 'text-[#60A5FA]' : isServepoint ? 'text-[#0F3D3E]' : 'text-[#2563EB]'}`} />
+              <div className={`text-sm font-semibold ${isTessera ? 'text-[#F5F4EE]' : isServepoint ? 'text-[#1A1A1A]' : 'text-[#1C1917]'}`}>
                 Card Swipe / Tap EDC Terminal
               </div>
-              <div className={`text-xs ${isTessera ? 'text-[#9BB5A5]' : 'text-[#57534E]'}`}>
+              <div className={`text-xs ${isTessera ? 'text-[#9BB5A5]' : isServepoint ? 'text-[#6B6B6B]' : 'text-[#57534E]'}`}>
                 Please tap or insert customer card on the Pine Labs / Paytm POS terminal.
               </div>
             </div>
@@ -393,10 +450,14 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
           {/* Split Bill View */}
           {selectedMethod === 'split' && (
             <div className={`p-4 rounded-xl border space-y-3 ${
-              isTessera ? 'bg-[#C084FC]/8 border-[#C084FC]/30' : 'bg-[#F5F3FF] border-[#DDD6FE]'
+              isTessera
+                ? 'bg-[#C084FC]/8 border-[#C084FC]/30'
+                : isServepoint
+                ? 'bg-[#D9E2DD] border-[#E3E7E0]'
+                : 'bg-[#F5F3FF] border-[#DDD6FE]'
             }`}>
               <div className="flex items-center justify-between">
-                <span className={`text-xs font-bold ${isTessera ? 'text-[#C084FC]' : 'text-[#5B21B6]'}`}>
+                <span className={`text-xs font-bold ${isTessera ? 'text-[#C084FC]' : isServepoint ? 'text-[#1A1A1A]' : 'text-[#5B21B6]'}`}>
                   Number of Diners:
                 </span>
                 <div className="flex items-center gap-1">
@@ -409,9 +470,13 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                         splitCount === n
                           ? isTessera
                             ? 'bg-[#C084FC] text-[#0A1410]'
+                            : isServepoint
+                            ? 'bg-[#B88E2F] text-white'
                             : 'bg-[#7C3AED] text-white shadow-2xs'
                           : isTessera
                           ? 'bg-[#0F1D17] border border-[#2A4A37] text-[#C084FC] hover:bg-[#142620]'
+                          : isServepoint
+                          ? 'bg-white border border-[#E3E7E0] text-[#6B6B6B] hover:border-[#B88E2F] hover:text-[#967221]'
                           : 'bg-white border border-[#DDD6FE] text-[#5B21B6] hover:bg-[#EDE9FE]'
                       }`}
                     >
@@ -429,9 +494,13 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                       diner.paid
                         ? isTessera
                           ? 'bg-[#34D399]/12 border-[#34D399]/40 text-[#34D399]'
+                          : isServepoint
+                          ? 'bg-[#0F3D3E]/10 border-[#0F3D3E]/30 text-[#0F3D3E]'
                           : 'bg-[#DCFCE7] border-[#86EFAC] text-[#166534]'
                         : isTessera
                         ? 'bg-[#0F1D17] border-[#2A4A37] text-[#F5F4EE]'
+                        : isServepoint
+                        ? 'bg-white border-[#E3E7E0] text-[#1A1A1A]'
                         : 'bg-white border-[#E9E0D6] text-[#1C1917]'
                     }`}
                   >
@@ -440,7 +509,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                       <span className="font-mono font-bold tabular-nums">₹{diner.amount.toFixed(2)}</span>
                       {diner.paid && (
                         <span className={`ml-2 text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded ${
-                          isTessera ? 'bg-[#0A1410] text-[#34D399] border border-[#34D399]/40' : 'bg-white text-[#166534]'
+                          isTessera ? 'bg-[#0A1410] text-[#34D399] border border-[#34D399]/40' : isServepoint ? 'bg-white text-[#0F3D3E]' : 'bg-white text-[#166534]'
                         }`}>
                           Paid via {diner.method}
                         </span>
@@ -455,6 +524,8 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                           className={`px-2 py-0.5 rounded text-[10px] font-bold border transition-colors ${
                             isTessera
                               ? 'bg-[#C5F82A]/12 hover:bg-[#C5F82A]/25 text-[#C5F82A] border-[#C5F82A]/40'
+                              : isServepoint
+                              ? 'bg-white hover:border-[#B88E2F] hover:bg-[#B88E2F]/10 text-[#6B6B6B] hover:text-[#967221] border-[#E3E7E0]'
                               : 'bg-[#FFF1E6] hover:bg-[#FDE2CF] text-[#EA580C] border-[#FDBA74]'
                           }`}
                         >
@@ -466,6 +537,8 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                           className={`px-2 py-0.5 rounded text-[10px] font-bold border transition-colors ${
                             isTessera
                               ? 'bg-[#34D399]/12 hover:bg-[#34D399]/25 text-[#34D399] border-[#34D399]/40'
+                              : isServepoint
+                              ? 'bg-white hover:border-[#B88E2F] hover:bg-[#B88E2F]/10 text-[#6B6B6B] hover:text-[#967221] border-[#E3E7E0]'
                               : 'bg-[#E8F5EC] hover:bg-[#DCFCE7] text-[#166534] border-[#BBF7D0]'
                           }`}
                         >
@@ -477,6 +550,8 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                           className={`px-2 py-0.5 rounded text-[10px] font-bold border transition-colors ${
                             isTessera
                               ? 'bg-[#60A5FA]/12 hover:bg-[#60A5FA]/25 text-[#60A5FA] border-[#60A5FA]/40'
+                              : isServepoint
+                              ? 'bg-white hover:border-[#B88E2F] hover:bg-[#B88E2F]/10 text-[#6B6B6B] hover:text-[#967221] border-[#E3E7E0]'
                               : 'bg-[#EFF6FF] hover:bg-[#DBEAFE] text-[#1D4ED8] border-[#BFDBFE]'
                           }`}
                         >
@@ -491,13 +566,13 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
               </div>
 
               <div className={`flex items-center justify-between text-xs pt-1 font-semibold ${
-                isTessera ? 'text-[#C084FC]' : 'text-[#5B21B6]'
+                isTessera ? 'text-[#C084FC]' : isServepoint ? 'text-[#6B6B6B]' : 'text-[#5B21B6]'
               }`}>
                 <span className="tabular-nums">Collected: ₹{totalSplitPaid.toFixed(2)} / ₹{grandTotal.toFixed(2)}</span>
                 <span className={`tabular-nums ${
                   allSplitDinersPaid
-                    ? isTessera ? 'text-[#34D399]' : 'text-[#166534]'
-                    : isTessera ? 'text-[#FBBF24]' : 'text-[#B45309]'
+                    ? isTessera ? 'text-[#34D399]' : isServepoint ? 'text-[#0F3D3E]' : 'text-[#166534]'
+                    : isTessera ? 'text-[#FBBF24]' : isServepoint ? 'text-[#967221]' : 'text-[#B45309]'
                 }`}>
                   {allSplitDinersPaid ? 'All Diners Paid!' : `₹${(grandTotal - totalSplitPaid).toFixed(2)} Remaining`}
                 </span>
@@ -507,37 +582,45 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
 
           {/* Bill Summary Breakdown */}
           <div className={`text-xs space-y-1.5 pt-2 border-t ${
-            isTessera ? 'border-[#1F3D2E] text-[#9BB5A5]' : 'border-[#E9E0D6] text-[#57534E]'
+            isTessera
+              ? 'border-[#1F3D2E] text-[#9BB5A5]'
+              : isServepoint
+              ? 'border-[#E3E7E0] text-[#6B6B6B]'
+              : 'border-[#E9E0D6] text-[#57534E]'
           }`}>
             <div className="flex justify-between">
               <span>Items Subtotal</span>
-              <span className="font-mono tabular-nums">₹{subtotal.toFixed(2)}</span>
+              <span className={isServepoint ? 'font-semibold text-[#1A1A1A] tabular-nums' : 'font-mono tabular-nums'}>₹{subtotal.toFixed(2)}</span>
             </div>
             <div className="flex justify-between">
               <span>GST (5%)</span>
-              <span className="font-mono tabular-nums">₹{taxTotal.toFixed(2)}</span>
+              <span className={isServepoint ? 'font-semibold text-[#1A1A1A] tabular-nums' : 'font-mono tabular-nums'}>₹{taxTotal.toFixed(2)}</span>
             </div>
             {discountTotal > 0 && (
-              <div className={`flex justify-between ${isTessera ? 'text-[#34D399]' : 'text-[#17803D]'}`}>
+              <div className={`flex justify-between ${isTessera ? 'text-[#34D399]' : isServepoint ? 'text-[#967221]' : 'text-[#17803D]'}`}>
                 <span>
                   Discount / Offer {redeemedPoints > 0 ? `(incl. ${redeemedPoints} pts)` : ''}
                 </span>
-                <span className="font-mono tabular-nums">- ₹{discountTotal.toFixed(2)}</span>
+                <span className={`tabular-nums ${isServepoint ? 'font-semibold' : 'font-mono'}`}>- ₹{discountTotal.toFixed(2)}</span>
               </div>
             )}
             {attachedCustomer && pointsToEarn > 0 && (
               <div className={`flex justify-between px-2 py-1 rounded-lg ${
-                isTessera ? 'text-[#C084FC] bg-[#C084FC]/10' : 'text-[#7C3AED] bg-[#F5F3FF]'
+                isTessera ? 'text-[#C084FC] bg-[#C084FC]/10' : isServepoint ? 'text-[#967221] bg-[#B88E2F]/10' : 'text-[#7C3AED] bg-[#F5F3FF]'
               }`}>
                 <span className="font-medium">Loyalty Reward ({attachedCustomer.name})</span>
-                <span className="font-mono font-bold tabular-nums">+{pointsToEarn} pts to earn</span>
+                <span className={`font-bold tabular-nums ${isServepoint ? 'font-semibold' : 'font-mono'}`}>+{pointsToEarn} pts to earn</span>
               </div>
             )}
             <div className="flex justify-between items-center text-xs">
               <span className="flex items-center gap-1">
                 Platform Fee:
                 <span className={`text-[10px] font-semibold px-1.5 py-0.2 rounded-full ${
-                  isTessera ? 'bg-[#C5F82A]/10 text-[#C5F82A] border border-[#C5F82A]/30' : 'bg-[#FFF1E6] text-[#F97316]'
+                  isTessera
+                    ? 'bg-[#C5F82A]/10 text-[#C5F82A] border border-[#C5F82A]/30'
+                    : isServepoint
+                    ? 'bg-[#B88E2F]/15 text-[#967221] border border-[#B88E2F]/30'
+                    : 'bg-[#FFF1E6] text-[#F97316]'
                 }`}>
                   {feePayer === 'cafe' ? 'Absorbed by Cafe' : 'Paid by Customer'}
                 </span>
@@ -551,13 +634,21 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
 
         {/* Footer */}
         <div className={`p-4 border-t flex items-center justify-between ${
-          isTessera ? 'bg-[#0A1410] border-[#1F3D2E]' : 'bg-[#FFF9F2] border-[#E9E0D6]'
+          isTessera
+            ? 'bg-[#0A1410] border-[#1F3D2E]'
+            : isServepoint
+            ? 'bg-white border-[#E3E7E0]'
+            : 'bg-[#FFF9F2] border-[#E9E0D6]'
         }`}>
           <button
             type="button"
             onClick={onClose}
             className={`px-4 py-2.5 text-sm font-medium transition-colors ${
-              isTessera ? 'text-[#9BB5A5] hover:text-[#F5F4EE]' : 'text-[#57534E] hover:text-[#1C1917]'
+              isTessera
+                ? 'text-[#9BB5A5] hover:text-[#F5F4EE]'
+                : isServepoint
+                ? 'text-[#6B6B6B] hover:text-[#1A1A1A]'
+                : 'text-[#57534E] hover:text-[#1C1917]'
             }`}
           >
             Back to Cart
@@ -569,6 +660,8 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
             className={`flex items-center gap-2 px-6 py-2.5 rounded-xl font-semibold text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
               isTessera
                 ? 'tessera-cta rounded-lg disabled:hover:transform-none disabled:hover:shadow-none'
+                : isServepoint
+                ? 'bg-[#0F3D3E] hover:bg-[#0B3132] text-white shadow-[0_4px_14px_rgba(15,61,62,0.25)]'
                 : 'bg-[#17803D] hover:bg-[#156f35] text-white shadow-xs'
             }`}
           >

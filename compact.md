@@ -3,11 +3,11 @@
 > **Purpose**: Single-page dense summary of the current TSOS project state, for fast cold re-onboarding by any agent or contributor. Updated alongside every code change. For full chronological detail, see [`docs/compacts/`](docs/compacts/README.md) (7 compacts) and [`worklog.md`](worklog.md) (live agent handover).
 
 - **Project**: TSOS — The Cafe Operating System
-- **Version**: 2.6.8
+- **Version**: 2.6.9
 - **Repo**: https://github.com/OmKardile/tsos-alt
 - **Author**: Omkar Kardile <omkardile84@gmail.com>
 - **Last Updated**: 2026-10-01
-- **Default Theme**: **ServePoint** (owner Figma, EXACT tokens since v2.6.7/ADR-0012: ivory `#F6F5F2` canvas, deep-teal `#0F3D3E` primary, gold `#B88E2F` accent (pressed `#967221`), signature sage `#D9E2DD` surfaces, text `#1A1A1A`/`#6B6B6B`, **Poppins**) for the authenticated app since v2.6.6; unauthenticated routes (frozen login, storefront) stay force-pinned Tessera — see [`CHANGELOG.md`](CHANGELOG.md) v2.6.0–v2.6.8 and ADR-0010/0011/0012
+- **Default Theme**: **ServePoint** (owner Figma, EXACT tokens since v2.6.7/ADR-0012: ivory `#F6F5F2` canvas, deep-teal `#0F3D3E` primary, gold `#B88E2F` accent (pressed `#967221`), signature sage `#D9E2DD` surfaces, text `#1A1A1A`/`#6B6B6B`, **Poppins**) for the authenticated app since v2.6.6; unauthenticated routes (frozen login, storefront) stay force-pinned Tessera — see [`CHANGELOG.md`](CHANGELOG.md) v2.6.0–v2.6.9 and ADR-0010/0011/0012
 - **Render Blueprint**: `render.yaml` → Static Site **`tsos-pos`** (v2.6.3 hardened; v2.6.4 re-hardcoded live Supabase keys — zero-touch apply)
 - **Design Governance**: **Login screen FROZEN** at v2.6.4 (ADR-0010) — no changes until owner unfreezes; Surface Pack illustrations reserved for login; **ServePoint UI (owner Figma) adopted as the default post-login design (ADR-0011)**; **Figma REST pipeline UNLOCKED via owner PAT (ADR-0012)** — all 6 pages explored, 57 Final UI frames rendered + archived at `docs/design/servepoint/` (frames/ + pages/); design source is now in-repo, no live Figma access needed
 
@@ -80,6 +80,8 @@ npm run dev   # or bun run dev
 
 ## Recent activity (live agent handover)
 See [`worklog.md`](worklog.md) for the chronological agent work log.
+
+**v2.6.9 (2026-10-01) shipped**: **PaymentModal + Dine-in Tables explicit ServePoint** — PaymentModal: sage `#D9E2DD` header with "Amount to Collect" in Poppins semibold `#1A1A1A` + pressed-gold `#967221` amount, all four method tabs share the gold active state (single-accent language replaces the warm four-color rainbow), UPI/Card/Split wells on sage + Cash well on canvas `#F6F5F2`, deep-teal Exact + **Confirm Payment CTA (exact "Charge customer" button `#0F3D3E`→`#0B3132`)**, Poppins semibold summary values (mono retired), ServePoint confetti `[gold, teal, sage]`. TablesScreen (first theme-aware version): ivory canvas, sage icon chip + gold Add CTA, white floor cards (`#E3E7E0` hairlines, gold-ring occupied + deep-teal free badges, gold-tinted order insets), sage selects, Add-Table modal + **QR Stand printout (sage well, deep-teal cafe name, gold CTA)**. Fixed a transient doubled-`>` JSX artifact via byte-level check. Verified: tsc 0 errors; E2E full tender (UPI→Cash→Split) + Order #104 PAID + Tables + QR stand; theme cycle round-trips; zero console errors.
 
 **v2.6.8 (2026-10-01) shipped**: **CartDrawer explicit ServePoint (Bills detail-pane language, frame 219:23130)** — sage `#D9E2DD` header strip (gold bag icon, near-black Poppins title, gold-tinted items pill), order-type tabs on `#E3E7E0` inset; white item cards with `#E3E7E0` hairlines + gold hover ring, Poppins semibold near-black totals (mono retired per Figma), sage qty steppers with gold hover; footer white pane with sage coupon input (gold focus) + **deep-teal `#0F3D3E` Apply button**; totals labels `#6B6B6B` / values semibold `#1A1A1A`; To Pay in pressed-gold `#967221`; **Charge CTA = Figma "Charge customer" button (full-width deep teal → #0B3132, white text)**; empty state sage well + gold bag. Verified: tsc 0 errors; E2E add→cart→PaymentModal→Back round-trip clean; zero console errors; tessera/warm untouched.
 

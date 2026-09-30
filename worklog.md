@@ -367,3 +367,52 @@ Unresolved Issues / Risks / Next-phase Priorities:
 2. Realtime POS→KDS end-to-end verification still open.
 3. fig-kiwi v4 uploads (FoodPOSDark_Tablet, Dazboard) unreadable — superseded by REST pipeline for ServePoint; treat kits as static layout reference only.
 4. Menu builder mutations still local-only; no automated tests yet.
+
+---
+Task ID: 12
+Agent: glm-5.3
+Task: Cron webDevReview round — QA sweep + continue ServePoint explicit passes (folded the auto-committer stray; shipped CartDrawer).
+
+Work Log:
+- Housekeeping: sandbox auto-committer had created stray commit aff0545 (UUID message, worklog.md only) on top of the pushed v2.6.7 → `git reset --soft HEAD~1`, folded into this round's commit.
+- QA sweep: port 3000 HTTP 200; app session alive (Owner, /coolkafe/pos); zero browser console errors; dev.log "error" lines confirmed historical transients (6:17 / 6:46, pre-dating this round).
+- Served the queue's top item: **CartDrawer explicit ServePoint** per the Figma "Bills" detail pane (frame 219:23130) — added `isServepoint` flag; sage #D9E2DD header strip with gold bag icon + gold-tinted items pill + near-black Poppins title; order-type tabs on #E3E7E0 inset; white item cards with #E3E7E0 hairlines + gold hover ring; item totals switched from mono to Poppins semibold near-black (Figma-faithful), "each" captions #969696; sage qty steppers with #6B6B6B→gold buttons; Remove #969696→#DC2626; white footer pane with sage coupon input (gold focus ring) + deep-teal #0F3D3E Apply button; totals labels #6B6B6B / values semibold #1A1A1A; To Pay value in pressed-gold #967221; **Charge CTA = exact Figma "Charge customer" button (full-width deep teal #0F3D3E→#0B3132, white text, soft teal shadow)**; empty state sage well + gold bag + non-italic copy. Tessera/warm branches untouched.
+- Verified: tsc --noEmit 0 errors; agent-browser E2E — added item (Cappuccino), cart header/steppers render in ServePoint, Charge / Pay opens PaymentModal (UPI QR tender ₹241.50 with gold active tab — PaymentModal's own explicit pass deferred to next round), Back to Cart round-trip clean, zero console errors.
+- Docs: CHANGELOG [2.6.8] entry (repaired the self-consumed [2.6.7] heading again — note for future agents: inserting a new ## section above an existing one eats the old heading unless the old heading is included in new_str); compact.md version 2.6.8 + v2.6.8 shipped paragraph + changelog range; technical-documentation.md version 2.6.8 + explicit-surfaces list (CartDrawer added); business-documentation.md 2.6.8.
+- Commit f603895 pushed to main (0447b93..f603895).
+
+Stage Summary:
+- v2.6.8 shipped: CartDrawer is the 3rd explicit ServePoint surface (after Header/WebNavbar chrome + PosScreen cards). The POS right column now matches the ServePoint Bills pane: sage header, white item rows, deep-teal Charge CTA.
+- Next highest-value explicit passes: PaymentModal (tender surface — currently warm+remap; needs deep-teal Confirm, gold active tab formalization, Poppins headings), then Dine-in Tables (floor plan cards), then Dashboard/SuperAdmin per Dashboard frame 219:23581.
+
+Unresolved Issues / Risks / Next-phase Priorities:
+1. customers + offers live tables still 404 to anon (migration 001 DDL re-run needed; no Postgres connection string in sandbox).
+2. Realtime POS→KDS end-to-end verification still open.
+3. Menu builder mutations still local-only; no automated tests.
+4. Reminder: CHANGELOG heading-consumption pattern when prepending sections (see Work Log).
+
+---
+Task ID: 13
+Agent: glm-5.3
+Task: Cron webDevReview round — QA sweep + continue explicit ServePoint passes (shipped PaymentModal + Dine-in Tables; v2.6.9)
+
+Work Log:
+- Housekeeping: folded stray auto-committer commit bcee5db (UUID message, worklog only) via git reset --soft HEAD~1 before starting.
+- QA sweep: port 3000 HTTP 200; Owner session alive on /coolkafe/pos; zero browser console errors; TablesScreen read revealed it had ZERO theme awareness (pure hardcoded warm) — queued for full pass.
+- PaymentModal explicit ServePoint pass (tender surface): sage #D9E2DD header with "Complete Sale Tender" eyebrow #6B6B6B + "Amount to Collect" Poppins semibold #1A1A1A with amount in pressed-gold #967221; all four method tabs share the single gold active state (#B88E2F border/tint/ring + #967221 text — replaces warm four-color rainbow per ServePoint's restrained accent), inactive #E3E7E0 hairline + gold-tint hover; UPI/Card/Split wells on sage, Cash well on canvas #F6F5F2; white QR card + VPA #6B6B6B with #967221 copy hover + white ghost "Simulate UPI App Confirmation"; Cash input white with gold focus ring + mini deep-teal Exact button + white denomination chips (Poppins semibold, mono retired) + white change-due card (deep-teal sufficient / #DC2626 short); Split sage well + gold active diner count + white diner rows with ghost UPI/Cash/Card chips + deep-teal paid rows + pressed-gold Remaining; bill summary labels #6B6B6B / values Poppins semibold #1A1A1A (mono retired), discount #967221, gold loyalty + platform-fee chips; footer white + #E3E7E0, Back to Cart #6B6B6B→#1A1A1A, Confirm Payment CTA = exact deep-teal #0F3D3E→#0B3132 "Charge customer" button with soft teal shadow; confetti switched to [#B88E2F, #0F3D3E, #D9E2DD]. Tessera/warm branches untouched.
+- Caught + fixed a transient artifact mid-edit: a doubled `>` on the Copied! span (MultiEdit sequential behavior + stale echo) — verified via sed|od byte dump, fixed with sed; dev.log PARSE_ERROR at 7:05:53 PM was this transient, clean HMRs after.
+- TablesScreen full ServePoint pass (first theme-aware version of this screen): isServepoint flag + themeMode from store; ivory #F6F5F2 canvas; white header + #E3E7E0 hairline + sage icon chip + gold grid icon; gold #B88E2F→#967221 Add New Table CTA; floor cards: free = white + #E3E7E0 + gold-border hover lift + shadow, occupied = gold ring #B88E2F/45 + gold badge + gold-tinted order inset with pressed-gold Poppins amount; free badge deep-teal tint; View QR ghost→sage hover, Test QR gold-tinted→solid, status select sage; Add Table modal white + gold focus rings + gold submit; QR Stand printout: sage well + deep-teal cafe name + gold table label + #F6F5F2 URL box + gold Test CTA + ghost Copy/Print.
+- Verified: npx tsc --noEmit → 0 errors (lint script = tsc, clean); agent-browser E2E — Charge/Pay(₹399) → tender renders exact ServePoint (UPI QR default gold tab), Cash view (₹400 → change ₹1.00 deep-teal), Split view (gold count 2, ghost per-diner chips), Confirm Payment → Order #104 PAID + receipt modal + ServePoint confetti; Tables screen floor plan + QR stand modal exact ServePoint; theme cycle servepoint→tessera→dark→servepoint round-trips (Tables in tessera = pre-existing remap behavior, unchanged fallback); zero browser console errors; dev.log clean post-fix.
+- Docs: CHANGELOG [2.6.9] entry (old [2.6.8] heading preserved in new_str — heading-consumption pattern respected); compact.md version 2.6.9 + changelog range + v2.6.9 shipped paragraph; technical-documentation.md version 2.6.9 + explicit-surfaces list extended (PaymentModal + Dine-in Tables added); business-documentation.md 2.6.9. README/help/decisions need no change (no new ADR; no version-surface content).
+- Commit + push to main as v2.6.9.
+
+Stage Summary:
+- v2.6.9 shipped: 5th+6th explicit ServePoint surfaces — the entire POS sale funnel (menu cards → CartDrawer → PaymentModal) is now Figma-faithful end-to-end, and Dine-in Tables got its first theme-aware pass (previously hardcoded warm).
+- Known note: TablesScreen in tessera/dark still uses warm fallback + global remaps (pre-existing look, unchanged); an explicit Tessera pass is optional future polish, consistent with how OrdersScreen was handled.
+- Next highest-value explicit passes: BillReceiptModal (post-payment receipt — still warm+remap), then Dashboard/SuperAdmin per Dashboard frame 219:23581 (line+donut+stat cards), then Orders two-pane per Bills frames.
+
+Unresolved Issues / Risks / Next-phase Priorities:
+1. customers + offers live tables still 404 to anon (migration 001 DDL re-run needed; no Postgres connection string in sandbox).
+2. Realtime POS→KDS end-to-end verification still open.
+3. Menu builder mutations still local-only; no automated tests.
+4. Reminder: MultiEdit applies sequentially and can partially apply on failure — verify state after each batch; byte-verify (sed|od) when echoes look doubled/stale (ANSI transport scrubber artifacts).
