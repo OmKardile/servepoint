@@ -340,3 +340,30 @@ Unresolved Issues / Risks / Next-phase Priorities:
 2. Realtime POS→KDS end-to-end verification still open.
 3. Figma full-page access blocked (needs FIGMA_TOKEN or exports) — documented in ADR-0011.
 4. Menu builder mutations still local-only; no automated tests.
+
+---
+Task ID: 11
+Agent: glm-5.3
+Task: Owner supplied Figma PAT ("figma token; save in env render too") + 4 local UI kits ("check these for UI") + "continue ALL / autoqueue all" — unlock the ServePoint design source, mine exact tokens, apply them to TSOS, sync docs, ship.
+
+Work Log:
+- Extracted owner uploads (upload/, gitignored): Dae Alright! POS kit RAR → full PNG exports (restaurant dashboard/orders/earnings reference); Dashboard .sketch (zip) → preview + page JSONs; two .fig files are fig-kiwi v4 — fig2sketch requires v15+; signature carving recovered only chunk-internal buffers → documented dead end.
+- Verified owner's Figma PAT (file_content:read scope; /v1/me 403 by design, file endpoints 200). Render.yaml wiring: first committed value: <PAT> → GitHub Push Protection REJECTED the push (GH013, "Figma Personal Access Token" protected class) → resolved with `- key: FIGMA_TOKEN sync: false` (Render prompts once at apply, stores server-side; real value lives only in gitignored .env). Documented in ADR-0012.
+- Figma REST exploration of ServePoint POS Preview (P14mYvxyrZlkMonqobnWL): all 6 pages inventoried (00 Cover, 01 Research, 02 Wireframes, 03 UI Exploration, 04 Final UI = 57 frames, 05 Components); rendered + archived ALL 57 Final UI frames at docs/design/servepoint/frames/ (0.5 scale) + 6 page overviews at docs/design/servepoint/pages/.
+- Mined EXACT tokens from node fills ("04 Final UI" Add-to-Order 219:30062 + Bills + "05 Components"): canvas #F6F5F2, deep teal #0F3D3E, gold #B88E2F (pressed variant #967221), signature sage #D9E2DD, text #1A1A1A/#6B6B6B/#969696, danger #DC2626, hairline #E3E7E0, radii 12/16/24/100, Poppins 400/16·500/16·600/24 — replaced ALL v2.6.6 cover-thumbnail estimates (#F2EFE5/#17402E/#E9A63C/Plus Jakarta Sans).
+- index.css: full [data-theme="servepoint"] rewrite (token block + all remaps + sp-cta = exact Primary Button gold/near-black/500 + sp-sidebar #0F3D3E + sp-banner gold + sp-ghost gold-hover-ring + NEW sp-surface sage). index.html: Poppins import + re-tokened body/selection.
+- Header.tsx + WebNavbar.tsx: every ServePoint branch re-tokened hex-for-hex (gold brand block/tabs/marker/badges, near-black text, sage outlet select + dropdown hover, #967221 fee accent, #969696 muted). PosScreen: added isServepoint flag + Figma-faithful menu cards (sage surface, gold-border hover lift, #E3E7E0 image well, non-mono semibold price, gold Add CTA #B88E2F→#967221, #C9D3CC divider, #DC2626 low-stock badge). NOTE: MultiEdit here is NOT atomic — it applies edits sequentially and stops at the first failure (caused a transient duplicate const + needed manual follow-ups; verified final state clean).
+- Verified: tsc 0 errors, bun lint clean; agent-browser E2E — logged-out login pixel-identical frozen Tessera; logged in (Owner one-click) → POS renders exact ServePoint (gold tabs/CTAs, sage cards, deep-teal ribbon); cart golden path (Cappuccino ₹150 → Charge/Pay ₹157.5) works; theme cycle servepoint→tessera→dark→servepoint round-trips; zero console errors. dev.log errors seen were historical transients from mid-edit states.
+- Docs: ADR-0012 (docs/decisions/0012-figma-rest-pipeline-and-exact-servepoint-tokens.md + index + decisions.md summary); CHANGELOG 2.6.7 (also repaired the previously-consumed [2.6.6] heading); compact.md version/theme/governance lines + added missing v2.6.6 shipped paragraph + v2.6.7 paragraph; technical-documentation.md §6.6 rewritten (exact tokens + REST pipeline + archive paths); README §5; business-documentation.md; help.md.
+- Commit 0447b93 pushed to main (78 files; 2.3MB design archive committed; upload/ stays gitignored). Note: amended commit message still says "into .env + render.yaml" (pre-pivot wording) — custody truth lives in ADR-0012/docs; force-push reword intentionally skipped.
+
+Stage Summary:
+- v2.6.7 shipped: ServePoint theme now uses the owner's EXACT Figma tokens (pixel-sourced, not estimated); full design corpus (57 screens + 6 page overviews) archived in-repo; POS menu cards match the Figma card language; PAT pipeline live for future agents via .env (FIGMA_TOKEN) with Render sync:false declared.
+- ADR-0010 login freeze re-verified intact (zero AuthScreen edits, pixel-identical logged-out render).
+- Next highest-value: explicit ServePoint passes for CartDrawer, Bills→Orders mapping (two-pane order detail per Bills frame), Dashboard/SuperAdmin (line+donut+stat cards per Dashboard frame 219:23581), remaining screens — all against the archived frames, no Figma access needed.
+
+Unresolved Issues / Risks / Next-phase Priorities:
+1. customers + offers live tables still 404 to anon (migration 001 DDL re-run needed; no Postgres connection string in sandbox).
+2. Realtime POS→KDS end-to-end verification still open.
+3. fig-kiwi v4 uploads (FoodPOSDark_Tablet, Dazboard) unreadable — superseded by REST pipeline for ServePoint; treat kits as static layout reference only.
+4. Menu builder mutations still local-only; no automated tests yet.

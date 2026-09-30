@@ -51,6 +51,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ onOpenPayment }) => {
   } = useTsosStore();
 
   const isTessera = themeMode === 'tessera';
+  const isServepoint = themeMode === 'servepoint';
 
   const [couponCode, setCouponCode] = useState('');
   const [couponError, setCouponError] = useState('');
@@ -115,18 +116,18 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ onOpenPayment }) => {
 
   return (
     <aside className={`w-full lg:w-96 border-l flex flex-col h-full ${
-      isTessera ? 'bg-[#0F1D17] border-[#1F3D2E]' : 'bg-white border-[#E9E0D6] shadow-xs'
+      isTessera ? 'bg-[#0F1D17] border-[#1F3D2E]' : isServepoint ? 'bg-white border-[#E3E7E0]' : 'bg-white border-[#E9E0D6] shadow-xs'
     }`}>
       {/* Drawer Header */}
       <div className={`p-4 border-b space-y-3 ${
-        isTessera ? 'border-[#1F3D2E] bg-[#0A1410]' : 'border-[#E9E0D6] bg-[#FFF9F2]'
+        isTessera ? 'border-[#1F3D2E] bg-[#0A1410]' : isServepoint ? 'border-[#E3E7E0] bg-[#D9E2DD]' : 'border-[#E9E0D6] bg-[#FFF9F2]'
       }`}>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <ShoppingBag className={`w-5 h-5 ${isTessera ? 'text-[#C5F82A]' : 'text-[#F97316]'}`} />
-            <h2 className={`font-bold text-base ${isTessera ? 'text-[#F5F4EE]' : 'text-[#1C1917]'}`}>Current Order</h2>
+            <ShoppingBag className={`w-5 h-5 ${isTessera ? 'text-[#C5F82A]' : isServepoint ? 'text-[#967221]' : 'text-[#F97316]'}`} />
+            <h2 className={`font-bold text-base ${isTessera ? 'text-[#F5F4EE]' : isServepoint ? 'text-[#1A1A1A]' : 'text-[#1C1917]'}`}>Current Order</h2>
             <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
-              isTessera ? 'bg-[#C5F82A]/15 text-[#C5F82A] border border-[#C5F82A]/30' : 'bg-[#FFF1E6] text-[#F97316]'
+              isTessera ? 'bg-[#C5F82A]/15 text-[#C5F82A] border border-[#C5F82A]/30' : isServepoint ? 'bg-[#B88E2F]/15 text-[#967221]' : 'bg-[#FFF1E6] text-[#F97316]'
             }`}>
               {safeCart.reduce((sum, i) => sum + i.qty, 0)} items
             </span>
@@ -136,7 +137,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ onOpenPayment }) => {
             <button
               onClick={clearCart}
               className={`text-xs flex items-center gap-1 transition-colors ${
-                isTessera ? 'text-[#6B8579] hover:text-[#F87171]' : 'text-[#57534E] hover:text-[#B42318]'
+                isTessera ? 'text-[#6B8579] hover:text-[#F87171]' : isServepoint ? 'text-[#6B6B6B] hover:text-[#DC2626]' : 'text-[#57534E] hover:text-[#B42318]'
               }`}
             >
               <Trash2 className="w-3 h-3" />
@@ -148,7 +149,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ onOpenPayment }) => {
         {/* Order Type Selector */}
         <GuidanceTooltip guideKey="pos_order_type" position="bottom" className="w-full">
           <div className={`grid grid-cols-3 gap-1 p-1 rounded-xl w-full ${
-            isTessera ? 'bg-[#0A1410] border border-[#2A4A37]' : 'bg-[#F5F0EB]'
+            isTessera ? 'bg-[#0A1410] border border-[#2A4A37]' : isServepoint ? 'bg-[#E3E7E0]' : 'bg-[#F5F0EB]'
           }`}>
             {orderTypeOptions.map((opt) => {
               const isSelected = orderType === opt.type;
@@ -431,17 +432,17 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ onOpenPayment }) => {
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
         {safeCart.length === 0 ? (
           <div className={`h-full flex flex-col items-center justify-center text-center p-6 ${
-            isTessera ? 'text-[#6B8579]' : 'text-[#A8A29E]'
+            isTessera ? 'text-[#6B8579]' : isServepoint ? 'text-[#6B6B6B]' : 'text-[#A8A29E]'
           }`}>
             <div className={`w-16 h-16 rounded-2xl flex items-center justify-center mb-3 ${
-              isTessera ? 'bg-[#142620] border border-[#2A4A37]' : ''
+              isTessera ? 'bg-[#142620] border border-[#2A4A37]' : isServepoint ? 'bg-[#D9E2DD]' : ''
             }`}>
-              <ShoppingBag className={`w-8 h-8 stroke-[1.5] ${isTessera ? 'text-[#2A4A37]' : 'text-[#E9E0D6]'}`} />
+              <ShoppingBag className={`w-8 h-8 stroke-[1.5] ${isTessera ? 'text-[#2A4A37]' : isServepoint ? 'text-[#B88E2F]' : 'text-[#E9E0D6]'}`} />
             </div>
-            <div className={`font-serif italic text-lg ${isTessera ? 'text-[#F5F4EE]' : 'font-sans not-italic font-semibold text-sm text-[#57534E]'}`}>
+            <div className={`text-lg ${isTessera ? 'font-serif italic text-[#F5F4EE]' : isServepoint ? 'font-semibold text-sm text-[#1A1A1A]' : 'font-sans not-italic font-semibold text-sm text-[#57534E]'}`}>
               Order is Empty
             </div>
-            <div className={`text-xs max-w-xs mt-1 ${isTessera ? 'text-[#6B8579]' : 'text-[#A8A29E]'}`}>
+            <div className={`text-xs max-w-xs mt-1 ${isTessera ? 'text-[#6B8579]' : isServepoint ? 'text-[#969696]' : 'text-[#A8A29E]'}`}>
               Select items from the menu grid to start building the order.
             </div>
           </div>
@@ -452,6 +453,8 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ onOpenPayment }) => {
               className={`p-3 rounded-xl border transition-all space-y-2 ${
                 isTessera
                   ? 'bg-[#0A1410] border-[#1F3D2E] hover:border-[#2A4A37]'
+                  : isServepoint
+                    ? 'bg-white border-[#E3E7E0] hover:border-[#B88E2F]/60'
                   : 'bg-white border-[#E9E0D6] hover:border-[#D5C9BD]'
               }`}
             >
@@ -495,12 +498,14 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ onOpenPayment }) => {
                 </div>
 
                 <div className="text-right shrink-0">
-                  <div className={`font-mono font-bold text-xs tabular-nums ${
-                    isTessera ? 'text-[#C5F82A]' : 'text-[#1C1917]'
+                  <div className={`text-xs font-semibold tabular-nums ${
+                    isTessera ? 'font-mono font-bold text-[#C5F82A]' : isServepoint ? 'text-[#1A1A1A]' : 'font-mono font-bold text-[#1C1917]'
                   }`}>
                     ₹{item.item_total}
                   </div>
-                  <div className={`text-[10px] font-mono ${isTessera ? 'text-[#6B8579]' : 'text-[#A8A29E]'}`}>
+                  <div className={`text-[10px] ${
+                    isTessera ? 'font-mono text-[#6B8579]' : isServepoint ? 'text-[#969696]' : 'font-mono text-[#A8A29E]'
+                  }`}>
                     ₹{item.unit_price} each
                   </div>
                 </div>
@@ -508,12 +513,12 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ onOpenPayment }) => {
 
               {/* Item Qty Controls */}
               <div className={`flex items-center justify-between pt-1 border-t ${
-                isTessera ? 'border-[#1F3D2E]' : 'border-[#F5F0EB]'
+                isTessera ? 'border-[#1F3D2E]' : isServepoint ? 'border-[#E3E7E0]' : 'border-[#F5F0EB]'
               }`}>
                 <button
                   onClick={() => removeFromCart(item.id)}
                   className={`text-[10px] flex items-center gap-1 ${
-                    isTessera ? 'text-[#6B8579] hover:text-[#F87171]' : 'text-[#A8A29E] hover:text-[#B42318]'
+                    isTessera ? 'text-[#6B8579] hover:text-[#F87171]' : isServepoint ? 'text-[#969696] hover:text-[#DC2626]' : 'text-[#A8A29E] hover:text-[#B42318]'
                   }`}
                 >
                   <Trash2 className="w-3 h-3" />
@@ -521,22 +526,22 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ onOpenPayment }) => {
                 </button>
 
                 <div className={`flex items-center gap-2 px-2 py-0.5 rounded-lg ${
-                  isTessera ? 'bg-[#142620] border border-[#2A4A37]' : 'bg-[#F5F0EB]'
+                  isTessera ? 'bg-[#142620] border border-[#2A4A37]' : isServepoint ? 'bg-[#D9E2DD]' : 'bg-[#F5F0EB]'
                 }`}>
                   <button
                     onClick={() => updateCartQty(item.id, -1)}
-                    className={`p-0.5 ${isTessera ? 'text-[#9BB5A5] hover:text-[#C5F82A]' : 'text-[#57534E] hover:text-[#1C1917]'}`}
+                    className={`p-0.5 ${isTessera ? 'text-[#9BB5A5] hover:text-[#C5F82A]' : isServepoint ? 'text-[#6B6B6B] hover:text-[#967221]' : 'text-[#57534E] hover:text-[#1C1917]'}`}
                   >
                     <Minus className="w-3 h-3" />
                   </button>
-                  <span className={`font-bold text-xs font-mono min-w-4 text-center tabular-nums ${
-                    isTessera ? 'text-[#F5F4EE]' : ''
+                  <span className={`font-bold text-xs min-w-4 text-center tabular-nums ${
+                    isTessera ? 'font-mono text-[#F5F4EE]' : isServepoint ? 'text-[#1A1A1A]' : ''
                   }`}>
                     {item.qty}
                   </span>
                   <button
                     onClick={() => updateCartQty(item.id, 1)}
-                    className={`p-0.5 ${isTessera ? 'text-[#9BB5A5] hover:text-[#C5F82A]' : 'text-[#57534E] hover:text-[#1C1917]'}`}
+                    className={`p-0.5 ${isTessera ? 'text-[#9BB5A5] hover:text-[#C5F82A]' : isServepoint ? 'text-[#6B6B6B] hover:text-[#967221]' : 'text-[#57534E] hover:text-[#1C1917]'}`}
                   >
                     <Plus className="w-3 h-3" />
                   </button>
@@ -550,14 +555,16 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ onOpenPayment }) => {
       {/* Cart Footer: Discount / Totals / Checkout */}
       {safeCart.length > 0 && (
         <div className={`p-4 border-t space-y-3 ${
-          isTessera ? 'border-[#1F3D2E] bg-[#0A1410]' : 'border-[#E9E0D6] bg-[#FFF9F2]'
+          isTessera ? 'border-[#1F3D2E] bg-[#0A1410]' : isServepoint ? 'border-[#E3E7E0] bg-white' : 'border-[#E9E0D6] bg-[#FFF9F2]'
         }`}>
           {/* Coupon Form */}
           {appliedOffer ? (
             <div className={`flex items-center justify-between p-2 rounded-xl border text-xs ${
               isTessera
                 ? 'bg-[#34D399]/10 border-[#34D399]/30'
-                : 'bg-[#E8F5EC] border-[#A7F3D0]'
+                : isServepoint
+                  ? 'bg-[#17803D]/10 border-[#17803D]/25'
+                  : 'bg-[#E8F5EC] border-[#A7F3D0]'
             }`}>
               <div className={`flex items-center gap-1.5 font-medium ${isTessera ? 'text-[#34D399]' : 'text-[#17803D]'}`}>
                 <Tag className="w-3.5 h-3.5" />
@@ -565,7 +572,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ onOpenPayment }) => {
               </div>
               <button
                 onClick={removeOffer}
-                className={`text-[11px] ${isTessera ? 'text-[#9BB5A5] hover:text-[#F87171]' : 'text-[#57534E] hover:text-[#B42318]'}`}
+                className={`text-[11px] ${isTessera ? 'text-[#9BB5A5] hover:text-[#F87171]' : isServepoint ? 'text-[#6B6B6B] hover:text-[#DC2626]' : 'text-[#57534E] hover:text-[#B42318]'}`}
               >
                 Remove
               </button>
@@ -578,10 +585,12 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ onOpenPayment }) => {
                   value={couponCode}
                   onChange={(e) => setCouponCode(e.target.value)}
                   placeholder="Coupon code (e.g. WELCOME50)"
-                  className={`flex-1 px-2.5 py-1.5 text-xs uppercase font-mono rounded-xl border focus:outline-hidden ${
+                  className={`flex-1 px-2.5 py-1.5 text-xs uppercase rounded-xl border focus:outline-hidden ${
                     isTessera
-                      ? 'border-[#2A4A37] bg-[#0F1D17] text-[#F5F4EE] placeholder:text-[#6B8579] focus:border-[#C5F82A]'
-                      : 'border-[#E9E0D6] bg-white focus:border-[#F97316]'
+                      ? 'font-mono border-[#2A4A37] bg-[#0F1D17] text-[#F5F4EE] placeholder:text-[#6B8579] focus:border-[#C5F82A]'
+                      : isServepoint
+                        ? 'border-[#E3E7E0] bg-[#D9E2DD] text-[#1A1A1A] placeholder:text-[#6B6B6B] focus:border-[#B88E2F]'
+                        : 'font-mono border-[#E9E0D6] bg-white focus:border-[#F97316]'
                   }`}
                 />
                 <button
@@ -589,7 +598,9 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ onOpenPayment }) => {
                   className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors ${
                     isTessera
                       ? 'tessera-ghost rounded-lg'
-                      : 'bg-[#1C1917] text-white hover:bg-black'
+                      : isServepoint
+                        ? 'bg-[#0F3D3E] text-white hover:bg-[#0B3132]'
+                        : 'bg-[#1C1917] text-white hover:bg-black'
                   }`}
                 >
                   Apply
@@ -601,42 +612,44 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ onOpenPayment }) => {
           )}
 
           {/* Subtotal, GST, Platform Fee */}
-          <div className={`space-y-1 text-xs ${isTessera ? 'text-[#9BB5A5]' : 'text-[#57534E]'}`}>
+          <div className={`space-y-1 text-xs ${isTessera ? 'text-[#9BB5A5]' : isServepoint ? 'text-[#6B6B6B]' : 'text-[#57534E]'}`}>
             <div className="flex justify-between">
               <span>Items Subtotal</span>
-              <span className="font-mono tabular-nums">₹{subtotal.toFixed(2)}</span>
+              <span className={`tabular-nums ${isTessera || !isServepoint ? 'font-mono' : 'font-semibold text-[#1A1A1A]'}`}>₹{subtotal.toFixed(2)}</span>
             </div>
             <div className="flex justify-between">
               <span>GST (5%)</span>
-              <span className="font-mono tabular-nums">₹{taxTotal.toFixed(2)}</span>
+              <span className={`tabular-nums ${isTessera || !isServepoint ? 'font-mono' : 'font-semibold text-[#1A1A1A]'}`}>₹{taxTotal.toFixed(2)}</span>
             </div>
             {discountTotal > 0 && (
               <div className={`flex justify-between font-medium ${isTessera ? 'text-[#34D399]' : 'text-[#17803D]'}`}>
                 <span>Total Discount</span>
-                <span className="font-mono tabular-nums">- ₹{discountTotal.toFixed(2)}</span>
+                <span className={`tabular-nums ${isServepoint ? 'font-semibold' : 'font-mono'}`}>- ₹{discountTotal.toFixed(2)}</span>
               </div>
             )}
             <GuidanceTooltip guideKey="pos_fee_engine" position="top" className="w-full">
               <div className="flex justify-between items-center text-xs w-full py-0.5">
                 <span className="flex items-center gap-1">
                   <span>TSOS Platform Fee</span>
-                  <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-medium ${
-                    isTessera ? 'bg-[#C5F82A]/10 text-[#C5F82A] border border-[#C5F82A]/30' : 'bg-[#FFF1E6] text-[#F97316]'
+                  <span className={`px-1.5 py-0.2 rounded-full font-medium text-[10px] ${
+                    isTessera ? 'bg-[#C5F82A]/10 text-[#C5F82A] border border-[#C5F82A]/30' : isServepoint ? 'bg-[#B88E2F]/15 text-[#967221]' : 'bg-[#FFF1E6] text-[#F97316]'
                   }`}>
                     {feePayer === 'cafe' ? 'Absorbed by Cafe' : 'Paid by Customer'}
                   </span>
                 </span>
-                <span className="font-mono tabular-nums">
+                <span className={`tabular-nums ${isServepoint ? 'font-semibold text-[#1A1A1A]' : 'font-mono'}`}>
                   {feePayer === 'customer' ? `+ ₹${platformFee}` : '₹0.00'}
                 </span>
               </div>
             </GuidanceTooltip>
 
             <div className={`flex justify-between text-base font-bold pt-2 border-t ${
-              isTessera ? 'text-[#F5F4EE] border-[#2A4A37]' : 'text-[#1C1917] border-[#E9E0D6]'
+              isTessera ? 'text-[#F5F4EE] border-[#2A4A37]' : isServepoint ? 'text-[#1A1A1A] border-[#E3E7E0]' : 'text-[#1C1917] border-[#E9E0D6]'
             }`}>
               <span>To Pay</span>
-              <span className={`font-mono text-lg tabular-nums ${isTessera ? 'text-[#C5F82A]' : 'text-[#F97316]'}`}>
+              <span className={`text-lg tabular-nums ${
+                isTessera ? 'font-mono text-[#C5F82A]' : isServepoint ? 'font-semibold text-[#967221]' : 'font-mono text-[#F97316]'
+              }`}>
                 ₹{grandTotal}
               </span>
             </div>
@@ -650,7 +663,9 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ onOpenPayment }) => {
               className={`w-full flex items-center justify-center gap-2 py-3 rounded-xl font-semibold text-sm transition-colors ${
                 isTessera
                   ? 'tessera-cta rounded-lg'
-                  : 'bg-[#F97316] hover:bg-[#EA580C] text-white shadow-xs'
+                  : isServepoint
+                    ? 'bg-[#0F3D3E] hover:bg-[#0B3132] text-white shadow-[0_10px_24px_-10px_rgba(15,61,62,0.55)]'
+                    : 'bg-[#F97316] hover:bg-[#EA580C] text-white shadow-xs'
               }`}
             >
               <span>Charge / Pay (₹{grandTotal})</span>

@@ -3,11 +3,11 @@
 > **Purpose**: Single-page dense summary of the current TSOS project state, for fast cold re-onboarding by any agent or contributor. Updated alongside every code change. For full chronological detail, see [`docs/compacts/`](docs/compacts/README.md) (7 compacts) and [`worklog.md`](worklog.md) (live agent handover).
 
 - **Project**: TSOS — The Cafe Operating System
-- **Version**: 2.6.7
+- **Version**: 2.6.8
 - **Repo**: https://github.com/OmKardile/tsos-alt
 - **Author**: Omkar Kardile <omkardile84@gmail.com>
 - **Last Updated**: 2026-10-01
-- **Default Theme**: **ServePoint** (owner Figma, EXACT tokens since v2.6.7/ADR-0012: ivory `#F6F5F2` canvas, deep-teal `#0F3D3E` primary, gold `#B88E2F` accent (pressed `#967221`), signature sage `#D9E2DD` surfaces, text `#1A1A1A`/`#6B6B6B`, **Poppins**) for the authenticated app since v2.6.6; unauthenticated routes (frozen login, storefront) stay force-pinned Tessera — see [`CHANGELOG.md`](CHANGELOG.md) v2.6.0–v2.6.7 and ADR-0010/0011/0012
+- **Default Theme**: **ServePoint** (owner Figma, EXACT tokens since v2.6.7/ADR-0012: ivory `#F6F5F2` canvas, deep-teal `#0F3D3E` primary, gold `#B88E2F` accent (pressed `#967221`), signature sage `#D9E2DD` surfaces, text `#1A1A1A`/`#6B6B6B`, **Poppins**) for the authenticated app since v2.6.6; unauthenticated routes (frozen login, storefront) stay force-pinned Tessera — see [`CHANGELOG.md`](CHANGELOG.md) v2.6.0–v2.6.8 and ADR-0010/0011/0012
 - **Render Blueprint**: `render.yaml` → Static Site **`tsos-pos`** (v2.6.3 hardened; v2.6.4 re-hardcoded live Supabase keys — zero-touch apply)
 - **Design Governance**: **Login screen FROZEN** at v2.6.4 (ADR-0010) — no changes until owner unfreezes; Surface Pack illustrations reserved for login; **ServePoint UI (owner Figma) adopted as the default post-login design (ADR-0011)**; **Figma REST pipeline UNLOCKED via owner PAT (ADR-0012)** — all 6 pages explored, 57 Final UI frames rendered + archived at `docs/design/servepoint/` (frames/ + pages/); design source is now in-repo, no live Figma access needed
 
@@ -80,6 +80,8 @@ npm run dev   # or bun run dev
 
 ## Recent activity (live agent handover)
 See [`worklog.md`](worklog.md) for the chronological agent work log.
+
+**v2.6.8 (2026-10-01) shipped**: **CartDrawer explicit ServePoint (Bills detail-pane language, frame 219:23130)** — sage `#D9E2DD` header strip (gold bag icon, near-black Poppins title, gold-tinted items pill), order-type tabs on `#E3E7E0` inset; white item cards with `#E3E7E0` hairlines + gold hover ring, Poppins semibold near-black totals (mono retired per Figma), sage qty steppers with gold hover; footer white pane with sage coupon input (gold focus) + **deep-teal `#0F3D3E` Apply button**; totals labels `#6B6B6B` / values semibold `#1A1A1A`; To Pay in pressed-gold `#967221`; **Charge CTA = Figma "Charge customer" button (full-width deep teal → #0B3132, white text)**; empty state sage well + gold bag. Verified: tsc 0 errors; E2E add→cart→PaymentModal→Back round-trip clean; zero console errors; tessera/warm untouched.
 
 **v2.6.7 (2026-10-01) shipped**: **Figma REST pipeline + EXACT ServePoint tokens (ADR-0012)** — owner supplied a `file_content:read` PAT (stored in gitignored `.env`; Render `sync: false` — GitHub Push Protection forbids committing Figma PATs) and 4 local UI kits; all 6 ServePoint pages explored via REST, **57 Final UI frames rendered to PNG** and archived at `docs/design/servepoint/frames/` (+ 6 page overviews); node-fill mining replaced every estimated token: canvas `#F6F5F2`, deep-teal `#0F3D3E`, **gold `#B88E2F`/pressed `#967221`**, signature **sage `#D9E2DD`**, text `#1A1A1A`/`#6B6B6B`, **Poppins**, radii 12/16/24/100; `index.css` token block + remaps rewritten, Header/WebNavbar re-tokened hex-for-hex, PosScreen menu cards got the explicit Figma card (sage surface, gold Add CTA, near-black text, `#DC2626` low-stock badge); fig-kiwi v4 `.fig` uploads documented dead end (below fig2sketch v15). Verified: tsc 0 errors; frozen login pixel-identical; sage/gold POS E2E + cart golden path + 4-theme cycle clean.
 
