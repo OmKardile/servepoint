@@ -111,16 +111,16 @@ export const LiveOpsPulse: React.FC = () => {
   ];
 
   return (
-    <div className="bg-white p-5 rounded-2xl border border-[#E9E0D6] shadow-xs">
+    <div className="bg-[#0F1D17] p-5 rounded-2xl border border-[#1F3D2E] tessera-block">
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
-          <Activity className="w-4 h-4 text-[#F97316] animate-pulse" />
-          <h3 className="font-bold text-sm text-[#1C1917]">Live Operational Pulse</h3>
-          <span className="text-[10px] font-semibold text-[#10B981] bg-[#E8F5EC] px-2 py-0.5 rounded-full border border-[#A7F3D0]">
+          <Activity className="w-4 h-4 text-[#C5F82A] animate-pulse" />
+          <h3 className="text-sm text-[#F5F4EE]">Live Operational Pulse</h3>
+          <span className="text-[10px] font-bold text-[#0A1410] bg-[#C5F82A] px-2 py-0.5 rounded-full" style={{ boxShadow: '1px 1px 0 #1F3D2E' }}>
             ● LIVE
           </span>
         </div>
-        <div className="flex items-center gap-1 text-[11px] text-[#78716C] font-mono">
+        <div className="flex items-center gap-1 text-[11px] text-[#6B8579] font-mono">
           <Clock className="w-3 h-3" />
           <span>{new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</span>
         </div>
@@ -130,25 +130,25 @@ export const LiveOpsPulse: React.FC = () => {
         {cards.map((c) => (
           <div
             key={c.label}
-            className="p-3 rounded-xl border border-[#F5F0EB] bg-[#FFFDF9] hover:border-[#E9E0D6] transition-colors"
+            className="p-3 rounded-lg border border-[#1F3D2E] bg-[#0A1410] hover:border-[#2A4A37] hover:bg-[#142620] transition-colors"
           >
             <div className="flex items-center justify-between mb-1.5">
-              <span className="text-[10px] uppercase tracking-wider font-semibold text-[#78716C]">{c.label}</span>
-              <span className={`p-1 rounded-md ${c.tint}`} style={c.customColor ? { color: c.customColor } : undefined}>
+              <span className="text-[10px] uppercase tracking-[0.12em] font-semibold text-[#6B8579]">{c.label}</span>
+              <span className="p-1 rounded-md" style={{ color: c.customColor || undefined }}>
                 {c.icon}
               </span>
             </div>
-            <div className="text-xl font-bold font-mono text-[#1C1917] leading-none" style={c.customColor ? { color: c.customColor } : undefined}>
+            <div className="text-xl font-bold font-mono leading-none tabular-nums" style={{ color: c.customColor || '#F5F4EE' }}>
               {c.value}
             </div>
-            <div className="text-[10px] text-[#78716C] mt-1">{c.sub}</div>
+            <div className="text-[10px] text-[#9BB5A5] mt-1">{c.sub}</div>
           </div>
         ))}
       </div>
 
-      {/* Quick insight strip */}
-      <div className="mt-3 p-2.5 rounded-lg bg-[#FFF9F2] border border-[#F5F0EB] text-[11px] text-[#57534E] flex items-center gap-2">
-        <TrendingUp className="w-3.5 h-3.5 text-[#F97316] shrink-0" />
+      {/* Quick insight strip — chartreuse accent on forest inset */}
+      <div className="mt-3 p-2.5 rounded-lg bg-[#0A1410] border border-[#1F3D2E] text-[11px] text-[#9BB5A5] flex items-center gap-2">
+        <TrendingUp className="w-3.5 h-3.5 text-[#C5F82A] shrink-0" />
         <span>
           {stats.kitchenLoad === 0 && stats.activeTables === 0
             ? 'Floor is quiet — good moment for restocks and shift handovers.'

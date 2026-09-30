@@ -57,12 +57,14 @@ export default function App() {
   // Sync theme mode to document element
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      const isDark = themeMode === 'dark' || themeMode === 'obsidian';
-      document.documentElement.setAttribute('data-theme', isDark ? 'dark' : 'warm');
-      if (isDark) {
+      // Tessera is its own editorial-dark forest/chartreuse theme.
+      // dark/obsidian map to the zinc dark layer. warm is the original cream light theme.
+      document.documentElement.setAttribute('data-theme', themeMode);
+      document.documentElement.classList.remove('dark', 'obsidian', 'tessera');
+      if (themeMode === 'dark' || themeMode === 'obsidian') {
         document.documentElement.classList.add('dark', 'obsidian');
-      } else {
-        document.documentElement.classList.remove('dark', 'obsidian');
+      } else if (themeMode === 'tessera') {
+        document.documentElement.classList.add('tessera');
       }
     }
   }, [themeMode]);
@@ -253,12 +255,12 @@ export default function App() {
     setActiveWebTab('pos');
   };
 
-  // Loading indicator while authenticating
+  // Loading indicator while authenticating (Tessera forest palette by default)
   if (isAuthLoading) {
     return (
-      <div className="min-h-screen bg-[#FFF9F2] flex items-center justify-center">
-        <div className="flex items-center gap-2 text-sm font-semibold text-[#57534E]">
-          <span className="w-2.5 h-2.5 rounded-full bg-[#F97316] animate-pulse" />
+      <div className="min-h-screen bg-[#0A1410] flex items-center justify-center">
+        <div className="flex items-center gap-2 text-sm font-semibold text-[#9BB5A5]">
+          <span className="w-2.5 h-2.5 rounded-full bg-[#C5F82A] animate-pulse" />
           <span>Starting TSOS Cloud Engine...</span>
         </div>
       </div>
@@ -356,12 +358,16 @@ export default function App() {
     }
   };
 
-  const isDarkTheme = themeMode === 'dark' || themeMode === 'obsidian';
+  const isDarkTheme = themeMode === 'dark' || themeMode === 'obsidian' || themeMode === 'tessera';
 
   return (
     <div
       className={`min-h-screen ${
-        isDarkTheme ? 'bg-[#09090B] text-[#F4F4F5]' : 'bg-[#FFF9F2] text-[#1C1917]'
+        themeMode === 'tessera'
+          ? 'bg-[#0A1410] text-[#F5F4EE] tessera-grain'
+          : isDarkTheme
+          ? 'bg-[#09090B] text-[#F4F4F5]'
+          : 'bg-[#FFF9F2] text-[#1C1917]'
       } flex flex-col font-sans transition-colors duration-200`}
     >
       <Header onSignOut={handleSignOut} />

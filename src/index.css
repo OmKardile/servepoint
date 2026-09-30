@@ -608,3 +608,338 @@
 .obsidian ::-webkit-scrollbar-thumb:hover {
   background: #52525B;
 }
+
+/* ==========================================================================
+   TESSERA THEME — Editorial Dark (uiverse.io/ui-kits/tessera)
+   Italic serif headlines + crisp sans body, deep forest surfaces,
+   vivid chartreuse action accent, 3D isometric block motifs.
+   Applied via [data-theme="tessera"] or .tessera class on <html>.
+   ========================================================================== */
+[data-theme="tessera"],
+.tessera {
+  /* --- Forest surface palette --- */
+  --tsos-bg: #0A1410;
+  --tsos-surface: #0F1D17;
+  --tsos-surface-secondary: #142620;
+  --tsos-divider: #1F3D2E;
+  /* --- Chartreuse action accent --- */
+  --tsos-action: #C5F82A;
+  --tsos-action-hover: #B8E633;
+  --tsos-action-soft: rgba(197, 248, 42, 0.12);
+  /* --- Status colors (kept compatible, tuned for forest) --- */
+  --tsos-completed: #34D399;
+  --tsos-completed-soft: rgba(52, 211, 153, 0.14);
+  --tsos-attention: #FBBF24;
+  --tsos-attention-soft: rgba(251, 191, 36, 0.14);
+  --tsos-destructive: #F87171;
+  --tsos-destructive-soft: rgba(248, 113, 113, 0.14);
+  --tsos-info: #60A5FA;
+  --tsos-info-soft: rgba(96, 165, 250, 0.14);
+  --tsos-accent: #C084FC;
+  --tsos-accent-soft: rgba(192, 132, 252, 0.14);
+  /* --- Text hierarchy on forest --- */
+  --tsos-text-primary: #F5F4EE;
+  --tsos-text-secondary: #9BB5A5;
+  --tsos-text-muted: #6B8579;
+  color-scheme: dark;
+}
+
+[data-theme="tessera"] body,
+.tessera body {
+  background-color: #0A1410 !important;
+  color: #F5F4EE !important;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+/* Italic serif headlines — the Tessera signature */
+[data-theme="tessera"] h1,
+[data-theme="tessera"] h2,
+[data-theme="tessera"] h3,
+[data-theme="tessera"] .font-display,
+.tessera h1,
+.tessera h2,
+.tessera h3,
+.tessera .font-display {
+  font-family: 'Instrument Serif', 'Times New Roman', Georgia, serif !important;
+  font-style: italic !important;
+  font-weight: 400 !important;
+  letter-spacing: -0.01em !important;
+}
+
+/* H4 stays sans for sub-section labels (editorial pairing contrast) */
+[data-theme="tessera"] h4,
+.tessera h4 {
+  font-family: 'Inter', system-ui, sans-serif !important;
+  font-style: normal !important;
+  font-weight: 600 !important;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.7rem;
+}
+
+/* --- 1. Deep forest backgrounds (canvas + warm-cream overrides) --- */
+[data-theme="tessera"] .bg-\[\#FFF9F2\],
+[data-theme="tessera"] .bg-\[\#FFFDFB\],
+[data-theme="tessera"] .bg-\[\#FFFDF9\],
+[data-theme="tessera"] .bg-\[\#FFFEFC\],
+[data-theme="tessera"] .bg-\[\#FFFBF5\],
+[data-theme="tessera"] .bg-\[\#FAF7F2\],
+[data-theme="tessera"] .bg-\[\#FAF6F0\],
+[data-theme="tessera"] .bg-\[\#F7F3EE\],
+[data-theme="tessera"] .bg-\[\#F5F5F4\],
+[data-theme="tessera"] .bg-\[\#F5EFEA\],
+[data-theme="tessera"] .bg-\[\#F5EBE1\],
+[data-theme="tessera"] .bg-\[\#F3ECE4\],
+[data-theme="tessera"] .bg-\[\#EFE8E1\],
+.tessera .bg-\[\#FFF9F2\],
+.tessera .bg-\[\#FFFDFB\],
+.tessera .bg-\[\#FFFDF9\],
+.tessera .bg-\[\#FFFEFC\],
+.tessera .bg-\[\#FFFBF5\],
+.tessera .bg-\[\#FAF7F2\],
+.tessera .bg-\[\#FAF6F0\],
+.tessera .bg-\[\#F7F3EE\],
+.tessera .bg-\[\#F5F5F4\],
+.tessera .bg-\[\#F5EFEA\],
+.tessera .bg-\[\#F5EBE1\],
+.tessera .bg-\[\#F3ECE4\],
+.tessera .bg-\[\#EFE8E1\] {
+  background-color: #0A1410 !important;
+}
+
+/* --- 2. Elevated forest card surfaces --- */
+[data-theme="tessera"] .bg-white,
+.tessera .bg-white {
+  background-color: #0F1D17 !important;
+  border-color: #1F3D2E !important;
+}
+
+/* --- 3. Inset / secondary forest surfaces --- */
+[data-theme="tessera"] .bg-\[\#FFF1E6\],
+[data-theme="tessera"] .bg-\[\#F5F0EB\],
+[data-theme="tessera"] .bg-\[\#E9E0D6\],
+[data-theme="tessera"] .bg-\[\#FFF9F2\],
+.tessera .bg-\[\#FFF1E6\],
+.tessera .bg-\[\#F5F0EB\],
+.tessera .bg-\[\#E9E0D6\],
+.tessera .bg-\[\#FFF9F2\] {
+  background-color: #142620 !important;
+}
+
+/* --- 4. Text hierarchy on forest --- */
+[data-theme="tessera"] .text-\[\#1C1917\],
+[data-theme="tessera"] .text-\[\#0C0A09\],
+[data-theme="tessera"] .text-stone-900,
+[data-theme="tessera"] .text-stone-800,
+[data-theme="tessera"] .text-gray-900,
+[data-theme="tessera"] .text-gray-800,
+.tessera .text-\[\#1C1917\],
+.tessera .text-\[\#0C0A09\] {
+  color: #F5F4EE !important;
+}
+
+[data-theme="tessera"] .text-\[\#57534E\],
+[data-theme="tessera"] .text-\[\#78716C\],
+[data-theme="tessera"] .text-stone-700,
+[data-theme="tessera"] .text-stone-600,
+.tessera .text-\[\#57534E\],
+.tessera .text-\[\#78716C\] {
+  color: #9BB5A5 !important;
+}
+
+[data-theme="tessera"] .text-\[\#A8A29E\],
+[data-theme="tessera"] .text-\[\#D6D3D1\],
+[data-theme="tessera"] .text-stone-500,
+[data-theme="tessera"] .text-stone-400,
+.tessera .text-\[\#A8A29E\],
+.tessera .text-\[\#D6D3D1\] {
+  color: #6B8579 !important;
+}
+
+/* --- 5. Borders → moss hairlines --- */
+[data-theme="tessera"] .border-\[\#E9E0D6\],
+[data-theme="tessera"] .border-\[\#F5F0EB\],
+[data-theme="tessera"] .border-\[\#D5C9BD\],
+[data-theme="tessera"] .border-\[\#D6D3D1\],
+[data-theme="tessera"] .border-\[\#E7E5E4\],
+[data-theme="tessera"] .border-stone-200,
+[data-theme="tessera"] .border-stone-300,
+[data-theme="tessera"] .border-gray-200,
+[data-theme="tessera"] .border-gray-300,
+.tessera .border-\[\#E9E0D6\],
+.tessera .border-\[\#F5F0EB\] {
+  border-color: #1F3D2E !important;
+}
+
+/* --- 6. Hover surfaces --- */
+[data-theme="tessera"] .hover\:bg-\[\#F5F0EB\]:hover,
+[data-theme="tessera"] .hover\:bg-\[\#FFF1E6\]:hover,
+[data-theme="tessera"] .hover\:bg-\[\#FFF9F2\]:hover,
+[data-theme="tessera"] .hover\:bg-\[\#F3ECE4\]:hover,
+[data-theme="tessera"] .hover\:bg-\[\#E9E0D6\]:hover,
+[data-theme="tessera"] .hover\:bg-stone-50:hover,
+[data-theme="tessera"] .hover\:bg-stone-100:hover,
+[data-theme="tessera"] .hover\:bg-white\/60:hover,
+.tessera .hover\:bg-\[\#F5F0EB\]:hover,
+.tessera .hover\:bg-\[\#FFF1E6\]:hover,
+.tessera .hover\:bg-white\/60:hover {
+  background-color: #1A2E25 !important;
+}
+
+/* --- 7. Header & nav --- */
+[data-theme="tessera"] header,
+[data-theme="tessera"] nav,
+.tessera header,
+.tessera nav {
+  background-color: #0A1410 !important;
+  border-color: #1F3D2E !important;
+}
+
+/* Active nav tab — chartreuse tint */
+[data-theme="tessera"] nav button.bg-\[\#FFF1E6\],
+[data-theme="tessera"] button.bg-\[\#1C1917\],
+[data-theme="tessera"] .bg-\[\#F5F0EB\] button.bg-white,
+.tessera nav button.bg-\[\#FFF1E6\] {
+  background-color: rgba(197, 248, 42, 0.14) !important;
+  color: #C5F82A !important;
+  border-color: rgba(197, 248, 42, 0.35) !important;
+}
+
+/* --- 8. Form controls on forest --- */
+[data-theme="tessera"] input:not([type="checkbox"]):not([type="radio"]),
+[data-theme="tessera"] select,
+[data-theme="tessera"] textarea,
+.tessera input:not([type="checkbox"]):not([type="radio"]),
+.tessera select,
+.tessera textarea {
+  background-color: #0F1D17 !important;
+  border-color: #1F3D2E !important;
+  color: #F5F4EE !important;
+}
+[data-theme="tessera"] input:focus,
+[data-theme="tessera"] select:focus,
+[data-theme="tessera"] textarea:focus {
+  border-color: #C5F82A !important;
+  background-color: #142620 !important;
+}
+[data-theme="tessera"] input::placeholder,
+.tessera input::placeholder {
+  color: #6B8579 !important;
+}
+
+/* --- 9. Status badges on forest --- */
+[data-theme="tessera"] .bg-\[\#E8F5EC\],
+[data-theme="tessera"] .bg-emerald-50,
+.tessera .bg-\[\#E8F5EC\] {
+  background-color: rgba(52, 211, 153, 0.14) !important;
+  border-color: rgba(52, 211, 153, 0.3) !important;
+}
+[data-theme="tessera"] .bg-\[\#FFF4E5\],
+[data-theme="tessera"] .bg-amber-50,
+.tessera .bg-\[\#FFF4E5\] {
+  background-color: rgba(251, 191, 36, 0.14) !important;
+  border-color: rgba(251, 191, 36, 0.3) !important;
+}
+[data-theme="tessera"] .bg-\[\#FEF2F2\],
+[data-theme="tessera"] .bg-red-50,
+.tessera .bg-\[\#FEF2F2\] {
+  background-color: rgba(248, 113, 113, 0.14) !important;
+  border-color: rgba(248, 113, 113, 0.3) !important;
+}
+[data-theme="tessera"] .bg-\[\#EFF6FF\],
+[data-theme="tessera"] .bg-blue-50,
+.tessera .bg-\[\#EFF6FF\] {
+  background-color: rgba(96, 165, 250, 0.14) !important;
+  border-color: rgba(96, 165, 250, 0.3) !important;
+}
+[data-theme="tessera"] .bg-\[\#F5F3FF\],
+[data-theme="tessera"] .bg-violet-50,
+.tessera .bg-\[\#F5F3FF\] {
+  background-color: rgba(192, 132, 252, 0.14) !important;
+  border-color: rgba(192, 132, 252, 0.3) !important;
+}
+
+/* Status text colors on forest */
+[data-theme="tessera"] .text-\[\#17803D\],
+[data-theme="tessera"] .text-emerald-700,
+.tessera .text-\[\#17803D\] { color: #34D399 !important; }
+[data-theme="tessera"] .text-\[\#B45309\],
+[data-theme="tessera"] .text-amber-700,
+.tessera .text-\[\#B45309\] { color: #FBBF24 !important; }
+[data-theme="tessera"] .text-\[\#2563EB\],
+[data-theme="tessera"] .text-blue-700,
+.tessera .text-\[\#2563EB\] { color: #60A5FA !important; }
+[data-theme="tessera"] .text-\[\#7C3AED\],
+[data-theme="tessera"] .text-purple-700,
+.tessera .text-\[\#7C3AED\] { color: #C084FC !important; }
+
+/* --- 10. 3D isometric block motifs (Tessera signature volume) --- */
+[data-theme="tessera"] .shadow-xs,
+[data-theme="tessera"] .shadow-sm,
+.tessera .shadow-xs,
+.tessera .shadow-sm {
+  box-shadow: 0 1px 0 rgba(255,255,255,0.03) inset, 0 -1px 0 rgba(0,0,0,0.3) inset, 0 2px 4px rgba(0,0,0,0.4) !important;
+}
+[data-theme="tessera"] .shadow-lg,
+[data-theme="tessera"] .shadow-xl,
+[data-theme="tessera"] .shadow-2xl,
+.tessera .shadow-lg,
+.tessera .shadow-xl,
+.tessera .shadow-2xl {
+  box-shadow: 0 1px 0 rgba(255,255,255,0.04) inset, 0 -1px 0 rgba(0,0,0,0.4) inset, 0 12px 32px -8px rgba(0,0,0,0.7) !important;
+}
+
+/* Tessera "block" utility — hard 3D offset shadow for hero cards / CTAs */
+.tessera-block {
+  box-shadow: 3px 3px 0 #1F3D2E, 3px 3px 0 4px rgba(0,0,0,0.4) !important;
+}
+.tessera-block-chartreuse {
+  box-shadow: 3px 3px 0 #C5F82A, 3px 3px 0 4px rgba(0,0,0,0.4) !important;
+}
+
+/* Chartreuse CTA button — the Tessera action accent */
+.tessera-cta {
+  background-color: #C5F82A !important;
+  color: #0A1410 !important;
+  font-weight: 700;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
+}
+.tessera-cta:hover {
+  background-color: #B8E633 !important;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 0 #1F3D2E, 0 8px 16px rgba(0,0,0,0.4) !important;
+}
+.tessera-cta:active {
+  transform: translateY(1px);
+  box-shadow: 0 1px 0 #1F3D2E !important;
+}
+
+/* Ghost button on forest */
+.tessera-ghost {
+  background-color: transparent !important;
+  color: #F5F4EE !important;
+  border: 1px solid #2A4A37 !important;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+.tessera-ghost:hover {
+  background-color: #142620 !important;
+  border-color: #C5F82A !important;
+  color: #C5F82A !important;
+}
+
+/* --- 11. Scrollbar on forest --- */
+[data-theme="tessera"] ::-webkit-scrollbar-thumb,
+.tessera ::-webkit-scrollbar-thumb {
+  background: #2A4A37;
+}
+[data-theme="tessera"] ::-webkit-scrollbar-thumb:hover,
+.tessera ::-webkit-scrollbar-thumb:hover {
+  background: #C5F82A;
+}
+
+/* Subtle grain texture for forest surfaces (CSS-only, no asset) */
+.tessera-grain {
+  background-image:
+    radial-gradient(circle at 25% 25%, rgba(197, 248, 42, 0.015) 0%, transparent 50%),
+    radial-gradient(circle at 75% 75%, rgba(52, 211, 153, 0.012) 0%, transparent 50%);
+}

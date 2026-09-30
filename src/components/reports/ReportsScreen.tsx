@@ -126,12 +126,12 @@ export const ReportsScreen: React.FC = () => {
     <div className="flex-1 flex flex-col h-[calc(100vh-100px)] overflow-hidden bg-[#FFF9F2] relative">
       {/* Toast Notification */}
       {toastMessage && (
-        <div className="absolute top-4 right-6 z-50 flex items-center gap-2 bg-[#1C1917] text-white px-4 py-2.5 rounded-xl shadow-lg border border-[#44403C] animate-fade-in text-xs">
-          <CheckCircle2 className="w-4 h-4 text-[#10B981] shrink-0" />
+        <div className="absolute top-4 right-6 z-50 flex items-center gap-2 bg-[#0F1D17] text-[#F5F4EE] px-4 py-2.5 rounded-lg border border-[#1F3D2E] animate-fade-in text-xs" style={{ boxShadow: '3px 3px 0 #1F3D2E' }}>
+          <CheckCircle2 className="w-4 h-4 text-[#C5F82A] shrink-0" />
           <span className="font-medium">{toastMessage}</span>
           <button
             onClick={() => setToastMessage(null)}
-            className="ml-2 text-[#A8A29E] hover:text-white"
+            className="ml-2 text-[#6B8579] hover:text-[#F5F4EE]"
           >
             <X className="w-3.5 h-3.5" />
           </button>
@@ -139,30 +139,30 @@ export const ReportsScreen: React.FC = () => {
       )}
 
       {/* Header */}
-      <div className="p-4 bg-white border-b border-[#E9E0D6] flex flex-wrap items-center justify-between gap-3">
+      <div className="p-4 bg-[#0F1D17] border-b border-[#1F3D2E] flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2.5">
-          <div className="w-9 h-9 rounded-xl bg-[#FFF1E6] text-[#F97316] flex items-center justify-center">
+          <div className="w-9 h-9 rounded-lg bg-[#0A1410] text-[#C5F82A] flex items-center justify-center border border-[#1F3D2E]" style={{ boxShadow: '2px 2px 0 #1F3D2E' }}>
             <BarChart3 className="w-5 h-5" />
           </div>
           <div>
-            <h2 className="text-base font-bold text-[#1C1917] leading-tight">
+            <h2 className="text-lg text-[#F5F4EE] leading-tight">
               Reports, Sales & Unit Economics
             </h2>
-            <div className="text-xs text-[#57534E]">
+            <div className="text-xs text-[#9BB5A5]">
               Live cafe performance metrics, weekly revenue curves, and ₹0 subscription savings
             </div>
           </div>
         </div>
 
         <div className="flex items-center gap-2.5">
-          <div className="hidden sm:flex items-center gap-2 text-xs font-semibold text-[#57534E] bg-[#FFF9F2] px-3 py-1.5 rounded-xl border border-[#E9E0D6]">
-            <Calendar className="w-3.5 h-3.5 text-[#F97316]" />
+          <div className="hidden sm:flex items-center gap-2 text-xs font-semibold text-[#9BB5A5] bg-[#0A1410] px-3 py-1.5 rounded-lg border border-[#1F3D2E]">
+            <Calendar className="w-3.5 h-3.5 text-[#C5F82A]" />
             <span>Today's Live Snapshot</span>
           </div>
 
           {/* Export Action Controls */}
           <div className="relative">
-            <div className="flex items-center rounded-xl bg-[#F97316] text-white shadow-xs hover:bg-[#EA580C] transition-colors">
+            <div className="flex items-center rounded-lg tessera-cta">
               <button
                 onClick={() => setIsExportModalOpen(true)}
                 className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold"
@@ -171,10 +171,10 @@ export const ReportsScreen: React.FC = () => {
                 <Download className="w-4 h-4" />
                 <span>Export</span>
               </button>
-              <div className="w-[1px] h-4 bg-white/30" />
+              <div className="w-[1px] h-4 bg-[#0A1410]/30" />
               <button
                 onClick={() => setIsQuickExportOpen(!isQuickExportOpen)}
-                className="px-1.5 py-1.5 hover:bg-black/10 rounded-r-xl transition-colors"
+                className="px-1.5 py-1.5 hover:bg-[#0A1410]/10 rounded-r-lg transition-colors"
                 title="Quick export options"
               >
                 <ChevronDown className="w-3.5 h-3.5" />
@@ -241,57 +241,58 @@ export const ReportsScreen: React.FC = () => {
 
         {/* 4 KPI Cards (animated count-up on mount + when value changes) */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="bg-white p-4 rounded-2xl border border-[#E9E0D6] shadow-xs hover:shadow-md hover:border-[#FED7AA] transition-all">
-            <div className="flex items-center justify-between text-xs text-[#57534E] mb-1">
-              <span>Gross Sales</span>
-              <span className="p-1 rounded-md bg-[#FFF1E6] text-[#F97316]">
+          <div className="bg-[#0F1D17] p-4 rounded-xl border border-[#1F3D2E] tessera-block hover:border-[#2A4A37] transition-colors">
+            <div className="flex items-center justify-between text-xs text-[#9BB5A5] mb-1">
+              <span className="uppercase tracking-[0.1em] font-semibold">Gross Sales</span>
+              <span className="p-1 rounded-md bg-[#0A1410] text-[#C5F82A] border border-[#1F3D2E]">
                 <TrendingUp className="w-3.5 h-3.5" />
               </span>
             </div>
-            <div className="text-2xl font-bold font-mono text-[#1C1917] tabular-nums">
+            <div className="text-2xl font-bold font-mono text-[#F5F4EE] tabular-nums">
               ₹{animatedGrossRevenue}
             </div>
-            <div className="text-[11px] text-[#17803D] mt-1 flex items-center gap-1">
-              <span className="w-1 h-1 rounded-full bg-[#17803D] animate-pulse" />
+            <div className="text-[11px] text-[#34D399] mt-1 flex items-center gap-1">
+              <span className="w-1 h-1 rounded-full bg-[#34D399] animate-pulse" />
               Across all order types
             </div>
           </div>
 
-          <div className="bg-white p-4 rounded-2xl border border-[#E9E0D6] shadow-xs hover:shadow-md hover:border-[#A7F3D0] transition-all">
-            <div className="flex items-center justify-between text-xs text-[#57534E] mb-1">
-              <span>Orders Placed</span>
-              <span className="p-1 rounded-md bg-[#E8F5EC] text-[#17803D]">
+          <div className="bg-[#0F1D17] p-4 rounded-xl border border-[#1F3D2E] tessera-block hover:border-[#2A4A37] transition-colors">
+            <div className="flex items-center justify-between text-xs text-[#9BB5A5] mb-1">
+              <span className="uppercase tracking-[0.1em] font-semibold">Orders Placed</span>
+              <span className="p-1 rounded-md bg-[#0A1410] text-[#34D399] border border-[#1F3D2E]">
                 <ShoppingBag className="w-3.5 h-3.5" />
               </span>
             </div>
-            <div className="text-2xl font-bold font-mono text-[#1C1917] tabular-nums">
+            <div className="text-2xl font-bold font-mono text-[#F5F4EE] tabular-nums">
               {animatedOrdersCount}
             </div>
-            <div className="text-[11px] text-[#57534E] mt-1">{completedOrders.length} completed</div>
+            <div className="text-[11px] text-[#9BB5A5] mt-1">{completedOrders.length} completed</div>
           </div>
 
-          <div className="bg-white p-4 rounded-2xl border border-[#E9E0D6] shadow-xs hover:shadow-md hover:border-[#BFDBFE] transition-all">
-            <div className="flex items-center justify-between text-xs text-[#57534E] mb-1">
-              <span>Average Order Value</span>
-              <span className="p-1 rounded-md bg-[#EFF6FF] text-[#2563EB]">
+          <div className="bg-[#0F1D17] p-4 rounded-xl border border-[#1F3D2E] tessera-block hover:border-[#2A4A37] transition-colors">
+            <div className="flex items-center justify-between text-xs text-[#9BB5A5] mb-1">
+              <span className="uppercase tracking-[0.1em] font-semibold">Average Order Value</span>
+              <span className="p-1 rounded-md bg-[#0A1410] text-[#60A5FA] border border-[#1F3D2E]">
                 <IndianRupee className="w-3.5 h-3.5" />
               </span>
             </div>
-            <div className="text-2xl font-bold font-mono text-[#1C1917] tabular-nums">
+            <div className="text-2xl font-bold font-mono text-[#F5F4EE] tabular-nums">
               ₹{animatedAov}
             </div>
-            <div className="text-[11px] text-[#57534E] mt-1">Per dining bill</div>
+            <div className="text-[11px] text-[#9BB5A5] mt-1">Per dining bill</div>
           </div>
 
-          <div className="bg-gradient-to-br from-[#FFF4E5] to-[#FFF9F2] p-4 rounded-2xl border border-[#FED7AA] shadow-xs hover:shadow-md transition-all">
-            <div className="flex items-center justify-between text-xs text-[#B45309] font-semibold mb-1">
-              <span>Savings with TSOS</span>
-              <ShieldCheck className="w-4 h-4 text-[#B45309]" />
+          {/* Savings card — chartreuse-tinted hero (Tessera accent) */}
+          <div className="bg-gradient-to-br from-[#142620] to-[#0F1D17] p-4 rounded-xl border border-[#C5F82A]/30 tessera-block-chartreuse hover:border-[#C5F82A]/50 transition-colors">
+            <div className="flex items-center justify-between text-xs text-[#C5F82A] font-semibold mb-1">
+              <span className="uppercase tracking-[0.1em]">Savings with TSOS</span>
+              <ShieldCheck className="w-4 h-4" />
             </div>
-            <div className="text-2xl font-bold font-mono text-[#B45309] tabular-nums">
+            <div className="text-2xl font-bold font-mono text-[#C5F82A] tabular-nums">
               ₹{animatedSavings}
             </div>
-            <div className="text-[11px] text-[#B45309] mt-1">vs 2.5% POS + monthly rentals</div>
+            <div className="text-[11px] text-[#9BB5A5] mt-1">vs 2.5% POS + monthly rentals</div>
           </div>
         </div>
 

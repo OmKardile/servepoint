@@ -68,31 +68,31 @@ export const OrderTypeBreakdown: React.FC = () => {
     const p = payload[0].payload as OrderTypeSlice;
     const pct = totalOrders > 0 ? Math.round((p.value / totalOrders) * 100) : 0;
     return (
-      <div className="bg-white border border-[#E9E0D6] rounded-lg shadow-lg px-3 py-2 text-xs">
-        <div className="flex items-center gap-1.5 font-bold text-[#1C1917]">
+      <div className="bg-[#0F1D17] border border-[#1F3D2E] rounded-lg px-3 py-2 text-xs" style={{ boxShadow: '2px 2px 0 #1F3D2E' }}>
+        <div className="flex items-center gap-1.5 font-bold text-[#F5F4EE]">
           <span style={{ color: p.color }}>{p.icon}</span>
           <span>{p.name}</span>
         </div>
-        <div className="text-[#57534E] mt-1">{p.value} orders · {pct}% of total</div>
-        <div className="text-[#57534E]">Revenue: <span className="font-mono font-semibold text-[#1C1917]">₹{p.revenue.toLocaleString('en-IN')}</span></div>
+        <div className="text-[#9BB5A5] mt-1">{p.value} orders · {pct}% of total</div>
+        <div className="text-[#9BB5A5]">Revenue: <span className="font-mono font-semibold text-[#C5F82A]">₹{p.revenue.toLocaleString('en-IN')}</span></div>
       </div>
     );
   };
 
   return (
-    <div className="bg-white p-5 rounded-2xl border border-[#E9E0D6] shadow-xs">
+    <div className="bg-[#0F1D17] p-5 rounded-2xl border border-[#1F3D2E] tessera-block">
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
-          <Utensils className="w-4 h-4 text-[#F97316]" />
-          <h3 className="font-bold text-sm text-[#1C1917]">Order Type Distribution</h3>
+          <Utensils className="w-4 h-4 text-[#C5F82A]" />
+          <h3 className="text-sm text-[#F5F4EE]">Order Type Distribution</h3>
         </div>
-        <span className="text-xs text-[#A8A29E]">{totalOrders} orders · ₹{totalRevenue.toLocaleString('en-IN')}</span>
+        <span className="text-xs text-[#6B8579] font-mono">{totalOrders} orders · ₹{totalRevenue.toLocaleString('en-IN')}</span>
       </div>
 
       {totalOrders === 0 ? (
         <div className="py-10 text-center">
-          <ShoppingBag className="w-8 h-8 text-[#E9E0D6] mx-auto mb-2" />
-          <div className="text-xs text-[#A8A29E]">No orders yet — analytics will populate as sales come in.</div>
+          <ShoppingBag className="w-8 h-8 text-[#1F3D2E] mx-auto mb-2" />
+          <div className="text-xs text-[#6B8579]">No orders yet — analytics will populate as sales come in.</div>
         </div>
       ) : (
         <div className="flex flex-col sm:flex-row items-center gap-4">
@@ -120,8 +120,8 @@ export const OrderTypeBreakdown: React.FC = () => {
             </ResponsiveContainer>
             {/* Center label — total orders */}
             <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-              <div className="text-2xl font-bold font-mono text-[#1C1917] leading-none">{totalOrders}</div>
-              <div className="text-[10px] text-[#78716C] uppercase tracking-wider mt-1">orders</div>
+              <div className="text-2xl font-bold font-mono text-[#F5F4EE] leading-none tabular-nums">{totalOrders}</div>
+              <div className="text-[10px] text-[#6B8579] uppercase tracking-[0.15em] mt-1">orders</div>
             </div>
           </div>
 
@@ -134,14 +134,14 @@ export const OrderTypeBreakdown: React.FC = () => {
                   <div className="flex items-center justify-between text-xs">
                     <div className="flex items-center gap-1.5">
                       <span className="w-2.5 h-2.5 rounded-sm" style={{ background: s.color }} />
-                      <span className="font-semibold text-[#1C1917]">{s.name}</span>
+                      <span className="font-semibold text-[#F5F4EE]">{s.name}</span>
                       <span style={{ color: s.color }}>{s.icon}</span>
                     </div>
-                    <span className="font-mono text-[#57534E]">
+                    <span className="font-mono text-[#9BB5A5]">
                       {s.value} · ₹{s.revenue.toLocaleString('en-IN')} · {pct}%
                     </span>
                   </div>
-                  <div className="w-full bg-[#F5F0EB] h-1.5 rounded-full overflow-hidden">
+                  <div className="w-full bg-[#0A1410] h-1.5 rounded-full overflow-hidden border border-[#1F3D2E]">
                     <div
                       className="h-full rounded-full transition-all duration-500"
                       style={{ width: `${pct}%`, background: s.color }}

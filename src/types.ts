@@ -5,7 +5,7 @@
 
 export type UserRole = 'superadmin' | 'owner' | 'manager' | 'cashier' | 'kitchen' | 'barista' | 'chef' | 'server';
 
-export type ThemeMode = 'warm' | 'dark' | 'obsidian';
+export type ThemeMode = 'tessera' | 'warm' | 'dark' | 'obsidian';
 
 export type OrderType = 'dine_in' | 'takeaway' | 'delivery';
 

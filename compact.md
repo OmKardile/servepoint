@@ -3,10 +3,11 @@
 > **Purpose**: Single-page dense summary of the current TSOS project state, for fast cold re-onboarding by any agent or contributor. Updated alongside every code change. For full chronological detail, see [`docs/compacts/`](docs/compacts/README.md) (7 compacts) and [`worklog.md`](worklog.md) (live agent handover).
 
 - **Project**: TSOS — The Cafe Operating System
-- **Version**: 2.5.0
+- **Version**: 2.6.0
 - **Repo**: https://github.com/OmKardile/tsos-alt
 - **Author**: Omkar Kardile <omkardile84@gmail.com>
 - **Last Updated**: 2026-09-30
+- **Default Theme**: Tessera (editorial dark / forest + chartreuse) — see [`CHANGELOG.md`](CHANGELOG.md) v2.6.0
 
 ---
 
@@ -76,9 +77,11 @@ npm run dev   # or bun run dev
 ```
 
 ## Recent activity (live agent handover)
-See [`worklog.md`](worklog.md) for the chronological agent work log (tasks 0-setup → 1-live-db → 1-cron → 2-doc-audit → 3-reports-expansion → ongoing). 
+See [`worklog.md`](worklog.md) for the chronological agent work log.
 
-**v2.5.0 (2026-09-30) shipped**: Reports screen expanded with **LiveOpsPulse** (live operational dashboard: orders last 60min, active tables, kitchen load, staff on shift), **OrderTypeBreakdown** donut (dine-in/takeaway/delivery split), and **useCountUp** animated KPI numbers. Bug fix: Escape + backdrop-click now dismiss Payment/Variant modals. Docs re-aligned (version drift, stale URLs, index fixes, created root `compact.md` + `decisions.md`, deleted typo'd `technical-dcoumentation.md`). Build config hardened (`tsconfig` scoped to `src/`, `@types/node` added, `.gitignore` extended for sandbox infra). Live Supabase DB connected. Git history recovered via fresh re-clone.
+**v2.6.0 (2026-09-30) shipped**: **Tessera UI Kit redesign** — new `tessera` ThemeMode (default), Instrument Serif italic headlines + Inter body, deep forest surfaces (`#0A1410`/`#0F1D17`/`#1F3D2E`), vivid chartreuse action accent (`#C5F82A`), 3D isometric block-motif utilities (`.tessera-block`/`.tessera-cta`/`.tessera-ghost`/`.tessera-grain`). AuthScreen fully redesigned as Tessera showcase; Reports widgets (LiveOpsPulse, OrderTypeBreakdown, KPI cards) polished with explicit `tessera-block` shadows + chartreuse accents. CSS variable override layer maps every warm-cream hex to forest when `[data-theme="tessera"]`. Inspired by [uiverse.io/ui-kits/tessera](https://uiverse.io/ui-kits/tessera).
+
+**v2.5.0 (2026-09-30) shipped**: Reports screen expanded with **LiveOpsPulse**, **OrderTypeBreakdown** donut, **useCountUp** animated KPIs. Modal Escape/backdrop UX fixed. Docs re-aligned (version drift, stale URLs, index fixes, created root `compact.md` + `decisions.md`, deleted typo'd `technical-dcoumentation.md`). Build config hardened. Live Supabase DB connected. Git history recovered via fresh re-clone.
 
 ## Canonical doc map (where to look)
 | Need | Read |

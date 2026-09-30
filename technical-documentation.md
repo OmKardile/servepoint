@@ -1,7 +1,7 @@
 # TSOS Technical Documentation & Architecture Specification
 
 - **System**: TSOS (The Cafe Operating System)
-- **Version**: 2.5.0
+- **Version**: 2.6.0
 - **Architect**: Lead Full-Stack Security & Platform Architect
 - **Updated**: September 30, 2026
 
@@ -177,6 +177,53 @@ TSOS features a global, single-button **Obsidian Mode** theme designed for high-
 
 ### 6.2 Implementation
 Managed centrally in `src/lib/store.ts` via `isObsidianMode` state and toggled via the global header button with `toggleObsidianMode()`. State is automatically persisted in `localStorage`.
+
+---
+
+## 6.5 Tessera Theme (v2.6.0 — Editorial Dark / Forest + Chartreuse)
+
+Tessera is the **default theme** as of v2.6.0, inspired by [uiverse.io/ui-kits/tessera](https://uiverse.io/ui-kits/tessera). It is an editorial dark design system pairing italic serif headlines with crisp sans body, deep forest surfaces, and a vivid chartreuse action accent. Signature 3D isometric block motifs add volume and rhythm.
+
+### 6.5.1 Theme Token Specifications
+
+| Token Category | Warm Cafe (legacy default) | Tessera (new default) |
+|---|---|---|
+| **App Canvas Background** | `#FFF9F2` (Cream Stone-50) | `#0A1410` (Deep Forest) |
+| **Card & Panel Surfaces** | `#FFFFFF` (Pure White) | `#0F1D17` (Forest Surface) |
+| **Inset / Secondary Surfaces** | `#F5F0EB` (Warm Sand) | `#142620` (Forest Surface-2) |
+| **Grid Lines & Borders** | `#E9E0D6` (Warm Sand) | `#1F3D2E` (Moss Hairline) / `#2A4A37` (Moss Strong) |
+| **Primary Typography** | `#1C1917` (Deep Espresso) | `#F5F4EE` (Warm Off-White) |
+| **Secondary Text** | `#57534E` (Stone-600) | `#9BB5A5` (Sage) |
+| **Muted / Caption** | `#A8A29E` (Stone-400) | `#6B8579` (Moss) |
+| **Action Accent** | `#F97316` (Warm Orange) | `#C5F82A` (Vivid Chartreuse) |
+| **Status: Completed** | `#17803D` (Emerald-700) | `#34D399` (Emerald-400, tuned for forest) |
+| **Status: Attention** | `#B45309` (Amber-700) | `#FBBF24` (Amber-400) |
+| **Status: Destructive** | `#B42318` (Red-700) | `#F87171` (Red-400) |
+| **Status: Info** | `#2563EB` (Blue-700) | `#60A5FA` (Blue-400) |
+| **Headline Font** | `Plus Jakarta Sans` (sans, weight 800) | `Instrument Serif` italic (weight 400) |
+| **Body Font** | `Inter` | `Inter` (unchanged) |
+
+### 6.5.2 Typography Pairing (the Tessera signature)
+- **h1, h2, h3, .font-display**: `Instrument Serif` italic — gives the editorial feel.
+- **h4**: `Inter` sans, uppercase, tracked `0.08em` — sub-section labels contrast against the serif headlines.
+- **body, labels, captions**: `Inter` (300–800 weights available).
+- **numeric/tabular**: `JetBrains Mono` for receipts, KPIs, timestamps.
+
+### 6.5.3 3D Isometric Block-Motif Utilities
+The "block motif" is the Tessera signature for volume and rhythm — hard offset shadows that make cards feel raised:
+- `.tessera-block` — `box-shadow: 3px 3px 0 #1F3D2E, 3px 3px 0 4px rgba(0,0,0,0.4)`. Used on hero cards (LiveOpsPulse, OrderTypeBreakdown, KPI cards, AuthScreen card).
+- `.tessera-block-chartreuse` — `box-shadow: 3px 3px 0 #C5F82A, 3px 3px 0 4px rgba(0,0,0,0.4)`. Used on chartreuse-tinted accent cards (e.g. "Savings with TSOS" KPI).
+- `.tessera-cta` — chartreuse `#C5F82A` button with forest `#0A1410` text, `translateY(-1px)` hover lift + 3D shadow, `translateY(1px)` active press.
+- `.tessera-ghost` — transparent forest button with moss border, chartreuse hover border + chartreuse hover text.
+- `.tessera-grain` — subtle CSS-only radial-gradient grain texture (chartreuse + emerald tints) applied to the app canvas wrapper.
+
+### 6.5.4 Implementation
+The Tessera theme is implemented as a CSS variable override layer in `src/index.css` under the `[data-theme="tessera"]` / `.tessera` selectors. It maps every warm-cream hex color used in Tailwind utility classes (e.g. `bg-[#FFF9F2]`, `text-[#1C1917]`, `border-[#E9E0D6]`) to the forest equivalent — so the entire existing component tree (POS, KDS, Orders, Inventory, etc.) inherits the Tessera palette automatically without per-component edits. The headline font-family override (`Instrument Serif` italic for h1-h3) is applied globally under the same selector.
+
+Theme state is managed in `src/lib/store.ts`:
+- `themeMode: ThemeMode` — `'tessera'` (default) | `'warm'` | `'dark'` | `'obsidian'`. Persisted in `localStorage` under `tsos_theme_mode`.
+- `setThemeMode(mode)` — sets the `data-theme` attribute on `<html>`, adds/removes the `tessera` / `dark` / `obsidian` classes.
+- `toggleThemeMode()` — cycles `tessera ↔ dark` (keeps the editorial dark language; `warm` is reachable via explicit `setThemeMode('warm')`).
 
 ---
 
