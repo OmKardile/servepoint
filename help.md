@@ -1,6 +1,6 @@
 # TSOS Help & Credentials Reference
 
-- **Document Version**: 2.6.3 (2026-10-01)
+- **Document Version**: 2.7.0 (2026-10-01)
 
 ## 🔑 Login Credentials
 
@@ -18,6 +18,16 @@
 - **ServePoint** (owner Figma — EXACT tokens since v2.6.7/ADR-0012: ivory `#F6F5F2` canvas, signature sage `#D9E2DD` surfaces, deep-teal `#0F3D3E` primary, gold `#B88E2F` accent, near-black text, **Poppins**) is the **default theme for the authenticated app** since v2.6.6 (ADR-0011). The header toggle cycles `servepoint → tessera → dark`; `warm`/`obsidian` remain reachable via `setThemeMode()`.
 - **⚠️ Login screen is FROZEN (ADR-0010) and always renders in Tessera**: while logged out, the document is force-pinned to Tessera so the approved login look never changes — including the reserved Surface Pack illustrations, which wait for an explicit owner unfreeze. See [`decisions.md`](decisions.md) ADR-0010/0011.
 - Selection persists in `localStorage` under `tsos_theme_mode` (legacy `tessera` values migrate to `servepoint` once).
+
+---
+
+## 🧾 Receipt Sharing (v2.7.0)
+
+After every completed sale, the receipt modal offers three ways to get the bill to the guest:
+
+- **Print** — sends the thermal bill (or Kitchen KOT) to the configured printer (80mm/58mm browser or Bluetooth).
+- **WhatsApp** — opens `wa.me` with the plain-text bill pre-filled; if the order has a guest phone number it opens the direct chat, otherwise the WhatsApp share picker so you can choose the chat.
+- **Copy** — copies the plain-text bill to the clipboard for pasting into any messaging app.
 
 ---
 

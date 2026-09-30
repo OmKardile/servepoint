@@ -15,6 +15,8 @@ import {
   Sparkles,
   RefreshCw,
   ExternalLink,
+  MessageCircle,
+  Copy,
 } from 'lucide-react';
 import {
   generateReceiptEscPos,
@@ -31,11 +33,14 @@ interface ReceiptModalProps {
 }
 
 export const ReceiptModal: React.FC<ReceiptModalProps> = ({ order, onClose, onNewSale }) => {
-  const { location, feeConfig, printerConfig, updatePrinterConfig } = useTsosStore();
+  const { location, feeConfig, printerConfig, updatePrinterConfig, themeMode } = useTsosStore();
+
+  const isServepoint = themeMode === 'servepoint';
 
   const [activeTab, setActiveTab] = useState<'bill' | 'kot' | 'escpos'>('bill');
   const [selectedWidth, setSelectedWidth] = useState<PaperWidth>(printerConfig.paper_width || '80mm');
   const [printFeedback, setPrintFeedback] = useState<{ success: boolean; message: string } | null>(null);
+  const [shareFeedback, setShareFeedback] = useState<{ success: boolean; message: string } | null>(null);
   const [isPrinting, setIsPrinting] = useState(false);
 
   const handlePrint = async () => {
@@ -76,6 +81,58 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({ order, onClose, onNe
     setTimeout(() => setPrintFeedback(null), 3000);
   };
 
+  // Build a plain-text version of the bill for sharing (WhatsApp / clipboard).
+  const buildReceiptText = (): string => {
+    const lines: string[] = [];
+    lines.push(`*${location.name}*`);
+    lines.push(location.address);
+    lines.push(`GSTIN: ${printerConfig.gstin || '29AABCT1337C1Z0'}`);
+    lines.push('--------------------------------');
+    lines.push(`Order #${order.order_number} (${order.order_type.replace('_', ' ')})`);
+    lines.push(
+      `${new Date(order.created_at).toLocaleDateString()} ${new Date(order.created_at).toLocaleTimeString(
+        [],
+        { hour: '2-digit', minute: '2-digit' }
+      )}`
+    );
+    if (order.table_label) lines.push(`Table: ${order.table_label}`);
+    if (order.customer_name) lines.push(`Guest: ${order.customer_name}`);
+    lines.push('--------------------------------');
+    order.items.forEach((i) => {
+      lines.push(`${i.qty}x ${i.menu_item_name} — ₹${i.item_total.toFixed(2)}`);
+    });
+    lines.push('--------------------------------');
+    lines.push(`Subtotal: ₹${order.subtotal.toFixed(2)}`);
+    lines.push(`GST: ₹${order.tax_total.toFixed(2)}`);
+    if (order.discount_total > 0) lines.push(`Discount: -₹${order.discount_total.toFixed(2)}`);
+    lines.push(`*TOTAL PAID: ₹${order.grand_total.toFixed(2)}*`);
+    lines.push(`Payment: ${(order.payment_method || 'paid').toUpperCase()}`);
+    lines.push(printerConfig.receipt_footer || 'Thank you for visiting! ✨');
+    lines.push('Powered by TSOS');
+    return lines.join('\n');
+  };
+
+  const handleCopyReceipt = async () => {
+    try {
+      await navigator.clipboard.writeText(buildReceiptText());
+      setShareFeedback({ success: true, message: 'Receipt copied to clipboard.' });
+    } catch {
+      setShareFeedback({ success: false, message: 'Clipboard unavailable in this browser.' });
+    }
+    setTimeout(() => setShareFeedback(null), 3000);
+  };
+
+  const handleShareWhatsApp = () => {
+    const text = encodeURIComponent(buildReceiptText());
+    const phone = order.customer_phone ? order.customer_phone.replace(/[^0-9]/g, '') : '';
+    // With a guest phone on file, open the direct chat; otherwise open the
+    // WhatsApp share picker so the cashier can pick the chat manually.
+    const url = phone.length >= 10 ? `https://wa.me/${phone}?text=${text}` : `https://wa.me/?text=${text}`;
+    window.open(url, '_blank', 'noopener,noreferrer');
+    setShareFeedback({ success: true, message: 'WhatsApp opened — attach the receipt to the chat.' });
+    setTimeout(() => setShareFeedback(null), 3500);
+  };
+
   // Generate Hex dump for ESC/POS debugging
   const escPosBytes =
     activeTab === 'kot'
@@ -88,23 +145,41 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({ order, onClose, onNe
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-150">
-      <div className="bg-white rounded-3xl max-w-lg w-full border border-[#E9E0D6] shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
+      <div
+        className={`max-w-lg w-full rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh] ${
+          isServepoint ? 'bg-white border border-[#E3E7E0]' : 'bg-white border border-[#E9E0D6]'
+        }`}
+      >
         {/* Top Header & Navigation */}
-        <div className="p-3.5 bg-[#FFF9F2] border-b border-[#E9E0D6] flex items-center justify-between">
+        <div
+          className={`p-3.5 border-b flex items-center justify-between ${
+            isServepoint ? 'bg-[#D9E2DD] border-[#E3E7E0]' : 'bg-[#FFF9F2] border-[#E9E0D6]'
+          }`}
+        >
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-xl bg-[#17803D]/10 text-[#17803D] flex items-center justify-center">
+            <div
+              className={`w-8 h-8 rounded-xl flex items-center justify-center ${
+                isServepoint ? 'bg-white text-[#B88E2F]' : 'bg-[#17803D]/10 text-[#17803D]'
+              }`}
+            >
               <Printer className="w-4 h-4" />
             </div>
             <div>
               <div className="flex items-center gap-1.5">
-                <span className="text-xs font-bold text-[#1C1917]">
+                <span className={`text-xs font-semibold ${isServepoint ? 'text-[#1A1A1A]' : 'text-[#1C1917]'}`}>
                   Order #{order.order_number} Bill & KOT
                 </span>
-                <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-emerald-100 text-emerald-800 font-bold border border-emerald-200">
+                <span
+                  className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold border ${
+                    isServepoint
+                      ? 'bg-[#B88E2F]/15 text-[#967221] border-[#B88E2F]/30'
+                      : 'bg-emerald-100 text-emerald-800 border-emerald-200'
+                  }`}
+                >
                   PAID
                 </span>
               </div>
-              <div className="text-[10px] text-[#A8A29E]">
+              <div className={`text-[10px] ${isServepoint ? 'text-[#6B6B6B]' : 'text-[#A8A29E]'}`}>
                 Thermal Printer Workstation • ESC/POS Ready
               </div>
             </div>
@@ -112,7 +187,11 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({ order, onClose, onNe
 
           <div className="flex items-center gap-1.5">
             {/* Paper Width Selector */}
-            <div className="flex items-center bg-white p-0.5 rounded-lg border border-[#E9E0D6] text-[11px] font-mono font-bold">
+            <div
+              className={`flex items-center p-0.5 rounded-lg border text-[11px] font-semibold ${
+                isServepoint ? 'bg-white border-[#E3E7E0]' : 'bg-white border-[#E9E0D6] font-mono'
+              }`}
+            >
               <button
                 onClick={() => {
                   setSelectedWidth('80mm');
@@ -120,8 +199,12 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({ order, onClose, onNe
                 }}
                 className={`px-2 py-0.5 rounded-md transition-colors ${
                   selectedWidth === '80mm'
-                    ? 'bg-[#1C1917] text-white'
-                    : 'text-[#57534E] hover:bg-[#F5F0EB]'
+                    ? isServepoint
+                      ? 'bg-[#0F3D3E] text-white'
+                      : 'bg-[#1C1917] text-white'
+                    : isServepoint
+                      ? 'text-[#6B6B6B] hover:bg-[#D9E2DD]/60'
+                      : 'text-[#57534E] hover:bg-[#F5F0EB]'
                 }`}
                 title="80mm standard 3-inch desktop roll (48 characters/line)"
               >
@@ -134,8 +217,12 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({ order, onClose, onNe
                 }}
                 className={`px-2 py-0.5 rounded-md transition-colors ${
                   selectedWidth === '58mm'
-                    ? 'bg-[#1C1917] text-white'
-                    : 'text-[#57534E] hover:bg-[#F5F0EB]'
+                    ? isServepoint
+                      ? 'bg-[#0F3D3E] text-white'
+                      : 'bg-[#1C1917] text-white'
+                    : isServepoint
+                      ? 'text-[#6B6B6B] hover:bg-[#D9E2DD]/60'
+                      : 'text-[#57534E] hover:bg-[#F5F0EB]'
                 }`}
                 title="58mm compact 2-inch mobile roll (32 characters/line)"
               >
@@ -145,7 +232,9 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({ order, onClose, onNe
 
             <button
               onClick={onClose}
-              className="p-1.5 rounded-xl hover:bg-[#E9E0D6] text-[#57534E] transition-colors"
+              className={`p-1.5 rounded-xl transition-colors ${
+                isServepoint ? 'hover:bg-white/70 text-[#6B6B6B] hover:text-[#1A1A1A]' : 'hover:bg-[#E9E0D6] text-[#57534E]'
+              }`}
             >
               <X className="w-4 h-4" />
             </button>
@@ -153,13 +242,19 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({ order, onClose, onNe
         </div>
 
         {/* View Mode Tabs */}
-        <div className="flex border-b border-[#E9E0D6] bg-white px-4 text-xs font-semibold">
+        <div className={`flex border-b bg-white px-4 text-xs font-medium ${
+          isServepoint ? 'border-[#E3E7E0]' : 'border-[#E9E0D6]'
+        }`}>
           <button
             onClick={() => setActiveTab('bill')}
             className={`py-2 px-3 border-b-2 flex items-center gap-1.5 transition-colors ${
               activeTab === 'bill'
-                ? 'border-[#F97316] text-[#F97316]'
-                : 'border-transparent text-[#57534E] hover:text-[#1C1917]'
+                ? isServepoint
+                  ? 'border-[#B88E2F] text-[#967221]'
+                  : 'border-[#F97316] text-[#F97316]'
+                : isServepoint
+                  ? 'border-transparent text-[#6B6B6B] hover:text-[#1A1A1A]'
+                  : 'border-transparent text-[#57534E] hover:text-[#1C1917]'
             }`}
           >
             <FileText className="w-3.5 h-3.5" />
@@ -169,8 +264,12 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({ order, onClose, onNe
             onClick={() => setActiveTab('kot')}
             className={`py-2 px-3 border-b-2 flex items-center gap-1.5 transition-colors ${
               activeTab === 'kot'
-                ? 'border-[#F97316] text-[#F97316]'
-                : 'border-transparent text-[#57534E] hover:text-[#1C1917]'
+                ? isServepoint
+                  ? 'border-[#B88E2F] text-[#967221]'
+                  : 'border-[#F97316] text-[#F97316]'
+                : isServepoint
+                  ? 'border-transparent text-[#6B6B6B] hover:text-[#1A1A1A]'
+                  : 'border-transparent text-[#57534E] hover:text-[#1C1917]'
             }`}
           >
             <Utensils className="w-3.5 h-3.5" />
@@ -180,8 +279,12 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({ order, onClose, onNe
             onClick={() => setActiveTab('escpos')}
             className={`py-2 px-3 border-b-2 flex items-center gap-1.5 transition-colors ${
               activeTab === 'escpos'
-                ? 'border-[#F97316] text-[#F97316]'
-                : 'border-transparent text-[#57534E] hover:text-[#1C1917]'
+                ? isServepoint
+                  ? 'border-[#B88E2F] text-[#967221]'
+                  : 'border-[#F97316] text-[#F97316]'
+                : isServepoint
+                  ? 'border-transparent text-[#6B6B6B] hover:text-[#1A1A1A]'
+                  : 'border-transparent text-[#57534E] hover:text-[#1C1917]'
             }`}
           >
             <Code className="w-3.5 h-3.5" />
@@ -190,21 +293,25 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({ order, onClose, onNe
         </div>
 
         {/* Status / Feedback Banner */}
-        {printFeedback && (
+        {(printFeedback || shareFeedback) && (
           <div
-            className={`p-2.5 px-4 text-xs flex items-center gap-2 ${
-              printFeedback.success
-                ? 'bg-emerald-50 text-emerald-800 border-b border-emerald-200'
-                : 'bg-rose-50 text-rose-800 border-b border-rose-200'
+            className={`p-2.5 px-4 text-xs flex items-center gap-2 border-b ${
+              (printFeedback ?? shareFeedback)!.success
+                ? isServepoint
+                  ? 'bg-[#D9E2DD]/60 text-[#0F3D3E] border-[#E3E7E0]'
+                  : 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                : 'bg-rose-50 text-rose-800 border-rose-200'
             }`}
           >
             <CheckCircle2 className="w-4 h-4 shrink-0" />
-            <span>{printFeedback.message}</span>
+            <span>{(printFeedback ?? shareFeedback)!.message}</span>
           </div>
         )}
 
         {/* Modal Main Content */}
-        <div className="flex-1 overflow-y-auto p-4 bg-[#F5F0EB]/50 flex justify-center">
+        <div className={`flex-1 overflow-y-auto p-4 flex justify-center ${
+          isServepoint ? 'bg-[#F6F5F2]' : 'bg-[#F5F0EB]/50'
+        }`}>
           {/* TAB 1: Customer Bill */}
           {activeTab === 'bill' && (
             <div
@@ -484,19 +591,55 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({ order, onClose, onNe
         </div>
 
         {/* Footer Actions */}
-        <div className="p-3.5 bg-[#FFF9F2] border-t border-[#E9E0D6] flex flex-wrap items-center justify-between gap-2">
+        <div
+          className={`p-3.5 border-t flex flex-wrap items-center justify-between gap-2 ${
+            isServepoint ? 'bg-white border-[#E3E7E0]' : 'bg-[#FFF9F2] border-[#E9E0D6]'
+          }`}
+        >
           <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={handleKickDrawer}
-              className="px-3 py-2 rounded-xl border border-[#E9E0D6] bg-white hover:bg-[#F5F0EB] text-[#57534E] text-xs font-semibold flex items-center gap-1.5 shadow-2xs transition-colors"
+              className={`px-3 py-2 rounded-xl border text-xs font-medium flex items-center gap-1.5 transition-colors ${
+                isServepoint
+                  ? 'border-[#E3E7E0] bg-white hover:bg-[#D9E2DD]/60 text-[#1A1A1A]'
+                  : 'border-[#E9E0D6] bg-white hover:bg-[#F5F0EB] text-[#57534E] shadow-2xs'
+              }`}
               title="Send ESC/POS Cash Drawer Kick Pulse (RJ11 Pin 2)"
             >
-              <DollarSign className="w-3.5 h-3.5 text-[#17803D]" />
+              <DollarSign className={`w-3.5 h-3.5 ${isServepoint ? 'text-[#0F3D3E]' : 'text-[#17803D]'}`} />
               <span>Kick Drawer</span>
             </button>
 
-            <span className="text-[11px] text-[#A8A29E] hidden sm:inline">
+            <button
+              type="button"
+              onClick={handleShareWhatsApp}
+              className={`px-3 py-2 rounded-xl border text-xs font-medium flex items-center gap-1.5 transition-colors ${
+                isServepoint
+                  ? 'border-[#B88E2F]/40 bg-[#B88E2F]/10 hover:bg-[#B88E2F]/20 text-[#967221]'
+                  : 'border-[#E9E0D6] bg-white hover:bg-[#F5F0EB] text-[#57534E] shadow-2xs'
+              }`}
+              title="Share the bill text with the guest on WhatsApp"
+            >
+              <MessageCircle className="w-3.5 h-3.5" />
+              <span>WhatsApp</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleCopyReceipt}
+              className={`px-3 py-2 rounded-xl border text-xs font-medium flex items-center gap-1.5 transition-colors ${
+                isServepoint
+                  ? 'border-[#E3E7E0] bg-white hover:bg-[#D9E2DD]/60 text-[#1A1A1A]'
+                  : 'border-[#E9E0D6] bg-white hover:bg-[#F5F0EB] text-[#57534E] shadow-2xs'
+              }`}
+              title="Copy the plain-text receipt to the clipboard"
+            >
+              <Copy className="w-3.5 h-3.5" />
+              <span>Copy</span>
+            </button>
+
+            <span className={`text-[11px] hidden sm:inline ${isServepoint ? 'text-[#6B6B6B]' : 'text-[#A8A29E]'}`}>
               Mode: {printerConfig.connection_type.toUpperCase()}
             </span>
           </div>
@@ -506,9 +649,13 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({ order, onClose, onNe
               type="button"
               onClick={handlePrint}
               disabled={isPrinting}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-[#1C1917] hover:bg-black text-white shadow-xs transition-colors"
+              className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold text-white transition-colors ${
+                isServepoint
+                  ? 'bg-[#0F3D3E] hover:bg-[#0B3132] shadow-md shadow-[#0F3D3E]/20'
+                  : 'bg-[#1C1917] hover:bg-black shadow-xs'
+              }`}
             >
-              <Printer className="w-3.5 h-3.5 text-[#F97316]" />
+              <Printer className={`w-3.5 h-3.5 ${isServepoint ? 'text-[#B88E2F]' : 'text-[#F97316]'}`} />
               <span>
                 {isPrinting ? 'Transmitting...' : `Print ${activeTab === 'kot' ? 'KOT' : 'Bill'} (${selectedWidth})`}
               </span>
@@ -521,7 +668,9 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({ order, onClose, onNe
                   onClose();
                   onNewSale();
                 }}
-                className="flex items-center gap-1 px-4 py-2 rounded-xl text-xs font-semibold bg-[#F97316] hover:bg-[#EA580C] text-white shadow-xs transition-colors"
+                className={`flex items-center gap-1 px-4 py-2 rounded-xl text-xs font-semibold text-white transition-colors ${
+                  isServepoint ? 'bg-[#B88E2F] hover:bg-[#967221]' : 'bg-[#F97316] hover:bg-[#EA580C]'
+                }`}
               >
                 <span>Next Sale</span>
                 <ArrowRight className="w-3.5 h-3.5" />

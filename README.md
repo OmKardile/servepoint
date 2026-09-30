@@ -43,8 +43,10 @@
 
 ### 6. Real-Time WebSockets & Offline Resiliency
 - **Cloud Menu Hydration (v2.6.2)**: categories + menu items load from Supabase for the active tenant at sign-in, with automatic fallback to the bundled seed menu when the cloud is empty or unreachable.
+- **Cloud Order Sync with UUID resolution (v2.7.0)**: orders sync to Supabase with local→cloud tenant/location id resolution (slug-lookup, session-cached) and a local→cloud order-id map so KDS bumps target the right rows; RLS-denied or offline inserts queue locally with auto-flush on reconnect.
 - **Supabase Realtime**: Instantaneous zero-reload ticket progression in KDS and live dining table status updates.
 - **Offline-First Synchronization**: Caches pending tickets under `tsos_pending_offline_orders` with automated auto-flush upon browser reconnection.
+- **Top-level ErrorBoundary (v2.7.0)**: screen crashes degrade into a ServePoint recovery card (Reload / Back to POS) instead of a white page.
 
 ### 7. Touchscreen Fast PIN Pad & Electron Desktop Roadmap
 - **Fast 4-Digit Staff PIN Pad**: Touchscreen numeric pad for rapid 2-tap cashier and barista shift transitions.

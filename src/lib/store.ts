@@ -969,7 +969,8 @@ export const useTsosStore = create<TsosState>((set, get) => ({
     // Sync order to Supabase Postgres (with automatic offline fallback queue)
     const tenantId = state.currentTenant?.id || 'biz_coolkafe_99';
     const locationId = state.location.id;
-    realtimeService.syncOrderToSupabase(newOrder, tenantId, locationId).then((res) => {
+    const tenantSlug = state.currentTenant?.slug || state.location.slug;
+    realtimeService.syncOrderToSupabase(newOrder, tenantId, locationId, tenantSlug).then((res) => {
       if (res.queued) {
         set((s) => ({
           cloudSync: {

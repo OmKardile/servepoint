@@ -1,7 +1,7 @@
 # TSOS Technical Documentation & Architecture Specification
 
 - **System**: TSOS (The Cafe Operating System)
-- **Version**: 2.6.9
+- **Version**: 2.7.0
 - **Architect**: Lead Full-Stack Security & Platform Architect
 - **Updated**: October 1, 2026
 
@@ -196,7 +196,7 @@ Tessera is the **default theme** as of v2.6.0, inspired by [uiverse.io/ui-kits/t
 - **Activation**: `[data-theme="servepoint"]` token + remap layer in `src/index.css` (creams→ivory, stone→near-black text, orange→gold accent, dark-stone strips→deep teal `#0F3D3E`, inset surfaces→sage `#D9E2DD`). Default ThemeMode for the authenticated app; stored `tessera` one-time-migrates. Toggle cycles `servepoint → tessera → dark`.
 - **Auth-scoped pinning**: `App.tsx` sets `data-theme="tessera"` whenever `!authSession || isAuthLoading` (frozen login ADR-0010 + public storefront keep their approved Tessera environment; zero AuthScreen edits). ServePoint tokens apply only to the authenticated document.
 - **Utilities**: `.sp-cta` (EXACT Primary Button: gold `#B88E2F`, near-black text, Poppins 500, r12, hover `#967221`), `.sp-sidebar` (deep-teal `#0F3D3E` panel), `.sp-banner` (gold gradient category hero), `.sp-ghost` (white button, gold hover ring), `.sp-surface` (sage surface, new v2.6.7).
-- **Explicit surfaces so far**: Header (gold brand block, sp-cta Fast PIN), WebNavbar (gold active tab + baseline marker, soft-shadow dropdown, sage dropdown hover), **PosScreen menu cards (v2.6.7 — sage card, gold Add CTA, near-black text, `#C9D3CC` divider, `#DC2626` low-stock badge)**, **CartDrawer (v2.6.8 — Bills detail-pane language: sage header, white item cards + `#E3E7E0` hairlines, sage qty steppers, deep-teal Apply + Charge CTAs, pressed-gold To Pay)**, **PaymentModal (v2.6.9 — tender surface: sage header with pressed-gold amount, gold active method tabs (single-accent language), sage/canvas method wells, deep-teal Exact + Confirm CTAs, Poppins semibold summary values, ServePoint confetti)**, **Dine-in Tables (v2.6.9 — first theme-aware pass: ivory canvas, sage icon chip, gold Add CTA, gold-ring occupied cards + deep-teal free badges, gold-tinted order insets, sage selects, sage QR-stand well with deep-teal cafe name)**. Remaining surfaces approximate ServePoint via the remap layer until their explicit pass (roadmap in ADR-0011).
+- **Explicit surfaces so far**: Header (gold brand block, sp-cta Fast PIN), WebNavbar (gold active tab + baseline marker, soft-shadow dropdown, sage dropdown hover), **PosScreen menu cards (v2.6.7 — sage card, gold Add CTA, near-black text, `#C9D3CC` divider, `#DC2626` low-stock badge)**, **CartDrawer (v2.6.8 — Bills detail-pane language: sage header, white item cards + `#E3E7E0` hairlines, sage qty steppers, deep-teal Apply + Charge CTAs, pressed-gold To Pay)**, **PaymentModal (v2.6.9 — tender surface: sage header with pressed-gold amount, gold active method tabs (single-accent language), sage/canvas method wells, deep-teal Exact + Confirm CTAs, Poppins semibold summary values, ServePoint confetti)**, **Dine-in Tables (v2.6.9 — first theme-aware pass: ivory canvas, sage icon chip, gold Add CTA, gold-ring occupied cards + deep-teal free badges, gold-tinted order insets, sage selects, sage QR-stand well with deep-teal cafe name)**, **Reports/Dashboard (v2.7.0 — white header + gold Export split-CTA, white KPI cards with Poppins values + gold Savings hero, gold Top-Items bars on sage tracks, restrained payment trio (sage/gold/teal tiles), gold/teal/gold Export-modal CTAs, deep-teal toast; OrderTypeBreakdown donut deep-teal/gold/sage on white)**, **ReceiptModal (v2.7.0 — sage header, gold PAID badge + tab underlines, deep-teal paper-width pill + Print CTA, gold Next Sale, WhatsApp/Copy share buttons; thermal bill/KOT previews stay monochrome paper)**. Remaining surfaces approximate ServePoint via the remap layer until their explicit pass (roadmap in ADR-0011; next: WeeklySalesLineChart/DailySalesHeatmap/LiveOpsPulse inside Reports, then Orders two-pane per Bills frames, then SuperAdmin per frame 219:23581 context).
 
 ### 6.5.1 Theme Token Specifications
 
@@ -297,8 +297,9 @@ The application maintains persistent PostgreSQL change subscriptions per tenant 
 - **Audio Chimes**: Plays synthesized double-ding chimes (`playChime('new_order')`) using the Web Audio API without external audio file latency.
 
 ### 8.2 Offline-First Queue & Sync
-- **Queue Storage**: Unsynced orders are cached under `tsos_pending_offline_orders` in `localStorage`.
+- **Queue Storage**: Unsynced orders are cached under `tsos_pending_offline_orders` in `localStorage` (each entry carries `tenantSlug` so deferred flushes can resolve cloud UUIDs).
 - **Auto-Flush Reconnect**: Listens to browser `'online'` events and flushes pending tickets immediately upon connection restoration.
+- **Cloud UUID Resolution (v2.7.0)**: `syncOrderToSupabase` resolves local demo ids to live UUIDs before insert — tenant by slug lookup, location by the tenant's first `locations` row (cached per session; mirrors the v2.6.2 menu-hydration path). Successful inserts record a local→cloud order-id map so `updateOrderStatus` (KDS bump / cashier advance) targets the correct cloud row; unmapped non-UUID ids skip the cloud call. RLS-denied inserts (`42501`, anon policy pending migration-001 re-run) log an actionable info line and stay local + queued.
 
 ---
 
