@@ -1,9 +1,9 @@
 # TSOS Technical Documentation & Architecture Specification
 
 - **System**: TSOS (The Cafe Operating System)
-- **Version**: 2.4.0
+- **Version**: 2.5.0
 - **Architect**: Lead Full-Stack Security & Platform Architect
-- **Updated**: September 25, 2026
+- **Updated**: September 30, 2026
 
 ---
 
@@ -47,11 +47,11 @@ graph TD
 ## 2. Frontend Architecture
 
 ### 2.1 Technology Stack
-- **Framework**: React 18 with TypeScript 5.2.
-- **Build Tool**: Vite 6 (ESM-native fast HMR and optimized production bundling).
-- **Styling**: Tailwind CSS with custom design tokens for Warm Cafe Cream and Obsidian Dark Terminal.
+- **Framework**: React 19 with TypeScript 7.0.
+- **Build Tool**: Vite 8.3 (ESM-native fast HMR and optimized production bundling).
+- **Styling**: Tailwind CSS 4.3 with custom design tokens for Warm Cafe Cream and Obsidian Dark Terminal.
 - **Icons**: Lucide React.
-- **State Management**: Zustand with `persist` middleware for zero-latency local caching.
+- **State Management**: Zustand 5 with `persist` middleware for zero-latency local caching.
 
 ### 2.2 Component Hierarchy & Surfaces
 - `src/App.tsx`: Root router parsing path-based tenant slugs and rendering active surface components.
@@ -73,7 +73,7 @@ The routing layer extracts tenant slugs dynamically from the window location pat
 | `/:slug/kds` | `KdsScreen` | Kitchen Staff, Barista | Real-time kitchen display board. |
 | `/:slug/orders` | `OrdersScreen` | Cashier, Manager | Master order directory with status filtering & receipt reprinting. |
 | `/:slug/inventory` | `InventoryScreen` | Manager, Owner | Ingredient stock ledger and recipe consumption costs. |
-| `/:slug/reports` | `ReportsScreen` | Manager, Owner | Sales telemetry, payment modes, and tax reporting. |
+| `/:slug/reports` | `ReportsScreen` | Manager, Owner | Sales telemetry, payment modes, order-type analytics, and tax reporting. |
 | `/:slug/settings` | `SettingsScreen` | Owner, Manager | Outlet profile, thermal printers, and tax configuration. |
 | `/:slug/t:tableNumber?token=:token` | `StorefrontScreen` | Anonymous Diner | Guest self-ordering with 10-minute ephemeral session validation. |
 | `/superadmin` | `SuperAdminScreen` | Platform SuperAdmin | Tenant provisioning, SaaS telemetry, and workspace impersonation. |
@@ -241,6 +241,30 @@ The application maintains persistent PostgreSQL change subscriptions per tenant 
 - **Windows WPF Frozen**: Standalone C# / WPF native desktop client is frozen.
 - **Electron.js Framework**: Desktop POS terminals will leverage cross-platform Electron.js wrapping the unified React/TypeScript POS codebase to access raw USB/COM ESC/POS thermal printers and cash drawers.
 - **Zero-Install Camera QR Ordering**: Cancelled customer native apps. Diners scan physical QR table stickers with their mobile camera; the storefront opens directly in the browser with 10-minute ephemeral sessions.
+
+---
+
+## 9.5 Reports Analytics Suite (v2.5.0)
+
+The `ReportsScreen` aggregates four complementary analytics views, each backed by the live Zustand store (and, when Supabase is configured, by realtime Postgres Changes).
+
+### 9.5.1 Live Operational Pulse (`src/components/reports/LiveOpsPulse.tsx`)
+A real-time "right now" dashboard card sitting at the top of the Reports screen. Four stat tiles:
+- **Last 60 min**: revenue + order count + per-minute velocity (`orders / 60`).
+- **Active Tables**: occupied tables / total tables + % occupied.
+- **Kitchen Load**: count of tickets currently in `new` + `preparing` state, color-coded `idle → light → moderate → busy → critical` (grey → emerald → orange → red-orange → red).
+- **Staff On Shift**: count of shifts with `status === 'active'`.
+A contextual insight strip at the bottom adapts its message to the current state (e.g. "kitchen at critical load — consider pulling a runner" vs "floor is quiet — good moment for restocks").
+
+### 9.5.2 Animated KPI Cards (`useCountUp` hook)
+The four summary KPIs (Gross Sales, Orders Placed, Average Order Value, Savings vs Traditional POS) now use `src/hooks/useCountUp.ts`. The hook animates from the previous value to the new target over a configurable duration (default 900 ms) using `requestAnimationFrame` + an ease-out cubic curve. This gives the dashboard a "live ticking" feel on mount and whenever the underlying metrics change, without re-rendering the whole Reports tree.
+
+### 9.5.3 Order Type Breakdown (`src/components/reports/OrderTypeBreakdown.tsx`)
+A Recharts donut chart visualizing the split of orders by type: **Dine-In** (orange), **Takeaway** (violet), **Delivery** (sky blue). Each slice shows order count + revenue + percentage share. The center label renders the total order count. Empty slices are filtered out so the donut only shows types with actual sales. Renders an empty state when no orders exist. This fills a gap in the prior Reports screen, which previously showed only payment-method breakdown (UPI / Cash / Card) and not order-type analytics.
+
+### 9.5.4 Existing Analytics (unchanged)
+- **WeeklySalesLineChart** (`WeeklySalesLineChart.tsx`): Recharts line chart of day-by-day gross sales for the current week, with Revenue / Order Volume / Dual Trend toggle.
+- **DailySalesHeatmap** (`DailySalesHeatmap.tsx`): hour-by-hour sales heatmap (07:00–23:00) with peak-hour detection, recommended staffing, and a schedule view.
 
 ---
 

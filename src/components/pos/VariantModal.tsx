@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { MenuItem, MenuItemVariant } from '../../types';
 import { useTsosStore } from '../../lib/store';
 import { X, Check } from 'lucide-react';
@@ -17,6 +17,18 @@ export const VariantModal: React.FC<VariantModalProps> = ({ item, onClose, onCon
   );
   const [selectedAddonIds, setSelectedAddonIds] = useState<string[]>([]);
   const [notes, setNotes] = useState('');
+
+  // Keyboard accessibility: Escape closes the variant picker, matching the X button.
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
 
   // Available addons for this item
   const safeAddons = addons || [];
@@ -38,7 +50,13 @@ export const VariantModal: React.FC<VariantModalProps> = ({ item, onClose, onCon
   };
 
   return (
-    <div className="fixed inset-0 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-150">
+    <div
+      className="fixed inset-0 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-150"
+      onClick={(e) => {
+        // Click on the backdrop (not inside the modal) closes the picker.
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
       <div className="bg-white rounded-2xl max-w-md w-full border border-[#E9E0D6] shadow-xl overflow-hidden flex flex-col max-h-[90vh]">
         {/* Modal Header */}
         <div className="p-4 border-b border-[#E9E0D6] flex items-center justify-between bg-[#FFF9F2]">

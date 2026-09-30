@@ -14,6 +14,8 @@ docs/
 │   ├── compact3.md         # Production Go-On Conversion & Chrome Purge
 │   ├── compact4.md         # Obsidian Mode & Global Theme Engine
 │   ├── compact5.md         # 10-Minute Ephemeral Table QR Session Security
+│   ├── compact6.md         # Comparative Audit & Selective Feature Migration
+│   ├── compact7.md         # Hardware Hub Purge & Electron Strategy Pivot
 │   └── README.md           # Index of Compacts
 ├── requests/               # Chronological log of all engineering requests & prompts
 │   └── request-history.md  # Detailed prompt ledger & requirements breakdown
@@ -23,6 +25,10 @@ docs/
 │   ├── 0003-production-chrome-purge-and-dynamic-routing.md
 │   ├── 0004-obsidian-terminal-theme-engine.md
 │   ├── 0005-ephemeral-table-qr-session-security.md
+│   ├── 0006-realtime-websockets-and-selective-migration.md
+│   ├── 0007-remove-hardware-hub-and-cancel-native-apps.md
+│   ├── 0008-cloud-deployment-render-and-vercel.md
+│   ├── 0009-role-based-access-control-and-route-guards.md
 │   └── README.md           # Index of ADRs
 ├── worklog/                # Daily engineering logs, commit history, and tests
 │   └── 2026-09-25.md       # Full engineering log for September 25, 2026
@@ -30,17 +36,17 @@ docs/
 │   ├── 01-qr-table-session-security-and-threat-model.md
 │   ├── 02-multi-tenant-saas-architecture-and-scaling.md
 │   └── README.md           # Index of Research
-└── specifications/         # Platform subsystem specifications
-    ├── CLOUD_SYNC_AND_OFFLINE_RESILIENCE.md
-    ├── INVENTORY_SUPPLY_CHAIN_AND_ANALYTICS_SPEC.md
-    ├── LOYALTY_SYSTEM_ARCHITECTURE.md
-    ├── MASTER_REPLICATION_PROMPT_FOR_AI.md
-    ├── MOBILE_NATIVE_CLIENTS_ANDROID_IOS_SPEC.md
-    ├── PRINTER_INTEGRATION_SPECIFICATION.md
-    ├── SURFACES_AND_ARCHITECTURE_MAP.md
-    ├── SYSTEM_GUIDANCE_AND_ONBOARDING_SPEC.md
-    ├── TABLE_SIDE_ORDERING_AND_QR_CLIENT_SPEC.md
-    └── WINDOWS_NATIVE_CLIENT_SPECIFICATION.md
+│   # Platform subsystem specifications (live directly in docs/, not a subfolder):
+├── CLOUD_SYNC_AND_OFFLINE_RESILIENCE.md
+├── INVENTORY_SUPPLY_CHAIN_AND_ANALYTICS_SPEC.md
+├── LOYALTY_SYSTEM_ARCHITECTURE.md
+├── MASTER_REPLICATION_PROMPT_FOR_AI.md
+├── MOBILE_NATIVE_CLIENTS_ANDROID_IOS_SPEC.md
+├── PRINTER_INTEGRATION_SPECIFICATION.md
+├── SURFACES_AND_ARCHITECTURE_MAP.md
+├── SYSTEM_GUIDANCE_AND_ONBOARDING_SPEC.md
+├── TABLE_SIDE_ORDERING_AND_QR_CLIENT_SPEC.md
+└── WINDOWS_NATIVE_CLIENT_SPECIFICATION.md
 ```
 
 ---

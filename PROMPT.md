@@ -1,6 +1,6 @@
 # MASTER PROMPT: TSOS (The Simple Operating System) - Omnichannel Cafe & Restaurant POS Engine
 
-> **Prompt Usage**: Provide this prompt to any AI coding assistant (Gemini, Claude, Antigravity, Cursor, ChatGPT) to reproduce the complete **TSOS** multi-surface cafe operating system from scratch in React 18, TypeScript, Tailwind CSS, Lucide Icons, and Zustand.
+> **Prompt Usage**: Provide this prompt to any AI coding assistant (Gemini, Claude, Antigravity, Cursor, ChatGPT) to reproduce the complete **TSOS** multi-surface cafe operating system from scratch in React 19, TypeScript 7, Tailwind CSS 4.3, Lucide Icons, and Zustand 5.
 
 ---
 

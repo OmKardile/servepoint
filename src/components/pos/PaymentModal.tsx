@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { PaymentMethod, Order } from '../../types';
 import { useTsosStore } from '../../lib/store';
 import { playChime } from '../../lib/sound';
@@ -68,6 +68,20 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
   const allSplitDinersPaid = splitDiners.every((d) => d.paid);
   const totalSplitPaid = splitDiners.filter((d) => d.paid).reduce((sum, d) => sum + d.amount, 0);
 
+  // Keyboard accessibility: Escape closes the modal (unless a payment is mid-flight).
+  // This matches the behaviour of native dialogs and the X / "Back to Cart" buttons.
+  useEffect(() => {
+    if (isProcessing) return; // never abort a payment in progress
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isProcessing, onClose]);
+
   const attachedCustomer = customers.find((c) => c.id === selectedCustomerId);
   const pointsToEarn = Math.floor(subtotal / 10);
 
@@ -103,7 +117,14 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-150">
+    <div
+      className="fixed inset-0 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-150"
+      onClick={(e) => {
+        // Click on the backdrop (not inside the modal) closes the modal — matches
+        // the Escape / X / "Back to Cart" affordances for fast cashier flow.
+        if (e.target === e.currentTarget && !isProcessing) onClose();
+      }}
+    >
       <div className="bg-white rounded-2xl max-w-lg w-full border border-[#E9E0D6] shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
         {/* Header */}
         <div className="p-4 bg-[#FFF9F2] border-b border-[#E9E0D6] flex items-center justify-between">

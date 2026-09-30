@@ -7,3 +7,18 @@ coverage/
 .env*
 !.env.example
 dev-server.mjs
+
+# Sandbox-only infrastructure (not part of tsos-alt upstream repo).
+# These exist only in the local dev container and must not be committed.
+Caddyfile
+vite.pid
+.zscripts/
+start-dev.sh
+skills/
+mini-services/
+tests/
+examples/
+download/
+upload/
+db/
+prisma/

@@ -16,7 +16,27 @@ export default defineConfig(() => {
       // Do not modify—file watching is disabled to prevent flickering during agent edits.
       hmr: process.env.DISABLE_HMR !== 'true',
       // Disable file watching when DISABLE_HMR is true to save CPU during agent edits.
-      watch: process.env.DISABLE_HMR === 'true' ? null : {},
+      // Otherwise, watch only the src/ directory to avoid sandbox infra (skills, mini-services,
+      // tests, upload, examples, download) from triggering spurious reloads / dependency scans.
+      watch: process.env.DISABLE_HMR === 'true' ? null : {
+        ignored: [
+          '**/skills/**',
+          '**/mini-services/**',
+          '**/tests/**',
+          '**/upload/**',
+          '**/examples/**',
+          '**/download/**',
+          '**/node_modules/**',
+          '**/.git/**',
+        ],
+      },
+    },
+    // Sandbox-specific: exclude non-app directories from the dependency pre-bundler.
+    // The `skills/` folder contains sandbox reference HTML that imports `three`, which
+    // is not part of this app and would otherwise break Vite's dependency scan.
+    optimizeDeps: {
+      exclude: ['skills', 'mini-services', 'tests', 'upload', 'examples', 'download'],
+      entries: ['src/**/*.tsx', 'src/**/*.ts'],
     },
     build: {
       chunkSizeWarningLimit: 1500,

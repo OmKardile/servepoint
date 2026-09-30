@@ -3,10 +3,10 @@
 > **Enterprise-Grade Multi-Tenant Cloud POS & Restaurant Management Platform**  
 > Engineered for specialty coffee shops, artisan bakeries, high-volume cafes, and quick-service restaurants (QSRs).
 
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.2-blue?logo=typescript)](https://www.typescriptlang.org/)
-[![React](https://img.shields.io/badge/React-18-61dafb?logo=react)](https://react.dev/)
-[![Vite](https://img.shields.io/badge/Vite-6-646CFF?logo=vite)](https://vitejs.dev/)
-[![TailwindCSS](https://img.shields.io/badge/TailwindCSS-3.4-38bdf8?logo=tailwindcss)](https://tailwindcss.com/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-7.0-blue?logo=typescript)](https://www.typescriptlang.org/)
+[![React](https://img.shields.io/badge/React-19-61dafb?logo=react)](https://react.dev/)
+[![Vite](https://img.shields.io/badge/Vite-8.3-646CFF?logo=vite)](https://vitejs.dev/)
+[![TailwindCSS](https://img.shields.io/badge/TailwindCSS-4.3-38bdf8?logo=tailwindcss)](https://tailwindcss.com/)
 [![Supabase](https://img.shields.io/badge/Supabase-PostgreSQL-3ECF8E?logo=supabase)](https://supabase.com/)
 [![Security](https://img.shields.io/badge/Security-HMAC--SHA256-brightgreen)](/docs/decisions/0005-ephemeral-table-qr-session-security.md)
 
@@ -55,7 +55,7 @@
 ## 🛠️ Architecture & Tech Stack
 
 ```
-Frontend:       React 18 + TypeScript + Vite + Tailwind CSS + Lucide Icons
+Frontend:       React 19 + TypeScript 7 + Vite 8.3 + Tailwind CSS 4.3 + Lucide Icons
 State Engine:   Zustand (Persistent Local Store + Optimistic State Updates)
 Backend & DB:   Supabase (PostgreSQL 15+ with pgcrypto, PL/pgSQL RPCs, and RLS)
 Security:       Web Crypto API + PostgreSQL HMAC-SHA256 Ephemeral Tokens
@@ -110,14 +110,14 @@ mega-tsos/
 ### 1. Installation & Setup
 ```bash
 # Clone the repository
-git clone https://github.com/jhonny-silverhand/tsos-alternate.git
-cd mega-tsos
+git clone https://github.com/OmKardile/tsos-alt.git
+cd tsos-alt
 
 # Install dependencies
-npm install
+npm install   # or: bun install / pnpm install
 
 # Start the development server
-npm run dev
+npm run dev   # or: bun run dev / pnpm dev
 ```
 The application will launch at `http://localhost:3000`.
 
@@ -143,7 +143,7 @@ The application will launch at `http://localhost:3000`.
 - **[CHANGELOG.md](CHANGELOG.md)**: Release history and version logs.
 - **[technical-documentation.md](technical-documentation.md)**: Deep technical architecture, schema specifications, and cryptographic protocols.
 - **[business-documentation.md](business-documentation.md)**: Multi-tenant SaaS business model, subscription tiers, and cafe unit economics.
-- **[docs/decisions/](docs/decisions/README.md)**: All Architecture Decision Records (ADR 0001 through 0008).
+- **[docs/decisions/](docs/decisions/README.md)**: All Architecture Decision Records (ADR 0001 through 0009).
 - **[docs/compacts/](docs/compacts/README.md)**: Chronological project phase summaries.
 - **[docs/worklog/](docs/worklog/2026-09-25.md)**: Detailed daily engineering commit ledger.
 

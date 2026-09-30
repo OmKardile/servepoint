@@ -1,0 +1,103 @@
+# TSOS Compact — One-Page Project State
+
+> **Purpose**: Single-page dense summary of the current TSOS project state, for fast cold re-onboarding by any agent or contributor. Updated alongside every code change. For full chronological detail, see [`docs/compacts/`](docs/compacts/README.md) (7 compacts) and [`worklog.md`](worklog.md) (live agent handover).
+
+- **Project**: TSOS — The Cafe Operating System
+- **Version**: 2.5.0
+- **Repo**: https://github.com/OmKardile/tsos-alt
+- **Author**: Omkar Kardile <omkardile84@gmail.com>
+- **Last Updated**: 2026-09-30
+
+---
+
+## What it is
+Enterprise-grade multi-tenant B2B SaaS cloud POS & restaurant management platform for Indian specialty cafes, coffee roasteries, bakeries, and QSRs. Vite SPA + React + Zustand + Supabase (PostgreSQL + RLS + Realtime + PL/pgSQL RPCs). Single-tenant prototype → multi-tenant SaaS migration completed 2026-09-25.
+
+## Tech stack (actual, from `package.json`)
+- React `^19.0.1` + React-DOM `^19.0.1`
+- TypeScript `^7.0.2`
+- Vite `^8.3.0` + `@vitejs/plugin-react ^6.1.1`
+- Tailwind CSS `^4.3.3` + `@tailwindcss/vite ^4.3.3`
+- Zustand `^5.0.15` (persistent local store)
+- Recharts `^3.10.1` (reports/charts)
+- `@supabase/supabase-js ^2.116.0` (live backend)
+- `lucide-react ^0.546.0`, `motion ^12.23.24`, `canvas-confetti ^1.9.4`
+- `@google/genai ^2.4.0`, `express ^4.21.2`, `pg ^8.23.0`, `dotenv ^17.2.3`
+
+## Current state (live)
+- **Dev server**: Vite 8.3 on `0.0.0.0:3000`, daemonized via `start-stop-daemon` (survives shell exit). Restart: `bash .zscripts/dev.sh` (sandbox-local, gitignored).
+- **Backend**: Live Supabase project `vbufsuzzmehsidshopku` (env vars in `.env`, gitignored). `isSupabaseConfigured()` returns `true`.
+- **All routes render with zero console errors**: `/` (auth), `/superadmin`, `/:slug/pos|kds|orders|inventory|menu|tables|customers|offers|shifts|reports|settings`, `/:slug/t:tableNumber` (storefront), `/track/:id`.
+- **Live DB data gaps** (outstanding): `categories` + `menu_items` tables exist but empty (menu served from local seed fallback); `customers` + `offers` tables return HTTP 404 to anon key (need migration re-run or RLS fix).
+
+## Architecture (9 ADRs, all Accepted 2026-09-25)
+1. **ADR 0001** — Supabase multi-tenant backend (rejected: custom backend, single-tenant)
+2. **ADR 0002** — RLS for tenant isolation (rejected: app-layer filtering)
+3. **ADR 0003** — Production chrome purge + path-based dynamic routing `/:slug/*` (rejected: prototype surface switcher)
+4. **ADR 0004** — Obsidian terminal theme engine, system-wide single toggle (rejected: per-screen dark mode)
+5. **ADR 0005** — 10-min ephemeral HMAC-SHA256 QR sessions (rejected: static QR tokens) — eliminates accidental remote orders from browser history
+6. **ADR 0006** — Supabase Realtime websockets + offline-resilient queue `tsos_pending_offline_orders` (rejected: polling)
+7. **ADR 0007** — Purge hardware hub, freeze WPF for Electron, cancel native mobile apps → pure camera QR browser ordering (rejected: native clients)
+8. **ADR 0008** — Render Static Site + Vercel Edge dual cloud deploy (rejected: single host)
+9. **ADR 0009** — RBAC role matrix (superadmin/owner/manager/cashier) + tab filtering + route guards + Manager PIN override (rejected: open access)
+
+## Key surfaces & routes
+| Surface | Route | Roles |
+|---|---|---|
+| Auth / login | `/` | public |
+| SuperAdmin SaaS console | `/superadmin` | superadmin |
+| Counter POS | `/:slug/pos` | cashier, manager, owner |
+| Kitchen Display (KDS) | `/:slug/kds` | kitchen, barista |
+| Orders directory | `/:slug/orders` | cashier, manager |
+| Inventory & recipes | `/:slug/inventory` | manager, owner |
+| Menu builder | `/:slug/menu` | manager, owner |
+| Tables floor plan | `/:slug/tables` | cashier, manager |
+| Customers CRM + loyalty | `/:slug/customers` | manager, owner |
+| Offers & promos | `/:slug/offers` | manager, owner |
+| Staff & shifts | `/:slug/shifts` | manager, owner |
+| Reports & analytics | `/:slug/reports` | manager, owner |
+| Settings & fee engine | `/:slug/settings` | owner |
+| Storefront (table QR) | `/:slug/t:tableNumber` | anonymous diner (10-min ephemeral session) |
+| Order tracking | `/track/:id` | anonymous diner |
+
+## Demo credentials (offline-resilient mode)
+- SuperAdmin: `admin@tsos.dev` / `admin123456` (or just `admin`)
+- Owner: `owner@coolkafe.com` / `demo123456` (or just `owner`)
+- Manager: `manager@coolkafe.com` / `demo123456` (or just `manager`)
+- Cashier: `cashier@coolkafe.com` / `demo123456` (or just `cashier`)
+
+## Run it
+```bash
+git clone https://github.com/OmKardile/tsos-alt.git
+cd tsos-alt
+npm install   # or bun install / pnpm install
+npm run dev   # or bun run dev
+# App at http://localhost:3000
+```
+
+## Recent activity (live agent handover)
+See [`worklog.md`](worklog.md) for the chronological agent work log (tasks 0-setup → 1-live-db → 1-cron → 2-doc-audit → 3-reports-expansion → ongoing). 
+
+**v2.5.0 (2026-09-30) shipped**: Reports screen expanded with **LiveOpsPulse** (live operational dashboard: orders last 60min, active tables, kitchen load, staff on shift), **OrderTypeBreakdown** donut (dine-in/takeaway/delivery split), and **useCountUp** animated KPI numbers. Bug fix: Escape + backdrop-click now dismiss Payment/Variant modals. Docs re-aligned (version drift, stale URLs, index fixes, created root `compact.md` + `decisions.md`, deleted typo'd `technical-dcoumentation.md`). Build config hardened (`tsconfig` scoped to `src/`, `@types/node` added, `.gitignore` extended for sandbox infra). Live Supabase DB connected. Git history recovered via fresh re-clone.
+
+## Canonical doc map (where to look)
+| Need | Read |
+|---|---|
+| Catch-up (this file, dense) | `compact.md` (root) |
+| Decisions / ADRs (single-file summary) | `decisions.md` (root) → detail in `docs/decisions/` |
+| Live agent handover | `worklog.md` (root) |
+| Original engineering log | `docs/worklog/2026-09-25.md` |
+| Versioned releases | `CHANGELOG.md` |
+| Architecture / schema / RPCs | `technical-documentation.md` |
+| Business model / pricing / ROI | `business-documentation.md` |
+| Setup / deploy / credentials | `help.md` |
+| Chronological milestones | `docs/compacts/compact1-7.md` |
+| Prompt / directive ledger | `docs/requests/request-history.md` |
+| Security & scaling research | `docs/research/01,02` |
+
+## Open issues / next priorities
+1. Seed live `menu_items` + `categories` for the `coolkafe` tenant (currently served from local fallback).
+2. Create / unblock `customers` + `offers` tables in live Supabase (re-run migration `001_multi_tenant_saas.sql`).
+3. Verify realtime: a new order inserted via POS should appear in KDS instantly (now that live DB is connected).
+4. Add Vitest + React Testing Library smoke tests (repo ships no automated tests).
+5. Styling polish + feature expansion per the recurring 15-min `webDevReview` cron (job 425841).

@@ -2,6 +2,9 @@ import React, { useState } from 'react';
 import { useTsosStore } from '../../lib/store';
 import { DailySalesHeatmap } from './DailySalesHeatmap';
 import { WeeklySalesLineChart } from './WeeklySalesLineChart';
+import { OrderTypeBreakdown } from './OrderTypeBreakdown';
+import { LiveOpsPulse } from './LiveOpsPulse';
+import { useCountUpFormatted } from '../../hooks/useCountUp';
 import { canPerformAction } from '../../lib/rbac';
 import {
   exportFinancialLedgerCSV,
@@ -49,6 +52,13 @@ export const ReportsScreen: React.FC = () => {
   const traditionalCostEstimate = grossRevenue * 0.025 + 3500;
   const tsosActualFee = totalOrdersCount * (feeConfig?.per_order_fee ?? 5);
   const estimatedSavings = Math.max(0, traditionalCostEstimate - tsosActualFee);
+
+  // Animated count-up values for the 4 KPI cards (animate from previous → target on mount + when value changes).
+  // Called unconditionally at the top level so the Rules of Hooks are satisfied.
+  const animatedGrossRevenue = useCountUpFormatted(grossRevenue, 1100, 0);
+  const animatedOrdersCount = useCountUpFormatted(totalOrdersCount, 900, 0);
+  const animatedAov = useCountUpFormatted(aov, 1000, 2);
+  const animatedSavings = useCountUpFormatted(Math.round(estimatedSavings), 1200, 0);
 
   // Top Selling Items tally
   const itemMap: { [name: string]: { qty: number; revenue: number } } = {};
@@ -226,54 +236,60 @@ export const ReportsScreen: React.FC = () => {
 
       {/* Main Dashboard */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {/* 4 KPI Cards */}
+        {/* Live Operational Pulse — right-now metrics (orders last 60min, active tables, kitchen load, staff on shift) */}
+        <LiveOpsPulse />
+
+        {/* 4 KPI Cards (animated count-up on mount + when value changes) */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="bg-white p-4 rounded-2xl border border-[#E9E0D6] shadow-xs">
+          <div className="bg-white p-4 rounded-2xl border border-[#E9E0D6] shadow-xs hover:shadow-md hover:border-[#FED7AA] transition-all">
             <div className="flex items-center justify-between text-xs text-[#57534E] mb-1">
               <span>Gross Sales</span>
               <span className="p-1 rounded-md bg-[#FFF1E6] text-[#F97316]">
                 <TrendingUp className="w-3.5 h-3.5" />
               </span>
             </div>
-            <div className="text-2xl font-bold font-mono text-[#1C1917]">
-              ₹{grossRevenue.toLocaleString()}
+            <div className="text-2xl font-bold font-mono text-[#1C1917] tabular-nums">
+              ₹{animatedGrossRevenue}
             </div>
-            <div className="text-[11px] text-[#17803D] mt-1">Across all order types</div>
+            <div className="text-[11px] text-[#17803D] mt-1 flex items-center gap-1">
+              <span className="w-1 h-1 rounded-full bg-[#17803D] animate-pulse" />
+              Across all order types
+            </div>
           </div>
 
-          <div className="bg-white p-4 rounded-2xl border border-[#E9E0D6] shadow-xs">
+          <div className="bg-white p-4 rounded-2xl border border-[#E9E0D6] shadow-xs hover:shadow-md hover:border-[#A7F3D0] transition-all">
             <div className="flex items-center justify-between text-xs text-[#57534E] mb-1">
               <span>Orders Placed</span>
               <span className="p-1 rounded-md bg-[#E8F5EC] text-[#17803D]">
                 <ShoppingBag className="w-3.5 h-3.5" />
               </span>
             </div>
-            <div className="text-2xl font-bold font-mono text-[#1C1917]">
-              {totalOrdersCount}
+            <div className="text-2xl font-bold font-mono text-[#1C1917] tabular-nums">
+              {animatedOrdersCount}
             </div>
             <div className="text-[11px] text-[#57534E] mt-1">{completedOrders.length} completed</div>
           </div>
 
-          <div className="bg-white p-4 rounded-2xl border border-[#E9E0D6] shadow-xs">
+          <div className="bg-white p-4 rounded-2xl border border-[#E9E0D6] shadow-xs hover:shadow-md hover:border-[#BFDBFE] transition-all">
             <div className="flex items-center justify-between text-xs text-[#57534E] mb-1">
               <span>Average Order Value</span>
               <span className="p-1 rounded-md bg-[#EFF6FF] text-[#2563EB]">
                 <IndianRupee className="w-3.5 h-3.5" />
               </span>
             </div>
-            <div className="text-2xl font-bold font-mono text-[#1C1917]">
-              ₹{aov}
+            <div className="text-2xl font-bold font-mono text-[#1C1917] tabular-nums">
+              ₹{animatedAov}
             </div>
             <div className="text-[11px] text-[#57534E] mt-1">Per dining bill</div>
           </div>
 
-          <div className="bg-gradient-to-br from-[#FFF4E5] to-[#FFF9F2] p-4 rounded-2xl border border-[#FED7AA] shadow-xs">
+          <div className="bg-gradient-to-br from-[#FFF4E5] to-[#FFF9F2] p-4 rounded-2xl border border-[#FED7AA] shadow-xs hover:shadow-md transition-all">
             <div className="flex items-center justify-between text-xs text-[#B45309] font-semibold mb-1">
               <span>Savings with TSOS</span>
               <ShieldCheck className="w-4 h-4 text-[#B45309]" />
             </div>
-            <div className="text-2xl font-bold font-mono text-[#B45309]">
-              ₹{Math.round(estimatedSavings).toLocaleString()}
+            <div className="text-2xl font-bold font-mono text-[#B45309] tabular-nums">
+              ₹{animatedSavings}
             </div>
             <div className="text-[11px] text-[#B45309] mt-1">vs 2.5% POS + monthly rentals</div>
           </div>
@@ -281,6 +297,10 @@ export const ReportsScreen: React.FC = () => {
 
         {/* Current Week Daily Sales Recharts Line Chart */}
         <WeeklySalesLineChart orders={safeOrders} />
+
+        {/* Order Type Breakdown donut (dine-in vs takeaway vs delivery) — new analytics */}
+        <OrderTypeBreakdown />
+
 
         {/* Daily Sales Heatmap & Peak Operational Hours (Recharts) */}
         <DailySalesHeatmap />
