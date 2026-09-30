@@ -10,7 +10,8 @@ interface VariantModalProps {
 }
 
 export const VariantModal: React.FC<VariantModalProps> = ({ item, onClose, onConfirm }) => {
-  const { addons } = useTsosStore();
+  const { addons, themeMode } = useTsosStore();
+  const isTessera = themeMode === 'tessera';
 
   const [selectedVariantId, setSelectedVariantId] = useState<string | undefined>(
     item.variants && item.variants.length > 0 ? item.variants[0].id : undefined
@@ -51,35 +52,56 @@ export const VariantModal: React.FC<VariantModalProps> = ({ item, onClose, onCon
 
   return (
     <div
-      className="fixed inset-0 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-150"
+      className={`fixed inset-0 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-150 ${
+        isTessera ? 'bg-black/60' : 'bg-black/40'
+      }`}
       onClick={(e) => {
         // Click on the backdrop (not inside the modal) closes the picker.
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="bg-white rounded-2xl max-w-md w-full border border-[#E9E0D6] shadow-xl overflow-hidden flex flex-col max-h-[90vh]">
+      <div className={`rounded-2xl max-w-md w-full overflow-hidden flex flex-col max-h-[90vh] ${
+        isTessera
+          ? 'bg-[#0F1D17] border border-[#2A4A37] tessera-block'
+          : 'bg-white border border-[#E9E0D6] shadow-xl'
+      }`}>
         {/* Modal Header */}
-        <div className="p-4 border-b border-[#E9E0D6] flex items-center justify-between bg-[#FFF9F2]">
+        <div className={`p-4 border-b flex items-center justify-between ${
+          isTessera ? 'border-[#1F3D2E] bg-[#0A1410]' : 'border-[#E9E0D6] bg-[#FFF9F2]'
+        }`}>
           <div className="flex items-center gap-2">
             <span
-              className={`w-3 h-3 rounded-xs border ${
-                item.is_veg ? 'border-emerald-600' : 'border-red-600'
-              } flex items-center justify-center p-0.5`}
+              className={`w-3 h-3 rounded-xs border flex items-center justify-center p-0.5 ${
+                item.is_veg
+                  ? isTessera ? 'border-[#34D399]' : 'border-emerald-600'
+                  : isTessera ? 'border-[#F87171]' : 'border-red-600'
+              }`}
             >
               <span
                 className={`w-1.5 h-1.5 rounded-full ${
-                  item.is_veg ? 'bg-emerald-600' : 'bg-red-600'
+                  item.is_veg
+                    ? isTessera ? 'bg-[#34D399]' : 'bg-emerald-600'
+                    : isTessera ? 'bg-[#F87171]' : 'bg-red-600'
                 }`}
               />
             </span>
             <div>
-              <h3 className="font-semibold text-base text-[#1C1917] leading-tight">{item.name}</h3>
-              <span className="text-xs text-[#57534E]">Customize your selection</span>
+              <h3 className={`font-semibold text-base leading-tight ${
+                isTessera ? 'text-[#F5F4EE] font-serif italic' : 'text-[#1C1917]'
+              }`}>
+                {item.name}
+              </h3>
+              <span className={`text-xs ${isTessera ? 'text-[#9BB5A5]' : 'text-[#57534E]'}`}>
+                Customize your selection
+              </span>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1 rounded-full hover:bg-[#E9E0D6] text-[#57534E] transition-colors"
+            aria-label="Close customize dialog"
+            className={`p-1 rounded-full transition-colors ${
+              isTessera ? 'hover:bg-[#142620] text-[#9BB5A5] hover:text-[#C5F82A]' : 'hover:bg-[#E9E0D6] text-[#57534E]'
+            }`}
           >
             <X className="w-5 h-5" />
           </button>
@@ -90,7 +112,9 @@ export const VariantModal: React.FC<VariantModalProps> = ({ item, onClose, onCon
           {/* Variants */}
           {item.variants && item.variants.length > 0 && (
             <div>
-              <div className="text-xs font-semibold text-[#57534E] uppercase tracking-wider mb-2">
+              <div className={`text-xs font-semibold uppercase tracking-wider mb-2 ${
+                isTessera ? 'text-[#6B8579]' : 'text-[#57534E]'
+              }`}>
                 Choose Size / Option
               </div>
               <div className="grid grid-cols-2 gap-2">
@@ -103,12 +127,18 @@ export const VariantModal: React.FC<VariantModalProps> = ({ item, onClose, onCon
                       onClick={() => setSelectedVariantId(v.id)}
                       className={`p-3 rounded-xl border text-left transition-all flex flex-col justify-between ${
                         isSelected
-                          ? 'border-[#F97316] bg-[#FFF1E6] text-[#1C1917] ring-1 ring-[#F97316]'
+                          ? isTessera
+                            ? 'border-[#C5F82A]/60 bg-[#C5F82A]/10 text-[#F5F4EE] ring-1 ring-[#C5F82A]/40'
+                            : 'border-[#F97316] bg-[#FFF1E6] text-[#1C1917] ring-1 ring-[#F97316]'
+                          : isTessera
+                          ? 'border-[#2A4A37] hover:bg-[#142620] text-[#F5F4EE]'
                           : 'border-[#E9E0D6] hover:bg-[#F5F0EB]'
                       }`}
                     >
                       <span className="font-medium text-sm">{v.name}</span>
-                      <span className="text-xs text-[#57534E] mt-1 font-mono">
+                      <span className={`text-xs mt-1 font-mono tabular-nums ${
+                        isSelected && isTessera ? 'text-[#C5F82A]' : isTessera ? 'text-[#9BB5A5]' : 'text-[#57534E]'
+                      }`}>
                         {v.price_delta === 0 ? 'Included' : `+ ₹${v.price_delta}`}
                       </span>
                     </button>
@@ -121,7 +151,9 @@ export const VariantModal: React.FC<VariantModalProps> = ({ item, onClose, onCon
           {/* Addons */}
           {availableAddons.length > 0 && (
             <div>
-              <div className="text-xs font-semibold text-[#57534E] uppercase tracking-wider mb-2">
+              <div className={`text-xs font-semibold uppercase tracking-wider mb-2 ${
+                isTessera ? 'text-[#6B8579]' : 'text-[#57534E]'
+              }`}>
                 Add-ons & Extras
               </div>
               <div className="space-y-1.5">
@@ -132,7 +164,11 @@ export const VariantModal: React.FC<VariantModalProps> = ({ item, onClose, onCon
                       key={addon.id}
                       className={`flex items-center justify-between p-2.5 rounded-xl border cursor-pointer transition-all ${
                         isChecked
-                          ? 'border-[#F97316] bg-[#FFF1E6]'
+                          ? isTessera
+                            ? 'border-[#C5F82A]/50 bg-[#C5F82A]/10'
+                            : 'border-[#F97316] bg-[#FFF1E6]'
+                          : isTessera
+                          ? 'border-[#2A4A37] hover:bg-[#142620]'
                           : 'border-[#E9E0D6] hover:bg-[#F5F0EB]'
                       }`}
                     >
@@ -140,15 +176,25 @@ export const VariantModal: React.FC<VariantModalProps> = ({ item, onClose, onCon
                         <div
                           className={`w-4 h-4 rounded-md border flex items-center justify-center transition-colors ${
                             isChecked
-                              ? 'bg-[#F97316] border-[#F97316] text-white'
+                              ? isTessera
+                                ? 'bg-[#C5F82A] border-[#C5F82A] text-[#0A1410]'
+                                : 'bg-[#F97316] border-[#F97316] text-white'
+                              : isTessera
+                              ? 'border-[#6B8579] bg-transparent'
                               : 'border-[#A8A29E] bg-white'
                           }`}
                         >
                           {isChecked && <Check className="w-3 h-3 stroke-[3]" />}
                         </div>
-                        <span className="text-sm font-medium text-[#1C1917]">{addon.name}</span>
+                        <span className={`text-sm font-medium ${
+                          isTessera ? 'text-[#F5F4EE]' : 'text-[#1C1917]'
+                        }`}>
+                          {addon.name}
+                        </span>
                       </div>
-                      <span className="text-xs font-mono font-medium text-[#57534E]">
+                      <span className={`text-xs font-mono font-medium tabular-nums ${
+                        isTessera ? 'text-[#9BB5A5]' : 'text-[#57534E]'
+                      }`}>
                         + ₹{addon.price}
                       </span>
                     </label>
@@ -160,7 +206,9 @@ export const VariantModal: React.FC<VariantModalProps> = ({ item, onClose, onCon
 
           {/* Special Instructions / Notes */}
           <div>
-            <label className="block text-xs font-semibold text-[#57534E] uppercase tracking-wider mb-1.5">
+            <label className={`block text-xs font-semibold uppercase tracking-wider mb-1.5 ${
+              isTessera ? 'text-[#6B8579]' : 'text-[#57534E]'
+            }`}>
               Special Instructions
             </label>
             <input
@@ -168,23 +216,39 @@ export const VariantModal: React.FC<VariantModalProps> = ({ item, onClose, onCon
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               placeholder="e.g. Less spicy, oat milk warm, no sugar"
-              className="w-full px-3 py-2 text-sm rounded-xl border border-[#E9E0D6] focus:border-[#F97316] focus:outline-hidden bg-white text-[#1C1917]"
+              className={`w-full px-3 py-2 text-sm rounded-xl border focus:outline-hidden transition-colors ${
+                isTessera
+                  ? 'border-[#2A4A37] bg-[#0A1410] text-[#F5F4EE] placeholder:text-[#6B8579] focus:border-[#C5F82A]'
+                  : 'border-[#E9E0D6] focus:border-[#F97316] bg-white text-[#1C1917]'
+              }`}
             />
           </div>
         </div>
 
         {/* Modal Footer */}
-        <div className="p-4 border-t border-[#E9E0D6] bg-[#FFF9F2] flex items-center justify-between">
+        <div className={`p-4 border-t flex items-center justify-between ${
+          isTessera ? 'border-[#1F3D2E] bg-[#0A1410]' : 'border-[#E9E0D6] bg-[#FFF9F2]'
+        }`}>
           <div>
-            <div className="text-[11px] text-[#57534E]">Total Price</div>
-            <div className="text-lg font-bold text-[#1C1917] font-mono">₹{totalPrice}</div>
+            <div className={`text-[11px] ${isTessera ? 'text-[#6B8579]' : 'text-[#57534E]'}`}>
+              Total Price
+            </div>
+            <div className={`text-lg font-bold font-mono tabular-nums ${
+              isTessera ? 'text-[#C5F82A]' : 'text-[#1C1917]'
+            }`}>
+              ₹{totalPrice}
+            </div>
           </div>
           <button
             onClick={() => {
               onConfirm(selectedVariantId, selectedAddonIds, notes);
               onClose();
             }}
-            className="px-5 py-2.5 rounded-xl font-semibold text-sm bg-[#F97316] hover:bg-[#EA580C] text-white shadow-xs transition-colors"
+            className={`px-5 py-2.5 rounded-xl font-semibold text-sm transition-colors ${
+              isTessera
+                ? 'tessera-cta rounded-lg'
+                : 'bg-[#F97316] hover:bg-[#EA580C] text-white shadow-xs'
+            }`}
           >
             Add to Order
           </button>

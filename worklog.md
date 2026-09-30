@@ -214,3 +214,30 @@ Unresolved Issues / Risks / Next-phase Priorities:
 3. Next Tessera surfaces: OrdersScreen table, SuperAdmin dashboard, Storefront + OrderTracking (diner-facing!), then Customers/Inventory/Menu/Tables/Offers/Shifts/Settings.
 4. No automated tests (Vitest + RTL candidates: theme store, cart engine, RBAC).
 5. VariantModal + PaymentModal still orange-accent (`#F97316`) in tessera mode — natural next polish targets since they sit inside the redesigned POS flow.
+
+---
+
+Task ID: 5-cron-live-menu-tender
+Agent: glm-5.3 (Z.ai Code, webDevReview cron)
+Task: Cron QA round — assess status, agent-browser QA, then fix bugs / advance features. Focus chosen: (a) close the live-DB menu data gap, (b) finish Tessera for VariantModal + PaymentModal, (c) explicitly E2E-test PaymentModal Escape (outstanding since v2.5.0).
+
+Work Log:
+- **QA sweep**: dev server 200, repo clean at 52d0d82 (v2.6.1). agent-browser sweep across /, /coolkafe/{pos,kds,orders,reports,t1}, /superadmin, /track/live → 0 page errors everywhere. Project stable → proceeded to feature/bug work.
+- **Live DB seeded (ops)**: inserted 4 categories + 7 menu_items into the live Supabase CoolKafe tenant via PostgREST + service key (deterministic UUIDs a1111111-…/b2222222-…, seed menu names/prices/images/veg flags, tax 5%). Verified anon-key readable (201 on insert; GET returns 4+7 rows).
+- **loadMenuFromCloud (store.ts)**: new action — fetches categories + menu_items for the active tenant, maps NUMERIC prices/booleans into the local model, and resolves the live tenant UUID by slug when currentTenant.id is a local seed id (browser log revealed `biz_coolkafe_99` isn't a UUID — first attempt failed with "invalid input syntax for type uuid", fixed by resolving via tenants table). Falls back to local seed with console notice. Wired in App.tsx useEffect on currentTenant.id change.
+- **provisionTenant UUID bug fixed (supabase.ts)**: starter categories/items were inserted with string ids (`cat_<slug>_coffee`) into UUID PK columns — server-side insert failures were silently discarded. Now uses crypto.randomUUID() + an id map to preserve category→item references; insert warnings logged.
+- **Browser confirmation**: `[TSOS] Menu loaded from Supabase cloud (4 categories, 7 items).` POS renders the cloud menu (alphabetical sort = cloud fetch proof; category counts correct). Storefront /coolkafe/t1 shows ADR-0005 security auto-lock as designed (no session token) with menu blurred behind the lock.
+- **VariantModal + PaymentModal Tessera polish**: forest shells + tessera-block shadows, serif italic item name, chartreuse variant rings/addon checkboxes/notes input/total, tessera-cta Add-to-Order; PaymentModal — uppercase tracked header + chartreuse mono amount, status-palette method tiles (UPI chartreuse / Cash emerald / Card info / Split accent, 12% fills + 40% rings), forest cash view w/ ghost denomination chips, accent split-bill view w/ per-diner method chips, chartreuse fee pill, tessera-cta Confirm Payment, chartreuse/emerald confetti, darker backdrops, aria-labels. QR panel kept WHITE deliberately for scan reliability.
+- **E2E tender flow**: live menu → add Espresso (straight to cart — live DB items have no variants, correct) → Charge/Pay → tessera PaymentModal → **Escape → modal closed (count 0) → reopen (count 1) — PaymentModal Escape test from v2.5.0 now explicitly verified ✓** → Simulate UPI → Order #104 created with confetti → receipt modal renders. tsc 0 errors throughout; 0 page errors.
+- **Docs updated same turn**: CHANGELOG [2.6.2], README §6 note, tech-doc §8.0 + version, business-doc version + design update, decisions ADR-0006 update note, help version, compact version + activity.
+
+Stage Summary:
+- **v2.6.2 shipped**: live cloud menu hydration + provisioning bug fix + tender modal Tessera completion + PaymentModal Escape verification. The biggest outstanding functional gap (menu from local fallback) is now closed for the CoolKafe tenant; customers/offers tables still 404 to anon (require migration 001 re-run — needs Postgres DDL access, PostgREST can't create tables).
+
+Unresolved Issues / Risks / Next-phase Priorities:
+1. customers + offers live tables still missing (HTTP 404 to anon) — needs DDL (migration 001 re-run via SQL editor/psql; no Postgres connection string in sandbox). CRM/Offers tabs remain local-state only.
+2. Realtime POS→KDS verification still open (order insert → KDS bump within seconds).
+3. Menu builder mutations (add/update/delete/toggle) remain local-only — a future round could write them through to Supabase (needs anon INSERT/UPDATE policies or service path).
+4. VariantModal visually verified only in its pre-polish state (live DB items have no variants so the modal doesn't open for cloud menus; code is type-safe and conditional-safe — verify if variants are ever seeded).
+5. Next Tessera surfaces: OrdersScreen, SuperAdmin dashboard, Storefront/OrderTracking (diner-facing), Customers/Inventory/Menu/Tables/Offers/Shifts/Settings.
+6. No automated tests yet (Vitest + RTL: theme store, cart engine, RBAC, menu hydration mapper).

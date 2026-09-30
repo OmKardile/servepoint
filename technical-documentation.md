@@ -1,7 +1,7 @@
 # TSOS Technical Documentation & Architecture Specification
 
 - **System**: TSOS (The Cafe Operating System)
-- **Version**: 2.6.1
+- **Version**: 2.6.2
 - **Architect**: Lead Full-Stack Security & Platform Architect
 - **Updated**: September 30, 2026
 
@@ -272,6 +272,9 @@ Two complementary strategies are used to bring surfaces to full Tessera fidelity
 ---
 
 ## 8. Real-Time WebSocket Synchronization & Offline-First Engine
+
+### 8.0 Cloud Menu Hydration (v2.6.2)
+`loadMenuFromCloud()` (`src/lib/store.ts`) fetches `categories` and `menu_items` for the active tenant from Supabase at tenant-scope change (wired in `src/App.tsx` via `useEffect`). If `currentTenant.id` is a local seed id rather than a UUID, the live tenant id is resolved by slug from the `tenants` table first. Rows are mapped into the local menu model (NUMERIC prices coerced, `is_available`/`tax_rate_pct` defaulted); variants/add-ons remain app-local (the live schema has no variant tables). Empty cloud menu or fetch failure keeps the bundled seed menu — the offline-resilient fallback of ADR 0006 applies to menu data as well. `provisionTenant()` now seeds starter menu rows with `crypto.randomUUID()` ids (fixing silent UUID-insert failures of string ids).
 
 ### 8.1 Supabase Realtime Channels
 The application maintains persistent PostgreSQL change subscriptions per tenant using `realtimeService.subscribeToTenantRealtime`:

@@ -3,11 +3,11 @@
 > **Purpose**: Single-page dense summary of the current TSOS project state, for fast cold re-onboarding by any agent or contributor. Updated alongside every code change. For full chronological detail, see [`docs/compacts/`](docs/compacts/README.md) (7 compacts) and [`worklog.md`](worklog.md) (live agent handover).
 
 - **Project**: TSOS — The Cafe Operating System
-- **Version**: 2.6.1
+- **Version**: 2.6.2
 - **Repo**: https://github.com/OmKardile/tsos-alt
 - **Author**: Omkar Kardile <omkardile84@gmail.com>
 - **Last Updated**: 2026-09-30
-- **Default Theme**: Tessera (editorial dark / forest + chartreuse) — see [`CHANGELOG.md`](CHANGELOG.md) v2.6.0 + v2.6.1
+- **Default Theme**: Tessera (editorial dark / forest + chartreuse) — see [`CHANGELOG.md`](CHANGELOG.md) v2.6.0–v2.6.2
 
 ---
 
@@ -78,6 +78,8 @@ npm run dev   # or bun run dev
 
 ## Recent activity (live agent handover)
 See [`worklog.md`](worklog.md) for the chronological agent work log.
+
+**v2.6.2 (2026-09-30) shipped**: **Live cloud menu + tender polish** — `loadMenuFromCloud()` in store.ts hydrates categories/menu_items from Supabase per tenant (resolves live tenant UUID by slug when currentTenant.id is a local seed id; falls back to seed menu when empty/unreachable). Live DB seeded: 4 categories + 7 menu_items for CoolKafe (anon-readable; POS/Menu/Storefront render cloud data — confirmed via console log + alphabetical sort). Fixed provisionTenant UUID bug (string ids like `cat_<slug>_coffee` silently failed against UUID PKs → crypto.randomUUID()). VariantModal + PaymentModal fully Tessera (forest shells, tessera-block shadows, status-palette method tiles, tessera-cta Confirm Payment, chartreuse confetti; QR kept white for scanning). E2E verified: live menu → cart → Charge/Pay → Escape closes PaymentModal (outstanding v2.5.0 test ✓) → UPI simulate → Order #104. tsc 0 errors, all routes clean.
 
 **v2.6.1 (2026-09-30) shipped**: **Tessera chrome polish** — explicit `isTessera` conditional styling shipped for Header (chartreuse TSOS brand block + `tessera-block` shadow, serif tenant name, Fast PIN as `tessera-cta`, forest profile dropdown), WebNavbar (chartreuse active tab + 2px baseline marker, soft-tinted status badges, `tessera-block` More dropdown), PosScreen (forest ribbon, chartreuse category pills with block shadow, lifted menu cards with chartreuse hover, chartreuse prices), CartDrawer (forest drawer, chartreuse items pill, `tessera-cta` Charge/Pay checkout). KDS board converted via new CSS zinc→forest remap (`src/index.css` §11) + chartreuse header flourishes. Bug fix: `hover:bg-[#FAFAFA]` white-flash on forest cards (Settings/Inventory/Offers). Theme round-trip tessera↔dark regression-verified in browser; tsc 0 errors; all routes console-clean.
 

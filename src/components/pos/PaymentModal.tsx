@@ -33,7 +33,8 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
   onClose,
   onSuccess,
 }) => {
-  const { createOrder, audioEnabled, location, currentTenant, redeemedPoints, selectedCustomerId, customers } = useTsosStore();
+  const { createOrder, audioEnabled, location, currentTenant, redeemedPoints, selectedCustomerId, customers, themeMode } = useTsosStore();
+  const isTessera = themeMode === 'tessera';
   const [selectedMethod, setSelectedMethod] = useState<PaymentMethod | 'split'>('upi');
   const [cashTendered, setCashTendered] = useState<number>(Math.ceil(grandTotal / 50) * 50 || 100);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -108,7 +109,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
         particleCount: 50,
         spread: 60,
         origin: { y: 0.7 },
-        colors: ['#F97316', '#17803D', '#7C3AED'],
+        colors: isTessera ? ['#C5F82A', '#34D399', '#F5F4EE'] : ['#F97316', '#17803D', '#7C3AED'],
       });
 
       setIsProcessing(false);
@@ -118,25 +119,40 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-150"
+      className={`fixed inset-0 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-150 ${
+        isTessera ? 'bg-black/65' : 'bg-black/50'
+      }`}
       onClick={(e) => {
         // Click on the backdrop (not inside the modal) closes the modal — matches
         // the Escape / X / "Back to Cart" affordances for fast cashier flow.
         if (e.target === e.currentTarget && !isProcessing) onClose();
       }}
     >
-      <div className="bg-white rounded-2xl max-w-lg w-full border border-[#E9E0D6] shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
+      <div className={`rounded-2xl max-w-lg w-full overflow-hidden flex flex-col max-h-[92vh] ${
+        isTessera
+          ? 'bg-[#0F1D17] border border-[#2A4A37] tessera-block'
+          : 'bg-white border border-[#E9E0D6] shadow-2xl'
+      }`}>
         {/* Header */}
-        <div className="p-4 bg-[#FFF9F2] border-b border-[#E9E0D6] flex items-center justify-between">
+        <div className={`p-4 border-b flex items-center justify-between ${
+          isTessera ? 'bg-[#0A1410] border-[#1F3D2E]' : 'bg-[#FFF9F2] border-[#E9E0D6]'
+        }`}>
           <div>
-            <div className="text-xs text-[#57534E]">Complete Sale Tender</div>
-            <div className="text-xl font-bold text-[#1C1917] font-mono tabular-nums">
+            <div className={`text-xs uppercase tracking-widest ${isTessera ? 'text-[#6B8579]' : 'text-[#57534E]'}`}>
+              Complete Sale Tender
+            </div>
+            <div className={`text-xl font-bold font-mono tabular-nums ${
+              isTessera ? 'text-[#C5F82A]' : 'text-[#1C1917]'
+            }`}>
               Amount to Collect: ₹{grandTotal.toFixed(2)}
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-full hover:bg-[#E9E0D6] text-[#57534E] transition-colors"
+            aria-label="Close payment dialog"
+            className={`p-1.5 rounded-full transition-colors ${
+              isTessera ? 'hover:bg-[#142620] text-[#9BB5A5] hover:text-[#C5F82A]' : 'hover:bg-[#E9E0D6] text-[#57534E]'
+            }`}
           >
             <X className="w-5 h-5" />
           </button>
@@ -151,7 +167,11 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
               onClick={() => setSelectedMethod('upi')}
               className={`p-2.5 rounded-xl border flex flex-col items-center justify-center gap-1.5 transition-all ${
                 selectedMethod === 'upi'
-                  ? 'border-[#F97316] bg-[#FFF1E6] text-[#F97316] ring-1 ring-[#F97316]'
+                  ? isTessera
+                    ? 'border-[#C5F82A]/60 bg-[#C5F82A]/12 text-[#C5F82A] ring-1 ring-[#C5F82A]/40'
+                    : 'border-[#F97316] bg-[#FFF1E6] text-[#F97316] ring-1 ring-[#F97316]'
+                  : isTessera
+                  ? 'border-[#2A4A37] hover:bg-[#142620] text-[#9BB5A5]'
                   : 'border-[#E9E0D6] hover:bg-[#F5F0EB] text-[#57534E]'
               }`}
             >
@@ -164,7 +184,11 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
               onClick={() => setSelectedMethod('cash')}
               className={`p-2.5 rounded-xl border flex flex-col items-center justify-center gap-1.5 transition-all ${
                 selectedMethod === 'cash'
-                  ? 'border-[#17803D] bg-[#E8F5EC] text-[#17803D] ring-1 ring-[#17803D]'
+                  ? isTessera
+                    ? 'border-[#34D399]/60 bg-[#34D399]/12 text-[#34D399] ring-1 ring-[#34D399]/40'
+                    : 'border-[#17803D] bg-[#E8F5EC] text-[#17803D] ring-1 ring-[#17803D]'
+                  : isTessera
+                  ? 'border-[#2A4A37] hover:bg-[#142620] text-[#9BB5A5]'
                   : 'border-[#E9E0D6] hover:bg-[#F5F0EB] text-[#57534E]'
               }`}
             >
@@ -177,7 +201,11 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
               onClick={() => setSelectedMethod('card')}
               className={`p-2.5 rounded-xl border flex flex-col items-center justify-center gap-1.5 transition-all ${
                 selectedMethod === 'card'
-                  ? 'border-[#2563EB] bg-[#EFF6FF] text-[#2563EB] ring-1 ring-[#2563EB]'
+                  ? isTessera
+                    ? 'border-[#60A5FA]/60 bg-[#60A5FA]/12 text-[#60A5FA] ring-1 ring-[#60A5FA]/40'
+                    : 'border-[#2563EB] bg-[#EFF6FF] text-[#2563EB] ring-1 ring-[#2563EB]'
+                  : isTessera
+                  ? 'border-[#2A4A37] hover:bg-[#142620] text-[#9BB5A5]'
                   : 'border-[#E9E0D6] hover:bg-[#F5F0EB] text-[#57534E]'
               }`}
             >
@@ -190,7 +218,11 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
               onClick={() => setSelectedMethod('split')}
               className={`p-2.5 rounded-xl border flex flex-col items-center justify-center gap-1.5 transition-all ${
                 selectedMethod === 'split'
-                  ? 'border-[#7C3AED] bg-[#F5F3FF] text-[#7C3AED] ring-1 ring-[#7C3AED]'
+                  ? isTessera
+                    ? 'border-[#C084FC]/60 bg-[#C084FC]/12 text-[#C084FC] ring-1 ring-[#C084FC]/40'
+                    : 'border-[#7C3AED] bg-[#F5F3FF] text-[#7C3AED] ring-1 ring-[#7C3AED]'
+                  : isTessera
+                  ? 'border-[#2A4A37] hover:bg-[#142620] text-[#9BB5A5]'
                   : 'border-[#E9E0D6] hover:bg-[#F5F0EB] text-[#57534E]'
               }`}
             >
@@ -201,9 +233,13 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
 
           {/* UPI View */}
           {selectedMethod === 'upi' && (
-            <div className="p-4 bg-[#FFF9F2] rounded-xl border border-[#E9E0D6] flex flex-col items-center text-center space-y-3">
-              <div className="bg-white p-3 rounded-xl border border-[#E9E0D6] shadow-xs">
-                {/* Visual BharatQR simulation with dynamic amount */}
+            <div className={`p-4 rounded-xl border flex flex-col items-center text-center space-y-3 ${
+              isTessera ? 'bg-[#0A1410] border-[#1F3D2E]' : 'bg-[#FFF9F2] border-[#E9E0D6]'
+            }`}>
+              <div className={`p-3 rounded-xl border shadow-xs ${
+                isTessera ? 'bg-white border-[#2A4A37]' : 'bg-white border-[#E9E0D6]'
+              }`}>
+                {/* Visual BharatQR simulation with dynamic amount — kept light for scan reliability */}
                 <div className="w-40 h-40 bg-white flex flex-col items-center justify-center border-2 border-dashed border-[#1C1917] p-2 rounded-lg relative">
                   <div className="absolute top-2 left-2 w-5 h-5 border-2 border-[#1C1917] bg-white flex items-center justify-center">
                     <div className="w-2 h-2 bg-[#1C1917]" />
@@ -224,10 +260,12 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
               </div>
 
               <div className="space-y-1">
-                <div className="text-xs font-semibold text-[#1C1917]">
+                <div className={`text-xs font-semibold ${isTessera ? 'text-[#F5F4EE]' : 'text-[#1C1917]'}`}>
                   Scan with Google Pay, PhonePe, Paytm, or BHIM
                 </div>
-                <div className="flex items-center justify-center gap-1.5 text-xs text-[#57534E] font-mono">
+                <div className={`flex items-center justify-center gap-1.5 text-xs font-mono ${
+                  isTessera ? 'text-[#9BB5A5]' : 'text-[#57534E]'
+                }`}>
                   <span>VPA: {upiId}</span>
                   <button
                     onClick={() => {
@@ -235,11 +273,16 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                       setCopiedUpi(true);
                       setTimeout(() => setCopiedUpi(false), 2000);
                     }}
-                    className="hover:text-[#1C1917]"
+                    aria-label="Copy UPI VPA"
+                    className={`transition-colors ${isTessera ? 'hover:text-[#C5F82A]' : 'hover:text-[#1C1917]'}`}
                   >
                     <Copy className="w-3.5 h-3.5" />
                   </button>
-                  {copiedUpi && <span className="text-[10px] text-[#17803D] font-bold">Copied!</span>}
+                  {copiedUpi && (
+                    <span className={`text-[10px] font-bold ${isTessera ? 'text-[#34D399]' : 'text-[#17803D]'}`}>
+                      Copied!
+                    </span>
+                  )}
                 </div>
               </div>
 
@@ -247,7 +290,11 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
               <button
                 type="button"
                 onClick={handleConfirmPayment}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#E8F5EC] hover:bg-[#DCFCE7] text-[#166534] text-xs font-bold transition-all border border-[#BBF7D0]"
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${
+                  isTessera
+                    ? 'bg-[#34D399]/10 hover:bg-[#34D399]/20 text-[#34D399] border-[#34D399]/40'
+                    : 'bg-[#E8F5EC] hover:bg-[#DCFCE7] text-[#166534] border-[#BBF7D0]'
+                }`}
               >
                 <Sparkles className="w-3.5 h-3.5" />
                 Simulate UPI App Confirmation
@@ -257,9 +304,13 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
 
           {/* Cash View */}
           {selectedMethod === 'cash' && (
-            <div className="p-4 bg-[#F5F0EB] rounded-xl border border-[#E9E0D6] space-y-3">
+            <div className={`p-4 rounded-xl border space-y-3 ${
+              isTessera ? 'bg-[#0A1410] border-[#1F3D2E]' : 'bg-[#F5F0EB] border-[#E9E0D6]'
+            }`}>
               <div>
-                <label className="block text-xs font-semibold text-[#57534E] uppercase tracking-wider mb-1.5">
+                <label className={`block text-xs font-semibold uppercase tracking-wider mb-1.5 ${
+                  isTessera ? 'text-[#6B8579]' : 'text-[#57534E]'
+                }`}>
                   Cash Tendered (₹)
                 </label>
                 <div className="flex items-center gap-2">
@@ -267,12 +318,20 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                     type="number"
                     value={cashTendered}
                     onChange={(e) => setCashTendered(Number(e.target.value) || 0)}
-                    className="w-full px-3 py-2 text-lg font-bold font-mono tabular-nums rounded-xl border border-[#E9E0D6] bg-white text-[#1C1917]"
+                    className={`w-full px-3 py-2 text-lg font-bold font-mono tabular-nums rounded-xl border focus:outline-none ${
+                      isTessera
+                        ? 'border-[#2A4A37] bg-[#0F1D17] text-[#F5F4EE] focus:border-[#C5F82A]'
+                        : 'border-[#E9E0D6] bg-white text-[#1C1917]'
+                    }`}
                   />
                   <button
                     type="button"
                     onClick={() => setCashTendered(grandTotal)}
-                    className="px-3 py-2 text-xs font-semibold bg-white border border-[#E9E0D6] rounded-xl hover:bg-[#E9E0D6]"
+                    className={`px-3 py-2 text-xs font-semibold rounded-xl border transition-colors ${
+                      isTessera
+                        ? 'tessera-ghost rounded-lg'
+                        : 'bg-white border-[#E9E0D6] hover:bg-[#E9E0D6]'
+                    }`}
                   >
                     Exact
                   </button>
@@ -286,18 +345,28 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                     key={note}
                     type="button"
                     onClick={() => setCashTendered(note)}
-                    className="px-3 py-1.5 text-xs font-mono font-bold bg-white rounded-lg border border-[#E9E0D6] hover:border-[#17803D] hover:bg-[#E8F5EC] text-[#1C1917]"
+                    className={`px-3 py-1.5 text-xs font-mono font-bold rounded-lg border transition-colors tabular-nums ${
+                      isTessera
+                        ? 'bg-[#0F1D17] border-[#2A4A37] text-[#F5F4EE] hover:border-[#34D399]/60 hover:text-[#34D399]'
+                        : 'bg-white border-[#E9E0D6] hover:border-[#17803D] hover:bg-[#E8F5EC] text-[#1C1917]'
+                    }`}
                   >
                     ₹{note}
                   </button>
                 ))}
               </div>
 
-              <div className="p-3 bg-white rounded-xl border border-[#E9E0D6] flex items-center justify-between">
-                <span className="text-xs font-semibold text-[#57534E]">Change Due to Return</span>
+              <div className={`p-3 rounded-xl border flex items-center justify-between ${
+                isTessera ? 'bg-[#0F1D17] border-[#2A4A37]' : 'bg-white border-[#E9E0D6]'
+              }`}>
+                <span className={`text-xs font-semibold ${isTessera ? 'text-[#9BB5A5]' : 'text-[#57534E]'}`}>
+                  Change Due to Return
+                </span>
                 <span
                   className={`text-xl font-bold font-mono tabular-nums ${
-                    cashTendered >= grandTotal ? 'text-[#17803D]' : 'text-[#B42318]'
+                    cashTendered >= grandTotal
+                      ? isTessera ? 'text-[#34D399]' : 'text-[#17803D]'
+                      : isTessera ? 'text-[#F87171]' : 'text-[#B42318]'
                   }`}
                 >
                   ₹{cashChange.toFixed(2)}
@@ -308,10 +377,14 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
 
           {/* Card View */}
           {selectedMethod === 'card' && (
-            <div className="p-4 bg-[#EFF6FF] rounded-xl border border-[#BFDBFE] text-center space-y-2">
-              <CreditCard className="w-8 h-8 text-[#2563EB] mx-auto" />
-              <div className="text-sm font-semibold text-[#1C1917]">Card Swipe / Tap EDC Terminal</div>
-              <div className="text-xs text-[#57534E]">
+            <div className={`p-4 rounded-xl border text-center space-y-2 ${
+              isTessera ? 'bg-[#60A5FA]/8 border-[#60A5FA]/30' : 'bg-[#EFF6FF] border-[#BFDBFE]'
+            }`}>
+              <CreditCard className={`w-8 h-8 mx-auto ${isTessera ? 'text-[#60A5FA]' : 'text-[#2563EB]'}`} />
+              <div className={`text-sm font-semibold ${isTessera ? 'text-[#F5F4EE]' : 'text-[#1C1917]'}`}>
+                Card Swipe / Tap EDC Terminal
+              </div>
+              <div className={`text-xs ${isTessera ? 'text-[#9BB5A5]' : 'text-[#57534E]'}`}>
                 Please tap or insert customer card on the Pine Labs / Paytm POS terminal.
               </div>
             </div>
@@ -319,18 +392,26 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
 
           {/* Split Bill View */}
           {selectedMethod === 'split' && (
-            <div className="p-4 bg-[#F5F3FF] rounded-xl border border-[#DDD6FE] space-y-3">
+            <div className={`p-4 rounded-xl border space-y-3 ${
+              isTessera ? 'bg-[#C084FC]/8 border-[#C084FC]/30' : 'bg-[#F5F3FF] border-[#DDD6FE]'
+            }`}>
               <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-[#5B21B6]">Number of Diners:</span>
+                <span className={`text-xs font-bold ${isTessera ? 'text-[#C084FC]' : 'text-[#5B21B6]'}`}>
+                  Number of Diners:
+                </span>
                 <div className="flex items-center gap-1">
                   {[2, 3, 4, 5, 6].map((n) => (
                     <button
                       key={n}
                       type="button"
                       onClick={() => updateSplitCount(n)}
-                      className={`w-7 h-7 rounded-lg text-xs font-bold transition-all ${
+                      className={`w-7 h-7 rounded-lg text-xs font-bold transition-all tabular-nums ${
                         splitCount === n
-                          ? 'bg-[#7C3AED] text-white shadow-2xs'
+                          ? isTessera
+                            ? 'bg-[#C084FC] text-[#0A1410]'
+                            : 'bg-[#7C3AED] text-white shadow-2xs'
+                          : isTessera
+                          ? 'bg-[#0F1D17] border border-[#2A4A37] text-[#C084FC] hover:bg-[#142620]'
                           : 'bg-white border border-[#DDD6FE] text-[#5B21B6] hover:bg-[#EDE9FE]'
                       }`}
                     >
@@ -346,15 +427,21 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                     key={diner.dinerNumber}
                     className={`p-2.5 rounded-lg border flex items-center justify-between text-xs transition-all ${
                       diner.paid
-                        ? 'bg-[#DCFCE7] border-[#86EFAC] text-[#166534]'
+                        ? isTessera
+                          ? 'bg-[#34D399]/12 border-[#34D399]/40 text-[#34D399]'
+                          : 'bg-[#DCFCE7] border-[#86EFAC] text-[#166534]'
+                        : isTessera
+                        ? 'bg-[#0F1D17] border-[#2A4A37] text-[#F5F4EE]'
                         : 'bg-white border-[#E9E0D6] text-[#1C1917]'
                     }`}
                   >
                     <div>
                       <span className="font-bold">Diner {diner.dinerNumber}:</span>{' '}
-                      <span className="font-mono font-bold">₹{diner.amount.toFixed(2)}</span>
+                      <span className="font-mono font-bold tabular-nums">₹{diner.amount.toFixed(2)}</span>
                       {diner.paid && (
-                        <span className="ml-2 text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded bg-white text-[#166534]">
+                        <span className={`ml-2 text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded ${
+                          isTessera ? 'bg-[#0A1410] text-[#34D399] border border-[#34D399]/40' : 'bg-white text-[#166534]'
+                        }`}>
                           Paid via {diner.method}
                         </span>
                       )}
@@ -365,35 +452,53 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                         <button
                           type="button"
                           onClick={() => markDinerPaid(diner.dinerNumber, 'upi')}
-                          className="px-2 py-0.5 rounded bg-[#FFF1E6] hover:bg-[#FDE2CF] text-[#EA580C] text-[10px] font-bold border border-[#FDBA74]"
+                          className={`px-2 py-0.5 rounded text-[10px] font-bold border transition-colors ${
+                            isTessera
+                              ? 'bg-[#C5F82A]/12 hover:bg-[#C5F82A]/25 text-[#C5F82A] border-[#C5F82A]/40'
+                              : 'bg-[#FFF1E6] hover:bg-[#FDE2CF] text-[#EA580C] border-[#FDBA74]'
+                          }`}
                         >
                           UPI
                         </button>
                         <button
                           type="button"
                           onClick={() => markDinerPaid(diner.dinerNumber, 'cash')}
-                          className="px-2 py-0.5 rounded bg-[#E8F5EC] hover:bg-[#DCFCE7] text-[#166534] text-[10px] font-bold border border-[#BBF7D0]"
+                          className={`px-2 py-0.5 rounded text-[10px] font-bold border transition-colors ${
+                            isTessera
+                              ? 'bg-[#34D399]/12 hover:bg-[#34D399]/25 text-[#34D399] border-[#34D399]/40'
+                              : 'bg-[#E8F5EC] hover:bg-[#DCFCE7] text-[#166534] border-[#BBF7D0]'
+                          }`}
                         >
                           Cash
                         </button>
                         <button
                           type="button"
                           onClick={() => markDinerPaid(diner.dinerNumber, 'card')}
-                          className="px-2 py-0.5 rounded bg-[#EFF6FF] hover:bg-[#DBEAFE] text-[#1D4ED8] text-[10px] font-bold border border-[#BFDBFE]"
+                          className={`px-2 py-0.5 rounded text-[10px] font-bold border transition-colors ${
+                            isTessera
+                              ? 'bg-[#60A5FA]/12 hover:bg-[#60A5FA]/25 text-[#60A5FA] border-[#60A5FA]/40'
+                              : 'bg-[#EFF6FF] hover:bg-[#DBEAFE] text-[#1D4ED8] border-[#BFDBFE]'
+                          }`}
                         >
                           Card
                         </button>
                       </div>
                     ) : (
-                      <Check className="w-4 h-4 text-[#16A34A]" />
+                      <Check className="w-4 h-4" />
                     )}
                   </div>
                 ))}
               </div>
 
-              <div className="flex items-center justify-between text-xs pt-1 text-[#5B21B6] font-semibold">
-                <span>Collected: ₹{totalSplitPaid.toFixed(2)} / ₹{grandTotal.toFixed(2)}</span>
-                <span className={allSplitDinersPaid ? 'text-[#166534]' : 'text-[#B45309]'}>
+              <div className={`flex items-center justify-between text-xs pt-1 font-semibold ${
+                isTessera ? 'text-[#C084FC]' : 'text-[#5B21B6]'
+              }`}>
+                <span className="tabular-nums">Collected: ₹{totalSplitPaid.toFixed(2)} / ₹{grandTotal.toFixed(2)}</span>
+                <span className={`tabular-nums ${
+                  allSplitDinersPaid
+                    ? isTessera ? 'text-[#34D399]' : 'text-[#166534]'
+                    : isTessera ? 'text-[#FBBF24]' : 'text-[#B45309]'
+                }`}>
                   {allSplitDinersPaid ? 'All Diners Paid!' : `₹${(grandTotal - totalSplitPaid).toFixed(2)} Remaining`}
                 </span>
               </div>
@@ -401,37 +506,43 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
           )}
 
           {/* Bill Summary Breakdown */}
-          <div className="text-xs space-y-1.5 pt-2 border-t border-[#E9E0D6] text-[#57534E]">
+          <div className={`text-xs space-y-1.5 pt-2 border-t ${
+            isTessera ? 'border-[#1F3D2E] text-[#9BB5A5]' : 'border-[#E9E0D6] text-[#57534E]'
+          }`}>
             <div className="flex justify-between">
               <span>Items Subtotal</span>
-              <span className="font-mono">₹{subtotal.toFixed(2)}</span>
+              <span className="font-mono tabular-nums">₹{subtotal.toFixed(2)}</span>
             </div>
             <div className="flex justify-between">
               <span>GST (5%)</span>
-              <span className="font-mono">₹{taxTotal.toFixed(2)}</span>
+              <span className="font-mono tabular-nums">₹{taxTotal.toFixed(2)}</span>
             </div>
             {discountTotal > 0 && (
-              <div className="flex justify-between text-[#17803D]">
+              <div className={`flex justify-between ${isTessera ? 'text-[#34D399]' : 'text-[#17803D]'}`}>
                 <span>
                   Discount / Offer {redeemedPoints > 0 ? `(incl. ${redeemedPoints} pts)` : ''}
                 </span>
-                <span className="font-mono">- ₹{discountTotal.toFixed(2)}</span>
+                <span className="font-mono tabular-nums">- ₹{discountTotal.toFixed(2)}</span>
               </div>
             )}
             {attachedCustomer && pointsToEarn > 0 && (
-              <div className="flex justify-between text-[#7C3AED] bg-[#F5F3FF] px-2 py-1 rounded-lg">
+              <div className={`flex justify-between px-2 py-1 rounded-lg ${
+                isTessera ? 'text-[#C084FC] bg-[#C084FC]/10' : 'text-[#7C3AED] bg-[#F5F3FF]'
+              }`}>
                 <span className="font-medium">Loyalty Reward ({attachedCustomer.name})</span>
-                <span className="font-mono font-bold">+{pointsToEarn} pts to earn</span>
+                <span className="font-mono font-bold tabular-nums">+{pointsToEarn} pts to earn</span>
               </div>
             )}
             <div className="flex justify-between items-center text-xs">
               <span className="flex items-center gap-1">
                 Platform Fee:
-                <span className="text-[10px] font-semibold px-1.5 py-0.2 rounded-full bg-[#FFF1E6] text-[#F97316]">
+                <span className={`text-[10px] font-semibold px-1.5 py-0.2 rounded-full ${
+                  isTessera ? 'bg-[#C5F82A]/10 text-[#C5F82A] border border-[#C5F82A]/30' : 'bg-[#FFF1E6] text-[#F97316]'
+                }`}>
                   {feePayer === 'cafe' ? 'Absorbed by Cafe' : 'Paid by Customer'}
                 </span>
               </span>
-              <span className="font-mono">
+              <span className="font-mono tabular-nums">
                 {feePayer === 'customer' ? `+ ₹${platformFee}` : '₹0.00'}
               </span>
             </div>
@@ -439,11 +550,15 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="p-4 bg-[#FFF9F2] border-t border-[#E9E0D6] flex items-center justify-between">
+        <div className={`p-4 border-t flex items-center justify-between ${
+          isTessera ? 'bg-[#0A1410] border-[#1F3D2E]' : 'bg-[#FFF9F2] border-[#E9E0D6]'
+        }`}>
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2.5 text-sm font-medium text-[#57534E] hover:text-[#1C1917]"
+            className={`px-4 py-2.5 text-sm font-medium transition-colors ${
+              isTessera ? 'text-[#9BB5A5] hover:text-[#F5F4EE]' : 'text-[#57534E] hover:text-[#1C1917]'
+            }`}
           >
             Back to Cart
           </button>
@@ -451,7 +566,11 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
             type="button"
             disabled={isProcessing || (selectedMethod === 'cash' && cashTendered < grandTotal)}
             onClick={handleConfirmPayment}
-            className="flex items-center gap-2 px-6 py-2.5 rounded-xl font-semibold text-sm bg-[#17803D] hover:bg-[#156f35] text-white shadow-xs transition-colors disabled:opacity-50"
+            className={`flex items-center gap-2 px-6 py-2.5 rounded-xl font-semibold text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+              isTessera
+                ? 'tessera-cta rounded-lg disabled:hover:transform-none disabled:hover:shadow-none'
+                : 'bg-[#17803D] hover:bg-[#156f35] text-white shadow-xs'
+            }`}
           >
             {isProcessing ? (
               <span>Recording...</span>

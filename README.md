@@ -43,6 +43,7 @@
 - Single-button toggle in the global navigation bar switches the entire system instantaneously (cycles `tessera ↔ dark`; `warm` reachable via explicit set).
 
 ### 6. Real-Time WebSockets & Offline Resiliency
+- **Cloud Menu Hydration (v2.6.2)**: categories + menu items load from Supabase for the active tenant at sign-in, with automatic fallback to the bundled seed menu when the cloud is empty or unreachable.
 - **Supabase Realtime**: Instantaneous zero-reload ticket progression in KDS and live dining table status updates.
 - **Offline-First Synchronization**: Caches pending tickets under `tsos_pending_offline_orders` with automated auto-flush upon browser reconnection.
 

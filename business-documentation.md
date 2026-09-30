@@ -1,7 +1,7 @@
 # TSOS Business & SaaS Strategy Documentation
 
 - **Product**: TSOS (The Cafe Operating System)
-- **Document Version**: 2.6.1
+- **Document Version**: 2.6.2
 - **Scope**: Multi-Tenant B2B SaaS Business Model, Unit Economics, Monetization & ROI
 
 ---
@@ -119,5 +119,6 @@ graph LR
 4. **Zero-Friction Hospitality Flow**: Eliminate native app installation barriers completely. Diners scan table QR stickers directly with their native smartphone camera to order in mobile browser tabs with 10-minute session security; counter terminals deploy on cross-platform Electron.js wrapping the web POS for direct USB/Serial thermal printing.
 
 ### Product Design Updates (factual)
+- **2026-09-30 — v2.6.2**: The CoolKafe live-DB menu gap was closed: categories + menu items are now seeded in the live Supabase project and hydrate into every surface (POS, menu builder, storefront) at sign-in, with automatic seed-menu fallback. Payment tender modals (UPI QR / cash / card / split-bill) completed the Tessera brand rollout, keeping the QR panel white for scan reliability. No pricing, fee-engine, or subscription changes.
 - **2026-09-30 — v2.6.1**: Completed the Tessera editorial design rollout across the operator-facing daily surfaces: global header/navbar chrome, POS menu grid + cart drawer (chartreuse Charge/Pay checkout CTA), and the kitchen display board. Rationale: consistent brand identity across every screen a paying tenant sees during operating hours — the POS and KDS are the two surfaces staff interact with hundreds of times per shift. No pricing, fee-engine, or subscription changes.
 

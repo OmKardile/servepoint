@@ -291,21 +291,28 @@ export async function provisionTenant(payload: ProvisionTenantPayload): Promise<
 
     // 5. Seed Starter Menu Items & Categories if requested
     if (config.menu_template !== 'empty') {
+      // The live schema uses UUID primary keys — map local seed ids to fresh
+      // UUIDs so category → menu_item references stay consistent.
+      const categoryIdMap = new Map<string, string>(
+        SEED_CATEGORIES.map((c) => [c.id, crypto.randomUUID()])
+      );
+
       const starterCategories = SEED_CATEGORIES.map((c) => ({
-        id: `cat_${business.slug}_${c.id}`,
+        id: categoryIdMap.get(c.id)!,
         tenant_id: tenantId,
         location_id: locationId,
         name: c.name,
         sort_order: c.sort_order,
         icon: c.icon,
       }));
-      await supabase.from('categories').insert(starterCategories);
+      const { error: catSeedErr } = await supabase.from('categories').insert(starterCategories);
+      if (catSeedErr) console.warn('Categories seed warning:', catSeedErr.message);
 
       const starterItems = SEED_MENU_ITEMS.slice(0, config.menu_template === 'casual_dining' ? 20 : 12).map((item) => ({
-        id: `item_${business.slug}_${item.id}`,
+        id: crypto.randomUUID(),
         tenant_id: tenantId,
         location_id: locationId,
-        category_id: `cat_${business.slug}_${item.category_id}`,
+        category_id: categoryIdMap.get(item.category_id) ?? null,
         name: item.name,
         description: item.description,
         price: item.price,
@@ -314,7 +321,8 @@ export async function provisionTenant(payload: ProvisionTenantPayload): Promise<
         is_available: true,
         tax_rate_pct: item.tax_rate_pct,
       }));
-      await supabase.from('menu_items').insert(starterItems);
+      const { error: itemSeedErr } = await supabase.from('menu_items').insert(starterItems);
+      if (itemSeedErr) console.warn('Menu items seed warning:', itemSeedErr.message);
     }
 
     // 6. Record Platform Audit Log

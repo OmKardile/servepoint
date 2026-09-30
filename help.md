@@ -1,6 +1,6 @@
 # TSOS Help & Credentials Reference
 
-- **Document Version**: 2.6.1 (2026-09-30)
+- **Document Version**: 2.6.2 (2026-09-30)
 
 ## 🔑 Login Credentials
 

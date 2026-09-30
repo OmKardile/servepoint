@@ -40,6 +40,7 @@ export default function App() {
     setActiveWebTab,
     currentTenant,
     switchTenantScope,
+    loadMenuFromCloud,
     tables,
     setSelectedTableId,
     setTrackedOrderId,
@@ -231,6 +232,14 @@ export default function App() {
       unsubscribe();
     };
   }, [currentTenant?.id, audioEnabled]);
+
+  // Cloud menu hydration — fetch categories + menu_items from Supabase for the
+  // active tenant. Falls back to the local seed menu when empty or unavailable.
+  useEffect(() => {
+    if (currentTenant?.id) {
+      loadMenuFromCloud();
+    }
+  }, [currentTenant?.id, loadMenuFromCloud]);
 
   const handleAuthSuccess = (session: AuthUserSession, isNewUser?: boolean) => {
     setAuthSession(session);

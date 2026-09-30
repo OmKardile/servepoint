@@ -34,6 +34,7 @@ import {
   PlatformAuditLog,
   ThemeMode,
 } from '../types';
+import { supabase, isSupabaseConfigured } from './supabase';
 import {
   SEED_LOCATION,
   SEED_PROFILES,
@@ -92,6 +93,7 @@ interface TsosState {
   // Menu
   categories: MenuCategory[];
   menuItems: MenuItem[];
+  loadMenuFromCloud: () => Promise<void>;
   addons: Addon[];
   toggleItemAvailability: (itemId: string) => void;
   addMenuItem: (item: Omit<MenuItem, 'id'>) => void;
@@ -497,6 +499,79 @@ export const useTsosStore = create<TsosState>((set, get) => ({
         item.id === itemId ? { ...item, is_available: !item.is_available } : item
       ),
     })),
+
+  loadMenuFromCloud: async () => {
+    if (!isSupabaseConfigured()) return;
+    const tenant = get().currentTenant;
+    if (!tenant) return;
+    try {
+      // Resolve the live tenant UUID: currentTenant.id may be a local seed id
+      // (e.g. 'biz_coolkafe_99') that does not exist in the cloud tenants table.
+      const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      let tenantId = tenant.id;
+      if (!UUID_RE.test(tenantId)) {
+        const { data: tRow, error: tErr } = await supabase
+          .from('tenants')
+          .select('id')
+          .eq('slug', tenant.slug)
+          .maybeSingle();
+        if (tErr) throw tErr;
+        if (!tRow) {
+          console.info('[TSOS] Tenant not found in cloud — keeping local seed menu.');
+          return;
+        }
+        tenantId = tRow.id;
+      }
+
+      const { data: cats, error: catErr } = await supabase
+        .from('categories')
+        .select('id, location_id, name, sort_order, icon')
+        .eq('tenant_id', tenantId)
+        .order('sort_order', { ascending: true });
+      if (catErr) throw catErr;
+
+      const { data: items, error: itemErr } = await supabase
+        .from('menu_items')
+        .select(
+          'id, location_id, category_id, name, description, price, image_url, is_veg, is_available, tax_rate_pct'
+        )
+        .eq('tenant_id', tenantId)
+        .order('name', { ascending: true });
+      if (itemErr) throw itemErr;
+
+      if (!cats || cats.length === 0 || !items || items.length === 0) {
+        console.info('[TSOS] Cloud menu empty for tenant — keeping local seed menu.');
+        return;
+      }
+
+      set({
+        categories: cats.map((c: any) => ({
+          id: c.id,
+          location_id: c.location_id || '',
+          name: c.name,
+          sort_order: c.sort_order ?? 0,
+          icon: c.icon || 'Coffee',
+        })),
+        menuItems: items.map((m: any) => ({
+          id: m.id,
+          location_id: m.location_id || '',
+          category_id: m.category_id || '',
+          name: m.name,
+          description: m.description || '',
+          price: Number(m.price),
+          image_url: m.image_url || '',
+          is_veg: m.is_veg ?? true,
+          is_available: m.is_available ?? true,
+          tax_rate_pct: Number(m.tax_rate_pct ?? 5),
+        })),
+      });
+      console.info(
+        `[TSOS] Menu loaded from Supabase cloud (${cats.length} categories, ${items.length} items).`
+      );
+    } catch (err: any) {
+      console.warn('[TSOS] Cloud menu fetch failed — using local seed menu:', err?.message || err);
+    }
+  },
 
   addMenuItem: (newItemData) =>
     set((state) => ({
