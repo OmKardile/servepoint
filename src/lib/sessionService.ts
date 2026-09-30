@@ -120,6 +120,8 @@ export const sessionService = {
   ): Promise<EphemeralSessionResult> {
     const cleanSlug = tenantSlug.toLowerCase().trim();
     const cleanToken = permanentQrToken.trim();
+    // v2.8.1 — remembered RPC rejection so the offline fallback can still run
+    let rpcRejection: { error: string; message: string } | null = null;
 
     // 1. Live Supabase Backend RPC Verification
     if (isSupabaseConfigured()) {
@@ -146,9 +148,15 @@ export const sessionService = {
           return result;
         }
 
+        // v2.8.1 fix: an explicit RPC rejection (unknown tenant, INVALID_PERMANENT_QR,
+        // table not found, …) must NOT short-circuit the offline path. We remember
+        // the reason and fall through to the local cryptographic fallback below —
+        // which itself only mints a session when fallbackTable.qr_token matches the
+        // presented token, so a tampered token can never pass. This restores the
+        // in-app "Test QR" demo flow (local seed tables: qr-demo-tN) while keeping
+        // real sticker deep-links on the live RPC path.
         if (data?.error) {
-          return {
-            isValid: false,
+          rpcRejection = {
             error: data.error,
             message: data.message || 'Table verification failed.',
           };
@@ -161,6 +169,11 @@ export const sessionService = {
     // 2. Offline / Edge Cryptographic HMAC-SHA256 Signing
     if (fallbackTable) {
       if (fallbackTable.qr_token !== cleanToken) {
+        // Prefer the live RPC's rejection reason when one was recorded; the local
+        // mismatch note is the last-resort message.
+        if (rpcRejection) {
+          return { isValid: false, error: rpcRejection.error, message: rpcRejection.message };
+        }
         return {
           isValid: false,
           error: 'INVALID_PERMANENT_QR',
@@ -209,6 +222,11 @@ export const sessionService = {
       return result;
     }
 
+    // v2.8.1 — no local table to fall back on: surface the live rejection when present
+    if (rpcRejection) {
+      return { isValid: false, error: rpcRejection.error, message: rpcRejection.message };
+    }
+
     return {
       isValid: false,
       error: 'TABLE_NOT_FOUND',
@@ -233,20 +251,33 @@ export const sessionService = {
     }
 
     // 1. Check Live Database RPC
+    // v2.8.1 fix: a LIVE-RPC-issued session token is opaque (not `v1.…` locally
+    // signed) and belongs to the LIVE table uuid, so verifying it against the
+    // local demo table id always failed with TABLE_MISMATCH and blocked every
+    // deep-linked diner order. Opaque tokens are verified by token alone
+    // (p_table_id null); locally-signed `v1.` tokens keep the table-bound path
+    // and fall through to the local HMAC check on rejection.
+    const isLocallySignedToken = sessionToken.startsWith('v1.');
+    // v2.8.1 — remembered cloud rejection; the local HMAC verdict is authoritative
+    // for `v1.` tokens, and for opaque tokens the cloud verdict is the only one.
+    let rpcVerifyRejection: { error: string; message: string } | null = null;
     if (isSupabaseConfigured()) {
       try {
         const { data, error } = await supabase.rpc('verify_and_consume_table_session', {
           p_session_token: sessionToken,
-          p_table_id: tableId,
+          p_table_id: isLocallySignedToken ? tableId : null,
         });
 
         if (!error && data?.is_valid) {
           return { isValid: true };
         }
 
+        // v2.8.1 fix: fall through to the local HMAC verdict instead of
+        // short-circuiting — locally-signed `v1.` tokens are unknown to the
+        // cloud, so the RPC always rejects them; the offline cryptographic
+        // check below is the authoritative verdict for those.
         if (data?.error) {
-          return {
-            isValid: false,
+          rpcVerifyRejection = {
             error: data.error,
             message: data.message || 'Session verification failed.',
           };
@@ -260,6 +291,10 @@ export const sessionService = {
     try {
       const parts = sessionToken.split('.');
       if (parts.length !== 3 || parts[0] !== 'v1') {
+        // Opaque live-RPC token that the cloud just rejected — surface the cloud verdict.
+        if (rpcVerifyRejection) {
+          return { isValid: false, ...rpcVerifyRejection };
+        }
         return {
           isValid: false,
           error: 'MALFORMED_TOKEN',

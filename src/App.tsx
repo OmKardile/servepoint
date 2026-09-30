@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useTsosStore } from './lib/store';
 import { authService, AuthUserSession } from './lib/authService';
 import { realtimeService } from './lib/realtimeService';
@@ -130,8 +130,11 @@ export default function App() {
   };
 
   // Dynamic Path-Based Tenant Scoping & Dedicated URL Routing
-  useEffect(() => {
-    const handleUrlRoute = () => {
+  // v2.8.1 fix: route handling now runs ONCE at boot (after tables hydrate so QR
+  // deep-links can match their table) and on popstate only. Re-running on every
+  // tables change re-processed the current URL mid-session and clobbered the
+  // just-placed order's navigation (order_track → storefront) + tracked id.
+  const handleUrlRoute = () => {
       const pathname = window.location.pathname.replace(/^\/|\/$/g, '');
       const segments = pathname.split('/').filter(Boolean);
 
@@ -187,12 +190,25 @@ export default function App() {
           if (matchTable) setSelectedTableId(matchTable.id);
         }
       }
-    };
+  };
 
+  const bootRouteRef = useRef({ done: false });
+  const routeRef = useRef<() => void>(() => {});
+  routeRef.current = handleUrlRoute;
+
+  useEffect(() => {
+    if (bootRouteRef.current.done) return;
+    if (isAuthLoading) return;
+    if (tables.length === 0) return; // wait for hydration so deep-links match tables
+    bootRouteRef.current.done = true;
     handleUrlRoute();
-    window.addEventListener('popstate', handleUrlRoute);
-    return () => window.removeEventListener('popstate', handleUrlRoute);
   }, [tables, isAuthLoading]);
+
+  useEffect(() => {
+    const onPopState = () => routeRef.current();
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, []);
 
   // Sync internal state back to browser URL
   useEffect(() => {
@@ -315,9 +331,10 @@ export default function App() {
   }
 
   // Public Customer QR Storefront (Table Ordering)
+  // v2.8.1 — canvas follows the active theme (ServePoint ivory vs warm legacy)
   if (activeSurface === 'storefront') {
     return (
-      <main className="min-h-screen bg-[#FFF9F2] flex flex-col min-h-0 overflow-y-auto">
+      <main className={`min-h-screen flex flex-col min-h-0 overflow-y-auto ${themeMode === 'servepoint' ? 'bg-[#F6F5F2]' : 'bg-[#FFF9F2]'}`}>
         <StorefrontScreen />
       </main>
     );
@@ -326,7 +343,7 @@ export default function App() {
   // Public Order Tracking Screen
   if (activeSurface === 'order_track') {
     return (
-      <main className="min-h-screen bg-[#FFF9F2] flex flex-col min-h-0 overflow-y-auto">
+      <main className={`min-h-screen flex flex-col min-h-0 overflow-y-auto ${themeMode === 'servepoint' ? 'bg-[#F6F5F2]' : 'bg-[#FFF9F2]'}`}>
         <OrderTrackingScreen />
       </main>
     );

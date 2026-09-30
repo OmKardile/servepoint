@@ -1,6 +1,6 @@
 # TSOS Help & Credentials Reference
 
-- **Document Version**: 2.8.0 (2026-10-01)
+- **Document Version**: 2.8.1 (2026-10-01)
 
 ## 🔑 Login Credentials
 
@@ -18,6 +18,15 @@
 - **ServePoint** (owner Figma — EXACT tokens since v2.6.7/ADR-0012: ivory `#F6F5F2` canvas, signature sage `#D9E2DD` surfaces, deep-teal `#0F3D3E` primary, gold `#B88E2F` accent, near-black text, **Poppins**) is the **default theme for the authenticated app** since v2.6.6 (ADR-0011). The header toggle cycles `servepoint → tessera → dark`; `warm`/`obsidian` remain reachable via `setThemeMode()`.
 - **⚠️ Login screen is FROZEN (ADR-0010) and always renders in Tessera**: while logged out, the document is force-pinned to Tessera so the approved login look never changes — including the reserved Surface Pack illustrations, which wait for an explicit owner unfreeze. See [`decisions.md`](decisions.md) ADR-0010/0011.
 - Selection persists in `localStorage` under `tsos_theme_mode` (legacy `tessera` values migrate to `servepoint` once).
+
+---
+
+## 🍽️ Guest Table Ordering (v2.8.1)
+
+- **Diner flow (real QR sticker)**: scanning the table QR opens `https://<app>/coolkafe/t01?token=<table-token>` → the guest Storefront launches with a **10-minute ephemeral session** (countdown chip in the hero; ≤2min turns gold, expiry auto-locks the screen — rescan the sticker to renew). Add dishes (with the **Veg only** filter and **price sort**), open **View Order**, add name/phone/kitchen notes, then **Pay & Send** — you land on the live **Order Tracking** card with an estimated-ready countdown and progress bar.
+- **In-app demo**: Owner → **Dine-in Tables → Test QR** launches the same guest experience for the selected table (locally-verified demo session). **View QR** shows the sticker URL a diner would scan.
+- **Guest actions**: **Call Waiter** (chime + 5s confirmation), **Digital Bill** modal — **WhatsApp** share (direct chat when the order has a guest phone), **Copy** to clipboard, **Download** the text invoice, or **Print**.
+- **Security model**: sessions are cryptographically bound to the table's permanent QR token; a tampered URL or a link opened from browser history after expiry is rejected ("Security Auto-Lock"). The lock screen shows the exact rejection reason for supportability.
 
 ---
 
