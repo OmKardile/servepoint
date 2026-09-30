@@ -69,3 +69,17 @@ services:
         value: https://vbufsuzzmehsidshopku.supabase.co
       - key: VITE_SUPABASE_ANON_KEY
         value: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZidWZzdXp6bWVoc2lkc2hvcGt1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTAyOTE0MjMsImV4cCI6MjEwNTg2NzQyM30.kymgulEpO3R7FRhrfFO-lpmYrAcOqBF82sSW4unZHBE
+      # Design-pipeline token (owner-provided, file_content: read scope).
+      # Used by tooling/agents to read the ServePoint POS Preview Figma and
+      # sync design tokens/screenshots into docs/design/servepoint/ (ADR-0012).
+      #
+      # ⚠️ WHY sync:false — GitHub Push Protection (GH013) rejects any push
+      # containing a Figma PAT ("Figma Personal Access Token" is a protected
+      # secret class), so the value cannot live in this file. The blueprint
+      # declares the variable; Render prompts for the value once at apply
+      # time and stores it in the service environment (never in Git).
+      # The working value is committed NOWHERE — it lives in the local
+      # gitignored .env (FIGMA_TOKEN=figd_…, see ADR-0012) and in the
+      # owner's Figma → Settings → Personal access tokens (revocable).
+      - key: FIGMA_TOKEN
+        sync: false

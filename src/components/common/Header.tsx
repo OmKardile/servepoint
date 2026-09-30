@@ -100,7 +100,7 @@ export const Header: React.FC<HeaderProps> = ({ onSignOut }) => {
       <header
         className={`border-b sticky top-0 z-40 ${
           isServepoint
-            ? 'bg-[#F2EFE5]/95 backdrop-blur border-[#E7E2D2] shadow-[0_4px_20px_-12px_rgba(23,64,46,0.25)]'
+            ? 'bg-[#F6F5F2]/95 backdrop-blur border-[#E3E7E0] shadow-[0_4px_20px_-12px_rgba(15,61,62,0.25)]'
             : isTessera
               ? 'bg-[#0A1410] border-[#1F3D2E]'
               : 'bg-white border-[#E9E0D6] shadow-xs'
@@ -144,7 +144,7 @@ export const Header: React.FC<HeaderProps> = ({ onSignOut }) => {
             <div
               className={`flex items-center gap-1.5 px-2.5 py-1 font-bold ${
                 isServepoint
-                  ? 'bg-[#E9A63C] text-[#17402E] rounded-lg uppercase tracking-widest text-[11px] shadow-[0_4px_12px_-4px_rgba(233,166,60,0.6)]'
+                  ? 'bg-[#B88E2F] text-[#1A1A1A] rounded-lg uppercase tracking-widest text-[11px] shadow-[0_4px_12px_-4px_rgba(184,142,47,0.6)]'
                   : isTessera
                     ? 'bg-[#C5F82A] text-[#0A1410] tessera-block rounded-lg uppercase tracking-widest text-[11px]'
                     : 'bg-[#1C1917] text-white shadow-xs rounded-full'
@@ -152,7 +152,7 @@ export const Header: React.FC<HeaderProps> = ({ onSignOut }) => {
             >
               <span
                 className={`w-2 h-2 rounded-full animate-pulse ${
-                  isServepoint ? 'bg-[#17402E]' : isTessera ? 'bg-[#0A1410]' : 'bg-[#F97316]'
+                  isServepoint ? 'bg-[#0F3D3E]' : isTessera ? 'bg-[#0A1410]' : 'bg-[#F97316]'
                 }`}
               />
               <span className="tracking-wide">TSOS</span>
@@ -170,7 +170,9 @@ export const Header: React.FC<HeaderProps> = ({ onSignOut }) => {
                 className={`rounded-xl px-2.5 py-1 text-xs font-semibold focus:outline-none focus:ring-1 cursor-pointer transition-colors ${
                   isTessera
                     ? 'bg-[#0F1D17] border border-[#2A4A37] text-[#F5F4EE] focus:ring-[#C5F82A] hover:border-[#C5F82A]/50'
-                    : 'bg-[#FFF9F2] border border-[#E9E0D6] text-[#1C1917] focus:ring-[#F97316] hover:bg-[#FFF1E6]'
+                    : isServepoint
+                      ? 'bg-[#D9E2DD] border border-[#E3E7E0] text-[#1A1A1A] focus:ring-[#B88E2F] hover:bg-[#E3E7E0]'
+                      : 'bg-[#FFF9F2] border border-[#E9E0D6] text-[#1C1917] focus:ring-[#F97316] hover:bg-[#FFF1E6]'
                 }`}
               >
                 {(availableLocations || [location]).map((loc) => (
@@ -183,14 +185,14 @@ export const Header: React.FC<HeaderProps> = ({ onSignOut }) => {
 
             <div
               className={`hidden lg:flex items-center gap-2 border-l pl-3 ${
-                isServepoint ? 'text-[#5F6D63] border-[#E7E2D2]' : isTessera ? 'text-[#6B8579] border-[#1F3D2E]' : 'text-[#78716C] border-[#E9E0D6]'
+                isServepoint ? 'text-[#6B6B6B] border-[#E3E7E0]' : isTessera ? 'text-[#6B8579] border-[#1F3D2E]' : 'text-[#78716C] border-[#E9E0D6]'
               }`}
             >
               <span>
                 Tenant:{' '}
                 <strong className={
                   isServepoint
-                    ? 'text-[#17402E] font-bold'
+                    ? 'text-[#1A1A1A] font-semibold'
                     : isTessera
                       ? 'text-[#F5F4EE] font-serif italic font-normal text-sm'
                       : 'text-[#1C1917]'
@@ -198,11 +200,11 @@ export const Header: React.FC<HeaderProps> = ({ onSignOut }) => {
                   {currentTenant?.name || 'CoolKafe'}
                 </strong>
               </span>
-              <span className={isServepoint ? 'text-[#D8D2BE]' : isTessera ? 'text-[#2A4A37]' : 'text-[#D6D3D1]'}>|</span>
+              <span className={isServepoint ? 'text-[#969696]' : isTessera ? 'text-[#2A4A37]' : 'text-[#D6D3D1]'}>|</span>
               <span>
                 Model:{' '}
                 <strong className={isServepoint ? 'text-[#17803D]' : isTessera ? 'text-[#34D399]' : 'text-[#15803D]'}>₹0/mo</strong> +{' '}
-                <strong className={isServepoint ? 'text-[#B0761F]' : isTessera ? 'text-[#C5F82A]' : 'text-[#F97316]'}>₹{feeConfig.per_order_fee}/order</strong>
+                <strong className={isServepoint ? 'text-[#967221]' : isTessera ? 'text-[#C5F82A]' : 'text-[#F97316]'}>₹{feeConfig.per_order_fee}/order</strong>
               </span>
             </div>
           </div>

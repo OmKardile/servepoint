@@ -3,13 +3,13 @@
 > **Purpose**: Single-page dense summary of the current TSOS project state, for fast cold re-onboarding by any agent or contributor. Updated alongside every code change. For full chronological detail, see [`docs/compacts/`](docs/compacts/README.md) (7 compacts) and [`worklog.md`](worklog.md) (live agent handover).
 
 - **Project**: TSOS — The Cafe Operating System
-- **Version**: 2.6.6
+- **Version**: 2.6.7
 - **Repo**: https://github.com/OmKardile/tsos-alt
 - **Author**: Omkar Kardile <omkardile84@gmail.com>
 - **Last Updated**: 2026-10-01
-- **Default Theme**: **ServePoint** (owner Figma: ivory canvas, forest-green primary, amber accent, Plus Jakarta Sans) for the authenticated app since v2.6.6; unauthenticated routes (frozen login, storefront) stay force-pinned Tessera — see [`CHANGELOG.md`](CHANGELOG.md) v2.6.0–v2.6.6 and ADR-0010/0011
+- **Default Theme**: **ServePoint** (owner Figma, EXACT tokens since v2.6.7/ADR-0012: ivory `#F6F5F2` canvas, deep-teal `#0F3D3E` primary, gold `#B88E2F` accent (pressed `#967221`), signature sage `#D9E2DD` surfaces, text `#1A1A1A`/`#6B6B6B`, **Poppins**) for the authenticated app since v2.6.6; unauthenticated routes (frozen login, storefront) stay force-pinned Tessera — see [`CHANGELOG.md`](CHANGELOG.md) v2.6.0–v2.6.7 and ADR-0010/0011/0012
 - **Render Blueprint**: `render.yaml` → Static Site **`tsos-pos`** (v2.6.3 hardened; v2.6.4 re-hardcoded live Supabase keys — zero-touch apply)
-- **Design Governance**: **Login screen FROZEN** at v2.6.4 (ADR-0010) — no changes until owner unfreezes; Surface Pack illustrations reserved for login; **ServePoint UI (owner Figma) adopted as the default post-login design (ADR-0011)**; Figma blocked from sandbox — cover thumbnail archived at `docs/design/servepoint/`
+- **Design Governance**: **Login screen FROZEN** at v2.6.4 (ADR-0010) — no changes until owner unfreezes; Surface Pack illustrations reserved for login; **ServePoint UI (owner Figma) adopted as the default post-login design (ADR-0011)**; **Figma REST pipeline UNLOCKED via owner PAT (ADR-0012)** — all 6 pages explored, 57 Final UI frames rendered + archived at `docs/design/servepoint/` (frames/ + pages/); design source is now in-repo, no live Figma access needed
 
 ---
 
@@ -80,6 +80,10 @@ npm run dev   # or bun run dev
 
 ## Recent activity (live agent handover)
 See [`worklog.md`](worklog.md) for the chronological agent work log.
+
+**v2.6.7 (2026-10-01) shipped**: **Figma REST pipeline + EXACT ServePoint tokens (ADR-0012)** — owner supplied a `file_content:read` PAT (stored in gitignored `.env`; Render `sync: false` — GitHub Push Protection forbids committing Figma PATs) and 4 local UI kits; all 6 ServePoint pages explored via REST, **57 Final UI frames rendered to PNG** and archived at `docs/design/servepoint/frames/` (+ 6 page overviews); node-fill mining replaced every estimated token: canvas `#F6F5F2`, deep-teal `#0F3D3E`, **gold `#B88E2F`/pressed `#967221`**, signature **sage `#D9E2DD`**, text `#1A1A1A`/`#6B6B6B`, **Poppins**, radii 12/16/24/100; `index.css` token block + remaps rewritten, Header/WebNavbar re-tokened hex-for-hex, PosScreen menu cards got the explicit Figma card (sage surface, gold Add CTA, near-black text, `#DC2626` low-stock badge); fig-kiwi v4 `.fig` uploads documented dead end (below fig2sketch v15). Verified: tsc 0 errors; frozen login pixel-identical; sage/gold POS E2E + cart golden path + 4-theme cycle clean.
+
+**v2.6.6 (2026-10-01) shipped**: **ServePoint UI adoption (ADR-0011)** — `servepoint` ThemeMode as default (stored tessera one-time migrated); `App.tsx` auth-scoped theme pinning (document pinned Tessera while logged out — frozen login untouched); `index.css` servepoint token layer + remaps + `sp-cta`/`sp-sidebar`/`sp-banner`/`sp-ghost`; Header/WebNavbar explicit ServePoint chrome; toggle cycles servepoint→tessera→dark. Tokens were cover-thumbnail ESTIMATES then — replaced by exact values in v2.6.7.
 
 **v2.6.5 (2026-10-01) shipped**: **OrdersScreen explicit Tessera + design governance (ADR-0010)** — Orders tabs as uppercase chartreuse `tessera-block` pills with forest-ghost inactive state; forest-inset search with chartreuse focus ring; status pills chartreuse-active/forest-chip; orders table as `tessera-block` card with serif-italic customer names, chartreuse mono totals, status-palette badges/chips/icons, ghost action buttons, editorial empty state. Warm styling untouched via `isTessera` conditionals. **Owner directives recorded as ADR-0010: login screen (`AuthScreen.tsx`) FROZEN at v2.6.4 (commit 5f38efc) until explicit unfreeze — Surface Pack (Figma Community) illustrations are the future login artwork, shadcn/ui Design System (Figma Community) is the post-login component reference; sandbox is CloudFront-blocked from figma.com (403 verified), asset-export path documented.** Verified: tsc 0 errors; browser E2E filter/tab round-trip clean.
 

@@ -15,7 +15,7 @@
 
 ## 🎨 Theme Appearance
 
-- **ServePoint** (owner Figma: ivory canvas, forest-green primary, amber accent, Plus Jakarta Sans) is the **default theme for the authenticated app** since v2.6.6 (ADR-0011). The header toggle cycles `servepoint → tessera → dark`; `warm`/`obsidian` remain reachable via `setThemeMode()`.
+- **ServePoint** (owner Figma — EXACT tokens since v2.6.7/ADR-0012: ivory `#F6F5F2` canvas, signature sage `#D9E2DD` surfaces, deep-teal `#0F3D3E` primary, gold `#B88E2F` accent, near-black text, **Poppins**) is the **default theme for the authenticated app** since v2.6.6 (ADR-0011). The header toggle cycles `servepoint → tessera → dark`; `warm`/`obsidian` remain reachable via `setThemeMode()`.
 - **⚠️ Login screen is FROZEN (ADR-0010) and always renders in Tessera**: while logged out, the document is force-pinned to Tessera so the approved login look never changes — including the reserved Surface Pack illustrations, which wait for an explicit owner unfreeze. See [`decisions.md`](decisions.md) ADR-0010/0011.
 - Selection persists in `localStorage` under `tsos_theme_mode` (legacy `tessera` values migrate to `servepoint` once).
 

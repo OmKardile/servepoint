@@ -49,6 +49,7 @@ export const PosScreen: React.FC = () => {
   } = useTsosStore();
 
   const isTessera = themeMode === 'tessera';
+  const isServepoint = themeMode === 'servepoint';
 
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -351,12 +352,14 @@ export const PosScreen: React.FC = () => {
                     className={`group rounded-2xl transition-all cursor-pointer overflow-hidden flex flex-col justify-between relative ${
                       isTessera
                         ? 'bg-[#0F1D17] border border-[#1F3D2E] hover:border-[#C5F82A]/50 hover:shadow-[0_8px_24px_-8px_rgba(0,0,0,0.6),0_0_0_1px_rgba(197,248,42,0.15)] hover:-translate-y-0.5'
-                        : 'bg-white border border-[#E9E0D6] hover:border-[#F97316]/50 hover:shadow-md'
+                        : isServepoint
+                          ? 'bg-[#D9E2DD] border border-transparent hover:border-[#B88E2F] hover:shadow-[0_12px_30px_-12px_rgba(15,61,62,0.35)] hover:-translate-y-0.5'
+                          : 'bg-white border border-[#E9E0D6] hover:border-[#F97316]/50 hover:shadow-md'
                     }`}
                   >
                     <div className="p-3">
                       <div className={`relative aspect-video w-full rounded-xl overflow-hidden mb-2.5 ${
-                        isTessera ? 'bg-[#142620]' : 'bg-[#F5F0EB]'
+                        isTessera ? 'bg-[#142620]' : isServepoint ? 'bg-[#E3E7E0]' : 'bg-[#F5F0EB]'
                       }`}>
                         <img
                           src={item.image_url}
@@ -391,7 +394,9 @@ export const PosScreen: React.FC = () => {
                             className={`absolute top-2 right-2 px-2 py-0.5 rounded-md text-[9px] font-bold flex items-center gap-1 backdrop-blur-xs shadow-xs ${
                               isTessera
                                 ? 'bg-[#FBBF24]/90 text-[#0A1410]'
-                                : 'bg-amber-500 text-white'
+                                : isServepoint
+                                  ? 'bg-[#DC2626] text-white'
+                                  : 'bg-amber-500 text-white'
                             }`}
                             title={`Reorder Point Breached: ${lowStockIng.name} has only ${lowStockIng.stock_qty}${lowStockIng.unit} left (threshold: ${lowStockIng.low_stock_threshold}${lowStockIng.unit})`}
                           >
@@ -413,24 +418,32 @@ export const PosScreen: React.FC = () => {
                       </div>
 
                       <h3 className={`font-bold text-sm leading-snug transition-colors line-clamp-1 ${
-                        isTessera ? 'text-[#F5F4EE] group-hover:text-[#C5F82A]' : 'text-[#1C1917] group-hover:text-[#F97316]'
+                        isTessera
+                          ? 'text-[#F5F4EE] group-hover:text-[#C5F82A]'
+                          : isServepoint
+                            ? 'text-[#1A1A1A] group-hover:text-[#967221]'
+                            : 'text-[#1C1917] group-hover:text-[#F97316]'
                       }`}>
                         {item.name}
                       </h3>
                       <p className={`text-xs mt-1 line-clamp-2 leading-relaxed ${
-                        isTessera ? 'text-[#9BB5A5]' : 'text-[#57534E]'
+                        isTessera ? 'text-[#9BB5A5]' : isServepoint ? 'text-[#6B6B6B]' : 'text-[#57534E]'
                       }`}>
                         {item.description}
                       </p>
                     </div>
 
                     <div className={`px-3 pb-3 pt-1 border-t flex items-center justify-between ${
-                      isTessera ? 'border-[#1F3D2E]' : 'border-[#F5F0EB]'
+                      isTessera ? 'border-[#1F3D2E]' : isServepoint ? 'border-[#C9D3CC]' : 'border-[#F5F0EB]'
                     }`}>
                       <div>
-                        <span className={`text-xs ${isTessera ? 'text-[#6B8579]' : 'text-[#57534E]'}`}>Starts at</span>
-                        <div className={`font-mono font-bold text-base tabular-nums ${
-                          isTessera ? 'text-[#C5F82A]' : 'text-[#1C1917]'
+                        <span className={`text-xs ${isTessera ? 'text-[#6B8579]' : isServepoint ? 'text-[#6B6B6B]' : 'text-[#57534E]'}`}>Starts at</span>
+                        <div className={`text-base tabular-nums ${
+                          isTessera
+                            ? 'font-mono font-bold text-[#C5F82A]'
+                            : isServepoint
+                              ? 'font-semibold text-[#1A1A1A]'
+                              : 'font-mono font-bold text-[#1C1917]'
                         }`}>
                           ₹{item.price}
                         </div>
@@ -441,7 +454,9 @@ export const PosScreen: React.FC = () => {
                         className={`flex items-center gap-1 px-3 py-1.5 rounded-xl font-semibold text-xs transition-colors shadow-xs ${
                           isTessera
                             ? 'bg-[#C5F82A]/15 border border-[#C5F82A]/40 text-[#C5F82A] hover:bg-[#C5F82A] hover:text-[#0A1410]'
-                            : 'bg-[#FFF1E6] hover:bg-[#F97316] text-[#F97316] hover:text-white'
+                            : isServepoint
+                              ? 'bg-[#B88E2F] text-[#1A1A1A] hover:bg-[#967221] hover:text-[#F6F5F2]'
+                              : 'bg-[#FFF1E6] hover:bg-[#F97316] text-[#F97316] hover:text-white'
                         }`}
                       >
                         <Plus className="w-3.5 h-3.5" />

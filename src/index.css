@@ -997,57 +997,60 @@
 
 /* ==========================================================================
    SERVEPOINT THEME — owner-mandated UI (Figma: ServePoint POS Preview, ADR-0011)
-   Warm ivory canvas, deep forest-green primary, amber accent,
-   white rounded cards with soft shadows, Plus Jakarta Sans headings.
+   Tokens below are EXACT values mined from the Figma REST API (v2.6.7):
+   node fills of "04 Final UI" + "05 Components" (file P14mYyvxyrZlkMonqobnWL).
+   Canvas #F6F5F2 ivory · depth #0F3D3E deep teal · accent #B88E2F gold
+   · signature sage surface #D9E2DD · text #1A1A1A / #6B6B6B · Poppins.
    Applied via [data-theme="servepoint"] on <html>. Default since v2.6.7.
    The Figma-embedded login screen is NOT affected (frozen, hardcoded).
+   Archived design source: docs/design/servepoint/ (57 frames + 6 page overviews).
    ========================================================================== */
 [data-theme="servepoint"] {
-  /* --- Surface palette --- */
-  --tsos-bg: #F2EFE5;
-  --tsos-surface: #FFFFFF;
-  --tsos-surface-secondary: #EFEDE0;
-  --tsos-divider: #E7E2D2;
-  /* --- Amber action accent --- */
-  --tsos-action: #E9A63C;
-  --tsos-action-hover: #D89430;
-  --tsos-action-soft: rgba(233, 166, 60, 0.16);
-  /* --- Status colors (tuned for ivory/forest) --- */
+  /* --- Surface palette (exact Figma fills) --- */
+  --tsos-bg: #F6F5F2;                    /* page canvas */
+  --tsos-surface: #FFFFFF;               /* white detail cards (Bills pane, chat) */
+  --tsos-surface-secondary: #D9E2DD;     /* SAGE — signature card/input surface */
+  --tsos-divider: #E3E7E0;               /* hairline between sage & ivory */
+  /* --- Gold action accent (Primary Button component) --- */
+  --tsos-action: #B88E2F;                /* gold */
+  --tsos-action-hover: #967221;          /* pressed variant from Components */
+  --tsos-action-soft: rgba(184, 142, 47, 0.16);
+  /* --- Status colors (tuned for ivory/teal/gold) --- */
   --tsos-completed: #17803D;
   --tsos-completed-soft: rgba(23, 128, 61, 0.12);
-  --tsos-attention: #E9A63C;
-  --tsos-attention-soft: rgba(233, 166, 60, 0.16);
-  --tsos-destructive: #DC2626;
+  --tsos-attention: #B88E2F;
+  --tsos-attention-soft: rgba(184, 142, 47, 0.16);
+  --tsos-destructive: #DC2626;           /* exact from Personal/Teams/Bills cards */
   --tsos-destructive-soft: rgba(220, 38, 38, 0.10);
   --tsos-info: #2C7A7B;
   --tsos-info-soft: rgba(44, 122, 123, 0.12);
   --tsos-accent: #7C5CBF;
   --tsos-accent-soft: rgba(124, 92, 191, 0.12);
-  /* --- Text hierarchy --- */
-  --tsos-text-primary: #17402E;
-  --tsos-text-secondary: #5F6D63;
-  --tsos-text-muted: #8B968C;
+  /* --- Text hierarchy (exact: #1A1A1A primary / #6B6B6B muted) --- */
+  --tsos-text-primary: #1A1A1A;
+  --tsos-text-secondary: #6B6B6B;
+  --tsos-text-muted: #969696;
   color-scheme: light;
 }
 
 [data-theme="servepoint"] body {
-  background-color: #F2EFE5 !important;
-  color: #17402E !important;
-  font-family: 'Plus Jakarta Sans', 'Inter', system-ui, -apple-system, sans-serif;
+  background-color: #F6F5F2 !important;
+  color: #1A1A1A !important;
+  font-family: 'Poppins', 'Plus Jakarta Sans', 'Inter', system-ui, -apple-system, sans-serif;
 }
 
-/* ServePoint headings — bold geometric sans (NOT italic; that is Tessera) */
+/* ServePoint headings — Poppins SemiBold 600 (exact: headings are 600/24) */
 [data-theme="servepoint"] h1,
 [data-theme="servepoint"] h2,
 [data-theme="servepoint"] h3,
 [data-theme="servepoint"] .font-display {
-  font-family: 'Plus Jakarta Sans', 'Inter', system-ui, sans-serif !important;
+  font-family: 'Poppins', 'Plus Jakarta Sans', 'Inter', system-ui, sans-serif !important;
   font-style: normal !important;
-  font-weight: 700 !important;
-  letter-spacing: -0.02em !important;
+  font-weight: 600 !important;
+  letter-spacing: -0.01em !important;
 }
 
-/* --- 1. Warm cream canvases → ServePoint ivory --- */
+/* --- 1. Warm cream canvases → ServePoint ivory canvas --- */
 [data-theme="servepoint"] .bg-\[\#FFF9F2\],
 [data-theme="servepoint"] .bg-\[\#FFFDFB\],
 [data-theme="servepoint"] .bg-\[\#FFFDF9\],
@@ -1060,91 +1063,92 @@
 [data-theme="servepoint"] .bg-\[\#F5EBE1\],
 [data-theme="servepoint"] .bg-\[\#F3ECE4\],
 [data-theme="servepoint"] .bg-\[\#EFE8E1\] {
-  background-color: #F2EFE5 !important;
+  background-color: #F6F5F2 !important;
 }
 
-/* --- 2. White cards stay white but gain the ServePoint card treatment --- */
+/* --- 2. White cards stay white (Bills detail pane language) --- */
 [data-theme="servepoint"] .bg-white {
   background-color: #FFFFFF !important;
-  border-color: #E7E2D2 !important;
-  box-shadow: 0 10px 30px -14px rgba(23, 64, 46, 0.16);
+  border-color: #E3E7E0 !important;
+  box-shadow: 0 10px 30px -14px rgba(15, 61, 62, 0.14);
 }
 
-/* --- 3. Inset / secondary surfaces → warm inset --- */
+/* --- 3. Inset / secondary surfaces → signature SAGE (#D9E2DD) --- */
 [data-theme="servepoint"] .bg-\[\#F5F0EB\],
 [data-theme="servepoint"] .bg-\[\#E9E0D6\],
 [data-theme="servepoint"] .bg-\[\#FFF1E6\] {
-  background-color: #EFEDE0 !important;
+  background-color: #D9E2DD !important;
 }
 
-/* --- 4. Text hierarchy: stone → forest green --- */
+/* --- 4. Text hierarchy: stone → ServePoint near-black/greys (exact) --- */
 [data-theme="servepoint"] .text-\[\#1C1917\],
 [data-theme="servepoint"] .text-\[\#0C0A09\],
 [data-theme="servepoint"] .text-stone-900 {
-  color: #17402E !important;
+  color: #1A1A1A !important;
 }
 [data-theme="servepoint"] .text-\[\#57534E\],
 [data-theme="servepoint"] .text-stone-600 {
-  color: #5F6D63 !important;
+  color: #6B6B6B !important;
 }
 [data-theme="servepoint"] .text-\[\#A8A29E\],
 [data-theme="servepoint"] .text-stone-400 {
-  color: #8B968C !important;
+  color: #969696 !important;
 }
 
-/* --- 5. Orange accent → ServePoint amber --- */
+/* --- 5. Orange accent → ServePoint GOLD (#B88E2F / pressed #967221) --- */
 [data-theme="servepoint"] .text-\[\#F97316\],
 [data-theme="servepoint"] .text-\[\#FB923C\],
 [data-theme="servepoint"] .text-orange-600 {
-  color: #D89430 !important;
+  color: #967221 !important;
 }
 [data-theme="servepoint"] .bg-\[\#F97316\],
 [data-theme="servepoint"] .bg-orange-600 {
-  background-color: #E9A63C !important;
+  background-color: #B88E2F !important;
 }
 [data-theme="servepoint"] .border-\[\#F97316\] {
-  border-color: #E9A63C !important;
+  border-color: #B88E2F !important;
 }
 [data-theme="servepoint"] .text-\[\#B45309\] {
-  color: #B0761F !important;
+  color: #967221 !important;
 }
 [data-theme="servepoint"] .bg-\[\#FFF1E6\] {
-  background-color: rgba(233, 166, 60, 0.14) !important;
+  background-color: rgba(184, 142, 47, 0.14) !important;
 }
 
-/* --- 6. Borders → warm hairline --- */
+/* --- 6. Borders → sage hairline --- */
 [data-theme="servepoint"] .border-\[\#E9E0D6\],
 [data-theme="servepoint"] .border-\[\#D5C9BD\],
 [data-theme="servepoint"] .border-\[\#F5F0EB\] {
-  border-color: #E7E2D2 !important;
+  border-color: #E3E7E0 !important;
 }
 
-/* --- 7. Scrollbar --- */
+/* --- 7. Scrollbar — sage thumb, gold hover --- */
 [data-theme="servepoint"] ::-webkit-scrollbar-thumb {
-  background: #D8D2BE;
+  background: #D9E2DD;
 }
 [data-theme="servepoint"] ::-webkit-scrollbar-thumb:hover {
-  background: #E9A63C;
+  background: #B88E2F;
 }
 
 /* --- ServePoint utilities --- */
-/* Amber CTA — the ServePoint action button (mirrors tessera-cta ergonomics) */
+/* Gold CTA — exact Primary Button: #B88E2F bg, #1A1A1A text, Poppins 500,
+   radius 12, pressed variant #967221 (from "05 Components") */
 .sp-cta {
-  background: #E9A63C;
-  color: #17402E;
-  font-weight: 700;
+  background: #B88E2F;
+  color: #1A1A1A;
+  font-weight: 500;
   border-radius: 0.75rem;
-  box-shadow: 0 6px 16px -6px rgba(233, 166, 60, 0.55);
+  box-shadow: 0 6px 16px -6px rgba(184, 142, 47, 0.55);
   transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
 }
 .sp-cta:hover {
-  background: #F0B14A;
+  background: #967221;
   transform: translateY(-1px);
-  box-shadow: 0 10px 22px -8px rgba(233, 166, 60, 0.65);
+  box-shadow: 0 10px 22px -8px rgba(184, 142, 47, 0.65);
 }
 .sp-cta:active {
   transform: translateY(1px);
-  box-shadow: 0 3px 10px -4px rgba(233, 166, 60, 0.5);
+  box-shadow: 0 3px 10px -4px rgba(184, 142, 47, 0.5);
 }
 .sp-cta:disabled {
   opacity: 0.5;
@@ -1152,32 +1156,39 @@
   box-shadow: none;
 }
 
-/* Deep forest sidebar panel (ServePoint shell) */
+/* Deep teal sidebar panel — exact "Side bar" component fill #0F3D3E */
 .sp-sidebar {
-  background: linear-gradient(180deg, #17402E 0%, #0F2E21 100%);
-  color: #F2EFE5;
+  background: linear-gradient(180deg, #0F3D3E 0%, #0B3132 100%);
+  color: #F6F5F2;
 }
 
-/* Amber banner (category hero, e.g. "BURGERS") */
+/* Gold banner (category hero, e.g. "BURGERS") — selected-card language */
 .sp-banner {
-  background: linear-gradient(120deg, #E9A63C 0%, #F0B14A 100%);
-  color: #17402E;
+  background: linear-gradient(120deg, #B88E2F 0%, #C79B37 100%);
+  color: #1A1A1A;
 }
 
-/* Ghost button on ivory */
+/* Ghost button on ivory — hover migrates to gold ring (exact border lang) */
 .sp-ghost {
-  border: 1px solid #E7E2D2;
+  border: 1px solid #E3E7E0;
   background: #FFFFFF;
-  color: #17402E;
+  color: #1A1A1A;
   transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
 }
 .sp-ghost:hover {
-  border-color: #E9A63C;
-  box-shadow: 0 6px 16px -8px rgba(23, 64, 46, 0.25);
+  border-color: #B88E2F;
+  box-shadow: 0 6px 16px -8px rgba(15, 61, 62, 0.25);
 }
 
-/* --- ServePoint: dark stone chips/strips → deep forest green (sidebar language) --- */
+/* Sage surface utility — for new ServePoint-native components
+   (category cards, search inputs, user card: all #D9E2DD in the Figma) */
+.sp-surface {
+  background: #D9E2DD;
+  color: #1A1A1A;
+}
+
+/* --- ServePoint: dark stone chips/strips → deep teal (exact #0F3D3E) --- */
 [data-theme="servepoint"] .bg-\[\#1C1917\],
 [data-theme="servepoint"] .bg-\[\#0C0A09\] {
-  background-color: #17402E !important;
+  background-color: #0F3D3E !important;
 }

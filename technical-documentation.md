@@ -1,7 +1,7 @@
 # TSOS Technical Documentation & Architecture Specification
 
 - **System**: TSOS (The Cafe Operating System)
-- **Version**: 2.6.6
+- **Version**: 2.6.7
 - **Architect**: Lead Full-Stack Security & Platform Architect
 - **Updated**: October 1, 2026
 
@@ -189,14 +189,14 @@ Tessera is the **default theme** as of v2.6.0, inspired by [uiverse.io/ui-kits/t
 - **Designated future login artwork**: *Free 75 Illustrations — Surface Pack* (Figma Community). Wiring plan (left brand panel, Tessera-tinted decorative layer) documented in [ADR-0010](docs/decisions/0010-login-screen-design-freeze-and-design-system-directives.md); the sandbox is CloudFront-blocked from figma.com (HTTP 403, verified 2026-10-01), so assets arrive via owner export into `src/assets/illustrations/`.
 - **Post-login component reference**: *shadcn/ui Design System* (Figma Community) — dark/light mode, buttons, forms. TSOS already implements the shadcn CSS-variable token architecture; Tessera rides on it as the default dark skin. Explicit-Tessera surfaces completed: Header, WebNavbar, POS menu + cart, KDS, Payment/Variant modals, **OrdersScreen (v2.6.5)**; remaining: SuperAdmin, Storefront/OrderTracking, Customers, Inventory, Menu, Tables, Offers, Shifts, Settings, PrintLogsSection.
 
-### 6.6 ServePoint Theme (v2.6.6 — Owner Figma, ADR-0011)
-- **Source**: owner's ServePoint POS Preview Figma (cover thumbnail archived at `docs/design/servepoint/cover-thumbnail.webp`; app pages CloudFront-403, REST API needs `FIGMA_TOKEN` — paths in ADR-0011).
-- **Tokens**: ivory canvas `#F2EFE5` · surface white `#FFFFFF` (`.bg-white` cards gain soft forest shadows: `0 10px 30px -14px rgba(23,64,46,0.16)`) · inset `#EFEDE0` · divider `#E7E2D2` · forest primary `#17402E` (deep `#0F2E21`) · amber accent `#E9A63C` (hover `#D89430`, soft 16%) · text secondary `#5F6D63` / muted `#8B968C`.
-- **Typography**: Plus Jakarta Sans 700 headings (geometric, **not** italic — the Tessera contrast), Inter fallback; imported in `index.html`.
-- **Activation**: `[data-theme="servepoint"]` token + remap layer in `src/index.css` (mirrors the Tessera remap architecture: creams→ivory, stone→forest text, orange→amber accent, dark-stone strips→forest `#17402E`). Default ThemeMode for the authenticated app; stored `tessera` one-time-migrates. Toggle cycles `servepoint → tessera → dark`.
+### 6.6 ServePoint Theme (v2.6.6 — Owner Figma, ADR-0011; exact tokens since v2.6.7, ADR-0012)
+- **Source**: owner's ServePoint POS Preview Figma. **Since v2.6.7 the design source is unlocked and archived in-repo** (ADR-0012): owner-provided `FIGMA_TOKEN` (stored in `.env` + `render.yaml`) opened the REST API — all 6 pages explored, **all 57 "04 Final UI" frames rendered to PNG** at `docs/design/servepoint/frames/` + 6 page overviews at `docs/design/servepoint/pages/`. The v2.6.6 cover-thumbnail estimates are superseded by node-fill mining of "04 Final UI" + "05 Components".
+- **EXACT tokens (v2.6.7)**: ivory canvas `#F6F5F2` · signature **sage surface `#D9E2DD`** (cards, search inputs, sidebar user card) · white detail cards `#FFFFFF` + soft teal shadow `0 10px 30px -14px rgba(15,61,62,0.14)` · **deep-teal primary `#0F3D3E`** (sidebar, dark CTAs) · **gold accent `#B88E2F`, pressed `#967221`** (Primary Button variants) · text `#1A1A1A` / `#6B6B6B` / `#969696` · danger `#DC2626` · hairline `#E3E7E0` · radii 12 buttons/inputs · 16 cards · 24 large · 100 pills.
+- **Typography**: **Poppins** — 400/16 body, 500/16 buttons/labels, 600/24 headings, 500/20 sub-heads, 400/12 captions (mined from TEXT styles); imported in `index.html`.
+- **Activation**: `[data-theme="servepoint"]` token + remap layer in `src/index.css` (creams→ivory, stone→near-black text, orange→gold accent, dark-stone strips→deep teal `#0F3D3E`, inset surfaces→sage `#D9E2DD`). Default ThemeMode for the authenticated app; stored `tessera` one-time-migrates. Toggle cycles `servepoint → tessera → dark`.
 - **Auth-scoped pinning**: `App.tsx` sets `data-theme="tessera"` whenever `!authSession || isAuthLoading` (frozen login ADR-0010 + public storefront keep their approved Tessera environment; zero AuthScreen edits). ServePoint tokens apply only to the authenticated document.
-- **Utilities**: `.sp-cta` (amber CTA, hover-lift/press-sink, mirrors `tessera-cta` ergonomics), `.sp-sidebar` (forest gradient panel), `.sp-banner` (amber gradient category hero), `.sp-ghost` (white/ivory bordered button).
-- **Explicit surfaces so far**: Header (amber brand block, sp-cta Fast PIN), WebNavbar (amber active tab + baseline marker, soft-shadow dropdown). Remaining surfaces approximate ServePoint via the remap layer until their explicit pass (roadmap in ADR-0011).
+- **Utilities**: `.sp-cta` (EXACT Primary Button: gold `#B88E2F`, near-black text, Poppins 500, r12, hover `#967221`), `.sp-sidebar` (deep-teal `#0F3D3E` panel), `.sp-banner` (gold gradient category hero), `.sp-ghost` (white button, gold hover ring), `.sp-surface` (sage surface, new v2.6.7).
+- **Explicit surfaces so far**: Header (gold brand block, sp-cta Fast PIN), WebNavbar (gold active tab + baseline marker, soft-shadow dropdown, sage dropdown hover), **PosScreen menu cards (v2.6.7 — sage card, gold Add CTA, near-black text, `#C9D3CC` divider, `#DC2626` low-stock badge)**. Remaining surfaces approximate ServePoint via the remap layer until their explicit pass (roadmap in ADR-0011).
 
 ### 6.5.1 Theme Token Specifications
 

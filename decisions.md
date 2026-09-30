@@ -112,6 +112,15 @@
 
 ---
 
+## ADR 0012 — Figma REST Pipeline & Exact ServePoint Design Tokens
+- **Context**: ADR-0011's token set was estimated from an 800×450 cover thumbnail (CloudFront blocked the app pages). The owner then supplied a **Figma PAT** (`file_content:read`, instructed into the env/render pipeline) and uploaded 4 local UI kits (Dae Alright! RAR, two fig-kiwi v4 `.fig` files, one `.sketch`).
+- **Decision**: Store the PAT verbatim in `.env` (gitignored) and wire Render via `sync: false` — GitHub Push Protection (GH013) classifies Figma PATs as protected secrets and rejects pushes containing them, so the value cannot be committed. Mine the **exact** tokens from "04 Final UI" + "05 Components" node fills — canvas `#F6F5F2`, deep teal `#0F3D3E`, gold `#B88E2F`/`#967221`, **sage `#D9E2DD`**, text `#1A1A1A`/`#6B6B6B`/`#969696`, **Poppins**, radii 12/16/24/100 — replacing every v2.6.6 estimate. Render **all 57 Final UI frames + 6 page overviews to PNG** and archive at `docs/design/servepoint/` so future work needs no live Figma access. Re-token the `servepoint` CSS layer, Header/WebNavbar branches, and give PosScreen menu cards an explicit Figma-faithful branch. Triage uploads: RAR/sketch = layout reference; fig-kiwi v4 = documented dead end (below fig2sketch v15; carving yields chunk-internal buffers).
+- **Alternatives rejected**: Keeping thumbnail estimates (measurable infidelity); committing the PAT to Git (GitHub Push Protection GH013 rejects Figma PATs — platform-enforced, non-negotiable); waiting for owner screen exports (PAT makes them unnecessary for ServePoint).
+- **Consequences**: ✅ Pixel-sourced design language, in-repo design corpus, faster faithful screen passes. ⚠️ PAT kept out of Git by platform rule (`.env` + Render env; rotate = update `.env`, re-paste in Render). ADR-0010 freeze unaffected (login re-verified pixel-identical).
+- **Full ADR**: [docs/decisions/0012-figma-rest-pipeline-and-exact-servepoint-tokens.md](docs/decisions/0012-figma-rest-pipeline-and-exact-servepoint-tokens.md) · Frame archive at [docs/design/servepoint/frames/](docs/design/servepoint/frames/)
+
+---
+
 ## Decision-Making Framework
 - All ADRs follow: **Context** (problem) → **Decision** (choice) → **Alternatives rejected** → **Consequences** (positive + negative).
 - Statuses: `Proposed` → `Accepted` → `Deprecated` → `Superseded`.
