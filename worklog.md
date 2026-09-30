@@ -290,3 +290,28 @@ Unresolved Issues / Risks / Next-phase Priorities:
 2. Realtime POS→KDS end-to-end verification still open.
 3. Next Tessera surfaces: OrdersScreen, SuperAdmin dashboard, Storefront/OrderTracking, then Customers/Inventory/Menu/Tables/Offers/Shifts/Settings.
 4. Menu builder mutations still local-only; no automated tests yet.
+
+---
+Task ID: 9
+Agent: glm-5.3
+Task: OrdersScreen explicit Tessera redesign + record owner design directives as ADR-0010 (login screen FROZEN; Surface Pack illustrations reserved for login; shadcn/ui design system reference post-login)
+
+Work Log:
+- QA sweep first: OrdersScreen/SuperAdmin/Storefront status via agent-browser. Investigated a suspected syntax error in OrdersScreen.tsx line 32 ("const anualPrintOrder, setManualPrintOrder]") — od byte-dump proved the file is correct (`const [manualPrintOrder, ...`); the [m byte-pair is swallowed by the tool-transport ANSI scrubber. Display artifact only — NOT a bug. (Note for future agents: use od -c to verify suspected character loss.)
+- OrdersScreen Tessera redesign (explicit isTessera conditionals; warm styling preserved): sub-nav tabs (Orders Directory / Print Logs) as uppercase tracked pills — active chartreuse tessera-block, inactive forest ghost with tinted count pills; failed-print err badge to status palette; forest-inset search input with chartreuse focus ring; status filter pills chartreuse-active / forest-chip; orders table card as tessera-block on #0F1D17 with forest header, #1F3D2E dividers, #142620 hover, mono order numbers, serif-italic customer names, chartreuse mono totals, status-palette badges (new orange / preparing purple / ready emerald / completed muted / cancelled rose), loyalty chips, payment icons, ghost action buttons, editorial serif-italic empty state.
+- Verified: npx tsc --noEmit → 0 errors; browser E2E — status filter click, Print Logs tab round-trip, zero console errors; screenshots reviewed.
+- Owner design directives received (Figma links): (1) Surface Pack illustrations for login, (2) shadcn/ui Design System for post-login, (3) login UI liked + FROZEN until explicit unfreeze — document it.
+- Attempted Figma access via agent-browser: CloudFront 403 (sandbox blocked from figma.com). Documented asset-export path (owner exports SVG/PNG → src/assets/illustrations/) in the ADR.
+- Authored ADR-0010: docs/decisions/0010-login-screen-design-freeze-and-design-system-directives.md + indexed in docs/decisions/README.md + summarized in decisions.md. Freeze pinned to commit 5f38efc (v2.6.4). Governance rule: automated redesign passes skip AuthScreen.tsx; forced crash-fixes there must be visual-neutral and logged.
+- Updated all 7 root docs: CHANGELOG.md (v2.6.5 entry), README.md (theme section governance line), technical-documentation.md (version + §6.5.0 Design Governance), business-documentation.md (version), decisions.md (ADR-0010 summary), compact.md (version + Design Governance line + v2.6.5 shipped paragraph), help.md (freeze warning in Theme Appearance).
+
+Stage Summary:
+- v2.6.5 shipped: OrdersScreen fully Tessera (8th explicit surface) + ADR-0010 design governance.
+- LOGIN SCREEN FROZEN: AuthScreen.tsx must not change until the owner explicitly says so. Surface Pack illustrations = future login artwork (blocked from fetching; owner exports assets). shadcn/ui Design System = post-login component reference.
+- Next surfaces: SuperAdmin → Storefront/OrderTracking → PrintLogsSection → Customers/Inventory/Menu/Tables/Offers/Shifts/Settings.
+
+Unresolved Issues / Risks / Next-phase Priorities:
+1. customers + offers live tables still 404 to anon (needs migration 001 DDL re-run).
+2. Realtime POS→KDS end-to-end verification still open.
+3. Figma assets unreachable from sandbox — owner export needed when login unfreezes.
+4. Menu builder mutations still local-only; no automated tests yet.

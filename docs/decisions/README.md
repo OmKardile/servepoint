@@ -17,6 +17,7 @@ This directory documents all key architectural decisions made in the development
 | **[ADR 0007](0007-remove-hardware-hub-and-cancel-native-apps.md)** | Removal of Hardware Hub, Freezing Windows for Electron & Browser QR Ordering | Accepted | 2026-09-25 |
 | **[ADR 0008](0008-cloud-deployment-render-and-vercel.md)** | Multi-Platform Cloud Deployment via Render Static Sites and Vercel Edge | Accepted | 2026-09-25 |
 | **[ADR 0009](0009-role-based-access-control-and-route-guards.md)** | Role-Based Access Control (RBAC), Tab Filtering, and Route Guards | Accepted | 2026-09-25 |
+| **[ADR 0010](0010-login-screen-design-freeze-and-design-system-directives.md)** | Login Screen Design Freeze & Design System Directives (Surface Pack illustrations reserved for login; shadcn/ui reference post-login) | Accepted | 2026-10-01 |
 
 ---
 

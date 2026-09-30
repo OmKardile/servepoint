@@ -1,7 +1,7 @@
 # TSOS Technical Documentation & Architecture Specification
 
 - **System**: TSOS (The Cafe Operating System)
-- **Version**: 2.6.4
+- **Version**: 2.6.5
 - **Architect**: Lead Full-Stack Security & Platform Architect
 - **Updated**: October 1, 2026
 
@@ -183,6 +183,11 @@ Managed centrally in `src/lib/store.ts` via `isObsidianMode` state and toggled v
 ## 6.5 Tessera Theme (v2.6.0 — Editorial Dark / Forest + Chartreuse)
 
 Tessera is the **default theme** as of v2.6.0, inspired by [uiverse.io/ui-kits/tessera](https://uiverse.io/ui-kits/tessera). It is an editorial dark design system pairing italic serif headlines with crisp sans body, deep forest surfaces, and a vivid chartreuse action accent. Signature 3D isometric block motifs add volume and rhythm.
+
+### 6.5.0 Design Governance (v2.6.5 — ADR-0010)
+- **Login screen FROZEN**: `src/components/auth/AuthScreen.tsx` is owner-approved as-is at v2.6.4 (commit `5f38efc`). No visual/structural/copy changes until an explicit owner unfreeze — automated redesign passes must skip this file (forced crash-fixes must be visual-neutral and logged in the worklog).
+- **Designated future login artwork**: *Free 75 Illustrations — Surface Pack* (Figma Community). Wiring plan (left brand panel, Tessera-tinted decorative layer) documented in [ADR-0010](docs/decisions/0010-login-screen-design-freeze-and-design-system-directives.md); the sandbox is CloudFront-blocked from figma.com (HTTP 403, verified 2026-10-01), so assets arrive via owner export into `src/assets/illustrations/`.
+- **Post-login component reference**: *shadcn/ui Design System* (Figma Community) — dark/light mode, buttons, forms. TSOS already implements the shadcn CSS-variable token architecture; Tessera rides on it as the default dark skin. Explicit-Tessera surfaces completed: Header, WebNavbar, POS menu + cart, KDS, Payment/Variant modals, **OrdersScreen (v2.6.5)**; remaining: SuperAdmin, Storefront/OrderTracking, Customers, Inventory, Menu, Tables, Offers, Shifts, Settings, PrintLogsSection.
 
 ### 6.5.1 Theme Token Specifications
 

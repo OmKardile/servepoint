@@ -15,7 +15,8 @@
 
 ## 🎨 Theme Appearance
 
-- **Tessera** (editorial dark, forest + chartreuse) is the **default** theme since v2.6.0; since v2.6.1 the header, navbar, POS and KDS carry full Tessera styling.
+- **Tessera** (editorial dark, forest + chartreuse) is the **default** theme since v2.6.0; since v2.6.1 the header, navbar, POS and KDS carry full Tessera styling; since v2.6.5 the OrdersScreen does too.
+- **⚠️ Login screen is FROZEN (ADR-0010)**: the login screen is owner-approved as-is — no changes (including the reserved Surface Pack illustrations) until the owner explicitly unfreezes it. See [`decisions.md`](decisions.md) ADR-0010.
 - The header **Dark Mode** button cycles `tessera ↔ dark`. The warm-cream and obsidian themes remain available to developers via `setThemeMode('warm' | 'obsidian')` (Zustand store).
 - Selection persists in `localStorage` under `tsos_theme_mode`. Clearing that key restores the Tessera default.
 

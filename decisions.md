@@ -94,6 +94,15 @@
 
 ---
 
+## ADR 0010 — Login Screen Design Freeze & Design System Directives
+- **Context**: Owner issued standing design directives (2026-10-01) with two Figma Community references: the *Free 75 Illustrations — Surface Pack* is the designated artwork source for the **login surface**, and the *shadcn/ui Design System* is the component reference for **everything after login** (dark/light mode, buttons, etc.). Simultaneously: *"I liked login screen UI — keep it like that; freeze it until I explicitly say so to change it."*
+- **Decision**: **Login screen (`src/components/auth/AuthScreen.tsx`) is FROZEN at its v2.6.4 state (commit `5f38efc`)** — no visual/structural/copy changes by any agent until an explicit owner unfreeze. Surface Pack illustrations are the *recorded future direction* for login (wiring plan documented in the full ADR; sandbox is CloudFront-blocked from figma.com, so the owner exports assets when ready). Post-login surfaces continue the Tessera loop with shadcn/ui-aligned anatomy (OrdersScreen completed this round; remaining: SuperAdmin, Storefront, Customers, Inventory, Menu, Tables, Offers, Shifts, Settings, PrintLogsSection).
+- **Alternatives rejected**: Wiring illustrations in now (violates the freeze); applying the shadcn reference to login too (owner scoped it post-login); generating substitute illustrations (wrong pack/licensing).
+- **Consequences**: ✅ Approved login UI is stable and pinned. ✅ Clear governance — automated redesign passes skip AuthScreen; any forced hotfix there must be visual-neutral and logged. ⚠️ Login stays illustration-free until unfreeze + asset hand-off.
+- **Full ADR**: [docs/decisions/0010-login-screen-design-freeze-and-design-system-directives.md](docs/decisions/0010-login-screen-design-freeze-and-design-system-directives.md)
+
+---
+
 ## Decision-Making Framework
 - All ADRs follow: **Context** (problem) → **Decision** (choice) → **Alternatives rejected** → **Consequences** (positive + negative).
 - Statuses: `Proposed` → `Accepted` → `Deprecated` → `Superseded`.

@@ -3,12 +3,13 @@
 > **Purpose**: Single-page dense summary of the current TSOS project state, for fast cold re-onboarding by any agent or contributor. Updated alongside every code change. For full chronological detail, see [`docs/compacts/`](docs/compacts/README.md) (7 compacts) and [`worklog.md`](worklog.md) (live agent handover).
 
 - **Project**: TSOS — The Cafe Operating System
-- **Version**: 2.6.4
+- **Version**: 2.6.5
 - **Repo**: https://github.com/OmKardile/tsos-alt
 - **Author**: Omkar Kardile <omkardile84@gmail.com>
 - **Last Updated**: 2026-10-01
-- **Default Theme**: Tessera (editorial dark / forest + chartreuse) — see [`CHANGELOG.md`](CHANGELOG.md) v2.6.0–v2.6.4
+- **Default Theme**: Tessera (editorial dark / forest + chartreuse) — see [`CHANGELOG.md`](CHANGELOG.md) v2.6.0–v2.6.5
 - **Render Blueprint**: `render.yaml` → Static Site **`tsos-pos`** (v2.6.3 hardened; v2.6.4 re-hardcoded live Supabase keys — zero-touch apply)
+- **Design Governance**: **Login screen FROZEN** at v2.6.4 (ADR-0010) — no changes until owner unfreezes; Surface Pack illustrations reserved for login; shadcn/ui Design System is the post-login component reference
 
 ---
 
@@ -79,6 +80,8 @@ npm run dev   # or bun run dev
 
 ## Recent activity (live agent handover)
 See [`worklog.md`](worklog.md) for the chronological agent work log.
+
+**v2.6.5 (2026-10-01) shipped**: **OrdersScreen explicit Tessera + design governance (ADR-0010)** — Orders tabs as uppercase chartreuse `tessera-block` pills with forest-ghost inactive state; forest-inset search with chartreuse focus ring; status pills chartreuse-active/forest-chip; orders table as `tessera-block` card with serif-italic customer names, chartreuse mono totals, status-palette badges/chips/icons, ghost action buttons, editorial empty state. Warm styling untouched via `isTessera` conditionals. **Owner directives recorded as ADR-0010: login screen (`AuthScreen.tsx`) FROZEN at v2.6.4 (commit 5f38efc) until explicit unfreeze — Surface Pack (Figma Community) illustrations are the future login artwork, shadcn/ui Design System (Figma Community) is the post-login component reference; sandbox is CloudFront-blocked from figma.com (403 verified), asset-export path documented.** Verified: tsc 0 errors; browser E2E filter/tab round-trip clean.
 
 **v2.6.4 (2026-10-01) shipped**: **Live credentials re-hardcoded (owner decision)** — `render.yaml` `VITE_SUPABASE_URL`/`VITE_SUPABASE_ANON_KEY` restored to hardcoded values (reverting v2.6.3's `sync: false` prompt flow → zero-touch blueprint apply); `src/lib/supabase.ts` now embeds the live URL + public anon key as fallback defaults (was a fake `demo-tsos-project` key that silently forced offline-resilient mode when env vars were missing); `import.meta.env` overrides still take precedence; `isSupabaseConfigured()` evaluates resolved constants. Rationale: anon key is public (RLS-protected, not secret); hardcoding kills the "deployed build silently offline" failure class. `service_role` key still forbidden client-side. All other v2.6.3 blueprint hardening untouched. Verified: `tsc --noEmit` 0 errors; browser E2E shows Cloud Synced (24 ms) live session.
 
