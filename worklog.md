@@ -315,3 +315,28 @@ Unresolved Issues / Risks / Next-phase Priorities:
 2. Realtime POS→KDS end-to-end verification still open.
 3. Figma assets unreachable from sandbox — owner export needed when login unfreezes.
 4. Menu builder mutations still local-only; no automated tests yet.
+
+---
+Task ID: 10
+Agent: glm-5.3
+Task: Adopt owner's ServePoint POS Figma UI as the default post-login design (ADR-0011) — "refer this UI from my figma; explore all pages; use this ui" — while preserving the ADR-0010 login freeze
+
+Work Log:
+- Figma access battle: curl + agent-browser → CloudFront 403 on app pages; REST API 403 without PAT; page_reader (SDK remote egress) fetched the app shell (canvas-rendered, no static content); **file cover thumbnail retrieved via the thumbnail-CDN redirect (800×450 WebP)** and analyzed; embed route 403s on its internal redirect. Thumbnail archived at docs/design/servepoint/cover-thumbnail.webp. Design language extracted: ivory #F2EFE5, forest #17402E, amber #E9A63C, white cards + soft shadows, Plus Jakarta Sans, warm hairlines #E7E2D2.
+- Implemented servepoint theme end-to-end: types.ts ThemeMode + 'servepoint'; store.ts default = servepoint with one-time migration of stored 'tessera' (agent-imposed default, never owner-chosen); toggle cycle servepoint→tessera→dark; App.tsx auth-scoped theme pinning — document FORCE-PINNED to tessera while !authSession || isAuthLoading (frozen login keeps its exact approved environment, ZERO AuthScreen.tsx edits; git log confirms AuthScreen untouched since v2.6.0).
+- index.css: [data-theme="servepoint"] token layer + remaps (creams→ivory, bg-white→white + ServePoint shadow, stone→forest text, orange→amber, #1C1917 strips→forest, Plus Jakarta Sans bold non-italic headings, amber scrollbar) + sp-cta/sp-sidebar/sp-banner/sp-ghost utilities. index.html: Plus Jakarta Sans import.
+- Explicit chrome: Header (amber TSOS brand block, ivory blur bar, sp-cta Fast PIN, forest/amber model line), WebNavbar (amber active tabs + baseline marker, ServePoint badges, soft-shadow More dropdown). POS ribbon converts to forest green via remap.
+- Freeze verification: cleared localStorage → logged-out login screenshot → pixel-identical frozen Tessera (forest bg, chartreuse logo, italic serif title) ✓; logged back in via Owner one-click; theme cycle round-trip servepoint→tessera→dark→servepoint verified in browser with all themes intact.
+- Caught + fixed a real freeze violation before shipping: the ServePoint h1 typography rule would have restyled AuthScreen's <h1> — solved via the auth-scoped tessera pin instead of touching the frozen file. Also fixed isAuthLoading TDZ (declaration moved above the effect) and a sandbox auto-commit of OrdersScreen (folded into a proper commit).
+- Docs: ADR-0011 (full + index + decisions.md summary), CHANGELOG 2.6.6, compact.md (version/theme/governance lines + shipped paragraph), technical-documentation.md (version + §6.6 ServePoint section), business-documentation.md, README §5 rewritten, help.md theme section, worklog (this entry).
+
+Stage Summary:
+- v2.6.6 shipped: ServePoint (owner's own Figma) is the default authenticated theme; login remains pixel-frozen in Tessera; tessera/dark/warm/obsidian all preserved and reachable. Verified tsc 0 errors + full browser E2E.
+- Figma fidelity blocker documented: FIGMA_TOKEN in .env (REST API → all pages' trees + renders) or owner-exported screenshots into docs/design/servepoint/. Cover thumbnail is the interim source of truth.
+- Next: explicit ServePoint passes — POS menu cards + amber category banner (sp-banner), CartDrawer, Reports/SuperAdmin dashboards (line + donut charts, stat chips per the cover), remaining screens; optional FIGMA_TOKEN unlock for pixel-exact pages.
+
+Unresolved Issues / Risks / Next-phase Priorities:
+1. customers + offers live tables still 404 to anon (migration 001 DDL re-run needed).
+2. Realtime POS→KDS end-to-end verification still open.
+3. Figma full-page access blocked (needs FIGMA_TOKEN or exports) — documented in ADR-0011.
+4. Menu builder mutations still local-only; no automated tests.

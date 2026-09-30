@@ -103,6 +103,15 @@
 
 ---
 
+## ADR 0011 — ServePoint UI Adoption (Owner Figma)
+- **Context**: Owner directed (*"refer this UI from my figma; explore all pages; use this ui"*) with their **ServePoint POS Preview** Figma file. Sandbox is blocked from Figma app pages (403) and the REST API needs a PAT; the file's cover thumbnail WAS reachable and yielded the full design language: ivory canvas `#F2EFE5`, white rounded cards with soft shadows, deep forest-green primary `#17402E`, amber accent `#E9A63C`, Plus Jakarta Sans headings.
+- **Decision**: New **`servepoint` ThemeMode is the default for the authenticated app** (stored `tessera` one-time-migrated; toggle cycles servepoint → tessera → dark). **Unauthenticated document stays force-pinned to Tessera** in App.tsx (login frozen per ADR-0010, zero AuthScreen edits). Implemented via a `[data-theme="servepoint"]` token + remap layer (mirroring the Tessera architecture) + `sp-cta/sp-sidebar/sp-banner/sp-ghost` utilities + explicit Header/WebNavbar branches. Figma access paths documented (PAT in `.env` or exported screenshots) for pixel-exact page passes.
+- **Alternatives rejected**: Restyling Tessera in place (destroys the approved dark theme + frozen login); applying ServePoint to unauthenticated routes (violates the freeze); waiting for full Figma access (cover carries the complete token set).
+- **Consequences**: ✅ App wears the owner's own design; login untouched; all prior themes intact. ⚠️ Non-explicit surfaces approximate ServePoint via remaps until their pass. ⚠️ Full-page fidelity blocked on Figma PAT or exports.
+- **Full ADR**: [docs/decisions/0011-servepoint-ui-adoption.md](docs/decisions/0011-servepoint-ui-adoption.md) · Cover thumbnail archived at [docs/design/servepoint/cover-thumbnail.webp](docs/design/servepoint/cover-thumbnail.webp)
+
+---
+
 ## Decision-Making Framework
 - All ADRs follow: **Context** (problem) → **Decision** (choice) → **Alternatives rejected** → **Consequences** (positive + negative).
 - Statuses: `Proposed` → `Accepted` → `Deprecated` → `Superseded`.

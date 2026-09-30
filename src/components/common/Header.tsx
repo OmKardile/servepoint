@@ -49,6 +49,7 @@ export const Header: React.FC<HeaderProps> = ({ onSignOut }) => {
   const roleMeta = getRoleMeta(currentProfile?.role);
   const isDark = themeMode === 'dark' || themeMode === 'obsidian';
   const isTessera = themeMode === 'tessera';
+  const isServepoint = themeMode === 'servepoint';
 
   // Tessera role avatar palette (status colors tuned for forest)
   const roleAvatarClass =
@@ -98,7 +99,11 @@ export const Header: React.FC<HeaderProps> = ({ onSignOut }) => {
     <>
       <header
         className={`border-b sticky top-0 z-40 ${
-          isTessera ? 'bg-[#0A1410] border-[#1F3D2E]' : 'bg-white border-[#E9E0D6] shadow-xs'
+          isServepoint
+            ? 'bg-[#F2EFE5]/95 backdrop-blur border-[#E7E2D2] shadow-[0_4px_20px_-12px_rgba(23,64,46,0.25)]'
+            : isTessera
+              ? 'bg-[#0A1410] border-[#1F3D2E]'
+              : 'bg-white border-[#E9E0D6] shadow-xs'
         }`}
       >
         {/* SuperAdmin Impersonation Banner */}
@@ -135,17 +140,19 @@ export const Header: React.FC<HeaderProps> = ({ onSignOut }) => {
         <div className="px-4 py-2 bg-inherit flex flex-wrap items-center justify-between gap-3 text-xs">
           {/* Left: Brand & Outlet Switcher */}
           <div className="flex items-center gap-3">
-            {/* TSOS brand cube — Tessera signature chartreuse block with 3D offset shadow */}
+            {/* TSOS brand cube — ServePoint amber block (owner Figma) / Tessera chartreuse block */}
             <div
-              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full font-bold ${
-                isTessera
-                  ? 'bg-[#C5F82A] text-[#0A1410] tessera-block rounded-lg uppercase tracking-widest text-[11px]'
-                  : 'bg-[#1C1917] text-white shadow-xs rounded-full'
+              className={`flex items-center gap-1.5 px-2.5 py-1 font-bold ${
+                isServepoint
+                  ? 'bg-[#E9A63C] text-[#17402E] rounded-lg uppercase tracking-widest text-[11px] shadow-[0_4px_12px_-4px_rgba(233,166,60,0.6)]'
+                  : isTessera
+                    ? 'bg-[#C5F82A] text-[#0A1410] tessera-block rounded-lg uppercase tracking-widest text-[11px]'
+                    : 'bg-[#1C1917] text-white shadow-xs rounded-full'
               }`}
             >
               <span
                 className={`w-2 h-2 rounded-full animate-pulse ${
-                  isTessera ? 'bg-[#0A1410]' : 'bg-[#F97316]'
+                  isServepoint ? 'bg-[#17402E]' : isTessera ? 'bg-[#0A1410]' : 'bg-[#F97316]'
                 }`}
               />
               <span className="tracking-wide">TSOS</span>
@@ -176,20 +183,26 @@ export const Header: React.FC<HeaderProps> = ({ onSignOut }) => {
 
             <div
               className={`hidden lg:flex items-center gap-2 border-l pl-3 ${
-                isTessera ? 'text-[#6B8579] border-[#1F3D2E]' : 'text-[#78716C] border-[#E9E0D6]'
+                isServepoint ? 'text-[#5F6D63] border-[#E7E2D2]' : isTessera ? 'text-[#6B8579] border-[#1F3D2E]' : 'text-[#78716C] border-[#E9E0D6]'
               }`}
             >
               <span>
                 Tenant:{' '}
-                <strong className={isTessera ? 'text-[#F5F4EE] font-serif italic font-normal text-sm' : 'text-[#1C1917]'}>
+                <strong className={
+                  isServepoint
+                    ? 'text-[#17402E] font-bold'
+                    : isTessera
+                      ? 'text-[#F5F4EE] font-serif italic font-normal text-sm'
+                      : 'text-[#1C1917]'
+                }>
                   {currentTenant?.name || 'CoolKafe'}
                 </strong>
               </span>
-              <span className={isTessera ? 'text-[#2A4A37]' : 'text-[#D6D3D1]'}>|</span>
+              <span className={isServepoint ? 'text-[#D8D2BE]' : isTessera ? 'text-[#2A4A37]' : 'text-[#D6D3D1]'}>|</span>
               <span>
                 Model:{' '}
-                <strong className={isTessera ? 'text-[#34D399]' : 'text-[#15803D]'}>₹0/mo</strong> +{' '}
-                <strong className={isTessera ? 'text-[#C5F82A]' : 'text-[#F97316]'}>₹{feeConfig.per_order_fee}/order</strong>
+                <strong className={isServepoint ? 'text-[#17803D]' : isTessera ? 'text-[#34D399]' : 'text-[#15803D]'}>₹0/mo</strong> +{' '}
+                <strong className={isServepoint ? 'text-[#B0761F]' : isTessera ? 'text-[#C5F82A]' : 'text-[#F97316]'}>₹{feeConfig.per_order_fee}/order</strong>
               </span>
             </div>
           </div>
@@ -281,15 +294,17 @@ export const Header: React.FC<HeaderProps> = ({ onSignOut }) => {
               </button>
             )}
 
-            {/* Fast PIN Switch Button — Tessera primary CTA (chartreuse block) */}
+            {/* Fast PIN Switch Button — ServePoint amber CTA / Tessera chartreuse block */}
             <button
               type="button"
               onClick={() => setIsStaffPinOpen(true)}
               title="Switch Cashier or Barista Shift"
-              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl font-semibold text-xs transition-all ${
-                isTessera
-                  ? 'tessera-cta rounded-lg'
-                  : 'bg-[#FFF1E6] hover:bg-[#FFE4D1] text-[#C2410C] border border-[#FDBA74]'
+              className={`flex items-center gap-1.5 px-2.5 py-1 font-semibold text-xs transition-all ${
+                isServepoint
+                  ? 'sp-cta rounded-lg text-[11px]'
+                  : isTessera
+                    ? 'tessera-cta rounded-lg'
+                    : 'bg-[#FFF1E6] hover:bg-[#FFE4D1] text-[#C2410C] border border-[#FDBA74] rounded-xl'
               }`}
             >
               <KeyRound className="w-3.5 h-3.5" />

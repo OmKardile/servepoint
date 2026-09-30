@@ -994,3 +994,190 @@
     radial-gradient(circle at 25% 25%, rgba(197, 248, 42, 0.015) 0%, transparent 50%),
     radial-gradient(circle at 75% 75%, rgba(52, 211, 153, 0.012) 0%, transparent 50%);
 }
+
+/* ==========================================================================
+   SERVEPOINT THEME — owner-mandated UI (Figma: ServePoint POS Preview, ADR-0011)
+   Warm ivory canvas, deep forest-green primary, amber accent,
+   white rounded cards with soft shadows, Plus Jakarta Sans headings.
+   Applied via [data-theme="servepoint"] on <html>. Default since v2.6.7.
+   The Figma-embedded login screen is NOT affected (frozen, hardcoded).
+   ========================================================================== */
+[data-theme="servepoint"] {
+  /* --- Surface palette --- */
+  --tsos-bg: #F2EFE5;
+  --tsos-surface: #FFFFFF;
+  --tsos-surface-secondary: #EFEDE0;
+  --tsos-divider: #E7E2D2;
+  /* --- Amber action accent --- */
+  --tsos-action: #E9A63C;
+  --tsos-action-hover: #D89430;
+  --tsos-action-soft: rgba(233, 166, 60, 0.16);
+  /* --- Status colors (tuned for ivory/forest) --- */
+  --tsos-completed: #17803D;
+  --tsos-completed-soft: rgba(23, 128, 61, 0.12);
+  --tsos-attention: #E9A63C;
+  --tsos-attention-soft: rgba(233, 166, 60, 0.16);
+  --tsos-destructive: #DC2626;
+  --tsos-destructive-soft: rgba(220, 38, 38, 0.10);
+  --tsos-info: #2C7A7B;
+  --tsos-info-soft: rgba(44, 122, 123, 0.12);
+  --tsos-accent: #7C5CBF;
+  --tsos-accent-soft: rgba(124, 92, 191, 0.12);
+  /* --- Text hierarchy --- */
+  --tsos-text-primary: #17402E;
+  --tsos-text-secondary: #5F6D63;
+  --tsos-text-muted: #8B968C;
+  color-scheme: light;
+}
+
+[data-theme="servepoint"] body {
+  background-color: #F2EFE5 !important;
+  color: #17402E !important;
+  font-family: 'Plus Jakarta Sans', 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+/* ServePoint headings — bold geometric sans (NOT italic; that is Tessera) */
+[data-theme="servepoint"] h1,
+[data-theme="servepoint"] h2,
+[data-theme="servepoint"] h3,
+[data-theme="servepoint"] .font-display {
+  font-family: 'Plus Jakarta Sans', 'Inter', system-ui, sans-serif !important;
+  font-style: normal !important;
+  font-weight: 700 !important;
+  letter-spacing: -0.02em !important;
+}
+
+/* --- 1. Warm cream canvases → ServePoint ivory --- */
+[data-theme="servepoint"] .bg-\[\#FFF9F2\],
+[data-theme="servepoint"] .bg-\[\#FFFDFB\],
+[data-theme="servepoint"] .bg-\[\#FFFDF9\],
+[data-theme="servepoint"] .bg-\[\#FFFEFC\],
+[data-theme="servepoint"] .bg-\[\#FFFBF5\],
+[data-theme="servepoint"] .bg-\[\#FAF7F2\],
+[data-theme="servepoint"] .bg-\[\#FAF6F0\],
+[data-theme="servepoint"] .bg-\[\#F7F3EE\],
+[data-theme="servepoint"] .bg-\[\#F5EFEA\],
+[data-theme="servepoint"] .bg-\[\#F5EBE1\],
+[data-theme="servepoint"] .bg-\[\#F3ECE4\],
+[data-theme="servepoint"] .bg-\[\#EFE8E1\] {
+  background-color: #F2EFE5 !important;
+}
+
+/* --- 2. White cards stay white but gain the ServePoint card treatment --- */
+[data-theme="servepoint"] .bg-white {
+  background-color: #FFFFFF !important;
+  border-color: #E7E2D2 !important;
+  box-shadow: 0 10px 30px -14px rgba(23, 64, 46, 0.16);
+}
+
+/* --- 3. Inset / secondary surfaces → warm inset --- */
+[data-theme="servepoint"] .bg-\[\#F5F0EB\],
+[data-theme="servepoint"] .bg-\[\#E9E0D6\],
+[data-theme="servepoint"] .bg-\[\#FFF1E6\] {
+  background-color: #EFEDE0 !important;
+}
+
+/* --- 4. Text hierarchy: stone → forest green --- */
+[data-theme="servepoint"] .text-\[\#1C1917\],
+[data-theme="servepoint"] .text-\[\#0C0A09\],
+[data-theme="servepoint"] .text-stone-900 {
+  color: #17402E !important;
+}
+[data-theme="servepoint"] .text-\[\#57534E\],
+[data-theme="servepoint"] .text-stone-600 {
+  color: #5F6D63 !important;
+}
+[data-theme="servepoint"] .text-\[\#A8A29E\],
+[data-theme="servepoint"] .text-stone-400 {
+  color: #8B968C !important;
+}
+
+/* --- 5. Orange accent → ServePoint amber --- */
+[data-theme="servepoint"] .text-\[\#F97316\],
+[data-theme="servepoint"] .text-\[\#FB923C\],
+[data-theme="servepoint"] .text-orange-600 {
+  color: #D89430 !important;
+}
+[data-theme="servepoint"] .bg-\[\#F97316\],
+[data-theme="servepoint"] .bg-orange-600 {
+  background-color: #E9A63C !important;
+}
+[data-theme="servepoint"] .border-\[\#F97316\] {
+  border-color: #E9A63C !important;
+}
+[data-theme="servepoint"] .text-\[\#B45309\] {
+  color: #B0761F !important;
+}
+[data-theme="servepoint"] .bg-\[\#FFF1E6\] {
+  background-color: rgba(233, 166, 60, 0.14) !important;
+}
+
+/* --- 6. Borders → warm hairline --- */
+[data-theme="servepoint"] .border-\[\#E9E0D6\],
+[data-theme="servepoint"] .border-\[\#D5C9BD\],
+[data-theme="servepoint"] .border-\[\#F5F0EB\] {
+  border-color: #E7E2D2 !important;
+}
+
+/* --- 7. Scrollbar --- */
+[data-theme="servepoint"] ::-webkit-scrollbar-thumb {
+  background: #D8D2BE;
+}
+[data-theme="servepoint"] ::-webkit-scrollbar-thumb:hover {
+  background: #E9A63C;
+}
+
+/* --- ServePoint utilities --- */
+/* Amber CTA — the ServePoint action button (mirrors tessera-cta ergonomics) */
+.sp-cta {
+  background: #E9A63C;
+  color: #17402E;
+  font-weight: 700;
+  border-radius: 0.75rem;
+  box-shadow: 0 6px 16px -6px rgba(233, 166, 60, 0.55);
+  transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+}
+.sp-cta:hover {
+  background: #F0B14A;
+  transform: translateY(-1px);
+  box-shadow: 0 10px 22px -8px rgba(233, 166, 60, 0.65);
+}
+.sp-cta:active {
+  transform: translateY(1px);
+  box-shadow: 0 3px 10px -4px rgba(233, 166, 60, 0.5);
+}
+.sp-cta:disabled {
+  opacity: 0.5;
+  transform: none;
+  box-shadow: none;
+}
+
+/* Deep forest sidebar panel (ServePoint shell) */
+.sp-sidebar {
+  background: linear-gradient(180deg, #17402E 0%, #0F2E21 100%);
+  color: #F2EFE5;
+}
+
+/* Amber banner (category hero, e.g. "BURGERS") */
+.sp-banner {
+  background: linear-gradient(120deg, #E9A63C 0%, #F0B14A 100%);
+  color: #17402E;
+}
+
+/* Ghost button on ivory */
+.sp-ghost {
+  border: 1px solid #E7E2D2;
+  background: #FFFFFF;
+  color: #17402E;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+}
+.sp-ghost:hover {
+  border-color: #E9A63C;
+  box-shadow: 0 6px 16px -8px rgba(23, 64, 46, 0.25);
+}
+
+/* --- ServePoint: dark stone chips/strips → deep forest green (sidebar language) --- */
+[data-theme="servepoint"] .bg-\[\#1C1917\],
+[data-theme="servepoint"] .bg-\[\#0C0A09\] {
+  background-color: #17402E !important;
+}

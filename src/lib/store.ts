@@ -250,7 +250,11 @@ const STORAGE_KEY = 'tsos_app_state_v1';
 const DEFAULT_STATE = {
   activeSurface: 'web' as ActiveSurface,
   activeWebTab: 'pos' as WebTab,
-  themeMode: (typeof window !== 'undefined' && (localStorage.getItem('tsos_theme_mode') as ThemeMode) ? (localStorage.getItem('tsos_theme_mode') as ThemeMode) : 'tessera') as ThemeMode,
+  themeMode: (typeof window !== 'undefined' && (localStorage.getItem('tsos_theme_mode') as ThemeMode)
+    ? ((localStorage.getItem('tsos_theme_mode') === 'tessera'
+        ? 'servepoint'  // v2.6.6 migration: old Tessera default → owner-mandated ServePoint UI (ADR-0011)
+        : localStorage.getItem('tsos_theme_mode')) as ThemeMode)
+    : 'servepoint') as ThemeMode,
   tenantBusinesses: INITIAL_TENANT_BUSINESSES,
   platformAuditLogs: INITIAL_PLATFORM_AUDIT_LOGS,
   activeSuperAdminTab: 'dashboard' as const,
@@ -469,7 +473,11 @@ export const useTsosStore = create<TsosState>((set, get) => ({
   setActiveSurface: (surface) => set({ activeSurface: surface }),
   setActiveWebTab: (tab) => set({ activeWebTab: tab }),
 
-  themeMode: (typeof window !== 'undefined' && (localStorage.getItem('tsos_theme_mode') as ThemeMode) ? (localStorage.getItem('tsos_theme_mode') as ThemeMode) : 'tessera') as ThemeMode,
+  themeMode: (typeof window !== 'undefined' && (localStorage.getItem('tsos_theme_mode') as ThemeMode)
+    ? ((localStorage.getItem('tsos_theme_mode') === 'tessera'
+        ? 'servepoint'  // v2.6.6 migration: old Tessera default → owner-mandated ServePoint UI (ADR-0011)
+        : localStorage.getItem('tsos_theme_mode')) as ThemeMode)
+    : 'servepoint') as ThemeMode,
   setThemeMode: (mode) => {
     if (typeof window !== 'undefined') {
       localStorage.setItem('tsos_theme_mode', mode);
@@ -484,10 +492,11 @@ export const useTsosStore = create<TsosState>((set, get) => ({
     set({ themeMode: mode });
   },
   toggleThemeMode: () => {
-    // Cycle: tessera → dark → tessera (keeps the editorial dark language; warm is reachable via setThemeMode).
+    // Cycle: servepoint → tessera → dark → servepoint (warm reachable via setThemeMode).
     const current = get().themeMode;
-    const isDark = current === 'dark' || current === 'obsidian';
-    get().setThemeMode(isDark ? 'tessera' : 'dark');
+    if (current === 'servepoint') get().setThemeMode('tessera');
+    else if (current === 'tessera') get().setThemeMode('dark');
+    else get().setThemeMode('servepoint');
   },
 
   setCurrentProfile: (profile) =>

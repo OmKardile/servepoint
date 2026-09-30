@@ -54,22 +54,27 @@ export default function App() {
   // Authentication & Modals State
   const [authSession, setAuthSession] = useState<AuthUserSession | null>(null);
   const [isOverridePinOpen, setIsOverridePinOpen] = useState(false);
+  const [isAuthLoading, setIsAuthLoading] = useState<boolean>(true);
 
   // Sync theme mode to document element
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      // Tessera is its own editorial-dark forest/chartreuse theme.
-      // dark/obsidian map to the zinc dark layer. warm is the original cream light theme.
-      document.documentElement.setAttribute('data-theme', themeMode);
+      // While UNAUTHENTICATED (auth loading, login screen, public storefront/track
+      // routes) the document is FORCE-PINNED to Tessera: the owner froze the login
+      // screen UI exactly as approved (ADR-0010). The ServePoint theme
+      // (owner-mandated via the ServePoint POS Figma, ADR-0011) applies to the
+      // authenticated app only.
+      const forceTessera = !authSession || isAuthLoading;
+      const effective = forceTessera ? 'tessera' : themeMode;
+      document.documentElement.setAttribute('data-theme', effective);
       document.documentElement.classList.remove('dark', 'obsidian', 'tessera');
-      if (themeMode === 'dark' || themeMode === 'obsidian') {
+      if (effective === 'dark' || effective === 'obsidian') {
         document.documentElement.classList.add('dark', 'obsidian');
-      } else if (themeMode === 'tessera') {
+      } else if (effective === 'tessera') {
         document.documentElement.classList.add('tessera');
       }
     }
-  }, [themeMode]);
-  const [isAuthLoading, setIsAuthLoading] = useState<boolean>(true);
+  }, [themeMode, authSession, isAuthLoading]);
   const [isOnboardingOpen, setIsOnboardingOpen] = useState<boolean>(false);
 
   // Check auth session on startup

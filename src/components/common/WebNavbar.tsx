@@ -23,6 +23,7 @@ export const WebNavbar: React.FC = () => {
   const [isMoreOpen, setIsMoreOpen] = useState(false);
   const moreRef = useRef<HTMLDivElement>(null);
   const isTessera = themeMode === 'tessera';
+  const isServepoint = themeMode === 'servepoint';
 
   // Active kitchen orders (new or preparing)
   const activeKdsCount = orders.filter(
@@ -74,7 +75,11 @@ export const WebNavbar: React.FC = () => {
   return (
     <nav
       className={`border-b px-4 py-2 flex items-center justify-between ${
-        isTessera ? 'bg-[#0A1410] border-[#1F3D2E]' : 'bg-white border-[#E9E0D6]'
+        isServepoint
+          ? 'bg-[#F2EFE5] border-[#E7E2D2]'
+          : isTessera
+            ? 'bg-[#0A1410] border-[#1F3D2E]'
+            : 'bg-white border-[#E9E0D6]'
       }`}
     >
       <div className="flex items-center gap-1.5 flex-wrap">
@@ -85,13 +90,17 @@ export const WebNavbar: React.FC = () => {
               key={tab.id}
               onClick={() => setActiveWebTab(tab.id)}
               className={`relative flex items-center gap-2 px-3.5 py-2 rounded-lg text-sm transition-all ${
-                isTessera
+                isServepoint
                   ? isActive
-                    ? 'bg-[#C5F82A]/15 text-[#C5F82A] font-semibold border border-[#C5F82A]/35 shadow-[inset_0_1px_0_rgba(197,248,42,0.12)]'
-                    : 'text-[#9BB5A5] font-medium border border-transparent hover:text-[#F5F4EE] hover:bg-[#142620] hover:border-[#2A4A37]'
-                  : isActive
-                  ? 'bg-[#FFF1E6] text-[#F97316] font-semibold border border-[#F97316]/20'
-                  : 'text-[#57534E] hover:bg-[#F5F0EB] hover:text-[#1C1917]'
+                    ? 'bg-[#E9A63C] text-[#17402E] font-bold shadow-[0_4px_12px_-4px_rgba(233,166,60,0.65)]'
+                    : 'text-[#5F6D63] font-medium hover:bg-white hover:text-[#17402E] hover:shadow-[0_4px_14px_-8px_rgba(23,64,46,0.3)]'
+                  : isTessera
+                    ? isActive
+                      ? 'bg-[#C5F82A]/15 text-[#C5F82A] font-semibold border border-[#C5F82A]/35 shadow-[inset_0_1px_0_rgba(197,248,42,0.12)]'
+                      : 'text-[#9BB5A5] font-medium border border-transparent hover:text-[#F5F4EE] hover:bg-[#142620] hover:border-[#2A4A37]'
+                    : isActive
+                    ? 'bg-[#FFF1E6] text-[#F97316] font-semibold border border-[#F97316]/20'
+                    : 'text-[#57534E] hover:bg-[#F5F0EB] hover:text-[#1C1917]'
               }`}
             >
               {tab.icon}
@@ -99,7 +108,13 @@ export const WebNavbar: React.FC = () => {
               {tab.badge !== undefined && tab.badge > 0 && (
                 <span
                   className={`text-[11px] font-bold px-1.5 py-0.2 rounded-full ${
-                    isTessera && 'tesseraBadge' in tab ? tab.tesseraBadge : `text-white ${tab.badgeColor}`
+                    isServepoint
+                      ? isActive
+                        ? 'bg-[#17402E]/15 text-[#17402E]'
+                        : 'bg-[#17402E]/8 text-[#5F6D63] border border-[#E7E2D2]'
+                      : isTessera && 'tesseraBadge' in tab
+                        ? tab.tesseraBadge
+                        : `text-white ${tab.badgeColor}`
                   }`}
                 >
                   {tab.badge}
@@ -108,6 +123,10 @@ export const WebNavbar: React.FC = () => {
               {/* Tessera signature: chartreuse baseline marker under the active tab */}
               {isTessera && isActive && (
                 <span className="absolute left-3 right-3 -bottom-[9px] h-[2px] bg-[#C5F82A] rounded-full" aria-hidden="true" />
+              )}
+              {/* ServePoint signature: amber baseline marker under the active tab */}
+              {isServepoint && isActive && (
+                <span className="absolute left-3 right-3 -bottom-[9px] h-[2px] bg-[#E9A63C] rounded-full" aria-hidden="true" />
               )}
             </button>
           );
@@ -119,26 +138,32 @@ export const WebNavbar: React.FC = () => {
             <button
               onClick={() => setIsMoreOpen(!isMoreOpen)}
               className={`flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-sm transition-all ${
-                isTessera
+                isServepoint
                   ? isMoreActive
-                    ? 'bg-[#C5F82A]/15 text-[#C5F82A] font-semibold border border-[#C5F82A]/35'
-                    : 'text-[#9BB5A5] font-medium border border-transparent hover:text-[#F5F4EE] hover:bg-[#142620] hover:border-[#2A4A37]'
-                  : isMoreActive
-                  ? 'bg-[#FFF1E6] text-[#F97316] font-semibold border border-[#F97316]/20'
-                  : 'text-[#57534E] hover:bg-[#F5F0EB] hover:text-[#1C1917]'
+                    ? 'bg-[#E9A63C] text-[#17402E] font-bold shadow-[0_4px_12px_-4px_rgba(233,166,60,0.65)]'
+                    : 'text-[#5F6D63] font-medium hover:bg-white hover:text-[#17402E]'
+                  : isTessera
+                    ? isMoreActive
+                      ? 'bg-[#C5F82A]/15 text-[#C5F82A] font-semibold border border-[#C5F82A]/35'
+                      : 'text-[#9BB5A5] font-medium border border-transparent hover:text-[#F5F4EE] hover:bg-[#142620] hover:border-[#2A4A37]'
+                    : isMoreActive
+                    ? 'bg-[#FFF1E6] text-[#F97316] font-semibold border border-[#F97316]/20'
+                    : 'text-[#57534E] hover:bg-[#F5F0EB] hover:text-[#1C1917]'
               }`}
             >
               <span>More</span>
               {isMoreActive && (
-                <span className={`text-xs font-normal ${isTessera ? 'text-[#C5F82A]/80' : 'text-[#F97316]'}`}>
+                <span className={`text-xs font-normal ${
+                  isServepoint ? 'text-[#17402E]/70' : isTessera ? 'text-[#C5F82A]/80' : 'text-[#F97316]'
+                }`}>
                   ({visibleMoreTabs.find((t) => t.id === activeWebTab)?.label})
                 </span>
               )}
               <ChevronDown
                 className={`w-3.5 h-3.5 transition-transform ${
                   isMoreOpen
-                    ? isTessera ? 'rotate-180 text-[#C5F82A]' : 'rotate-180 text-[#F97316]'
-                    : isTessera ? 'text-[#6B8579]' : 'text-[#A8A29E]'
+                    ? isServepoint ? 'rotate-180 text-[#17402E]' : isTessera ? 'rotate-180 text-[#C5F82A]' : 'rotate-180 text-[#F97316]'
+                    : isServepoint ? 'text-[#8B968C]' : isTessera ? 'text-[#6B8579]' : 'text-[#A8A29E]'
                 }`}
               />
             </button>
@@ -146,14 +171,20 @@ export const WebNavbar: React.FC = () => {
             {isMoreOpen && (
               <div
                 className={`absolute left-0 mt-1.5 w-64 border rounded-xl py-1.5 z-50 animate-in fade-in slide-in-from-top-1 duration-150 ${
-                  isTessera
-                    ? 'bg-[#0F1D17] border-[#2A4A37] tessera-block'
-                    : 'bg-white border-[#E9E0D6] shadow-lg'
+                  isServepoint
+                    ? 'bg-white border-[#E7E2D2] shadow-[0_20px_50px_-20px_rgba(23,64,46,0.35)]'
+                    : isTessera
+                      ? 'bg-[#0F1D17] border-[#2A4A37] tessera-block'
+                      : 'bg-white border-[#E9E0D6] shadow-lg'
                 }`}
               >
                 <div
                   className={`px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider border-b ${
-                    isTessera ? 'text-[#6B8579] border-[#1F3D2E]' : 'text-[#A8A29E] border-[#F5F0EB]'
+                    isServepoint
+                      ? 'text-[#8B968C] border-[#EFEDE0]'
+                      : isTessera
+                        ? 'text-[#6B8579] border-[#1F3D2E]'
+                        : 'text-[#A8A29E] border-[#F5F0EB]'
                   }`}
                 >
                   Cafe Management
@@ -168,21 +199,31 @@ export const WebNavbar: React.FC = () => {
                         setIsMoreOpen(false);
                       }}
                       className={`w-full flex items-start gap-2.5 px-3 py-2 text-left text-sm transition-colors ${
-                        isTessera
+                        isServepoint
                           ? isActive
-                            ? 'bg-[#C5F82A]/10 text-[#C5F82A]'
-                            : 'text-[#F5F4EE] hover:bg-[#142620]'
-                          : isActive
-                          ? 'bg-[#FFF1E6] text-[#F97316]'
-                          : 'text-[#1C1917] hover:bg-[#F5F0EB]'
+                            ? 'bg-[#E9A63C]/12 text-[#17402E]'
+                            : 'text-[#17402E] hover:bg-[#EFEDE0]'
+                          : isTessera
+                            ? isActive
+                              ? 'bg-[#C5F82A]/10 text-[#C5F82A]'
+                              : 'text-[#F5F4EE] hover:bg-[#142620]'
+                            : isActive
+                            ? 'bg-[#FFF1E6] text-[#F97316]'
+                            : 'text-[#1C1917] hover:bg-[#F5F0EB]'
                       }`}
                     >
-                      <span className={`mt-0.5 ${isActive ? (isTessera ? 'text-[#C5F82A]' : 'text-[#F97316]') : isTessera ? 'text-[#9BB5A5]' : 'text-[#57534E]'}`}>
+                      <span className={`mt-0.5 ${
+                        isActive
+                          ? isServepoint ? 'text-[#B0761F]' : isTessera ? 'text-[#C5F82A]' : 'text-[#F97316]'
+                          : isServepoint ? 'text-[#8B968C]' : isTessera ? 'text-[#9BB5A5]' : 'text-[#57534E]'
+                      }`}>
                         {tab.icon}
                       </span>
                       <div>
                         <div className="font-medium text-xs leading-tight">{tab.label}</div>
-                        <div className={`text-[11px] ${isTessera ? 'text-[#6B8579]' : 'text-[#A8A29E]'}`}>{tab.desc}</div>
+                        <div className={`text-[11px] ${
+                          isServepoint ? 'text-[#8B968C]' : isTessera ? 'text-[#6B8579]' : 'text-[#A8A29E]'
+                        }`}>{tab.desc}</div>
                       </div>
                     </button>
                   );
@@ -197,9 +238,11 @@ export const WebNavbar: React.FC = () => {
         <button
           onClick={() => setActiveWebTab('inventory')}
           className={`hidden md:flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-lg border transition-colors ${
-            isTessera
-              ? 'bg-[#F87171]/10 border-[#F87171]/35 text-[#F87171] hover:bg-[#F87171]/20'
-              : 'bg-[#FEF2F2] border-[#FCA5A5] text-[#B42318] hover:bg-[#FEE2E2]'
+            isServepoint
+              ? 'bg-[#DC2626]/8 border-[#DC2626]/25 text-[#B42318] hover:bg-[#DC2626]/15'
+              : isTessera
+                ? 'bg-[#F87171]/10 border-[#F87171]/35 text-[#F87171] hover:bg-[#F87171]/20'
+                : 'bg-[#FEF2F2] border-[#FCA5A5] text-[#B42318] hover:bg-[#FEE2E2]'
           }`}
         >
           <AlertTriangle className="w-3.5 h-3.5" />

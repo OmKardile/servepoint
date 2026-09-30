@@ -36,12 +36,9 @@
 - **Order Submission Guard**: Enforces `X-Table-Session-Token` on `POST /api/orders`, rejecting expired, spoofed, or settled tables.
 - **Frontend UX**: Live countdown timer (`mm:ss`) in header, 2-minute warning banner, and automatic security lock overlay at 00:00 with renewal handshake.
 
-### 5. Tessera Editorial Theme (Default) + Industrial Obsidian Mode (Global Single-Button Toggle)
-- **Tessera (default since v2.6.0)**: editorial dark design pairing Instrument Serif italic headlines with Inter body, deep forest surfaces (`#0A1410`/`#0F1D17`), vivid chartreuse action accent (`#C5F82A`), and 3D isometric block-motif utilities (`.tessera-block` / `.tessera-cta` / `.tessera-ghost`). Since v2.6.1 the global chrome (Header, WebNavbar), POS (menu cards, CartDrawer, Charge/Pay CTA) and the KDS board carry explicit Tessera flourishes; warm/dark/obsidian palettes remain fully preserved behind conditional classes. Since v2.6.5 the OrdersScreen carries the full explicit treatment too.
-- **Design governance (ADR-0010)**: the **login screen is FROZEN** at v2.6.4 — no changes until the owner explicitly unfreezes; *Free 75 Illustrations — Surface Pack* (Figma Community) is the reserved login artwork, and the *shadcn/ui Design System* (Figma Community) is the post-login component reference (dark/light mode, buttons, forms).
-- **Industrial Obsidian Mode**: high-contrast terminal design engineered for glare resistance and reduced eye strain under cafe and kitchen lighting.
-- Palette (Obsidian): Pitch obsidian `#0C0A09`, hairline borders `#292524`, phosphor amber `#F59E0B`, and emerald status glows `#10B981`.
-- Single-button toggle in the global navigation bar switches the entire system instantaneously (cycles `tessera ↔ dark`; `warm` reachable via explicit set).
+### 5. ServePoint Theme (Owner Figma — Default) + Tessera / Obsidian / Warm Modes
+- **ServePoint (default since v2.6.6, ADR-0011)**: the owner's own [ServePoint POS Figma](https://www.figma.com/design/P14mYyvxyrZlkMonqobnWL/ServePoint-POS-Preview) drives the authenticated app — warm ivory canvas (`#F2EFE5`), white rounded cards with soft forest shadows, deep forest-green primary (`#17402E`), amber action accent (`#E9A63C`), Plus Jakarta Sans bold headings, `sp-cta` / `sp-sidebar` / `sp-banner` / `sp-ghost` utilities. The header toggle cycles `servepoint → tessera → dark`; warm/obsidian reachable via `setThemeMode`.
+- **Auth-scoped pinning**: unauthenticated routes (the **frozen login screen** per ADR-0010, plus public storefront/track) stay force-pinned **Tessera** — the approved editorial dark forest/chartreuse look is unchanged.
 
 ### 6. Real-Time WebSockets & Offline Resiliency
 - **Cloud Menu Hydration (v2.6.2)**: categories + menu items load from Supabase for the active tenant at sign-in, with automatic fallback to the bundled seed menu when the cloud is empty or unreachable.

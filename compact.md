@@ -3,13 +3,13 @@
 > **Purpose**: Single-page dense summary of the current TSOS project state, for fast cold re-onboarding by any agent or contributor. Updated alongside every code change. For full chronological detail, see [`docs/compacts/`](docs/compacts/README.md) (7 compacts) and [`worklog.md`](worklog.md) (live agent handover).
 
 - **Project**: TSOS — The Cafe Operating System
-- **Version**: 2.6.5
+- **Version**: 2.6.6
 - **Repo**: https://github.com/OmKardile/tsos-alt
 - **Author**: Omkar Kardile <omkardile84@gmail.com>
 - **Last Updated**: 2026-10-01
-- **Default Theme**: Tessera (editorial dark / forest + chartreuse) — see [`CHANGELOG.md`](CHANGELOG.md) v2.6.0–v2.6.5
+- **Default Theme**: **ServePoint** (owner Figma: ivory canvas, forest-green primary, amber accent, Plus Jakarta Sans) for the authenticated app since v2.6.6; unauthenticated routes (frozen login, storefront) stay force-pinned Tessera — see [`CHANGELOG.md`](CHANGELOG.md) v2.6.0–v2.6.6 and ADR-0010/0011
 - **Render Blueprint**: `render.yaml` → Static Site **`tsos-pos`** (v2.6.3 hardened; v2.6.4 re-hardcoded live Supabase keys — zero-touch apply)
-- **Design Governance**: **Login screen FROZEN** at v2.6.4 (ADR-0010) — no changes until owner unfreezes; Surface Pack illustrations reserved for login; shadcn/ui Design System is the post-login component reference
+- **Design Governance**: **Login screen FROZEN** at v2.6.4 (ADR-0010) — no changes until owner unfreezes; Surface Pack illustrations reserved for login; **ServePoint UI (owner Figma) adopted as the default post-login design (ADR-0011)**; Figma blocked from sandbox — cover thumbnail archived at `docs/design/servepoint/`
 
 ---
 
