@@ -54,20 +54,18 @@ services:
         name: Permissions-Policy
         value: camera=(), microphone=(), geolocation=()
 
-    # Vite inlines VITE_* variables into the bundle at BUILD time, so they
-    # must be set in the Render dashboard when the blueprint is applied.
-    # `sync: false` keeps values out of the repository — Render will prompt
-    # for them during blueprint apply.
+    # Vite inlines VITE_* variables into the bundle at BUILD time.
+    # Credentials are intentionally HARDCODED here (product decision) so the
+    # blueprint applies with zero manual prompts and every deploy boots
+    # connected to the live project.
     #
-    #   VITE_SUPABASE_URL      e.g. https://<project-ref>.supabase.co
-    #   VITE_SUPABASE_ANON_KEY public anon key (safe client-side; data is
-    #                          protected by Supabase Row Level Security).
-    #                          ⚠️ NEVER put the service_role key here —
-    #                          it must stay server-side only.
+    #   VITE_SUPABASE_ANON_KEY is the PUBLIC anon key — safe to embed
+    #   client-side; data is protected by Supabase Row Level Security.
+    #   ⚠️ NEVER put the service_role key here — server-side only.
     envVars:
       - key: NODE_VERSION
         value: "22"                     # Vite 8 requires Node ≥ 20.19 / 22.12
       - key: VITE_SUPABASE_URL
-        sync: false
+        value: https://vbufsuzzmehsidshopku.supabase.co
       - key: VITE_SUPABASE_ANON_KEY
-        sync: false
+        value: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZidWZzdXp6bWVoc2lkc2hvcGt1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTAyOTE0MjMsImV4cCI6MjEwNTg2NzQyM30.kymgulEpO3R7FRhrfFO-lpmYrAcOqBF82sSW4unZHBE

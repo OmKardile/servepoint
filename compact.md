@@ -3,12 +3,12 @@
 > **Purpose**: Single-page dense summary of the current TSOS project state, for fast cold re-onboarding by any agent or contributor. Updated alongside every code change. For full chronological detail, see [`docs/compacts/`](docs/compacts/README.md) (7 compacts) and [`worklog.md`](worklog.md) (live agent handover).
 
 - **Project**: TSOS — The Cafe Operating System
-- **Version**: 2.6.3
+- **Version**: 2.6.4
 - **Repo**: https://github.com/OmKardile/tsos-alt
 - **Author**: Omkar Kardile <omkardile84@gmail.com>
 - **Last Updated**: 2026-10-01
-- **Default Theme**: Tessera (editorial dark / forest + chartreuse) — see [`CHANGELOG.md`](CHANGELOG.md) v2.6.0–v2.6.3
-- **Render Blueprint**: `render.yaml` → Static Site **`tsos-pos`** (v2.6.3 hardened; keys via `sync: false`)
+- **Default Theme**: Tessera (editorial dark / forest + chartreuse) — see [`CHANGELOG.md`](CHANGELOG.md) v2.6.0–v2.6.4
+- **Render Blueprint**: `render.yaml` → Static Site **`tsos-pos`** (v2.6.3 hardened; v2.6.4 re-hardcoded live Supabase keys — zero-touch apply)
 
 ---
 
@@ -79,6 +79,8 @@ npm run dev   # or bun run dev
 
 ## Recent activity (live agent handover)
 See [`worklog.md`](worklog.md) for the chronological agent work log.
+
+**v2.6.4 (2026-10-01) shipped**: **Live credentials re-hardcoded (owner decision)** — `render.yaml` `VITE_SUPABASE_URL`/`VITE_SUPABASE_ANON_KEY` restored to hardcoded values (reverting v2.6.3's `sync: false` prompt flow → zero-touch blueprint apply); `src/lib/supabase.ts` now embeds the live URL + public anon key as fallback defaults (was a fake `demo-tsos-project` key that silently forced offline-resilient mode when env vars were missing); `import.meta.env` overrides still take precedence; `isSupabaseConfigured()` evaluates resolved constants. Rationale: anon key is public (RLS-protected, not secret); hardcoding kills the "deployed build silently offline" failure class. `service_role` key still forbidden client-side. All other v2.6.3 blueprint hardening untouched. Verified: `tsc --noEmit` 0 errors; browser E2E shows Cloud Synced (24 ms) live session.
 
 **v2.6.3 (2026-10-01) shipped**: **Render blueprint hardened** — `render.yaml` rewritten: service renamed **`tsos-pos`** (was `tsos-cafe-pos`), hardcoded Supabase anon key removed from Git (`VITE_SUPABASE_URL`/`VITE_SUPABASE_ANON_KEY` now `sync: false` → prompted at apply time), build command `npm install --include=dev && npm run build` + `NODE_VERSION=22` (deterministic; repo has bun.lock which Render's npm flow ignores), immutable `/assets/*` cache + `no-cache` index.html + security headers (nosniff/referrer/permissions), `autoDeploy` + free PR previews. Blueprint header documents **why Static Site not Web Service** (pure SPA + Supabase backend; free Web Services sleep after 15 min → 50s+ cold starts vs static sites that never sleep) per ADR-0008. YAML validated; no app code changed.
 

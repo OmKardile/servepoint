@@ -1,7 +1,7 @@
 # TSOS Technical Documentation & Architecture Specification
 
 - **System**: TSOS (The Cafe Operating System)
-- **Version**: 2.6.3
+- **Version**: 2.6.4
 - **Architect**: Lead Full-Stack Security & Platform Architect
 - **Updated**: October 1, 2026
 
@@ -362,7 +362,7 @@ TSOS is architected as a decoupled client-side Single-Page Application (SPA) int
 - **Build**: `npm install --include=dev && npm run build` with `NODE_VERSION=22` pinned via env var (Vite 8 requires Node ≥ 20.19/22.12; devDependencies are installed explicitly so the build is deterministic).
 - **Headers**: `/assets/*` → `Cache-Control: public, max-age=31536000, immutable` (Vite content-hashed bundles); `/index.html` → `no-cache` (instant deploy propagation); global `X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy` security headers.
 - **Deploy semantics**: `autoDeploy: true` + `pullRequestPreviewsEnabled: true` (free for static sites).
-- **Secret hygiene**: `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` declared with `sync: false` — Render prompts for values at blueprint-apply time; keys are never committed. The anon key is RLS-protected by design; the `service_role` key must never be placed in client-facing configuration.
+- **Secret hygiene**: the live `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` are intentionally **hardcoded in the blueprint** (v2.6.4, owner decision — reverting the v2.6.3 `sync: false` prompt flow) so blueprint applies are zero-touch and every build boots live-connected. The anon key is a *public* client key protected by Row Level Security, not by secrecy; the `service_role` key must NEVER be placed in client-facing configuration.
 - **Client-Side Routing Rewrite**:
   ```yaml
   routes:

@@ -11,15 +11,21 @@ import {
 } from '../types';
 import { SEED_CATEGORIES, SEED_MENU_ITEMS } from '../data/seedData';
 
-// Environment variables or fallback demo credentials
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://demo-tsos-project.supabase.co';
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.e30.fake_anon_key_for_offline_resilient_mode';
+// Live Supabase credentials — intentionally HARDCODED (product decision).
+// The anon key is a PUBLIC client key protected by Row Level Security, so
+// embedding it keeps every environment (Render, Vercel, local dev, offline
+// builds) connected to the live project with zero env configuration.
+const HARDCODED_SUPABASE_URL = 'https://vbufsuzzmehsidshopku.supabase.co';
+const HARDCODED_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZidWZzdXp6bWVoc2lkc2hvcGt1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTAyOTE0MjMsImV4cCI6MjEwNTg2NzQyM30.kymgulEpO3R7FRhrfFO-lpmYrAcOqBF82sSW4unZHBE';
+
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || HARDCODED_SUPABASE_URL;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || HARDCODED_SUPABASE_ANON_KEY;
 
 export const isSupabaseConfigured = (): boolean => {
   return Boolean(
-    import.meta.env.VITE_SUPABASE_URL && 
-    import.meta.env.VITE_SUPABASE_ANON_KEY &&
-    !import.meta.env.VITE_SUPABASE_URL.includes('demo-tsos-project')
+    supabaseUrl &&
+    supabaseAnonKey &&
+    !supabaseUrl.includes('demo-tsos-project')
   );
 };
 

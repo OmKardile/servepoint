@@ -23,6 +23,8 @@
 
 ## ⚙️ Environment Variables (`.env`)
 
+**Since v2.6.4 the live Supabase URL and public anon key are hardcoded as fallback defaults in `src/lib/supabase.ts` and in `render.yaml`** — the app builds and connects to the live project with zero env configuration. The entries below are therefore **optional overrides** (useful for pointing a local dev copy at a different Supabase project).
+
 Configure these in your local `.env` or in your cloud deployment settings (Render / Vercel):
 
 ```env

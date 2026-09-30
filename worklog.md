@@ -266,3 +266,27 @@ Unresolved Issues / Risks / Next-phase Priorities (unchanged from task 5):
 2. Realtime POS→KDS end-to-end verification still open.
 3. Next Tessera surfaces: OrdersScreen, SuperAdmin dashboard, Storefront/OrderTracking, then Customers/Inventory/Menu/Tables/Offers/Shifts/Settings.
 4. Menu builder mutations still local-only; no automated tests yet.
+
+---
+Task ID: 7
+Agent: glm-5.3
+Task: Revert v2.6.3 credential de-hardcoding — restore live Supabase keys as hardcoded defaults (owner directive: "keep the damn env keys hardcoded as they were")
+
+Work Log:
+- Diagnosed: v2.6.3 (commit 1e3541a) had removed the hardcoded `VITE_SUPABASE_URL`/`VITE_SUPABASE_ANON_KEY` from `render.yaml` (turned into `sync: false` dashboard prompts), and `src/lib/supabase.ts` fell back to a fake `demo-tsos-project` key that silently forced offline-resilient mode whenever env vars were absent.
+- `render.yaml`: restored both keys as hardcoded `value:` entries (exactly the v2.6.2 values) with a comment documenting the owner decision + RLS rationale; kept ALL other v2.6.3 hardening (service `tsos-pos`, `npm install --include=dev && npm run build`, NODE_VERSION=22, immutable asset cache, security headers, autoDeploy + PR previews).
+- `src/lib/supabase.ts`: added `HARDCODED_SUPABASE_URL` / `HARDCODED_SUPABASE_ANON_KEY` constants as fallback defaults (env `import.meta.env.VITE_*` still takes precedence); `isSupabaseConfigured()` now evaluates the resolved constants — app is live-connected even with zero env config (Render apply, Vercel build, bare `npm run build`).
+- Updated all 7 docs: CHANGELOG.md (new v2.6.4 entry), README.md (deploy section), technical-documentation.md (version + §12.1 secret hygiene), business-documentation.md (version), decisions.md (ADR-0008 v2.6.4 update line), compact.md (version + blueprint line + v2.6.4 shipped paragraph), help.md (env section now marked optional-override).
+- Verified: `npx tsc --noEmit` → 0 errors; agent-browser E2E → app boots authenticated, Header shows "Cloud Synced (24 ms)" live Supabase session, zero console errors.
+- Committed + pushed as v2.6.4.
+
+Stage Summary:
+- v2.6.4: live Supabase credentials are hardcoded in BOTH `render.yaml` and `src/lib/supabase.ts` (owner decision). Security model unchanged: the anon key is public; data is protected by Row Level Security. `service_role` key must never go client-side.
+- Deployment is now fully zero-touch: Render blueprint apply requires no manual env prompts; any env-config-free build boots live-connected. The "deployed build silently offline" failure class is eliminated.
+- `.env` remains gitignored and optional (override only).
+
+Unresolved Issues / Risks / Next-phase Priorities:
+1. customers + offers live tables still 404 to anon (needs migration 001 DDL re-run — no Postgres connection string in sandbox).
+2. Realtime POS→KDS end-to-end verification still open.
+3. Next Tessera surfaces: OrdersScreen, SuperAdmin dashboard, Storefront/OrderTracking, then Customers/Inventory/Menu/Tables/Offers/Shifts/Settings.
+4. Menu builder mutations still local-only; no automated tests yet.

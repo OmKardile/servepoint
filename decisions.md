@@ -76,6 +76,7 @@
 - **Consequences**: ✅ Free, no cold starts, deep-linkable QR URLs. ⚠️ Two configs to keep in sync.
 - **Full ADR**: [docs/decisions/0008-cloud-deployment-render-and-vercel.md](docs/decisions/0008-cloud-deployment-render-and-vercel.md)
 - **Update (v2.6.3, 2026-10-01)**: Blueprint hardened — service renamed **`tsos-pos`**; Supabase keys moved out of Git (`sync: false`, prompted at apply time); build pinned to `npm install --include=dev && npm run build` + `NODE_VERSION=22`; added immutable `/assets/*` caching, `no-cache` index.html, security headers, `autoDeploy` + free PR previews. Static-vs-Web-Service rationale (SPA + Supabase → no runtime server; free Web Services sleep, static sites never do) documented in the blueprint header itself.
+- **Update (v2.6.4, 2026-10-01, owner decision)**: Supabase credentials **re-hardcoded** in `render.yaml` (reverting the v2.6.3 `sync: false` prompt flow) AND embedded as fallback defaults in `src/lib/supabase.ts`. Rationale: the anon key is a *public* client key — security comes from Row Level Security, not key secrecy. Hardcoding guarantees zero-touch blueprint applies and eliminates the "deployed build silently offline" failure class (missing env vars used to fall back to a fake demo key). `service_role` key remains forbidden in client-facing files.
 
 ---
 
