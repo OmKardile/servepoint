@@ -129,6 +129,16 @@
 - **Consequences**: ✅ Role boundaries match the real org: developer → owner → staff. ✅ Login leaks nothing; credentials are distributed deliberately. ✅ Legacy accounts keep working (auto-merge to staff). ⚠️ Migration 003 must be run by the owner on the live Supabase project (same blocker as migration 001). ⚠️ Cloud-auth users created in-app require the documented Supabase-dashboard step when the local registry does not apply.
 - **Full ADR**: this summary is the ADR (owner-directed change, recorded in decisions.md per framework).
 
+
+---
+
+## ADR 0014 — Production Rebuild: App Equals the Figma (Owner Order)
+- **Context**: v4.0.0 shipped with 42 components over an 11-tab IA, three theme systems + remap layer, demo seed data (CoolKafe fake tenant), dev tools and alias auto-login. Owner verdict: "everythings messed up fucked up — delete everything except login page; redesign everything according to the figma design each and every component; make this end production app; remove any demo or development things."
+- **Decision** (v5.0.0): **The product equals the Figma.** Kept: login (v4.0.0), Supabase client, three-role model. Deleted: KDS, Inventory, Menu mgmt, Shifts, Customers, Offers, Reports, Tables, Storefront/QR, seed data, hybrid store, Tessera/dark themes + remap layer, dev tools, alias auto-login, hardcoded demo accounts. Built per frames: Sidebar+Header shell, Dashboard (charts/stat cards/Best Employees/Trending Dishes), Food & Drinks (categories→items→detail modal with add-on steppers→order), Bills two-pane with Charge customer CTA, Messages (Teams/Personal chat), Notifications, Settings (Profile/Notification/Appearance/Checkout/Security/Language & Region + owner-only Staff Accounts), ServePoint-styled SuperAdmin platform (Businesses, Provisioning Wizard→owner, Subscriptions). Data: new typed `api.ts` over Supabase (no mock fallbacks; skeleton/error/empty states). Migration 004 adds notifications/messages tables + RLS.
+- **Alternatives rejected**: polishing the 11-tab IA in place; keeping legacy themes behind a toggle; keeping seed data for "first-run experience".
+- **Consequences**: ✅ every component traces to a frame; zero demo surface; single theme/data source. ⚠️ out-of-Figma features removed (need owner frames to return); migrations 001+003+004 owed on live Supabase; messages/notifications degrade gracefully until 004 runs.
+- **Full ADR**: [docs/decisions/0014-production-rebuild-app-equals-figma.md](docs/decisions/0014-production-rebuild-app-equals-figma.md)
+
 ---
 
 ## Decision-Making Framework

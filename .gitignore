@@ -1,25 +1,6 @@
-node_modules/
-build/
-dist/
-coverage/
-.DS_Store
-*.log
-.env*
-!.env.example
-dev-server.mjs
-
-# Sandbox-only infrastructure (not part of tsos-alt upstream repo).
-# These exist only in the local dev container and must not be committed.
-Caddyfile
-vite.pid
-.zscripts/
-start-dev.sh
 skills/
-mini-services/
-tests/
-examples/
-download/
+node_modules/
+
+# Secrets & local-only design uploads (ADR-0012)
+.env
 upload/
-db/
-prisma/
-tool-results/

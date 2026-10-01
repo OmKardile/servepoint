@@ -3,6 +3,20 @@
 All notable changes to **TSOS (The Cafe Operating System)** are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.0.0] — 2026-10-01 — Production Rebuild: App Equals the Figma (ADR-0014)
+
+### Changed — Owner order: "delete everything except login page; redesign everything according to the figma design each and every component; make this end production app; remove any demo or development things"
+- **THE PRODUCT EQUALS THE FIGMA.** The app is now the ServePoint IA from the 57 archived frames: **Dashboard · Food & Drinks · Bills · Messages · Settings** (+ Notifications, Support), inside the ServePoint shell (deep-teal sidebar with gold active pill + user card + Open Profile, breadcrumb header with bell/clock/search). Login screen KEPT (v4.0.0 credentials-only), rebranded ServePoint.
+- **DELETED**: KDS, Inventory, Menu management, Shifts, Customers, Offers, Reports, Tables, Storefront/QR OrderTracking, native clients, printer/session/sound/realtime services, BOTH seed-data modules, the 1,865-line hybrid store, Tessera/dark themes + remap layer, "Switch to Cafe View" dev tool, email-alias auto-login, hardcoded demo accounts. 42 components → 14 production components.
+- **NEW production data layer** (`src/lib/api.ts`): typed Supabase access only (tenants, categories, menu_items, orders, order_items, tenant_users, subscriptions, audit) — no seed data, no mock fallbacks; loading skeletons (frame 219-26844), honest error cards with Retry, Figma empty states. `useTenant()` resolves the workspace from session metadata (cloud tenant_id or slug lookup) with honest "workspace not linked/found" states.
+- **NEW surfaces built to frames**: Dashboard (Daily Sales line chart, Revenue donut, Total Order/New Customers stats, Best Employees, Trending Dishes — Recharts themed), Food & Drinks (categories grid → items grid with gold selected state → Frame_30 item modal with add-on steppers → order drawer with GST math → cloud order creation), Bills (two-pane per 219-29423: status/date filters, bottom search, detail pane with legacy-status normalization, method-gated Charge flow → PAID against live Supabase), Messages (Teams/Personal two-pane chat, migration-004 grace notes), Notifications (category cards + mark-all-read), Support, Settings (sage nav: Profile/Notification/Appearance/Checkout/Security/Language & Region + owner-only Staff accounts), Platform console (Businesses/Subscriptions/Audit + **Provisioning Wizard** creating business + owner with generated password and copyable credentials).
+- **Auth hardening**: the bootstrap platform operator (`admin@tsos.dev`) now resolves to `superadmin` regardless of stale cloud metadata (found via E2E: cloud metadata `role:"staff"` dropped the operator into the cafe app — fixed). Alias shortcuts and demo fallbacks removed; CREDENTIALS.md rewritten to the production account model.
+- **Mobile**: sidebar collapses to a 76px icon rail below md; header search swaps to a profile chip; breadcrumbs truncate.
+- **DB**: `supabase/migrations/004_notifications_messages.sql` — notifications/conversations/conversation_messages + RLS + default team conversations.
+
+### Verified
+- `tsc --noEmit` + `bun run lint` → 0 errors; browser console clean. agent-browser E2E against the LIVE Supabase: operator sign-in → Platform (never cafe); wizard provisioned "Brew & Bean Koramangala" (RLS-blocked cloud insert honestly surfaced; owner registered locally) → owner sign-in landed in the cafe app; CoolKafe cloud data end-to-end: live menu categories/items → item modal → cart → order drawer (GST 5% correct) → Bills live order #1 → status normalized from legacy "new" → Cash charge → **"Payment recorded" / Paid**; Messages/Notifications show honest migration-004 states; mobile icon rail verified at 390px.
+
 ## [4.0.0] — 2026-10-01 — Role Model Rework: superadmin/owner/staff + Login Overhaul (ADR-0010 Unfrozen by Owner Order)
 
 ### Changed — Owner-mandated role model & auth rework

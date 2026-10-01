@@ -1,1476 +1,1138 @@
-import React, { useState } from 'react';
-import { useTsosStore } from '../../lib/store';
-import { SEED_PROFILES } from '../../data/seedData';
-import { PrinterConfig, PaperWidth } from '../../types';
+import React, { useEffect, useRef, useState } from 'react';
 import {
-  Sliders,
-  Store,
-  CreditCard,
-  Zap,
-  Users,
-  Database,
-  RotateCcw,
+  Bell,
   Check,
+  ChevronDown,
+  CookingPot,
+  Copy,
+  Eye,
+  EyeOff,
+  Glasses,
+  Globe2,
+  Info,
+  Lock,
+  LogOut,
+  RefreshCw,
   ShieldCheck,
-  Building,
-  Printer,
-  Wifi,
-  Bluetooth,
-  Usb,
-  DollarSign,
-  Scissors,
-  Sparkles,
-  HelpCircle,
-  FileCheck2,
-  UserPlus,
-  KeyRound,
+  SlidersHorizontal,
+  TriangleAlert,
+  User,
+  Users,
 } from 'lucide-react';
-import { canPerformAction } from '../../lib/rbac';
+import type { LucideIcon } from 'lucide-react';
+import { supabase } from '../../lib/supabase';
 import { authService } from '../../lib/authService';
-import {
-  generateTestReceiptEscPos,
-  triggerCashDrawerKick,
-  printViaBluetooth,
-} from '../../lib/printerService';
-import { GuidanceTooltip } from '../common/GuidanceTooltip';
+import { canPerformAction, getRoleMeta } from '../../lib/rbac';
+import { getPrefs, setPrefs, subscribePrefs } from '../../lib/prefs';
+import type { SpPrefs } from '../../lib/prefs';
+import { useTenant } from '../../lib/tenant';
+import { useSession, useUi } from '../../store/session';
+import { useCart } from '../../store/cart';
+import type { Employee } from '../../types';
 
-/* ServePoint gold toggle switch (ADR-0011 surface 19 — Checkout_Settings frame rows: label + description + gold toggle) */
+/**
+ * ServePoint Settings (v5.0.0, ADR-0014) — Checkout_Settings_219-29597 frame:
+ * sage section-nav card left (active row white bg, bold ink) + white setting
+ * panel right (bold label + small description + gold toggle, hairline
+ * dividers, full-width gold Save Changes). Every editable section persists
+ * REAL preferences via getPrefs/setPrefs (src/lib/prefs.ts).
+ */
+
+/* ────────────────────────── shared primitives ───────────────────────── */
+
+type SettingsSection =
+  | 'profile'
+  | 'notification'
+  | 'appearance'
+  | 'checkout'
+  | 'security'
+  | 'language'
+  | 'staff';
+
+const SECTION_TITLES: Record<SettingsSection, string> = {
+  profile: 'Profile',
+  notification: 'Notification',
+  appearance: 'Appearance',
+  checkout: 'Checkout Settings',
+  security: 'Security',
+  language: 'Language & Region',
+  staff: 'Staff accounts',
+};
+
+/** Timed confirmation flag ("Saved", "Cleared", "Copied") with cleanup. */
+function useTransientFlag(durationMs = 2400): [boolean, () => void] {
+  const [on, setOn] = useState(false);
+  const timer = useRef<number | null>(null);
+  useEffect(
+    () => () => {
+      if (timer.current !== null) window.clearTimeout(timer.current);
+    },
+    []
+  );
+  const fire = () => {
+    setOn(true);
+    if (timer.current !== null) window.clearTimeout(timer.current);
+    timer.current = window.setTimeout(() => setOn(false), durationMs);
+  };
+  return [on, fire];
+}
+
+async function copyToClipboard(text: string): Promise<boolean> {
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch {
+    /* fall through to legacy path */
+  }
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.setAttribute('readonly', '');
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand('copy');
+    document.body.removeChild(ta);
+    return ok;
+  } catch {
+    return false;
+  }
+}
+
+/** ServePoint toggle — sage track, white knob, gold when checked. */
 const SPToggle: React.FC<{
   checked: boolean;
-  onChange: (value: boolean) => void;
+  onChange: (v: boolean) => void;
   label: string;
-}> = ({ checked, onChange, label }) => (
+  disabled?: boolean;
+}> = ({ checked, onChange, label, disabled }) => (
   <button
     type="button"
     role="switch"
     aria-checked={checked}
     aria-label={label}
+    disabled={disabled}
     onClick={() => onChange(!checked)}
-    className={`relative inline-flex h-5 w-10 shrink-0 items-center rounded-full transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#B88E2F]/40 ${
-      checked ? 'bg-[#B88E2F]' : 'bg-[#C7D2CB]'
+    className={`relative h-6 w-11 shrink-0 rounded-full transition-colors duration-200 before:absolute before:-inset-2.5 before:rounded-full before:content-[''] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#967221] disabled:cursor-not-allowed disabled:opacity-45 ${
+      checked ? 'bg-[#B88E2F]' : 'bg-[#D9E2DD]'
     }`}
   >
     <span
-      className={`inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition-transform ${
-        checked ? 'translate-x-[22px]' : 'translate-x-0.5'
+      aria-hidden
+      className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all duration-200 ${
+        checked ? 'left-[22px]' : 'left-0.5'
       }`}
     />
   </button>
 );
 
-export const SettingsScreen: React.FC = () => {
-  const {
-    location,
-    currentTenant,
-    feeConfig,
-    updateFeeConfig,
-    currentProfile,
-    setCurrentProfile,
-    resetToSeed,
-    printerConfig,
-    updatePrinterConfig,
-    startTour,
-    guidanceMode,
-    toggleGuidanceMode,
-    themeMode,
-  } = useTsosStore();
-  const isServepoint = themeMode === 'servepoint';
+const SectionHeading: React.FC<{ title: string; description?: string }> = ({
+  title,
+  description,
+}) => (
+  <div>
+    <h2 className="text-[17px] font-semibold text-[#1A1A1A]">{title}</h2>
+    {description && (
+      <p className="mt-1 text-[13px] leading-relaxed text-[#6B6B6B]">{description}</p>
+    )}
+  </div>
+);
 
-  const [activeSettingsSection, setActiveSettingsSection] = useState<
-    'printer' | 'fees' | 'staff' | 'profile' | 'reset'
-  >('printer');
+const SettingRow: React.FC<{
+  label: string;
+  description?: string;
+  last?: boolean;
+  children: React.ReactNode;
+}> = ({ label, description, last, children }) => (
+  <div
+    className={`flex flex-wrap items-center justify-between gap-x-4 gap-y-2 py-4 ${
+      last ? '' : 'border-b border-[#E3E7E0]'
+    }`}
+  >
+    <div className="min-w-0">
+      <p className="text-[14px] font-semibold text-[#1A1A1A]">{label}</p>
+      {description && (
+        <p className="mt-0.5 text-[12px] leading-relaxed text-[#6B6B6B]">{description}</p>
+      )}
+    </div>
+    <div className="flex items-center gap-3">{children}</div>
+  </div>
+);
 
-  const [savedSuccess, setSavedSuccess] = useState(false);
-  const [printerSavedSuccess, setPrinterSavedSuccess] = useState(false);
-  const [testPrintFeedback, setTestPrintFeedback] = useState<string | null>(null);
+/** Full-width gold Save Changes + inline "Saved" confirmation chip. */
+const SectionSave: React.FC<{ onPersist: () => void; buttonLabel?: string }> = ({
+  onPersist,
+  buttonLabel = 'Save Changes',
+}) => {
+  const [saved, fireSaved] = useTransientFlag(2400);
+  return (
+    <div className="mt-6 flex flex-wrap items-center gap-3">
+      <button
+        type="button"
+        className="sp-cta min-h-[44px] flex-1 py-2.5 text-[14px]"
+        onClick={() => {
+          onPersist();
+          fireSaved();
+        }}
+      >
+        {buttonLabel}
+      </button>
+      {saved && (
+        <span
+          role="status"
+          className="inline-flex items-center gap-1.5 rounded-full bg-[#E8F5EC] px-3.5 py-2 text-[12px] font-semibold text-[#2E7D32]"
+        >
+          <Check size={14} aria-hidden /> Saved
+        </span>
+      )}
+    </div>
+  );
+};
 
-  // Fee engine form state
-  const [feePayer, setFeePayer] = useState(feeConfig.default_fee_payer);
-  const [perOrderFee, setPerOrderFee] = useState(feeConfig.per_order_fee);
-  const [autoFlipEnabled, setAutoFlipEnabled] = useState(feeConfig.auto_flip_enabled);
-  const [autoFlipThreshold, setAutoFlipThreshold] = useState(feeConfig.customer_paid_order_limit);
+const Note: React.FC<{ tone: 'amber' | 'error' | 'success'; children: React.ReactNode }> = ({
+  tone,
+  children,
+}) => {
+  const cls =
+    tone === 'amber'
+      ? 'bg-[#FCF1DF] text-[#8A5A0B]'
+      : tone === 'error'
+        ? 'bg-[#FEF2F2] text-[#B42318]'
+        : 'bg-[#E8F5EC] text-[#2E7D32]';
+  return (
+    <div
+      role={tone === 'error' ? 'alert' : 'status'}
+      className={`flex items-start gap-2 rounded-xl px-3.5 py-2.5 text-[12.5px] leading-relaxed ${cls}`}
+    >
+      {tone === 'success' ? (
+        <Check size={14} aria-hidden className="mt-0.5 shrink-0" />
+      ) : (
+        <TriangleAlert size={14} aria-hidden className="mt-0.5 shrink-0" />
+      )}
+      <span>{children}</span>
+    </div>
+  );
+};
 
-  // Thermal printer form state
-  const [printerForm, setPrinterForm] = useState<PrinterConfig>({ ...printerConfig });
-
-  // v4.0.0 — Owner creates STAFF logins (merged manager+cashier role)
-  const [staffLoginForm, setStaffLoginForm] = useState({ name: '', email: '', password: '' });
-  const [staffLoginFeedback, setStaffLoginFeedback] = useState<{ ok: boolean; text: string } | null>(null);
-
-  const handleSaveFeeConfig = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!canPerformAction(currentProfile?.role, 'edit_settings')) {
-      setTestPrintFeedback('Action Blocked: Only Cafe Owners and SuperAdmins can modify billing and fee configurations.');
-      setTimeout(() => setTestPrintFeedback(null), 4000);
-      return;
-    }
-    updateFeeConfig({
-      default_fee_payer: feePayer,
-      per_order_fee: perOrderFee,
-      auto_flip_enabled: autoFlipEnabled,
-      customer_paid_order_limit: autoFlipThreshold,
-    });
-    setSavedSuccess(true);
-    setTimeout(() => setSavedSuccess(false), 2500);
+const CopyButton: React.FC<{ value: string; label: string }> = ({ value, label }) => {
+  const [copied, fireCopied] = useTransientFlag(1600);
+  const onCopy = async () => {
+    const ok = await copyToClipboard(value);
+    if (ok) fireCopied();
   };
+  return (
+    <button
+      type="button"
+      onClick={onCopy}
+      aria-label={`Copy ${label}`}
+      className="inline-flex h-11 shrink-0 items-center gap-1.5 rounded-xl border border-[#E3E7E0] bg-white px-3.5 text-[12.5px] font-semibold text-[#0F3D3E] transition-colors hover:bg-[#F6F5F2] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#967221]"
+    >
+      {copied ? <Check size={14} aria-hidden /> : <Copy size={14} aria-hidden />}
+      {copied ? 'Copied' : 'Copy'}
+    </button>
+  );
+};
 
-  const handleSavePrinterConfig = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!canPerformAction(currentProfile?.role, 'edit_settings')) {
-      setTestPrintFeedback('Action Blocked: Only Cafe Owners and SuperAdmins can modify hardware printer configurations.');
-      setTimeout(() => setTestPrintFeedback(null), 4000);
-      return;
-    }
-    updatePrinterConfig(printerForm);
-    setPrinterSavedSuccess(true);
-    setTimeout(() => setPrinterSavedSuccess(false), 2500);
-  };
-
-  const handleTestPrint = async () => {
-    const testBytes = generateTestReceiptEscPos(location, printerForm);
-
-    if (printerForm.connection_type === 'bluetooth') {
-      const res = await printViaBluetooth(testBytes);
-      setTestPrintFeedback(res.message);
-      setTimeout(() => setTestPrintFeedback(null), 4000);
-      return;
-    }
-
-    if (printerForm.open_cash_drawer) {
-      triggerCashDrawerKick();
-    }
-
-    setTestPrintFeedback(
-      `Test pattern (${printerForm.paper_width}, ${printerForm.connection_type.toUpperCase()}) dispatched. Triggering print dialog.`
-    );
-    window.print();
-    setTimeout(() => setTestPrintFeedback(null), 4000);
-  };
-
-  const handleTestDrawerKick = () => {
-    const res = triggerCashDrawerKick();
-    setTestPrintFeedback(res.message);
-    setTimeout(() => setTestPrintFeedback(null), 3000);
-  };
-
-  /* ================= SERVEPOINT BRANCH (per docs/design/servepoint/frames/Checkout_Settings_219-29597.png):
-      ivory canvas, sage-tint section-nav card w/ deep-teal active row, setting rows with gold toggles,
-      hairline dividers, full-width gold Save Changes. All existing handlers/fields preserved. ================= */
-  if (isServepoint) {
-    const settingsNav = [
-      { id: 'printer' as const, label: 'Printer & Hardware', icon: Printer },
-      { id: 'fees' as const, label: 'Checkout Settings', icon: Zap },
-      { id: 'staff' as const, label: 'Staff Accounts', icon: Users },
-      { id: 'profile' as const, label: 'Cafe Profile', icon: Building },
-      { id: 'reset' as const, label: 'Reset Data', icon: RotateCcw },
-    ];
-
-    const spInputClass =
-      'w-full px-3 py-2 text-xs font-bold rounded-xl border border-[#E3E7E0] bg-white text-[#1A1A1A] focus:border-[#B88E2F] focus:ring-1 focus:ring-[#B88E2F]/30 focus:outline-hidden';
-    const spLabelClass = 'block text-xs font-semibold text-[#6B6B6B] mb-1';
-
-    return (
-      <div className="flex-1 overflow-y-auto bg-[#F6F5F2] p-4 lg:p-8">
-        <div className="max-w-5xl mx-auto space-y-6">
-          {/* Page Header */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <div className="w-11 h-11 rounded-2xl sp-surface text-[#0F3D3E] flex items-center justify-center">
-                <Sliders className="w-5 h-5" />
-              </div>
-              <div>
-                <h1 className="text-xl font-black text-[#1A1A1A] tracking-tight flex items-center gap-2">
-                  <span>Checkout Settings</span>
-                  <span className="text-xs px-2 py-0.5 rounded-full bg-[#D9E2DD] text-[#0F3D3E] font-semibold">
-                    Station #{location.id}
-                  </span>
-                </h1>
-                <p className="text-xs text-[#6B6B6B] mt-0.5">
-                  Configure thermal bill printing, cash drawer kick, zero-subscription fee engine, and guidance mode.
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={startTour}
-                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white border border-[#E3E7E0] text-xs font-bold text-[#0F3D3E] hover:bg-[#F6F5F2] transition-colors"
-              >
-                <Sparkles className="w-4 h-4 text-[#B88E2F]" />
-                <span>Launch Guided Tour</span>
-              </button>
-              <button
-                type="button"
-                onClick={toggleGuidanceMode}
-                className={`px-3 py-2 rounded-xl text-xs font-bold transition-colors ${
-                  guidanceMode
-                    ? 'bg-[#0F3D3E] text-white'
-                    : 'bg-white text-[#6B6B6B] border border-[#E3E7E0] hover:bg-[#F6F5F2]'
-                }`}
-              >
-                {guidanceMode ? 'Guidance ON' : 'Guidance OFF'}
-              </button>
-            </div>
-          </div>
-
-          {/* Section Nav (sage card) + Content */}
-          <div className="grid grid-cols-1 lg:grid-cols-[230px_1fr] gap-5 items-start">
-            <nav aria-label="Settings sections" className="bg-[#D9E2DD] rounded-2xl p-2 space-y-0.5 lg:sticky lg:top-4">
-              <div className="text-[10px] uppercase tracking-wider text-[#6B8579] font-semibold px-3.5 pt-1.5 pb-1">
-                Settings
-              </div>
-              {settingsNav.map((s) => {
-                const NavIcon = s.icon;
-                const isActive = activeSettingsSection === s.id;
-                return (
-                  <button
-                    key={s.id}
-                    type="button"
-                    onClick={() => setActiveSettingsSection(s.id)}
-                    aria-current={isActive ? 'page' : undefined}
-                    className={`w-full flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-sm transition-colors ${
-                      isActive
-                        ? 'bg-[#0F3D3E] text-white font-semibold shadow-xs'
-                        : 'text-[#0F3D3E] font-medium hover:bg-white/70'
-                    }`}
-                  >
-                    <NavIcon className={`w-4 h-4 ${isActive ? 'text-[#B88E2F]' : 'text-[#0F3D3E] opacity-70'}`} />
-                    <span>{s.label}</span>
-                  </button>
-                );
-              })}
-            </nav>
-
-            <div className="space-y-6 min-w-0">
-              {/* ===== 1. THERMAL PRINTER ===== */}
-              {activeSettingsSection === 'printer' && (
-                <div className="bg-white rounded-3xl border border-[#E3E7E0] p-6 shadow-xs space-y-6">
-                  <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#E3E7E0] pb-4">
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-10 h-10 rounded-2xl sp-surface text-[#0F3D3E] flex items-center justify-center">
-                        <Printer className="w-5 h-5" />
-                      </div>
-                      <div>
-                        <h3 className="font-bold text-base text-[#1A1A1A] flex items-center gap-2">
-                          <span>Thermal Receipt & KOT Printer Integration</span>
-                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#E8F5EC] text-[#17803D] font-bold">
-                            ESC/POS
-                          </span>
-                        </h3>
-                        <p className="text-xs text-[#6B6B6B]">
-                          Connect 58mm or 80mm thermal receipt printers via Web Print, Network/LAN, Bluetooth, or USB.
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={handleTestDrawerKick}
-                        className="px-3 py-1.5 rounded-xl border border-[#E3E7E0] bg-white text-xs font-semibold text-[#6B6B6B] hover:bg-[#F6F5F2] flex items-center gap-1.5 transition-colors"
-                        title="Send test RJ11/RJ12 drawer kick pulse"
-                      >
-                        <DollarSign className="w-3.5 h-3.5 text-[#17803D]" />
-                        <span>Test Drawer</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={handleTestPrint}
-                        className="px-3.5 py-1.5 rounded-xl bg-[#0F3D3E] hover:bg-[#0B3132] text-white text-xs font-bold flex items-center gap-1.5 transition-colors"
-                      >
-                        <Printer className="w-3.5 h-3.5 text-[#B88E2F]" />
-                        <span>Diagnostic Test Print</span>
-                      </button>
-                    </div>
-                  </div>
-
-                  {testPrintFeedback && (
-                    <div className="p-3 bg-[#B88E2F]/10 text-[#967221] border border-[#B88E2F]/30 rounded-xl text-xs flex items-center gap-2 animate-in fade-in">
-                      <FileCheck2 className="w-4 h-4 shrink-0" />
-                      <span>{testPrintFeedback}</span>
-                    </div>
-                  )}
-
-                  {printerSavedSuccess && (
-                    <div className="p-3 bg-[#E8F5EC] text-[#17803D] border border-[#B7DCC5] rounded-xl text-xs flex items-center gap-2 animate-in fade-in">
-                      <Check className="w-4 h-4 shrink-0" />
-                      <span>Printer settings saved successfully! Thermal bills will format according to your choices.</span>
-                    </div>
-                  )}
-
-                  <form onSubmit={handleSavePrinterConfig} className="space-y-5">
-                    {/* Connection Type */}
-                    <div>
-                      <label className="block text-xs font-bold text-[#1A1A1A] mb-2">
-                        Printer Connection Interface
-                      </label>
-                      <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
-                        {[
-                          {
-                            id: 'browser',
-                            name: 'Browser / System Dialog',
-                            icon: Printer,
-                            desc: 'Zero drivers needed. Works across Chrome, Edge, and Windows print spools.',
-                          },
-                          {
-                            id: 'network',
-                            name: 'Network / LAN (TCP:9100)',
-                            icon: Wifi,
-                            desc: 'Direct socket to Ethernet or Wi-Fi thermal printer IP address.',
-                          },
-                          {
-                            id: 'bluetooth',
-                            name: 'Web Bluetooth (SPP)',
-                            icon: Bluetooth,
-                            desc: 'Direct wireless pairing with handheld mobile thermal printers.',
-                          },
-                          {
-                            id: 'usb',
-                            name: 'Web USB Direct',
-                            icon: Usb,
-                            desc: 'Direct raw ESC/POS byte streaming to desktop USB receipt printer.',
-                          },
-                        ].map((conn) => {
-                          const Icon = conn.icon;
-                          const isSelected = printerForm.connection_type === conn.id;
-                          return (
-                            <button
-                              key={conn.id}
-                              type="button"
-                              onClick={() =>
-                                setPrinterForm((prev) => ({
-                                  ...prev,
-                                  connection_type: conn.id as any,
-                                }))
-                              }
-                              className={`p-3.5 rounded-2xl border text-left transition-all ${
-                                isSelected
-                                  ? 'border-[#B88E2F] bg-[#B88E2F]/5 ring-1 ring-[#B88E2F]'
-                                  : 'border-[#E3E7E0] bg-white hover:bg-[#F6F5F2]'
-                              }`}
-                            >
-                              <div className="flex items-center justify-between mb-1.5">
-                                <Icon className={`w-4 h-4 ${isSelected ? 'text-[#967221]' : 'text-[#6B6B6B]'}`} />
-                                {isSelected && <span className="w-2 h-2 rounded-full bg-[#B88E2F]" />}
-                              </div>
-                              <div className="font-bold text-xs text-[#1A1A1A]">{conn.name}</div>
-                              <div className="text-[11px] text-[#6B6B6B] mt-1 leading-snug">{conn.desc}</div>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-
-                    {/* Paper Width & IP Details */}
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                      <div>
-                        <label className={spLabelClass}>Thermal Paper Roll Width</label>
-                        <div className="flex rounded-xl border border-[#E3E7E0] overflow-hidden bg-white p-1">
-                          <button
-                            type="button"
-                            onClick={() => setPrinterForm((prev) => ({ ...prev, paper_width: '80mm' }))}
-                            className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-colors ${
-                              printerForm.paper_width === '80mm'
-                                ? 'bg-[#0F3D3E] text-white'
-                                : 'text-[#6B6B6B] hover:bg-[#F6F5F2]'
-                            }`}
-                          >
-                            80mm (Standard Desktop)
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setPrinterForm((prev) => ({ ...prev, paper_width: '58mm' }))}
-                            className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-colors ${
-                              printerForm.paper_width === '58mm'
-                                ? 'bg-[#0F3D3E] text-white'
-                                : 'text-[#6B6B6B] hover:bg-[#F6F5F2]'
-                            }`}
-                          >
-                            58mm (Compact Mobile)
-                          </button>
-                        </div>
-                        <span className="text-[10px] text-[#6B8579] mt-1 block">
-                          {printerForm.paper_width === '80mm'
-                            ? '48 characters per line'
-                            : '32 characters per line'}
-                        </span>
-                      </div>
-
-                      <div>
-                        <label className={spLabelClass}>Printer IP / Host Address (Port 9100)</label>
-                        <input
-                          type="text"
-                          value={printerForm.ip_address || ''}
-                          onChange={(e) =>
-                            setPrinterForm((prev) => ({ ...prev, ip_address: e.target.value }))
-                          }
-                          placeholder="192.168.1.200"
-                          className={spInputClass}
-                        />
-                        <span className="text-[10px] text-[#6B8579] mt-1 block">
-                          Used for Network thermal printers over Wi-Fi/LAN
-                        </span>
-                      </div>
-
-                      <div>
-                        <label className={spLabelClass}>Kitchen KOT Printer IP</label>
-                        <input
-                          type="text"
-                          value={printerForm.kot_printer_ip || ''}
-                          onChange={(e) =>
-                            setPrinterForm((prev) => ({ ...prev, kot_printer_ip: e.target.value }))
-                          }
-                          placeholder="192.168.1.201:9100"
-                          className={spInputClass}
-                        />
-                        <span className="text-[10px] text-[#6B8579] mt-1 block">
-                          Dedicated ticket printer stationed in barista/kitchen
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Automation Toggles — setting rows with gold toggles */}
-                    <div className="rounded-2xl border border-[#E3E7E0] divide-y divide-[#E3E7E0]">
-                      {[
-                        {
-                          key: 'auto_print_receipt',
-                          label: 'Auto-Print Customer Bill on Payment',
-                          desc: 'Instantly triggers receipt printer when bill is settled via UPI, Cash, or Card.',
-                          value: printerForm.auto_print_receipt,
-                        },
-                        {
-                          key: 'auto_print_kot',
-                          label: 'Auto-Print Kitchen Order Ticket (KOT)',
-                          desc: 'Sends ticket to kitchen printer immediately upon cart confirmation.',
-                          value: printerForm.auto_print_kot,
-                        },
-                        {
-                          key: 'open_cash_drawer',
-                          label: 'Auto-Kick Cash Drawer on Cash Sale',
-                          desc: 'Sends ESC/POS pulse (ESC p 0 25 250) to RJ11/RJ12 drawer port.',
-                          value: printerForm.open_cash_drawer,
-                        },
-                        {
-                          key: 'cut_paper',
-                          label: 'Automatic Paper Guillotine Cut',
-                          desc: 'Feeds 3 blank lines and triggers hardware cutter command (GS V 66 0).',
-                          value: printerForm.cut_paper,
-                        },
-                      ].map((row) => (
-                        <div key={row.key} className="flex items-center justify-between gap-4 px-4 py-3.5">
-                          <div>
-                            <span className="text-xs font-bold text-[#1A1A1A]">{row.label}</span>
-                            <p className="text-[11px] text-[#6B6B6B] mt-0.5">{row.desc}</p>
-                          </div>
-                          <SPToggle
-                            checked={row.value}
-                            label={row.label}
-                            onChange={(v) =>
-                              setPrinterForm((prev) => ({
-                                ...prev,
-                                [row.key]: v,
-                              }))
-                            }
-                          />
-                        </div>
-                      ))}
-                    </div>
-
-                    {/* Bill Header, Footer & GSTIN */}
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                      <div>
-                        <label className={spLabelClass}>Legal GSTIN Number</label>
-                        <input
-                          type="text"
-                          value={printerForm.gstin || ''}
-                          onChange={(e) => setPrinterForm((prev) => ({ ...prev, gstin: e.target.value }))}
-                          placeholder="29AABCT1337C1Z0"
-                          className={spInputClass}
-                        />
-                      </div>
-
-                      <div>
-                        <label className={spLabelClass}>Custom Receipt Header Note</label>
-                        <input
-                          type="text"
-                          value={printerForm.receipt_header || ''}
-                          onChange={(e) =>
-                            setPrinterForm((prev) => ({ ...prev, receipt_header: e.target.value }))
-                          }
-                          placeholder="Welcome to TSOS Cafe & Roastery"
-                          className={spInputClass}
-                        />
-                      </div>
-
-                      <div>
-                        <label className={spLabelClass}>Custom Receipt Footer Note</label>
-                        <input
-                          type="text"
-                          value={printerForm.receipt_footer || ''}
-                          onChange={(e) =>
-                            setPrinterForm((prev) => ({ ...prev, receipt_footer: e.target.value }))
-                          }
-                          placeholder="Thank you for dining with us! ✨"
-                          className={spInputClass}
-                        />
-                      </div>
-                    </div>
-
-                    <button
-                      type="submit"
-                      className="sp-cta w-full py-2.5 text-xs font-semibold"
-                    >
-                      Save Printer Configuration
-                    </button>
-                  </form>
-                </div>
-              )}
-
-              {/* ===== 2. FEE ENGINE ===== */}
-              {activeSettingsSection === 'fees' && (
-                <div className="bg-white rounded-3xl border border-[#E3E7E0] p-6 shadow-xs space-y-4">
-                  <div className="flex items-center gap-2.5 border-b border-[#E3E7E0] pb-3">
-                    <div className="w-10 h-10 rounded-2xl sp-surface text-[#0F3D3E] flex items-center justify-center">
-                      <Zap className="w-5 h-5" />
-                    </div>
-                    <div>
-                      <h3 className="font-bold text-sm text-[#1A1A1A]">
-                        TSOS Zero-Subscription Fee Engine
-                      </h3>
-                      <p className="text-xs text-[#6B6B6B]">
-                        Configured at ₹1 per order with zero upfront or monthly software commitments.
-                      </p>
-                    </div>
-                  </div>
-
-                  {savedSuccess && (
-                    <div className="p-3 bg-[#E8F5EC] text-[#17803D] border border-[#B7DCC5] rounded-xl text-xs flex items-center gap-2">
-                      <Check className="w-4 h-4 shrink-0" />
-                      <span>Fee engine configuration saved successfully.</span>
-                    </div>
-                  )}
-
-                  <form onSubmit={handleSaveFeeConfig} className="space-y-4">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div>
-                        <label className={spLabelClass}>Monthly Subscription Fee</label>
-                        <div className="px-3 py-2 text-sm font-bold bg-[#F6F5F2] rounded-xl border border-[#E3E7E0] text-[#17803D]">
-                          ₹0 / month (Lifetime Free)
-                        </div>
-                        <div className="text-[11px] text-[#6B8579] mt-1">
-                          No hidden monthly software fees or rental contracts.
-                        </div>
-                      </div>
-
-                      <div>
-                        <label className={spLabelClass}>Per-Order Platform Fee (₹)</label>
-                        <input
-                          type="number"
-                          min={0}
-                          step={0.25}
-                          value={perOrderFee}
-                          onChange={(e) => setPerOrderFee(Number(e.target.value) || 0)}
-                          className={spInputClass}
-                        />
-                        <div className="text-[11px] text-[#6B8579] mt-1">
-                          Default is ₹1.00 per completed sale.
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Fee Payer */}
-                    <div className="p-4 rounded-xl bg-[#F6F5F2] border border-[#E3E7E0] space-y-3">
-                      <div className="text-xs font-semibold text-[#1A1A1A]">Who Pays the Platform Fee?</div>
-                      <div className="grid grid-cols-2 gap-3">
-                        <button
-                          type="button"
-                          onClick={() => setFeePayer('cafe')}
-                          className={`p-3 rounded-xl border text-left transition-all ${
-                            feePayer === 'cafe'
-                              ? 'border-[#B88E2F] bg-[#B88E2F]/5 ring-1 ring-[#B88E2F]'
-                              : 'border-[#E3E7E0] bg-white hover:bg-[#F6F5F2]'
-                          }`}
-                        >
-                          <div className="font-bold text-xs text-[#1A1A1A]">Absorbed by Cafe</div>
-                          <div className="text-[11px] text-[#6B6B6B] mt-0.5">
-                            Customer bill stays clean; ₹1 fee is absorbed as an operating expense.
-                          </div>
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => setFeePayer('customer')}
-                          className={`p-3 rounded-xl border text-left transition-all ${
-                            feePayer === 'customer'
-                              ? 'border-[#B88E2F] bg-[#B88E2F]/5 ring-1 ring-[#B88E2F]'
-                              : 'border-[#E3E7E0] bg-white hover:bg-[#F6F5F2]'
-                          }`}
-                        >
-                          <div className="font-bold text-xs text-[#1A1A1A]">Paid by Customer</div>
-                          <div className="text-[11px] text-[#6B6B6B] mt-0.5">
-                            +₹1 platform fee itemized directly on customer invoice/receipt.
-                          </div>
-                        </button>
-                      </div>
-
-                      {/* Auto-flip rule */}
-                      <div className="pt-3 border-t border-[#E3E7E0]">
-                        <div className="flex items-start justify-between gap-4">
-                          <div>
-                            <span className="text-xs font-semibold text-[#1A1A1A]">
-                              Enable Auto-Flip Fee Engine
-                            </span>
-                            <p className="text-[11px] text-[#6B6B6B] leading-relaxed mt-0.5">
-                              Automatically switch fee payer from "Cafe" to "Customer" after a promotional trial period.
-                            </p>
-                          </div>
-                          <SPToggle
-                            checked={autoFlipEnabled}
-                            label="Enable Auto-Flip Fee Engine"
-                            onChange={(v) => setAutoFlipEnabled(v)}
-                          />
-                        </div>
-
-                        {autoFlipEnabled && (
-                          <div className="mt-3 flex items-center gap-3">
-                            <span className="text-xs text-[#6B6B6B]">Flip threshold:</span>
-                            <input
-                              type="number"
-                              min={10}
-                              value={autoFlipThreshold}
-                              onChange={(e) => setAutoFlipThreshold(Number(e.target.value) || 100)}
-                              className="w-24 px-2 py-1 text-xs font-bold rounded-lg border border-[#E3E7E0] bg-white text-[#1A1A1A] focus:border-[#B88E2F] focus:ring-1 focus:ring-[#B88E2F]/30 focus:outline-none"
-                            />
-                            <span className="text-xs text-[#6B6B6B]">
-                              orders ({feeConfig.period_order_count} of {autoFlipThreshold} completed)
-                            </span>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    <button
-                      type="submit"
-                      className="sp-cta w-full py-2.5 text-xs font-semibold"
-                    >
-                      Save Fee Engine Settings
-                    </button>
-                  </form>
-                </div>
-              )}
-
-              {/* ===== 3. STAFF ACCOUNTS ===== */}
-              {activeSettingsSection === 'staff' && (
-                <div className="bg-white rounded-3xl border border-[#E3E7E0] p-6 shadow-xs space-y-4">
-                  <div className="flex items-center gap-2.5 border-b border-[#E3E7E0] pb-3">
-                    <div className="w-10 h-10 rounded-2xl sp-surface text-[#0F3D3E] flex items-center justify-center">
-                      <Users className="w-5 h-5" />
-                    </div>
-                    <div>
-                      <h3 className="font-bold text-sm text-[#1A1A1A]">Staff Accounts & Quick Role Switch</h3>
-                      <p className="text-xs text-[#6B6B6B]">
-                        Staff is the merged Manager + Cashier role — they operate the whole POS app
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* v4.0.0 — Create Staff Login (owner-only ability) */}
-                  {canPerformAction(currentProfile?.role, 'manage_staff') ? (
-                    <form
-                      onSubmit={async (e) => {
-                        e.preventDefault();
-                        if (!staffLoginForm.name.trim() || !staffLoginForm.email.trim() || staffLoginForm.password.length < 6) return;
-                        setStaffLoginFeedback(null);
-                        const res = await authService.signUp(
-                          staffLoginForm.email,
-                          staffLoginForm.password,
-                          staffLoginForm.name.trim(),
-                          'staff',
-                          { slug: currentTenant?.slug || location.slug, name: location.name }
-                        );
-                        setStaffLoginFeedback({
-                          ok: true,
-                          text: res.error
-                            ? `${staffLoginForm.email.trim().toLowerCase()} created — ${res.error}`
-                            : `Staff login created: ${staffLoginForm.email.trim().toLowerCase()} / ${staffLoginForm.password}`,
-                        });
-                        setStaffLoginForm({ name: '', email: '', password: '' });
-                      }}
-                      className="p-4 rounded-2xl border border-[#E3E7E0] bg-[#F6F5F2] space-y-3"
-                    >
-                      <div className="flex items-center gap-2">
-                        <UserPlus className="w-4 h-4 text-[#0F3D3E]" />
-                        <span className="font-bold text-xs text-[#1A1A1A]">Create Staff Login</span>
-                        <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-[#D9E2DD] text-[#0F3D3E] font-semibold">Owner only</span>
-                      </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                        <input
-                          type="text"
-                          required
-                          value={staffLoginForm.name}
-                          onChange={(e) => setStaffLoginForm({ ...staffLoginForm, name: e.target.value })}
-                          placeholder="Staff name (e.g. Rahul Verma)"
-                          className="px-3 py-2 text-xs rounded-lg border border-[#E3E7E0] bg-white text-[#1A1A1A] focus:border-[#B88E2F] focus:ring-1 focus:ring-[#B88E2F]/30 focus:outline-none"
-                        />
-                        <input
-                          type="email"
-                          required
-                          value={staffLoginForm.email}
-                          onChange={(e) => setStaffLoginForm({ ...staffLoginForm, email: e.target.value })}
-                          placeholder="staff@yourcafe.com"
-                          className="px-3 py-2 text-xs rounded-lg border border-[#E3E7E0] bg-white text-[#1A1A1A] focus:border-[#B88E2F] focus:ring-1 focus:ring-[#B88E2F]/30 focus:outline-none"
-                        />
-                        <input
-                          type="text"
-                          required
-                          minLength={6}
-                          value={staffLoginForm.password}
-                          onChange={(e) => setStaffLoginForm({ ...staffLoginForm, password: e.target.value })}
-                          placeholder="Temporary password (min 6 chars)"
-                          className="px-3 py-2 text-xs rounded-lg border border-[#E3E7E0] bg-white text-[#1A1A1A] focus:border-[#B88E2F] focus:ring-1 focus:ring-[#B88E2F]/30 focus:outline-none"
-                        />
-                      </div>
-                      <div className="flex items-center justify-between gap-3 flex-wrap">
-                        <span className="text-[10px] text-[#6B8579] flex items-center gap-1.5">
-                          <KeyRound className="w-3 h-3" />
-                          Share the password securely — staff sign in at the login screen with email + password.
-                        </span>
-                        <button type="submit" className="sp-cta px-4 py-2 text-xs font-semibold">
-                          Create Staff Login
-                        </button>
-                      </div>
-                      {staffLoginFeedback && (
-                        <div className="p-2.5 rounded-lg bg-[#E8F5EC] border border-[#17803D]/30 text-[11px] text-[#17803D] font-semibold">
-                          {staffLoginFeedback.text}
-                        </div>
-                      )}
-                    </form>
-                  ) : (
-                    <div className="p-3 rounded-xl border border-[#E3E7E0] bg-[#F6F5F2] text-[11px] text-[#6B6B6B]">
-                      Only the cafe <span className="font-bold text-[#0F3D3E]">Owner</span> can create staff logins. Ask your owner to provision an account.
-                    </div>
-                  )}
-
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    {SEED_PROFILES.map((p) => {
-                      const isCurrent = currentProfile.id === p.id;
-                      return (
-                        <div
-                          key={p.id}
-                          className={`p-3.5 rounded-xl border transition-all ${
-                            isCurrent
-                              ? 'border-[#0F3D3E] bg-[#F6F5F2] ring-1 ring-[#0F3D3E]'
-                              : 'border-[#E3E7E0] bg-white hover:bg-[#F6F5F2]'
-                          }`}
-                        >
-                          <div className="flex items-center justify-between mb-2">
-                            <span className="font-bold text-xs capitalize text-[#1A1A1A]">{p.role}</span>
-                            <span className="text-[10px] font-semibold bg-[#D9E2DD] text-[#0F3D3E] px-1.5 py-0.2 rounded-md">
-                              PIN: {p.pin_code}
-                            </span>
-                          </div>
-                          <div className="text-xs font-semibold text-[#1A1A1A]">{p.name}</div>
-                          <div className="text-[11px] text-[#6B6B6B]">{p.email}</div>
-
-                          <button
-                            onClick={() => setCurrentProfile(p)}
-                            disabled={isCurrent}
-                            className={`w-full mt-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
-                              isCurrent
-                                ? 'bg-[#0F3D3E] text-white cursor-default'
-                                : 'bg-white border border-[#E3E7E0] hover:bg-[#F6F5F2] text-[#0F3D3E]'
-                            }`}
-                          >
-                            {isCurrent ? 'Active User' : 'Switch to This Staff'}
-                          </button>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {/* ===== 4. CAFE PROFILE ===== */}
-              {activeSettingsSection === 'profile' && (
-                <div className="bg-white rounded-3xl border border-[#E3E7E0] p-6 shadow-xs space-y-3">
-                  <div className="flex items-center gap-2.5 border-b border-[#E3E7E0] pb-3">
-                    <div className="w-10 h-10 rounded-2xl sp-surface text-[#0F3D3E] flex items-center justify-center">
-                      <Building className="w-5 h-5" />
-                    </div>
-                    <h3 className="font-bold text-sm text-[#1A1A1A]">Cafe Location & Legal Profile</h3>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-                    <div>
-                      <span className="text-[#6B6B6B]">Location Name:</span>
-                      <div className="font-bold text-[#1A1A1A] text-sm">{location.name}</div>
-                    </div>
-                    <div>
-                      <span className="text-[#6B6B6B]">Public Slug:</span>
-                      <div className="font-bold text-[#B88E2F] hover:text-[#967221]">/storefront/{location.slug}</div>
-                    </div>
-                    <div>
-                      <span className="text-[#6B6B6B]">Registered Address:</span>
-                      <div className="text-[#1A1A1A]">{location.address}</div>
-                    </div>
-                    <div>
-                      <span className="text-[#6B6B6B]">Official Phone:</span>
-                      <div className="text-[#1A1A1A]">{location.phone}</div>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* ===== 5. RESET DEMO ===== */}
-              {activeSettingsSection === 'reset' && (
-                <div className="p-5 bg-[#FEF2F2] rounded-3xl border border-[#F5C6C0] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                  <div>
-                    <h4 className="font-bold text-xs text-[#B42318]">Reset All Demo Data</h4>
-                    <p className="text-[11px] text-[#B42318]/80 mt-0.5">
-                      Restore default demo cafe items, initial coffee/tea inventory, sample orders, and tables.
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => {
-                      if (window.confirm('Reset all demo cafe data to initial factory state?')) {
-                        resetToSeed();
-                      }
-                    }}
-                    className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-white border border-[#F5C6C0] text-xs font-semibold text-[#B42318] hover:bg-[#FDE3E3] transition-colors shrink-0"
-                  >
-                    <RotateCcw className="w-3.5 h-3.5" />
-                    <span>Reset Demo</span>
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
+const PasswordField: React.FC<{
+  id: string;
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  autoComplete: string;
+}> = ({ id, label, value, onChange, autoComplete }) => {
+  const [show, setShow] = useState(false);
+  return (
+    <div>
+      <label htmlFor={id} className="text-[12.5px] font-semibold text-[#1A1A1A]">
+        {label}
+      </label>
+      <div className="relative mt-1.5">
+        <input
+          id={id}
+          type={show ? 'text' : 'password'}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          autoComplete={autoComplete}
+          className="sp-input h-11 w-full pl-3.5 pr-12 text-[14px]"
+        />
+        <button
+          type="button"
+          onClick={() => setShow((s) => !s)}
+          aria-label={show ? `Hide ${label.toLowerCase()}` : `Show ${label.toLowerCase()}`}
+          aria-pressed={show}
+          className="absolute right-0 top-0 flex h-11 w-11 items-center justify-center rounded-r-xl text-[#6B6B6B] hover:text-[#1A1A1A] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#967221]"
+        >
+          {show ? <EyeOff size={16} aria-hidden /> : <Eye size={16} aria-hidden />}
+        </button>
       </div>
-    );
-  }
+    </div>
+  );
+};
+
+const SPSelect: React.FC<{
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  options: { value: string; label: string }[];
+}> = ({ label, value, onChange, options }) => (
+  <div className="relative">
+    <select
+      aria-label={label}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className="sp-input h-11 w-44 max-w-[52vw] appearance-none pl-3.5 pr-9 text-[13.5px]"
+    >
+      {options.map((o) => (
+        <option key={o.value} value={o.value}>
+          {o.label}
+        </option>
+      ))}
+    </select>
+    <ChevronDown
+      size={15}
+      aria-hidden
+      className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[#6B6B6B]"
+    />
+  </div>
+);
+
+/* ──────────────────────────── 1 · Profile ───────────────────────────── */
+
+const ProfileSection: React.FC = () => {
+  const session = useSession((s) => s.session);
+  const roleMeta = getRoleMeta(session?.role);
+  const initial = (session?.name || session?.email || 'S').charAt(0).toUpperCase();
 
   return (
-    <div className="flex-1 overflow-y-auto bg-[#F5F0EB] p-4 lg:p-8">
-      <div className="max-w-4xl mx-auto space-y-6">
-        {/* Header & Quick Tour Trigger */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <h1 className="text-xl font-black text-[#1C1917] tracking-tight flex items-center gap-2">
-              <span>Cafe & Hardware Settings</span>
-              <span className="text-xs px-2 py-0.5 rounded-full bg-[#E9E0D6] text-[#57534E] font-normal">
-                Station #{location.id}
+    <div>
+      <SectionHeading title="Profile" description="Your account details as recorded by the platform." />
+      <div className="mt-6 flex items-center gap-4">
+        <span
+          aria-hidden
+          className="flex h-20 w-20 shrink-0 items-center justify-center rounded-full bg-[#D9E2DD] text-[26px] font-bold text-[#0F3D3E]"
+        >
+          {initial}
+        </span>
+        <div className="min-w-0">
+          <p className="truncate text-[16px] font-semibold text-[#1A1A1A]">
+            {session?.name || '—'}
+          </p>
+          <p className="mt-0.5 truncate text-[13px] text-[#6B6B6B]">{session?.email || '—'}</p>
+          <span
+            className={`mt-2 inline-block rounded-full px-3 py-1 text-[11px] font-semibold ${roleMeta.className}`}
+          >
+            {roleMeta.label}
+          </span>
+        </div>
+      </div>
+
+      <div className="mt-6 border-t border-[#E3E7E0]">
+        <SettingRow label="Workspace" description="The business this login operates">
+          <span className="max-w-[52vw] truncate text-[13.5px] font-medium text-[#1A1A1A]">
+            {session?.tenantName || 'ServePoint Platform'}
+          </span>
+        </SettingRow>
+        <SettingRow label="Member since" description="Account creation date" last>
+          <span className="text-[13.5px] font-medium text-[#1A1A1A]">—</span>
+        </SettingRow>
+      </div>
+
+      <div className="mt-4 flex items-start gap-2 rounded-xl bg-[#F6F5F2] px-4 py-3 text-[12.5px] leading-relaxed text-[#6B6B6B]">
+        <Info size={14} aria-hidden className="mt-0.5 shrink-0 text-[#969696]" />
+        <span>Profile details are managed by the platform operator.</span>
+      </div>
+
+      <button
+        type="button"
+        className="sp-cta mt-6 flex min-h-[44px] w-full items-center justify-center gap-2 py-2.5 text-[14px]"
+        onClick={async () => {
+          await authService.signOut();
+          useSession.getState().setSession(null);
+        }}
+      >
+        <LogOut size={16} aria-hidden /> Sign out
+      </button>
+    </div>
+  );
+};
+
+/* ───────────────────────── 2 · Notification ─────────────────────────── */
+
+const NOTIFY_ROWS: { key: keyof SpPrefs['notify']; label: string; description: string }[] = [
+  { key: 'messages', label: 'New messages', description: 'Team & personal chats' },
+  { key: 'orders', label: 'Order updates', description: 'Bills & payments' },
+  { key: 'promotions', label: 'Promotions', description: 'Offers & news' },
+];
+
+const NotificationSection: React.FC = () => {
+  const [draft, setDraft] = useState<SpPrefs['notify']>(() => ({ ...getPrefs().notify }));
+
+  return (
+    <div>
+      <SectionHeading title="Notification" description="Choose what ServePoint alerts you about." />
+      <div className="mt-6 border-t border-[#E3E7E0]">
+        {NOTIFY_ROWS.map((row, i) => (
+          <SettingRow
+            key={row.key}
+            label={row.label}
+            description={row.description}
+            last={i === NOTIFY_ROWS.length - 1}
+          >
+            <SPToggle
+              label={row.label}
+              checked={draft[row.key]}
+              onChange={(v) => setDraft((d) => ({ ...d, [row.key]: v }))}
+            />
+          </SettingRow>
+        ))}
+      </div>
+      <SectionSave onPersist={() => setPrefs({ notify: draft })} />
+    </div>
+  );
+};
+
+/* ───────────────────────── 3 · Appearance ───────────────────────────── */
+
+const AppearanceSection: React.FC = () => {
+  const [compact, setCompact] = useState<boolean>(() => getPrefs().compact);
+
+  return (
+    <div>
+      <SectionHeading title="Appearance" description="Interface style and density." />
+      <p className="mt-6 text-[14px] font-semibold text-[#1A1A1A]">Interface style</p>
+      <div className="mt-3 rounded-2xl border border-[#E3E7E0] bg-[#EAF0EC] p-4">
+        <div className="flex items-center gap-3">
+          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white text-[#0F3D3E]">
+            <CookingPot size={20} aria-hidden />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-[14px] font-semibold text-[#1A1A1A]">ServePoint</p>
+            <p className="text-[12px] text-[#6B6B6B]">Owner-designed theme</p>
+          </div>
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-white px-2.5 py-1.5 text-[11px] font-semibold text-[#6B6B6B]">
+            <Lock size={12} aria-hidden /> Locked
+          </span>
+        </div>
+        <p className="mt-3 text-[12px] text-[#969696]">ServePoint is the production theme</p>
+      </div>
+
+      <div className="mt-4 border-t border-[#E3E7E0]">
+        <SettingRow
+          label="Compact density"
+          description="Tighter rows and smaller text across the app"
+          last
+        >
+          <SPToggle label="Compact density" checked={compact} onChange={setCompact} />
+        </SettingRow>
+      </div>
+      <SectionSave onPersist={() => setPrefs({ compact })} />
+    </div>
+  );
+};
+
+/* ─────────────────────── 4 · Checkout settings ──────────────────────── */
+
+const CheckoutSection: React.FC = () => {
+  const [saveHistory, setSaveHistory] = useState<boolean>(() => getPrefs().savePaymentHistory);
+  const [methods, setMethods] = useState<SpPrefs['paymentMethods']>(() => ({
+    ...getPrefs().paymentMethods,
+  }));
+  const [confirmClear, setConfirmClear] = useState(false);
+  const [cleared, fireCleared] = useTransientFlag(2400);
+
+  const doClear = () => {
+    useCart.getState().clear();
+    setConfirmClear(false);
+    fireCleared();
+  };
+
+  return (
+    <div>
+      <SectionHeading
+        title="Checkout Settings"
+        description="Payments accepted at the counter and bill history."
+      />
+
+      <p className="mt-6 text-[14px] font-semibold text-[#1A1A1A]">Payment History</p>
+      <div className="mt-1 border-t border-[#E3E7E0]">
+        <SettingRow
+          label="Save payment history"
+          description="Bills are cached on this device for exports and audits"
+        >
+          <SPToggle
+            label="Save payment history"
+            checked={saveHistory}
+            onChange={setSaveHistory}
+          />
+        </SettingRow>
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 py-3">
+          <p className="text-[12.5px] text-[#6B6B6B]">
+            Clear locally cached bill drafts stored in this browser.
+          </p>
+          {confirmClear ? (
+            <span className="flex flex-wrap items-center gap-x-3 text-[12.5px]">
+              <span className="font-medium text-[#B42318]">
+                This clears locally cached bill drafts
               </span>
-            </h1>
-            <p className="text-xs text-[#57534E] mt-0.5">
-              Configure thermal bill printing, cash drawer kick, zero-subscription fee engine, and guidance mode.
-            </p>
-          </div>
-
-          <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={doClear}
+                className="inline-flex min-h-[44px] items-center rounded-lg px-1 font-semibold text-[#B42318] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#967221]"
+              >
+                Clear
+              </button>
+              <button
+                type="button"
+                onClick={() => setConfirmClear(false)}
+                className="inline-flex min-h-[44px] items-center rounded-lg px-1 font-semibold text-[#6B6B6B] hover:text-[#1A1A1A] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#967221]"
+              >
+                Cancel
+              </button>
+            </span>
+          ) : cleared ? (
+            <span
+              role="status"
+              className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-[#2E7D32]"
+            >
+              <Check size={14} aria-hidden /> Cleared
+            </span>
+          ) : (
             <button
               type="button"
-              onClick={startTour}
-              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white border border-[#E9E0D6] text-xs font-bold text-[#1C1917] hover:bg-[#FFF9F2] shadow-2xs transition-colors"
+              onClick={() => setConfirmClear(true)}
+              className="inline-flex min-h-[44px] items-center px-1 text-[12.5px] font-semibold text-[#2E7D32] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#967221]"
             >
-              <Sparkles className="w-4 h-4 text-[#F97316]" />
-              <span>Launch Guided Tour</span>
+              Clear history
             </button>
-            <button
-              type="button"
-              onClick={toggleGuidanceMode}
-              className={`px-3 py-2 rounded-xl text-xs font-bold transition-colors ${
-                guidanceMode
-                  ? 'bg-[#7C3AED] text-white shadow-2xs'
-                  : 'bg-white text-[#57534E] border border-[#E9E0D6]'
-              }`}
-            >
-              {guidanceMode ? 'Guidance ON' : 'Guidance OFF'}
-            </button>
-          </div>
+          )}
         </div>
+      </div>
 
-        {/* 1. THERMAL BILL & KOT PRINTER INTEGRATION */}
-        <div className="bg-white rounded-3xl border border-[#E9E0D6] p-6 shadow-xs space-y-6">
-          <div className="flex items-center justify-between border-b border-[#F5F0EB] pb-4">
-            <div className="flex items-center gap-2.5">
-              <div className="w-10 h-10 rounded-2xl bg-[#FFF1E6] text-[#F97316] flex items-center justify-center">
-                <Printer className="w-5 h-5" />
-              </div>
-              <div>
-                <h3 className="font-bold text-base text-[#1C1917] flex items-center gap-2">
-                  <span>Thermal Receipt & KOT Printer Integration</span>
-                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-bold">
-                    ESC/POS
-                  </span>
-                </h3>
-                <p className="text-xs text-[#57534E]">
-                  Connect 58mm or 80mm thermal receipt printers via Web Print, Network/LAN, Bluetooth, or USB.
-                </p>
-              </div>
+      <p className="mt-4 text-[14px] font-semibold text-[#1A1A1A]">Payment Method</p>
+      <p className="mt-0.5 text-[12px] text-[#6B6B6B]">Methods accepted at the counter</p>
+      <div className="mt-1 border-t border-[#E3E7E0]">
+        <SettingRow label="Bank Card">
+          <SPToggle
+            label="Bank Card"
+            checked={methods.card}
+            onChange={(v) => setMethods((m) => ({ ...m, card: v }))}
+          />
+        </SettingRow>
+        <SettingRow label="Cash">
+          <SPToggle
+            label="Cash"
+            checked={methods.cash}
+            onChange={(v) => setMethods((m) => ({ ...m, cash: v }))}
+          />
+        </SettingRow>
+        <SettingRow label="UPI" last>
+          <SPToggle
+            label="UPI"
+            checked={methods.upi}
+            onChange={(v) => setMethods((m) => ({ ...m, upi: v }))}
+          />
+        </SettingRow>
+      </div>
+
+      <SectionSave
+        onPersist={() => setPrefs({ savePaymentHistory: saveHistory, paymentMethods: methods })}
+      />
+    </div>
+  );
+};
+
+/* ─────────────────────────── 5 · Security ───────────────────────────── */
+
+const LOCAL_PASSWORD_NOTICE =
+  'This account is provisioned locally. Password changes are managed by the account creator.';
+
+const SecuritySection: React.FC = () => {
+  const [current, setCurrent] = useState('');
+  const [next, setNext] = useState('');
+  const [confirmPw, setConfirmPw] = useState('');
+  const [status, setStatus] = useState<'idle' | 'saving' | 'updated' | 'local' | 'error'>('idle');
+  const [message, setMessage] = useState<string | null>(null);
+
+  const submit = async () => {
+    setMessage(null);
+    if (!current || !next || !confirmPw) {
+      setStatus('error');
+      setMessage('Fill in all three password fields.');
+      return;
+    }
+    if (next.length < 6) {
+      setStatus('error');
+      setMessage('New password must be at least 6 characters.');
+      return;
+    }
+    if (next !== confirmPw) {
+      setStatus('error');
+      setMessage('New password and confirmation do not match.');
+      return;
+    }
+    setStatus('saving');
+    try {
+      const { error } = await supabase.auth.updateUser({ password: next });
+      if (error) {
+        setStatus('local');
+        setMessage(LOCAL_PASSWORD_NOTICE);
+        return;
+      }
+      setStatus('updated');
+      setCurrent('');
+      setNext('');
+      setConfirmPw('');
+    } catch {
+      setStatus('local');
+      setMessage(LOCAL_PASSWORD_NOTICE);
+    }
+  };
+
+  return (
+    <div>
+      <SectionHeading title="Security" description="Change your password and protect the account." />
+
+      <p className="mt-6 text-[14px] font-semibold text-[#1A1A1A]">Change password</p>
+      <div className="mt-3 space-y-4">
+        <PasswordField
+          id="sp-current-password"
+          label="Current password"
+          value={current}
+          onChange={setCurrent}
+          autoComplete="current-password"
+        />
+        <PasswordField
+          id="sp-new-password"
+          label="New password"
+          value={next}
+          onChange={setNext}
+          autoComplete="new-password"
+        />
+        <PasswordField
+          id="sp-confirm-password"
+          label="Confirm new password"
+          value={confirmPw}
+          onChange={setConfirmPw}
+          autoComplete="new-password"
+        />
+      </div>
+
+      {status === 'error' && message && (
+        <div className="mt-4">
+          <Note tone="error">{message}</Note>
+        </div>
+      )}
+      {status === 'local' && message && (
+        <div className="mt-4">
+          <Note tone="amber">{message}</Note>
+        </div>
+      )}
+
+      <div className="mt-5 flex flex-wrap items-center gap-3">
+        <button
+          type="button"
+          onClick={submit}
+          disabled={status === 'saving'}
+          className="sp-cta min-h-[44px] flex-1 py-2.5 text-[14px]"
+        >
+          {status === 'saving' ? 'Updating…' : 'Update password'}
+        </button>
+        {status === 'updated' && (
+          <span
+            role="status"
+            className="inline-flex items-center gap-1.5 rounded-full bg-[#E8F5EC] px-3.5 py-2 text-[12px] font-semibold text-[#2E7D32]"
+          >
+            <Check size={14} aria-hidden /> Password updated
+          </span>
+        )}
+      </div>
+
+      <div className="mt-6 border-t border-[#E3E7E0]">
+        <SettingRow
+          label="Two-factor authentication"
+          description="Available on cloud accounts"
+          last
+        >
+          <SPToggle
+            label="Two-factor authentication"
+            checked={false}
+            onChange={() => {}}
+            disabled
+          />
+        </SettingRow>
+      </div>
+    </div>
+  );
+};
+
+/* ────────────────────── 6 · Language & Region ───────────────────────── */
+
+const CURRENCY_OPTIONS: { value: string; label: string }[] = [
+  { value: '₹', label: '₹ INR — Indian Rupee' },
+  { value: '$', label: '$ USD — US Dollar' },
+  { value: '€', label: '€ EUR — Euro' },
+];
+const TIMEZONE_OPTIONS: { value: string; label: string }[] = [
+  { value: 'Asia/Kolkata', label: 'Asia/Kolkata' },
+  { value: 'Asia/Dubai', label: 'Asia/Dubai' },
+  { value: 'Asia/Singapore', label: 'Asia/Singapore' },
+  { value: 'Europe/London', label: 'Europe/London' },
+  { value: 'America/New_York', label: 'America/New_York' },
+];
+
+const LanguageRegionSection: React.FC = () => {
+  const [currency, setCurrency] = useState<string>(() => getPrefs().currency);
+  const [timezone, setTimezone] = useState<string>(() => getPrefs().timezone);
+
+  return (
+    <div>
+      <SectionHeading
+        title="Language & Region"
+        description="Currency and timezone used across bills and reports."
+      />
+      <div className="mt-6 border-t border-[#E3E7E0]">
+        <SettingRow label="Currency" description="Applied to menus, bills and dashboards">
+          <SPSelect
+            label="Currency"
+            value={currency}
+            onChange={setCurrency}
+            options={CURRENCY_OPTIONS}
+          />
+        </SettingRow>
+        <SettingRow label="Language" description="Interface language">
+          <SPSelect
+            label="Language"
+            value="English"
+            onChange={() => {}}
+            options={[{ value: 'English', label: 'English' }]}
+          />
+        </SettingRow>
+        <SettingRow label="Timezone" description="Timestamps in reports and shifts" last>
+          <SPSelect
+            label="Timezone"
+            value={timezone}
+            onChange={setTimezone}
+            options={TIMEZONE_OPTIONS}
+          />
+        </SettingRow>
+      </div>
+      <SectionSave onPersist={() => setPrefs({ currency, timezone })} />
+    </div>
+  );
+};
+
+/* ─────────────────────── 7 · Staff accounts (owner) ─────────────────── */
+
+function generateTempPassword(): string {
+  const letters = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+  const digits = '23456789';
+  const pick = (set: string): string => {
+    if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+      const buf = new Uint32Array(1);
+      crypto.getRandomValues(buf);
+      return set[Math.floor((buf[0] / 4294967296) * set.length)];
+    }
+    return set[Math.floor(Math.random() * set.length)];
+  };
+  const half = (): string => `${pick(letters)}${pick(letters)}${pick(letters)}${pick(digits)}`;
+  return `${half()}-${half()}`;
+}
+
+const CredentialRow: React.FC<{ label: string; value: string }> = ({ label, value }) => (
+  <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-white px-3.5 py-2.5">
+    <div className="min-w-0">
+      <p className="text-[11px] font-semibold uppercase tracking-wide text-[#969696]">{label}</p>
+      <p className="mt-0.5 break-all text-[14px] font-semibold text-[#1A1A1A]">{value}</p>
+    </div>
+    <CopyButton value={value} label={label.toLowerCase()} />
+  </div>
+);
+
+const StaffSection: React.FC = () => {
+  const session = useSession((s) => s.session);
+  const { loading: tenantLoading, error: tenantError, tenantId } = useTenant();
+
+  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [listLoading, setListLoading] = useState(true);
+  const [listError, setListError] = useState<string | null>(null);
+  const [reloadTick, setReloadTick] = useState(0);
+
+  const [formOpen, setFormOpen] = useState(false);
+  const [staffName, setStaffName] = useState('');
+  const [staffEmail, setStaffEmail] = useState('');
+  const [tempPassword, setTempPassword] = useState<string>(() => generateTempPassword());
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [created, setCreated] = useState<{
+    email: string;
+    password: string;
+    cloudNotice?: string;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!tenantId) {
+      setListLoading(false);
+      return;
+    }
+    let alive = true;
+    setListLoading(true);
+    setListError(null);
+    supabase
+      .from('tenant_users')
+      .select('*')
+      .eq('tenant_id', tenantId)
+      .order('created_at', { ascending: false })
+      .then(({ data, error }) => {
+        if (!alive) return;
+        if (error) {
+          setListError(error.message);
+          setEmployees([]);
+        } else {
+          setEmployees((data || []) as Employee[]);
+        }
+        setListLoading(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [tenantId, reloadTick]);
+
+  const openForm = () => {
+    setCreated(null);
+    setSubmitError(null);
+    setTempPassword(generateTempPassword());
+    setFormOpen(true);
+  };
+
+  const submitCreate = async () => {
+    setSubmitError(null);
+    const cleanEmail = staffEmail.trim().toLowerCase();
+    if (!staffName.trim()) {
+      setSubmitError("Enter the staff member's full name.");
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+      setSubmitError('Enter a valid email address.');
+      return;
+    }
+    if (tempPassword.length < 6) {
+      setTempPassword(generateTempPassword());
+      setSubmitError('A stronger password was generated — submit again.');
+      return;
+    }
+    setSubmitting(true);
+    const result = await authService.signUp(cleanEmail, tempPassword, staffName.trim(), 'staff', {
+      slug: session?.tenantSlug,
+      name: session?.tenantName,
+    });
+    setSubmitting(false);
+    if (result.success) {
+      setCreated({ email: cleanEmail, password: tempPassword, cloudNotice: result.error });
+      setFormOpen(false);
+      setStaffName('');
+      setStaffEmail('');
+      setTempPassword(generateTempPassword());
+      setReloadTick((t) => t + 1);
+    } else {
+      setSubmitError(result.error || 'Could not create the staff login. Try again.');
+    }
+  };
+
+  return (
+    <div>
+      <SectionHeading
+        title="Staff accounts"
+        description="Create logins for your team. Staff operate the whole app but cannot manage accounts."
+      />
+
+      {tenantLoading && (
+        <div className="mt-5 space-y-3" aria-label="Loading staff accounts">
+          <div className="sp-skeleton h-14 w-full" />
+          <div className="sp-skeleton h-14 w-full" />
+        </div>
+      )}
+
+      {!tenantLoading && tenantError && (
+        <div className="mt-5">
+          <Note tone="error">{tenantError}</Note>
+        </div>
+      )}
+
+      {!tenantLoading && !tenantError && listError && (
+        <div className="mt-5">
+          <Note tone="error">{listError}</Note>
+        </div>
+      )}
+
+      {!tenantLoading && !tenantError && !listError && (
+        <>
+          {listLoading ? (
+            <div className="mt-5 space-y-3" aria-label="Loading staff accounts">
+              <div className="sp-skeleton h-14 w-full" />
+              <div className="sp-skeleton h-14 w-full" />
             </div>
-
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={handleTestDrawerKick}
-                className="px-3 py-1.5 rounded-xl border border-[#E9E0D6] bg-white text-xs font-semibold text-[#57534E] hover:bg-[#F5F0EB] flex items-center gap-1.5 shadow-2xs"
-                title="Send test RJ11/RJ12 drawer kick pulse"
-              >
-                <DollarSign className="w-3.5 h-3.5 text-emerald-600" />
-                <span>Test Drawer</span>
+          ) : employees.length === 0 ? (
+            <div className="mt-6 flex flex-col items-center rounded-2xl border border-[#E3E7E0] bg-[#F6F5F2] px-6 py-10 text-center">
+              <span className="flex h-14 w-14 items-center justify-center rounded-full bg-[#D9E2DD] text-[#0F3D3E]">
+                <Users size={24} aria-hidden />
+              </span>
+              <p className="mt-4 text-[15px] font-semibold text-[#1A1A1A]">No staff accounts yet</p>
+              <p className="mt-1 max-w-sm text-[12.5px] leading-relaxed text-[#6B6B6B]">
+                Your team signs in with their own logins. Create the first one to get started.
+              </p>
+              <button type="button" onClick={openForm} className="sp-teal-btn mt-5 px-5 py-2.5 text-[13px]">
+                Create staff login
               </button>
-
-              <button
-                type="button"
-                onClick={handleTestPrint}
-                className="px-3.5 py-1.5 rounded-xl bg-[#1C1917] hover:bg-black text-white text-xs font-bold flex items-center gap-1.5 shadow-2xs"
-              >
-                <Printer className="w-3.5 h-3.5 text-[#F97316]" />
-                <span>Diagnostic Test Print</span>
-              </button>
             </div>
-          </div>
-
-          {testPrintFeedback && (
-            <div className="p-3 bg-amber-50 text-amber-900 border border-amber-200 rounded-xl text-xs flex items-center gap-2 animate-in fade-in">
-              <FileCheck2 className="w-4 h-4 text-amber-600 shrink-0" />
-              <span>{testPrintFeedback}</span>
-            </div>
-          )}
-
-          {printerSavedSuccess && (
-            <div className="p-3 bg-emerald-50 text-emerald-900 border border-emerald-200 rounded-xl text-xs flex items-center gap-2 animate-in fade-in">
-              <Check className="w-4 h-4 text-emerald-600 shrink-0" />
-              <span>Printer settings saved successfully! Thermal bills will format according to your choices.</span>
-            </div>
-          )}
-
-          <form onSubmit={handleSavePrinterConfig} className="space-y-5">
-            {/* Connection Type */}
-            <div>
-              <label className="block text-xs font-bold text-[#1C1917] mb-2">
-                Printer Connection Interface
-              </label>
-              <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
-                {[
-                  {
-                    id: 'browser',
-                    name: 'Browser / System Dialog',
-                    icon: Printer,
-                    desc: 'Zero drivers needed. Works across Chrome, Edge, and Windows print spools.',
-                  },
-                  {
-                    id: 'network',
-                    name: 'Network / LAN (TCP:9100)',
-                    icon: Wifi,
-                    desc: 'Direct socket to Ethernet or Wi-Fi thermal printer IP address.',
-                  },
-                  {
-                    id: 'bluetooth',
-                    name: 'Web Bluetooth (SPP)',
-                    icon: Bluetooth,
-                    desc: 'Direct wireless pairing with handheld mobile thermal printers.',
-                  },
-                  {
-                    id: 'usb',
-                    name: 'Web USB Direct',
-                    icon: Usb,
-                    desc: 'Direct raw ESC/POS byte streaming to desktop USB receipt printer.',
-                  },
-                ].map((conn) => {
-                  const Icon = conn.icon;
-                  const isSelected = printerForm.connection_type === conn.id;
-                  return (
-                    <button
-                      key={conn.id}
-                      type="button"
-                      onClick={() =>
-                        setPrinterForm((prev) => ({
-                          ...prev,
-                          connection_type: conn.id as any,
-                        }))
-                      }
-                      className={`p-3.5 rounded-2xl border text-left transition-all ${
-                        isSelected
-                          ? 'border-[#F97316] bg-[#FFF9F2] ring-1 ring-[#F97316]'
-                          : 'border-[#E9E0D6] bg-white hover:bg-[#FAFAFA]'
-                      }`}
+          ) : (
+            <ul className="mt-4 border-t border-[#E3E7E0]">
+              {employees.map((e) => {
+                const meta = getRoleMeta(e.role);
+                const active = e.is_active !== false;
+                return (
+                  <li
+                    key={e.id}
+                    className="flex items-center gap-3 border-b border-[#E3E7E0] py-3.5 last:border-b-0"
+                  >
+                    <span
+                      aria-hidden
+                      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#D9E2DD] text-[14px] font-semibold text-[#0F3D3E]"
                     >
-                      <div className="flex items-center justify-between mb-1.5">
-                        <Icon className={`w-4 h-4 ${isSelected ? 'text-[#F97316]' : 'text-[#57534E]'}`} />
-                        {isSelected && <span className="w-2 h-2 rounded-full bg-[#F97316]" />}
-                      </div>
-                      <div className="font-bold text-xs text-[#1C1917]">{conn.name}</div>
-                      <div className="text-[11px] text-[#57534E] mt-1 leading-snug">{conn.desc}</div>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
+                      {(e.email || '?').charAt(0).toUpperCase()}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-[14px] font-medium text-[#1A1A1A]">{e.email}</p>
+                      <p className="text-[12px] text-[#969696]">
+                        {e.created_at ? new Date(e.created_at).toDateString() : '—'}
+                      </p>
+                    </div>
+                    <span
+                      className={`hidden shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold sm:inline-block ${meta.className}`}
+                    >
+                      {meta.label}
+                    </span>
+                    <span
+                      className={`block h-2.5 w-2.5 shrink-0 rounded-full ${active ? 'bg-[#2E7D32]' : 'bg-[#C4C9C4]'}`}
+                      title={active ? 'Active' : 'Inactive'}
+                    >
+                      <span className="sr-only">{active ? 'Active' : 'Inactive'}</span>
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
 
-            {/* Paper Width & IP Details */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div>
-                <label className="block text-xs font-semibold text-[#57534E] mb-1">
-                  Thermal Paper Roll Width
-                </label>
-                <div className="flex rounded-xl border border-[#E9E0D6] overflow-hidden bg-white p-1">
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setPrinterForm((prev) => ({ ...prev, paper_width: '80mm' }))
-                    }
-                    className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-colors ${
-                      printerForm.paper_width === '80mm'
-                        ? 'bg-[#1C1917] text-white'
-                        : 'text-[#57534E] hover:bg-[#F5F0EB]'
-                    }`}
-                  >
-                    80mm (Standard Desktop)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setPrinterForm((prev) => ({ ...prev, paper_width: '58mm' }))
-                    }
-                    className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-colors ${
-                      printerForm.paper_width === '58mm'
-                        ? 'bg-[#1C1917] text-white'
-                        : 'text-[#57534E] hover:bg-[#F5F0EB]'
-                    }`}
-                  >
-                    58mm (Compact Mobile)
-                  </button>
-                </div>
-                <span className="text-[10px] text-[#A8A29E] mt-1 block">
-                  {printerForm.paper_width === '80mm'
-                    ? '48 characters per line'
-                    : '32 characters per line'}
+          {created && (
+            <div className="mt-6 rounded-2xl border border-[#E3E7E0] bg-[#EAF0EC] p-5" role="status">
+              <div className="flex items-center gap-2">
+                <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[#2E7D32] text-white">
+                  <Check size={15} aria-hidden />
                 </span>
+                <p className="text-[14px] font-semibold text-[#1A1A1A]">Staff login created</p>
               </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-[#57534E] mb-1">
-                  Printer IP / Host Address (Port 9100)
-                </label>
-                <input
-                  type="text"
-                  value={printerForm.ip_address || ''}
-                  onChange={(e) =>
-                    setPrinterForm((prev) => ({ ...prev, ip_address: e.target.value }))
-                  }
-                  placeholder="192.168.1.200"
-                  className="w-full px-3 py-2 text-xs font-mono font-bold rounded-xl border border-[#E9E0D6] bg-white focus:border-[#F97316] focus:outline-hidden"
-                />
-                <span className="text-[10px] text-[#A8A29E] mt-1 block">
-                  Used for Network thermal printers over Wi-Fi/LAN
-                </span>
+              <div className="mt-4 space-y-2.5">
+                <CredentialRow label="Email" value={created.email} />
+                <CredentialRow label="Temporary password" value={created.password} />
               </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-[#57534E] mb-1">
-                  Kitchen KOT Printer IP
-                </label>
-                <input
-                  type="text"
-                  value={printerForm.kot_printer_ip || ''}
-                  onChange={(e) =>
-                    setPrinterForm((prev) => ({ ...prev, kot_printer_ip: e.target.value }))
-                  }
-                  placeholder="192.168.1.201:9100"
-                  className="w-full px-3 py-2 text-xs font-mono font-bold rounded-xl border border-[#E9E0D6] bg-white focus:border-[#F97316] focus:outline-hidden"
-                />
-                <span className="text-[10px] text-[#A8A29E] mt-1 block">
-                  Dedicated ticket printer stationed in barista/kitchen
-                </span>
-              </div>
-            </div>
-
-            {/* Automation Toggles */}
-            <div className="p-4 rounded-2xl bg-[#FFF9F2] border border-[#E9E0D6] grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <label className="flex items-start gap-2.5 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={printerForm.auto_print_receipt}
-                  onChange={(e) =>
-                    setPrinterForm((prev) => ({
-                      ...prev,
-                      auto_print_receipt: e.target.checked,
-                    }))
-                  }
-                  className="mt-0.5 rounded-sm text-[#F97316] focus:ring-0"
-                />
-                <div>
-                  <span className="text-xs font-bold text-[#1C1917]">
-                    Auto-Print Customer Bill on Payment
-                  </span>
-                  <p className="text-[11px] text-[#57534E]">
-                    Instantly triggers receipt printer when bill is settled via UPI, Cash, or Card.
-                  </p>
-                </div>
-              </label>
-
-              <label className="flex items-start gap-2.5 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={printerForm.auto_print_kot}
-                  onChange={(e) =>
-                    setPrinterForm((prev) => ({
-                      ...prev,
-                      auto_print_kot: e.target.checked,
-                    }))
-                  }
-                  className="mt-0.5 rounded-sm text-[#F97316] focus:ring-0"
-                />
-                <div>
-                  <span className="text-xs font-bold text-[#1C1917]">
-                    Auto-Print Kitchen Order Ticket (KOT)
-                  </span>
-                  <p className="text-[11px] text-[#57534E]">
-                    Sends ticket to kitchen printer immediately upon cart confirmation.
-                  </p>
-                </div>
-              </label>
-
-              <label className="flex items-start gap-2.5 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={printerForm.open_cash_drawer}
-                  onChange={(e) =>
-                    setPrinterForm((prev) => ({
-                      ...prev,
-                      open_cash_drawer: e.target.checked,
-                    }))
-                  }
-                  className="mt-0.5 rounded-sm text-[#F97316] focus:ring-0"
-                />
-                <div>
-                  <span className="text-xs font-bold text-[#1C1917]">
-                    Auto-Kick Cash Drawer on Cash Sale
-                  </span>
-                  <p className="text-[11px] text-[#57534E]">
-                    Sends ESC/POS pulse (ESC p 0 25 250) to RJ11/RJ12 drawer port.
-                  </p>
-                </div>
-              </label>
-
-              <label className="flex items-start gap-2.5 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={printerForm.cut_paper}
-                  onChange={(e) =>
-                    setPrinterForm((prev) => ({
-                      ...prev,
-                      cut_paper: e.target.checked,
-                    }))
-                  }
-                  className="mt-0.5 rounded-sm text-[#F97316] focus:ring-0"
-                />
-                <div>
-                  <span className="text-xs font-bold text-[#1C1917]">
-                    Automatic Paper Guillotine Cut
-                  </span>
-                  <p className="text-[11px] text-[#57534E]">
-                    Feeds 3 blank lines and triggers hardware cutter command (GS V 66 0).
-                  </p>
-                </div>
-              </label>
-            </div>
-
-            {/* Bill Header, Footer & GSTIN */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div>
-                <label className="block text-xs font-semibold text-[#57534E] mb-1">
-                  Legal GSTIN Number
-                </label>
-                <input
-                  type="text"
-                  value={printerForm.gstin || ''}
-                  onChange={(e) =>
-                    setPrinterForm((prev) => ({ ...prev, gstin: e.target.value }))
-                  }
-                  placeholder="29AABCT1337C1Z0"
-                  className="w-full px-3 py-2 text-xs font-mono font-bold rounded-xl border border-[#E9E0D6] bg-white focus:border-[#F97316] focus:outline-hidden"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-[#57534E] mb-1">
-                  Custom Receipt Header Note
-                </label>
-                <input
-                  type="text"
-                  value={printerForm.receipt_header || ''}
-                  onChange={(e) =>
-                    setPrinterForm((prev) => ({ ...prev, receipt_header: e.target.value }))
-                  }
-                  placeholder="Welcome to TSOS Cafe & Roastery"
-                  className="w-full px-3 py-2 text-xs rounded-xl border border-[#E9E0D6] bg-white focus:border-[#F97316] focus:outline-hidden"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-[#57534E] mb-1">
-                  Custom Receipt Footer Note
-                </label>
-                <input
-                  type="text"
-                  value={printerForm.receipt_footer || ''}
-                  onChange={(e) =>
-                    setPrinterForm((prev) => ({ ...prev, receipt_footer: e.target.value }))
-                  }
-                  placeholder="Thank you for dining with us! ✨"
-                  className="w-full px-3 py-2 text-xs rounded-xl border border-[#E9E0D6] bg-white focus:border-[#F97316] focus:outline-hidden"
-                />
-              </div>
-            </div>
-
-            <div className="flex justify-end pt-2">
-              <button
-                type="submit"
-                className="px-5 py-2.5 rounded-xl bg-[#F97316] hover:bg-[#EA580C] text-white text-xs font-bold shadow-xs transition-colors"
-              >
-                Save Printer Configuration
-              </button>
-            </div>
-          </form>
-        </div>
-
-        {/* 3. Zero-Subscription Fee Engine Settings */}
-        <div className="bg-white rounded-3xl border border-[#E9E0D6] p-6 shadow-xs space-y-4">
-          <div className="flex items-center gap-2 border-b border-[#F5F0EB] pb-3">
-            <Zap className="w-5 h-5 text-[#F97316]" />
-            <div>
-              <h3 className="font-bold text-sm text-[#1C1917]">
-                TSOS Zero-Subscription Fee Engine
-              </h3>
-              <p className="text-xs text-[#57534E]">
-                Configured at ₹1 per order with zero upfront or monthly software commitments.
+              <p className="mt-4 text-[12.5px] leading-relaxed text-[#6B6B6B]">
+                Hand these credentials to your staff member. They sign in on the login screen.
               </p>
-            </div>
-          </div>
-
-          {savedSuccess && (
-            <div className="p-3 bg-emerald-50 text-emerald-900 border border-emerald-200 rounded-xl text-xs flex items-center gap-2">
-              <Check className="w-4 h-4 text-emerald-600" />
-              <span>Fee engine configuration saved successfully.</span>
+              {created.cloudNotice && (
+                <div className="mt-3">
+                  <Note tone="amber">{created.cloudNotice}</Note>
+                </div>
+              )}
+              <button
+                type="button"
+                onClick={() => setCreated(null)}
+                className="mt-4 min-h-[44px] rounded-xl border border-[#E3E7E0] bg-white px-4 py-2.5 text-[13px] font-semibold text-[#1A1A1A] transition-colors hover:bg-[#F6F5F2] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#967221]"
+              >
+                Done
+              </button>
             </div>
           )}
 
-          <form onSubmit={handleSaveFeeConfig} className="space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-semibold text-[#57534E] mb-1">
-                  Monthly Subscription Fee
-                </label>
-                <div className="px-3 py-2 text-sm font-mono font-bold bg-[#F5F0EB] rounded-xl border border-[#E9E0D6] text-[#17803D]">
-                  ₹0 / month (Lifetime Free)
-                </div>
-                <div className="text-[11px] text-[#A8A29E] mt-1">
-                  No hidden monthly software fees or rental contracts.
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-[#57534E] mb-1">
-                  Per-Order Platform Fee (₹)
-                </label>
-                <input
-                  type="number"
-                  min={0}
-                  step={0.25}
-                  value={perOrderFee}
-                  onChange={(e) => setPerOrderFee(Number(e.target.value) || 0)}
-                  className="w-full px-3 py-2 text-sm font-mono font-bold rounded-xl border border-[#E9E0D6] bg-white focus:border-[#F97316] focus:outline-hidden"
-                />
-                <div className="text-[11px] text-[#A8A29E] mt-1">
-                  Default is ₹1.00 per completed sale.
-                </div>
-              </div>
-            </div>
-
-            {/* Fee Payer Toggle */}
-            <div className="p-4 rounded-xl bg-[#FFF9F2] border border-[#E9E0D6] space-y-3">
-              <div className="text-xs font-semibold text-[#1C1917]">Who Pays the Platform Fee?</div>
-              <div className="grid grid-cols-2 gap-3">
-                <button
-                  type="button"
-                  onClick={() => setFeePayer('cafe')}
-                  className={`p-3 rounded-xl border text-left transition-all ${
-                    feePayer === 'cafe'
-                      ? 'border-[#F97316] bg-[#FFF1E6] ring-1 ring-[#F97316]'
-                      : 'border-[#E9E0D6] bg-white hover:bg-[#F5F0EB]'
-                  }`}
-                >
-                  <div className="font-bold text-xs text-[#1C1917]">Absorbed by Cafe</div>
-                  <div className="text-[11px] text-[#57534E] mt-0.5">
-                    Customer bill stays clean; ₹1 fee is absorbed as an operating expense.
-                  </div>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setFeePayer('customer')}
-                  className={`p-3 rounded-xl border text-left transition-all ${
-                    feePayer === 'customer'
-                      ? 'border-[#F97316] bg-[#FFF1E6] ring-1 ring-[#F97316]'
-                      : 'border-[#E9E0D6] bg-white hover:bg-[#F5F0EB]'
-                  }`}
-                >
-                  <div className="font-bold text-xs text-[#1C1917]">Paid by Customer</div>
-                  <div className="text-[11px] text-[#57534E] mt-0.5">
-                    +₹1 platform fee itemized directly on customer invoice/receipt.
-                  </div>
-                </button>
-              </div>
-
-              {/* Auto-flip rule */}
-              <div className="pt-2 border-t border-[#E9E0D6]">
-                <label className="flex items-start gap-2 cursor-pointer">
+          {formOpen && !created && (
+            <div className="mt-6 rounded-2xl border border-[#E3E7E0] bg-[#F6F5F2] p-5">
+              <p className="text-[14px] font-semibold text-[#1A1A1A]">New staff login</p>
+              <div className="mt-4 space-y-4">
+                <div>
+                  <label htmlFor="staff-name" className="text-[12.5px] font-semibold text-[#1A1A1A]">
+                    Full name
+                  </label>
                   <input
-                    type="checkbox"
-                    checked={autoFlipEnabled}
-                    onChange={(e) => setAutoFlipEnabled(e.target.checked)}
-                    className="mt-0.5 rounded-sm text-[#F97316] focus:ring-0"
+                    id="staff-name"
+                    type="text"
+                    value={staffName}
+                    onChange={(e) => setStaffName(e.target.value)}
+                    autoComplete="off"
+                    placeholder="Staff member's full name"
+                    className="sp-input mt-1.5 h-11 w-full px-3.5 text-[14px]"
                   />
-                  <div>
-                    <span className="text-xs font-semibold text-[#1C1917]">
-                      Enable Auto-Flip Fee Engine
-                    </span>
-                    <p className="text-[11px] text-[#57534E] leading-relaxed">
-                      Automatically switch fee payer from "Cafe" to "Customer" after a promotional trial period.
-                    </p>
-                  </div>
-                </label>
-
-                {autoFlipEnabled && (
-                  <div className="mt-3 flex items-center gap-3 pl-5">
-                    <span className="text-xs text-[#57534E]">Flip threshold:</span>
+                </div>
+                <div>
+                  <label htmlFor="staff-email" className="text-[12.5px] font-semibold text-[#1A1A1A]">
+                    Email
+                  </label>
+                  <input
+                    id="staff-email"
+                    type="text"
+                    inputMode="email"
+                    autoCapitalize="none"
+                    value={staffEmail}
+                    onChange={(e) => setStaffEmail(e.target.value)}
+                    autoComplete="off"
+                    placeholder="name@yourbusiness.com"
+                    className="sp-input mt-1.5 h-11 w-full px-3.5 text-[14px]"
+                  />
+                </div>
+                <div>
+                  <label
+                    htmlFor="staff-temp-password"
+                    className="text-[12.5px] font-semibold text-[#1A1A1A]"
+                  >
+                    Temporary password
+                  </label>
+                  <div className="mt-1.5 flex flex-wrap items-center gap-2">
                     <input
-                      type="number"
-                      min={10}
-                      value={autoFlipThreshold}
-                      onChange={(e) => setAutoFlipThreshold(Number(e.target.value) || 100)}
-                      className="w-24 px-2 py-1 text-xs font-mono font-bold rounded-lg border border-[#E9E0D6]"
+                      id="staff-temp-password"
+                      type="text"
+                      readOnly
+                      value={tempPassword}
+                      aria-readonly="true"
+                      className="sp-input h-11 min-w-0 flex-1 px-3.5 text-[14px] font-semibold tracking-wide"
                     />
-                    <span className="text-xs text-[#57534E]">
-                      orders ({feeConfig.period_order_count} of {autoFlipThreshold} completed)
-                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setTempPassword(generateTempPassword())}
+                      aria-label="Generate a new temporary password"
+                      className="inline-flex h-11 shrink-0 items-center gap-1.5 rounded-xl border border-[#E3E7E0] bg-white px-3.5 text-[12.5px] font-semibold text-[#0F3D3E] transition-colors hover:bg-[#F6F5F2] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#967221]"
+                    >
+                      <RefreshCw size={14} aria-hidden /> Generate
+                    </button>
+                    <CopyButton value={tempPassword} label="temporary password" />
                   </div>
-                )}
+                </div>
+              </div>
+
+              {submitError && (
+                <div className="mt-4">
+                  <Note tone="error">{submitError}</Note>
+                </div>
+              )}
+
+              <div className="mt-5 flex flex-wrap items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFormOpen(false);
+                    setSubmitError(null);
+                  }}
+                  className="min-h-[44px] flex-1 rounded-xl border border-[#E3E7E0] bg-white px-4 py-2.5 text-[13.5px] font-semibold text-[#1A1A1A] transition-colors hover:bg-[#F6F5F2] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#967221]"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={submitCreate}
+                  disabled={submitting}
+                  className="sp-cta min-h-[44px] flex-1 py-2.5 text-[13.5px]"
+                >
+                  {submitting ? 'Creating…' : 'Create login'}
+                </button>
               </div>
             </div>
+          )}
 
-            <div className="flex justify-end">
-              <button
-                type="submit"
-                className="px-5 py-2.5 rounded-xl bg-[#F97316] hover:bg-[#EA580C] text-white text-xs font-semibold shadow-xs"
-              >
-                Save Fee Engine Settings
-              </button>
-            </div>
-          </form>
-        </div>
+          {!formOpen && !created && employees.length > 0 && (
+            <button type="button" onClick={openForm} className="sp-cta mt-6 w-full py-3 text-[14px]">
+              Create staff login
+            </button>
+          )}
+        </>
+      )}
+    </div>
+  );
+};
 
-        {/* 3. Staff Accounts & Role Switcher */}
-        <div className="bg-white rounded-3xl border border-[#E9E0D6] p-6 shadow-xs space-y-4">
-          <div className="flex items-center gap-2 border-b border-[#F5F0EB] pb-3">
-            <Users className="w-5 h-5 text-[#57534E]" />
-            <div>
-              <h3 className="font-bold text-sm text-[#1C1917]">Staff Accounts & Quick Role Switch</h3>
-              <p className="text-xs text-[#57534E]">
-                Simulate role-based access for Owner, Cashier, and Kitchen staff
-              </p>
-            </div>
-          </div>
+/* ─────────────────────────────── screen ─────────────────────────────── */
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            {SEED_PROFILES.map((p) => {
-              const isCurrent = currentProfile.id === p.id;
+const NAV_ITEMS: { id: SettingsSection; label: string; icon: LucideIcon }[] = [
+  { id: 'profile', label: 'Profile', icon: User },
+  { id: 'notification', label: 'Notification', icon: Bell },
+  { id: 'appearance', label: 'Appearance', icon: Glasses },
+  { id: 'checkout', label: 'Checkout settings', icon: SlidersHorizontal },
+  { id: 'security', label: 'Security', icon: ShieldCheck },
+  { id: 'language', label: 'Language & Region', icon: Globe2 },
+];
+
+export const SettingsScreen: React.FC = () => {
+  const session = useSession((s) => s.session);
+  const setBreadcrumb = useUi((s) => s.setBreadcrumb);
+  const [active, setActive] = useState<SettingsSection>('checkout');
+  const [, setPrefsTick] = useState(0);
+  const canManageStaff = canPerformAction(session?.role, 'manage_staff');
+
+  useEffect(() => {
+    setBreadcrumb(['Settings', 'Checkout Settings']);
+    return subscribePrefs(() => setPrefsTick((t) => t + 1));
+  }, [setBreadcrumb]);
+
+  const selectSection = (id: SettingsSection) => {
+    setActive(id);
+    setBreadcrumb(['Settings', SECTION_TITLES[id]]);
+  };
+
+  const items = [...NAV_ITEMS];
+  if (canManageStaff) items.push({ id: 'staff', label: 'Staff accounts', icon: Users });
+
+  const effective: SettingsSection = active === 'staff' && !canManageStaff ? 'checkout' : active;
+
+  return (
+    <div className="p-5 lg:p-8">
+      <h1 className="text-[22px] font-semibold tracking-[-0.01em] text-[#1A1A1A]">Settings</h1>
+
+      <div className="mt-5 flex flex-col gap-5 lg:flex-row lg:items-start">
+        <nav
+          aria-label="Settings sections"
+          className="w-full shrink-0 rounded-2xl bg-[#D9E2DD] p-2 lg:w-56"
+        >
+          <div className="flex gap-1 overflow-x-auto lg:flex-col lg:overflow-visible">
+            {items.map((item) => {
+              const Icon = item.icon;
+              const isActive = effective === item.id;
               return (
-                <div
-                  key={p.id}
-                  className={`p-3.5 rounded-xl border transition-all ${
-                    isCurrent
-                      ? 'border-[#1C1917] bg-[#F5F0EB] ring-1 ring-[#1C1917]'
-                      : 'border-[#E9E0D6] bg-white hover:bg-[#FAFAFA]'
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => selectSection(item.id)}
+                  aria-current={isActive ? 'page' : undefined}
+                  className={`sp-nav-pill flex min-h-[44px] shrink-0 items-center gap-2.5 whitespace-nowrap rounded-xl px-3.5 py-2.5 text-[13.5px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#967221] ${
+                    isActive
+                      ? 'bg-white font-semibold text-[#1A1A1A] shadow-sm'
+                      : 'text-[#0F3D3E]/70 hover:bg-white/50'
                   }`}
                 >
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="font-bold text-xs capitalize text-[#1C1917]">{p.role}</span>
-                    <span className="text-[10px] font-mono bg-[#E9E0D6] px-1.5 py-0.2 rounded-md">
-                      PIN: {p.pin_code}
-                    </span>
-                  </div>
-                  <div className="text-xs font-semibold text-[#1C1917]">{p.name}</div>
-                  <div className="text-[11px] text-[#57534E] font-mono">{p.email}</div>
-
-                  <button
-                    onClick={() => setCurrentProfile(p)}
-                    disabled={isCurrent}
-                    className={`w-full mt-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
-                      isCurrent
-                        ? 'bg-[#1C1917] text-white cursor-default'
-                        : 'bg-white border border-[#E9E0D6] hover:bg-[#E9E0D6] text-[#57534E]'
-                    }`}
-                  >
-                    {isCurrent ? 'Active User' : 'Switch to This Staff'}
-                  </button>
-                </div>
+                  <Icon size={16} aria-hidden className="shrink-0" />
+                  {item.label}
+                </button>
               );
             })}
           </div>
-        </div>
+        </nav>
 
-        {/* 4. Location & Cafe Profile */}
-        <div className="bg-white rounded-3xl border border-[#E9E0D6] p-6 shadow-xs space-y-3">
-          <div className="flex items-center gap-2 border-b border-[#F5F0EB] pb-3">
-            <Building className="w-5 h-5 text-[#57534E]" />
-            <h3 className="font-bold text-sm text-[#1C1917]">Cafe Location & Legal Profile</h3>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-            <div>
-              <span className="text-[#57534E]">Location Name:</span>
-              <div className="font-bold text-[#1C1917] text-sm">{location.name}</div>
-            </div>
-            <div>
-              <span className="text-[#57534E]">Public Slug:</span>
-              <div className="font-mono font-bold text-[#F97316]">/storefront/{location.slug}</div>
-            </div>
-            <div>
-              <span className="text-[#57534E]">Registered Address:</span>
-              <div className="text-[#1C1917]">{location.address}</div>
-            </div>
-            <div>
-              <span className="text-[#57534E]">Official Phone:</span>
-              <div className="font-mono text-[#1C1917]">{location.phone}</div>
-            </div>
-          </div>
-        </div>
-
-        {/* 5. Reset Demo Data */}
-        <div className="p-5 bg-[#FEF2F2] rounded-3xl border border-[#FECACA] flex items-center justify-between">
-          <div>
-            <h4 className="font-bold text-xs text-[#B42318]">Reset All Demo Data</h4>
-            <p className="text-[11px] text-[#B42318]/80">
-              Restore default demo cafe items, initial coffee/tea inventory, sample orders, and tables.
-            </p>
-          </div>
-          <button
-            onClick={() => {
-              if (window.confirm('Reset all demo cafe data to initial factory state?')) {
-                resetToSeed();
-              }
-            }}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white border border-[#FECACA] text-xs font-semibold text-[#B42318] hover:bg-[#FEE2E2]"
-          >
-            <RotateCcw className="w-3.5 h-3.5" />
-            <span>Reset Demo</span>
-          </button>
+        <div className="sp-card w-full min-w-0 flex-1 p-5 sm:p-6">
+          {effective === 'profile' && <ProfileSection />}
+          {effective === 'notification' && <NotificationSection />}
+          {effective === 'appearance' && <AppearanceSection />}
+          {effective === 'checkout' && <CheckoutSection />}
+          {effective === 'security' && <SecuritySection />}
+          {effective === 'language' && <LanguageRegionSection />}
+          {effective === 'staff' && <StaffSection />}
         </div>
       </div>
     </div>

@@ -1,7 +1,7 @@
 # TSOS Technical Documentation & Architecture Specification
 
 - **System**: TSOS (The Cafe Operating System)
-- **Version**: 4.0.0
+- **Version**: 5.0.0 (production rebuild, ADR-0014)
 - **Architect**: Lead Full-Stack Security & Platform Architect
 - **Updated**: October 1, 2026
 
@@ -41,6 +41,29 @@ graph TD
   POSTGRES --> REALTIME
   REALTIME --> KDS
 ```
+
+
+---
+
+## 2.0 — v5.0.0 Production Rebuild (ADR-0014) — CURRENT ARCHITECTURE
+
+**Mandate**: the application equals the owner's Figma (ServePoint). One theme, one data source, zero demo content.
+
+### 2.0.1 Module map (complete)
+- `src/App.tsx` — role router: no session → AuthScreen; `superadmin` → `PlatformScreen` (always); `owner|staff` → `AppShell` section router (dashboard/food/messages/bills/notifications/support/settings).
+- `src/components/shell/` — `Sidebar` (deep-teal rail, gold pills, user card; 76px icon rail < md), `Header` (back + breadcrumbs, bell w/ gold dot, history clock, search), `AppShell` (shell + Open Profile modal).
+- `src/lib/api.ts` — the ONLY data access: typed Supabase CRUD (categories, menu_items, orders+items, notifications, conversations/messages, tenants, subscriptions, audit logs, dashboard aggregation, provisionBusiness). No mocks/seed fallbacks; errors throw → screens render honest error cards with Retry.
+- `src/lib/tenant.ts` — `useTenant()`: session.tenant_id → direct; else slug lookup; else honest unlinked-workspace state.
+- `src/lib/authService.ts` — Supabase Auth primary + local credential registry (`servepoint_local_credentials`) for wizard/owner-created accounts; bootstrap operator `admin@tsos.dev` pinned to `superadmin`; sign-in = email+password only.
+- `src/lib/prefs.ts` — persisted production settings (currency ₹ default, payment methods, notification toggles, compact density, timezone) consumed by Bills (charge methods) and Settings.
+- `src/store/session.ts` (session + section/breadcrumb/search/profile UI), `src/store/cart.ts` (order builder: lines, order type, table/guests/customer, GST math helpers).
+- Screens: `dashboard/` (Recharts per Dashboard frames), `food/` (categories→items→Frame_30 modal→order drawer→createOrder), `bills/` (two-pane, legacy-status normalization, charge flow), `messages/` + `notifications/` (migration-004 aware), `support/`, `settings/` (7 sections; Staff accounts owner-only), `platform/` (PlatformScreen + ProvisioningWizard).
+
+### 2.0.2 Deleted (recoverable in git history ≤ v4.0.0)
+KDS, Inventory (+Restock), Menu management, Shifts (+Drawer Reconciliation), Customers, Offers, Reports (+LiveOpsPulse/Heatmap/Weekly), Tables, Orders two-pane (replaced by Bills), POS/CartDrawer/PaymentModal/Receipt/Variant (replaced by Food & Drinks flow), Storefront/OrderTracking (QR guest journey), native clients, printer/session/sound/realtime services, `src/data/*` seeds, 1,865-line hybrid store, Tessera/dark themes + remap layer, dev tools, alias auto-login.
+
+### 2.0.3 Database state
+Migrations 001/002/003 shipped; **004** (`004_notifications_messages.sql`) adds notifications/conversations/conversation_messages + member RLS + default team conversations. Owner must run 001+003+004 in the Supabase SQL editor (RLS 42501 on orders INSERT and tenants INSERT persists until then; the app surfaces it honestly).
 
 ---
 

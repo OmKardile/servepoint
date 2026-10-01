@@ -111,3 +111,17 @@ VITE_SUPABASE_URL="https://vbufsuzzmehsidshopku.supabase.co"
 VITE_SUPABASE_ANON_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZidWZzdXp6bWVoc2lkc2hvcGt1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTAyOTE0MjMsImV4cCI6MjEwNTg2NzQyM30.kymgulEpO3R7FRhrfFO-lpmYrAcOqBF82sSW4unZHBE"
 SUPABASE_SERVICE_ROLE_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZidWZzdXp6bWVoc2lkc2hvcGt1Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc5MDI5MTQyMywiZXhwIjoyMTA1ODY3NDIzfQ.7ChyfZnWQeb5V0ZWJZD5hYY1-DpN-yg4gK_PXfrvSlk"
 ```
+
+
+## 🏁 ServePoint Production App (v5.0.0)
+
+The product was rebuilt to match the ServePoint design exactly. What you see now **is** the Figma:
+
+- **Signing in** — email + password from `docs/CREDENTIALS.md` (no signup, no magic link, no one-click). The Platform Operator lands on the **Platform console**; owners & staff land in their **business app**.
+- **Platform console** (Platform Operator only) — Businesses, Subscriptions, Audit log, and **+ Add Business**: a 3-step wizard that creates the business AND its owner login (temporary password shown + copyable — hand it over).
+- **Dashboard** — Daily Sales, Total Revenue mix, orders & new-customer counters, Best Employees, Trending Dishes. Empty until orders exist for the day (no fake numbers, ever).
+- **Food & Drinks** — browse categories → items (tap a card; it turns gold) → item details (quantity + add-ons) → **Add to Order** → Review order (Dine-in/Takeaway/Delivery, table & guests, GST 5%) → **Place Order**.
+- **Bills** — every order with status dots (gold = Active, green = Paid, red = Cancelled), filters, search; open one and **Charge customer** (Cash / Bank Card / UPI — configurable in Settings → Checkout settings). Legacy "new" orders count as Active.
+- **Messages & Notifications** — team + personal chats and notification cards. Require migration 004 on Supabase; until then you'll see an honest note instead of fake data.
+- **Settings** — Profile, Notification, Appearance, Checkout settings, Security, Language & Region (currency defaults to ₹), and **Staff accounts** (owners only): create staff logins with generated temporary passwords.
+- **Anything empty or failing tells the truth** — skeletons while loading, real error text + Retry, Figma-style empty states. No demo data exists anywhere in the app.

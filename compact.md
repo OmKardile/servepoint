@@ -3,7 +3,7 @@
 > **Purpose**: Single-page dense summary of the current TSOS project state, for fast cold re-onboarding by any agent or contributor. Updated alongside every code change. For full chronological detail, see [`docs/compacts/`](docs/compacts/README.md) (7 compacts) and [`worklog.md`](worklog.md) (live agent handover).
 
 - **Project**: TSOS — The Cafe Operating System
-- **Version**: 4.0.0
+- **Version**: 5.0.0 (production rebuild — app equals the Figma, ADR-0014)
 - **Repo**: https://github.com/OmKardile/tsos-alt
 - **Author**: Omkar Kardile <omkardile84@gmail.com>
 - **Last Updated**: 2026-10-01
@@ -140,3 +140,12 @@ See [`worklog.md`](worklog.md) for the chronological agent work log.
 3. Verify realtime: a new order inserted via POS should appear in KDS instantly (now that live DB is connected).
 4. Add Vitest + React Testing Library smoke tests (repo ships no automated tests).
 5. Styling polish + feature expansion per the recurring 15-min `webDevReview` cron (job 425841).
+
+
+## v5.0.0 — Production Rebuild (2026-10-01, owner order)
+
+- **Owner verdict**: "everythings messed up… delete everything except login page; redesign everything according to the figma design each and every component; make this end production app; remove any demo or development things."
+- **Result**: the product IS the Figma now. Kept: login, Supabase client, trio roles (ADR-0013). Deleted: KDS/Inventory/Menu/Shifts/Customers/Offers/Reports/Tables/Storefront/QR, seed data, hybrid store, Tessera/dark/remap, dev tools, alias auto-login, demo accounts. 42 components → 14.
+- **Architecture**: `src/lib/api.ts` (typed Supabase-only data), `src/lib/tenant.ts` (useTenant workspace resolution), `src/lib/prefs.ts` (production settings: currency ₹, payment methods, notifications), `src/store/session.ts` + `cart.ts` (zustand), `src/components/shell/` (Sidebar/Header/AppShell), screens: dashboard/ food/ bills/ messages/ notifications/ support/ settings/ platform/ (+ProvisioningWizard). Migration 004 adds notifications/messages tables.
+- **Auth**: bootstrap operator `admin@tsos.dev` pinned to superadmin regardless of stale cloud metadata; accounts only via wizard/owner (registry + Supabase best-effort). CREDENTIALS.md = production account model.
+- **E2E (live cloud)**: operator→Platform; wizard→owner created; CoolKafe menu→item modal→cart→order drawer; Bills→legacy "new"→normalized→Cash charge→Paid. Honest states everywhere (RLS 42501 still owner-side; migration 004 pending).

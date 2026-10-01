@@ -1,54 +1,45 @@
-# 🔐 TSOS Sign-In Credentials
+# 🔐 ServePoint — Sign-In Credentials
 
-> **Distribution notice (v4.0.0):** Accounts are **provisioned, not self-registered**.
-> The login screen accepts email + password only — no magic link, no self-serve
-> "Register Cafe", no one-click demo buttons.
->
-> - **SuperAdmin (TSOS developer)** provisions each business + its OWNER account via
->   the SuperAdmin Platform → Provisioning Wizard (the wizard generates and displays
->   the owner password; copy it from there).
-> - **Cafe Owners** create their STAFF logins in their cafe app → Settings →
->   Staff Accounts → "Create Staff Login".
-> - Accounts created in the app are stored in the local credential registry and (when
->   cloud auth is active) in Supabase Auth. If a cloud sign-in fails for an
->   app-provisioned account, create the user in the Supabase dashboard
->   (Authentication → Users → Add user) with the same email/password shown at
->   provision time.
+> **Production account model (v5.0.0).** Accounts are **provisioned, not self-registered**.
+> The login screen accepts **email + password only** — no magic link, no self-serve
+> "Register Cafe", no one-click sign-ins, no aliases. Copy credentials from here when
+> signing in.
 
-## Platform Accounts
+## How accounts exist
 
-| Role | Email | Password | Lands on |
-|---|---|---|---|
-| **SuperAdmin (TSOS Developer)** | `admin@tsos.dev` | `admin123456` | SuperAdmin Platform console (businesses, provisioning wizard, subscriptions, audit) |
+| Role | Created by | Lands on |
+|---|---|---|
+| **Platform Operator** (`superadmin`) | Bootstrap account below | ServePoint **Platform console** — businesses, provisioning, subscriptions, audit |
+| **Owner** (`owner`) | Platform Operator → Platform console → **+ Add Business** wizard (generates the owner's temporary password) | Their whole business app: Dashboard, Food & Drinks, Bills, Messages, Notifications, Settings (+ Staff accounts) |
+| **Cafe Staff** (`staff`) | Owner → **Settings → Staff accounts → Create staff login** (generates a temporary password) | The whole business app (operates everything; cannot manage accounts) |
 
-## Cafe Workspace Accounts (tenant: CoolKafe Indiranagar — `coolkafe`)
+Accounts created in-app are registered in the local credential registry and pushed to
+**Supabase Auth** best-effort. If a cloud sign-in fails for an in-app-provisioned account,
+create the user in the Supabase dashboard (**Authentication → Users → Add user**) with the
+exact same email/password shown at provision time.
 
-| Role | Email | Password | Lands on |
-|---|---|---|---|
-| **Owner** | `owner@coolkafe.com` | `demo123456` | Full cafe app: POS, KDS, Orders, Menu, Inventory, Tables, Customers, Offers, Shifts, Reports, Settings + **Staff Accounts (create staff logins)** |
-| **Staff** (merged Manager+Cashier) | `staff@coolkafe.com` | `demo123456` | Whole cafe POS app — operates everything (no staff-account creation) |
+## Platform Operator (bootstrap)
 
-### Legacy accounts (still valid — auto-merged to Staff)
+| Email | Password |
+|---|---|
+| `admin@tsos.dev` | `admin123456` |
 
-| Old Role | Email | Password | Now resolves to |
-|---|---|---|---|
-| Manager | `manager@coolkafe.com` | `demo123456` | **Staff** |
-| Cashier | `cashier@coolkafe.com` | `demo123456` | **Staff** |
+This is the only standing account. It exists so the platform can be entered before any
+business is provisioned. Keep it private.
 
-### Quick aliases (type these as the email)
+## First-run flow
 
-`admin` / `superadmin` / `developer` → SuperAdmin · `owner` → Owner · `staff` / `manager` / `cashier` → Staff
-(Passwords: `admin123456` for SuperAdmin, `demo123456` for cafe accounts when omitted.)
+1. Sign in as the Platform Operator (above).
+2. Platform console → **+ Add Business** → fill business details + owner account →
+   **Provision business** → copy the shown owner credentials.
+3. Sign in as the owner → Settings → **Staff accounts** → create staff logins →
+   hand each staff member their credentials.
 
-## Role Model (v4.0.0)
+## Database migrations (owner-run, Supabase SQL editor)
 
-```
-superadmin (TSOS developer)
-   └── provisions business + owner account (wizard) ──► owner (cafe owner)
-                                                            └── creates staff logins ──► staff (merged manager+cashier)
-```
+- `supabase/migrations/001_multi_tenant_saas.sql`
+- `supabase/migrations/003_role_model_staff_merge.sql`
+- `supabase/migrations/004_notifications_messages.sql`
 
-- **superadmin** — platform console ONLY (never the cafe POS by default; an explicit
-  "Switch to Cafe View" dev tool exists inside the console).
-- **owner** — business dashboards + every cafe screen + staff-account creation.
-- **staff** — the WHOLE cafe POS app, operating everything (no account creation).
+Until 001/003 are applied, cloud data (menu, orders, businesses) will surface honest
+error/empty states; until 004 is applied, Messages/Notifications show the migration note.

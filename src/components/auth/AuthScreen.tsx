@@ -60,7 +60,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onSuccess }) => {
             <Coffee className="w-7 h-7" strokeWidth={2.5} />
           </div>
           <h1 className="text-2xl text-[#F5F4EE] tracking-tight leading-tight">
-            TSOS Cafe Operating System
+            ServePoint
           </h1>
           <p className="text-xs text-[#9BB5A5] mt-1.5 font-medium tracking-wide">
             Multi-Tenant Point-of-Sale &amp; Kitchen Management Platform
@@ -89,7 +89,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onSuccess }) => {
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@yourbusiness.com  (or alias: admin / owner / staff)"
+                placeholder="you@yourbusiness.com"
                 className="w-full pl-9 pr-3 py-2.5 text-sm rounded-lg border border-[#1F3D2E] bg-[#0A1410] focus:bg-[#142620] focus:border-[#C5F82A] focus:outline-none text-[#F5F4EE] placeholder-[#6B8579] transition-colors"
               />
             </div>

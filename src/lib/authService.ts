@@ -1,17 +1,14 @@
 import { supabase, isSupabaseConfigured } from './supabase';
-import { StaffMember } from '../types';
 import { normalizeRole } from './rbac';
 
 /**
- * v4.0.0 Auth Model (owner-mandated):
- *  - Roles: superadmin | owner | staff (legacy manager/cashier/kitchen/barista/chef/server
- *    normalize to 'staff' via normalizeRole).
- *  - No self-serve signup, no magic link. Accounts come from:
- *      (a) the SuperAdmin Provisioning Wizard (creates the business OWNER),
- *      (b) the Owner's Settings → Staff Accounts (creates STAFF logins),
- *      (c) Supabase Auth (cloud) — or the local credential registry (offline/demo).
- *  - The local registry (`tsos_local_credentials`) makes provisioned/created accounts
- *    sign-in-able instantly even when Supabase Auth does not yet hold the user.
+ * v5.0.0 Production Auth (ADR-0013 role model + ADR-0014 demo purge):
+ *  - Sign-in = real email + real password (docs/CREDENTIALS.md is the credential source).
+ *  - Accounts come from: Supabase Auth (cloud), or the local credential registry
+ *    populated by the SuperAdmin Provisioning Wizard (owners) and Settings →
+ *    Staff Accounts (staff). No aliases, no hardcoded demo accounts, no magic link.
+ *  - One bootstrap platform-operator constant exists (documented in CREDENTIALS.md)
+ *    so the platform can be entered before any business is provisioned.
  */
 
 export interface AuthUserSession {
@@ -35,25 +32,17 @@ export interface LocalCredential {
 }
 
 const LOCAL_AUTH_KEY = 'tsos_auth_session';
-const ACTIVE_STAFF_KEY = 'tsos_active_staff';
-const LOCAL_CREDENTIALS_KEY = 'tsos_local_credentials';
+const LOCAL_CREDENTIALS_KEY = 'servepoint_local_credentials';
 
-/** Friendly alias → real account (typed into the email field). */
-const EMAIL_ALIASES: Record<string, { email: string; password: string }> = {
-  admin: { email: 'admin@tsos.dev', password: 'admin123456' },
-  superadmin: { email: 'admin@tsos.dev', password: 'admin123456' },
-  super_admin: { email: 'admin@tsos.dev', password: 'admin123456' },
-  developer: { email: 'admin@tsos.dev', password: 'admin123456' },
-  owner: { email: 'owner@coolkafe.com', password: 'demo123456' },
-  staff: { email: 'staff@coolkafe.com', password: 'demo123456' },
-  manager: { email: 'manager@coolkafe.com', password: 'demo123456' },
-  cashier: { email: 'cashier@coolkafe.com', password: 'demo123456' },
+/** Bootstrap platform operator (documented in docs/CREDENTIALS.md). */
+const BOOTSTRAP_OPERATOR = {
+  email: 'admin@tsos.dev',
+  password: 'admin123456',
+  name: 'TSOS Developer',
 };
 
 export const authService = {
-  /**
-   * Local credential registry (offline-first account store for provisioned accounts)
-   */
+  /** Local credential registry (accounts provisioned in-app). */
   getLocalCredentials(): LocalCredential[] {
     if (typeof window === 'undefined') return [];
     try {
@@ -65,7 +54,11 @@ export const authService = {
 
   registerLocalCredential(cred: Omit<LocalCredential, 'created_at'>): LocalCredential {
     const list = this.getLocalCredentials().filter((c) => c.email !== cred.email.toLowerCase());
-    const entry: LocalCredential = { ...cred, email: cred.email.toLowerCase(), created_at: new Date().toISOString() };
+    const entry: LocalCredential = {
+      ...cred,
+      email: cred.email.toLowerCase(),
+      created_at: new Date().toISOString(),
+    };
     list.push(entry);
     if (typeof window !== 'undefined') {
       localStorage.setItem(LOCAL_CREDENTIALS_KEY, JSON.stringify(list));
@@ -80,97 +73,88 @@ export const authService = {
     );
   },
 
-  /**
-   * Get current authenticated user session
-   */
   async getSession(): Promise<AuthUserSession | null> {
     try {
       if (isSupabaseConfigured()) {
-        const { data: { session }, error } = await supabase.auth.getSession();
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
         if (session?.user) {
-          const userMeta = session.user.user_metadata || {};
+          const meta = session.user.user_metadata || {};
           const emailLower = (session.user.email || '').toLowerCase();
-          const resolvedRole = normalizeRole(userMeta.role || (
-            emailLower.includes('admin') ? 'superadmin' : 'owner'
-          ));
+          // The bootstrap platform operator is ALWAYS superadmin (its cloud
+          // metadata may be stale); everyone else resolves from metadata.
+          const resolvedRole =
+            emailLower === BOOTSTRAP_OPERATOR.email
+              ? 'superadmin'
+              : normalizeRole(meta.role || 'owner');
           return {
             id: session.user.id,
             email: session.user.email || '',
-            name: userMeta.name || userMeta.full_name || session.user.email?.split('@')[0] || 'Cafe Staff',
+            name: meta.name || meta.full_name || session.user.email?.split('@')[0] || 'Cafe Staff',
             role: resolvedRole,
-            tenantId: userMeta.tenant_id,
-            tenantSlug: userMeta.tenant_slug,
-            tenantName: userMeta.tenant_name,
+            tenantId: meta.tenant_id,
+            tenantSlug: meta.tenant_slug,
+            tenantName: meta.tenant_name,
           };
         }
       }
-    } catch (err) {
-      console.warn('Error reading Supabase session:', err);
+    } catch {
+      /* cloud unavailable — fall through to local session */
     }
 
-    // Fallback to local storage session
     if (typeof window !== 'undefined') {
       const stored = localStorage.getItem(LOCAL_AUTH_KEY);
       if (stored) {
         try {
           const parsed = JSON.parse(stored);
           return { ...parsed, role: normalizeRole(parsed.role) };
-        } catch {}
+        } catch {
+          /* corrupt entry — ignore */
+        }
       }
     }
-
     return null;
   },
 
-  /**
-   * Sign In with Email & Password
-   */
-  async signIn(emailInput: string, passwordInput: string): Promise<{ success: boolean; session?: AuthUserSession; error?: string }> {
-    let email = emailInput.trim().toLowerCase();
-    let password = passwordInput;
+  async signIn(
+    emailInput: string,
+    passwordInput: string
+  ): Promise<{ success: boolean; session?: AuthUserSession; error?: string }> {
+    const email = emailInput.trim().toLowerCase();
+    const password = passwordInput;
 
-    // Friendly alias normalization (typed "admin" / "owner" / "staff" etc.)
-    const alias = EMAIL_ALIASES[email];
-    if (alias) {
-      email = alias.email;
-      if (!password || password === '1234' || password === email.split('@')[0]) password = alias.password;
-    }
-
+    // 1) Cloud auth
     try {
       if (isSupabaseConfigured()) {
-        const { data, error } = await supabase.auth.signInWithPassword({
-          email,
-          password,
-        });
-
+        const { data, error } = await supabase.auth.signInWithPassword({ email, password });
         if (!error && data.session?.user) {
-          const userMeta = data.session.user.user_metadata || {};
+          const meta = data.session.user.user_metadata || {};
           const emailLower = (data.session.user.email || email).toLowerCase();
-          const resolvedRole = normalizeRole(userMeta.role || (
-            emailLower.includes('admin') ? 'superadmin' : 'owner'
-          ));
-          const userSession: AuthUserSession = {
+          const resolvedRole =
+            emailLower === BOOTSTRAP_OPERATOR.email
+              ? 'superadmin'
+              : normalizeRole(meta.role || 'owner');
+          const session: AuthUserSession = {
             id: data.session.user.id,
             email: data.session.user.email || email,
-            name: userMeta.name || userMeta.full_name || email.split('@')[0],
+            name: meta.name || meta.full_name || email.split('@')[0],
             role: resolvedRole,
-            tenantId: userMeta.tenant_id,
-            tenantSlug: userMeta.tenant_slug,
-            tenantName: userMeta.tenant_name,
+            tenantId: meta.tenant_id,
+            tenantSlug: meta.tenant_slug,
+            tenantName: meta.tenant_name,
           };
-
           if (typeof window !== 'undefined') {
-            localStorage.setItem(LOCAL_AUTH_KEY, JSON.stringify(userSession));
+            localStorage.setItem(LOCAL_AUTH_KEY, JSON.stringify(session));
           }
-          return { success: true, session: userSession };
+          return { success: true, session };
         }
-        console.warn('Supabase signIn notice:', error?.message);
       }
-    } catch (err: any) {
-      console.warn('Supabase signIn failed, falling back to local session:', err);
+    } catch (err) {
+      console.warn('Cloud auth unavailable, using provisioned-account registry.', err);
     }
 
-    // Local credential registry (provisioned owners / owner-created staff logins)
+    // 2) Local credential registry (wizard-created owners, owner-created staff)
     const cred = this.findLocalCredential(email, password);
     if (cred) {
       const session: AuthUserSession = {
@@ -178,8 +162,8 @@ export const authService = {
         email: cred.email,
         name: cred.name || cred.email.split('@')[0],
         role: normalizeRole(cred.role),
-        tenantSlug: cred.tenantSlug || 'coolkafe',
-        tenantName: cred.tenantName || 'CoolKafe Indiranagar',
+        tenantSlug: cred.tenantSlug,
+        tenantName: cred.tenantName,
       };
       if (typeof window !== 'undefined') {
         localStorage.setItem(LOCAL_AUTH_KEY, JSON.stringify(session));
@@ -187,44 +171,40 @@ export const authService = {
       return { success: true, session };
     }
 
-    // Known-account fallback (demo seed accounts — see docs/CREDENTIALS.md)
-    const knownAccounts: Record<string, { password: string; role: 'superadmin' | 'owner' | 'staff'; name: string }> = {
-      'admin@tsos.dev': { password: 'admin123456', role: 'superadmin', name: 'TSOS Developer' },
-      'owner@coolkafe.com': { password: 'demo123456', role: 'owner', name: 'Devraj Sen' },
-      'staff@coolkafe.com': { password: 'demo123456', role: 'staff', name: 'Ananya Sharma' },
-      // Legacy merged accounts — still valid, resolve to 'staff'
-      'manager@coolkafe.com': { password: 'demo123456', role: 'staff', name: 'Rahul Verma (Staff)' },
-      'cashier@coolkafe.com': { password: 'demo123456', role: 'staff', name: 'Ananya Sharma (Staff)' },
-    };
-
-    const known = knownAccounts[email];
-    if (known && known.password === password) {
-      const fallbackSession: AuthUserSession = {
-        id: `usr_${Date.now()}`,
-        email,
-        name: known.name,
-        role: known.role,
-        tenantSlug: 'coolkafe',
-        tenantName: 'CoolKafe Indiranagar',
+    // 3) Bootstrap platform operator (see docs/CREDENTIALS.md)
+    if (email === BOOTSTRAP_OPERATOR.email && password === BOOTSTRAP_OPERATOR.password) {
+      const session: AuthUserSession = {
+        id: 'usr_platform_operator',
+        email: BOOTSTRAP_OPERATOR.email,
+        name: BOOTSTRAP_OPERATOR.name,
+        role: 'superadmin',
       };
       if (typeof window !== 'undefined') {
-        localStorage.setItem(LOCAL_AUTH_KEY, JSON.stringify(fallbackSession));
+        localStorage.setItem(LOCAL_AUTH_KEY, JSON.stringify(session));
       }
-      return { success: true, session: fallbackSession };
+      return { success: true, session };
     }
 
-    return { success: false, error: 'Invalid email or password. Credentials live in docs/CREDENTIALS.md.' };
+    return {
+      success: false,
+      error: 'Invalid email or password. Credentials are distributed via docs/CREDENTIALS.md.',
+    };
   },
 
   /**
-   * Create an account (used ONLY by: SuperAdmin wizard → owner, Owner Settings → staff).
-   * Registers into Supabase Auth when configured; ALWAYS registers into the local
-   * credential registry so the account can sign in immediately (offline/demo path).
+   * Create an account — used ONLY by: SuperAdmin wizard → owner,
+   * Owner Settings → Staff Accounts. Registers locally first (so the account
+   * can sign in immediately), then pushes to Supabase Auth best-effort.
    */
-  async signUp(email: string, password: string, name: string, role: 'owner' | 'staff' = 'staff', tenant?: { slug?: string; name?: string }): Promise<{ success: boolean; session?: AuthUserSession; error?: string }> {
+  async signUp(
+    email: string,
+    password: string,
+    name: string,
+    role: 'owner' | 'staff' = 'staff',
+    tenant?: { slug?: string; name?: string }
+  ): Promise<{ success: boolean; error?: string }> {
     const cleanEmail = email.trim().toLowerCase();
 
-    // Register locally first so the account works regardless of cloud state
     this.registerLocalCredential({
       email: cleanEmail,
       password,
@@ -236,7 +216,7 @@ export const authService = {
 
     try {
       if (isSupabaseConfigured()) {
-        const { data, error } = await supabase.auth.signUp({
+        const { error } = await supabase.auth.signUp({
           email: cleanEmail,
           password,
           options: {
@@ -249,76 +229,32 @@ export const authService = {
             },
           },
         });
-
         if (error) {
-          // Local registry entry still stands; surface the cloud notice
-          return { success: true, error: `Cloud auth notice: ${error.message}. Account registered locally and ready to sign in.` };
-        }
-
-        if (data.user) {
-          return { success: true };
+          return {
+            success: true,
+            error: `Cloud auth notice: ${error.message}. Account is registered and ready to sign in.`,
+          };
         }
       }
     } catch (err: any) {
-      console.warn('Supabase signUp error:', err);
-      return { success: true, error: `Cloud auth unavailable (${err?.message || 'offline'}). Account registered locally and ready to sign in.` };
+      return {
+        success: true,
+        error: `Cloud auth unavailable (${err?.message || 'offline'}). Account is registered and ready to sign in.`,
+      };
     }
-
     return { success: true };
   },
 
-  /**
-   * Sign Out
-   */
   async signOut(): Promise<void> {
     try {
       if (isSupabaseConfigured()) {
         await supabase.auth.signOut();
       }
-    } catch (err) {
-      console.warn('Supabase signOut error:', err);
+    } catch {
+      /* offline — clear local state regardless */
     }
-
     if (typeof window !== 'undefined') {
       localStorage.removeItem(LOCAL_AUTH_KEY);
-      localStorage.removeItem(ACTIVE_STAFF_KEY);
-    }
-  },
-
-  /**
-   * Staff 4-Digit Fast PIN Pad Validation
-   */
-  verifyStaffPin(pin: string, staffList: StaffMember[]): StaffMember | null {
-    const cleanPin = pin.trim();
-    const match = staffList.find((s) => s.pin_code === cleanPin || s.pin === cleanPin);
-    if (match) {
-      if (typeof window !== 'undefined') {
-        localStorage.setItem(ACTIVE_STAFF_KEY, JSON.stringify(match));
-      }
-      return match;
-    }
-    return null;
-  },
-
-  getActiveStaff(): StaffMember | null {
-    if (typeof window !== 'undefined') {
-      const stored = localStorage.getItem(ACTIVE_STAFF_KEY);
-      if (stored) {
-        try {
-          return JSON.parse(stored);
-        } catch {}
-      }
-    }
-    return null;
-  },
-
-  setActiveStaff(staff: StaffMember | null) {
-    if (typeof window !== 'undefined') {
-      if (staff) {
-        localStorage.setItem(ACTIVE_STAFF_KEY, JSON.stringify(staff));
-      } else {
-        localStorage.removeItem(ACTIVE_STAFF_KEY);
-      }
     }
   },
 };
