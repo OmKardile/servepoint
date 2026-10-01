@@ -2,9 +2,11 @@ import React, { useEffect, useState } from 'react';
 import { CookingPot } from 'lucide-react';
 import { authService } from './lib/authService';
 import { normalizeRole } from './lib/rbac';
+import { useTenant } from './lib/tenant';
 import { useSession, useUi } from './store/session';
 import { AuthScreen } from './components/auth/AuthScreen';
 import { AppShell } from './components/shell/AppShell';
+import { NoWorkspaceScreen } from './components/shell/NoWorkspaceScreen';
 import { DashboardScreen } from './components/dashboard/DashboardScreen';
 import { FoodDrinksScreen } from './components/food/FoodDrinksScreen';
 import { BillsScreen } from './components/bills/BillsScreen';
@@ -40,6 +42,30 @@ const Splash: React.FC = () => (
 
 const CafeApp: React.FC = () => {
   const { section } = useUi();
+  const session = useSession((s) => s.session);
+  const setSession = useSession((s) => s.setSession);
+  const [retryKey, setRetryKey] = useState(0);
+  // Resolve the workspace ONCE at the shell: if the signed-in account has no
+  // business tenant in the cloud, show one actionable state instead of letting
+  // every screen render its own "Workspace not found" error card.
+  const tenant = useTenant(retryKey);
+
+  if (tenant.loading) return <Splash />;
+
+  if (tenant.error) {
+    return (
+      <NoWorkspaceScreen
+        email={session?.email}
+        message={tenant.error}
+        onRetry={() => setRetryKey((k) => k + 1)}
+        onSignOut={async () => {
+          await authService.signOut();
+          setSession(null);
+        }}
+      />
+    );
+  }
+
   return (
     <AppShell>
       {section === 'dashboard' && <DashboardScreen />}

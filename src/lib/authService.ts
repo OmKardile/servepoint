@@ -29,6 +29,12 @@ export interface LocalCredential {
   tenantSlug?: string;
   tenantName?: string;
   created_at: string;
+  /** Set when a silent cloud-link grant failed DEFINITIVELY (no cloud auth
+   *  account exists for this email). Future sign-ins skip the attempt so the
+   *  browser console stops collecting a 400 the user cannot act on. Cleared
+   *  automatically when the account is re-provisioned (signUp rewrites the
+   *  registry entry) or when a grant eventually succeeds. */
+  cloudGrantFailedAt?: string;
 }
 
 const LOCAL_AUTH_KEY = 'tsos_auth_session';
@@ -71,6 +77,22 @@ export const authService = {
     return this.getLocalCredentials().find(
       (c) => c.email === target && (!password || c.password === password)
     );
+  },
+
+  /** Persist (or clear) the definitive cloud-grant-failure flag for an entry. */
+  setCloudGrantFailed(email: string, failed: boolean): void {
+    if (typeof window === 'undefined') return;
+    const target = email.trim().toLowerCase();
+    const list = this.getLocalCredentials();
+    const entry = list.find((c) => c.email === target);
+    if (!entry) return;
+    if (failed && !entry.cloudGrantFailedAt) {
+      entry.cloudGrantFailedAt = new Date().toISOString();
+      window.localStorage.setItem(LOCAL_CREDENTIALS_KEY, JSON.stringify(list));
+    } else if (!failed && entry.cloudGrantFailedAt) {
+      delete entry.cloudGrantFailedAt;
+      window.localStorage.setItem(LOCAL_CREDENTIALS_KEY, JSON.stringify(list));
+    }
   },
 
   async getSession(): Promise<AuthUserSession | null> {
@@ -144,7 +166,18 @@ export const authService = {
       if (typeof window !== 'undefined') {
         localStorage.setItem(LOCAL_AUTH_KEY, JSON.stringify(session));
       }
-      const cloudLinked = await this.tryLinkCloudSession(email, password);
+      // Silent cloud session upgrade — but skip it when a previous grant for
+      // this account failed DEFINITIVELY (no cloud auth account for the email):
+      // retrying on every sign-in only adds one more console 400 the user
+      // cannot act on. The flag clears automatically on re-provisioning
+      // (signUp rewrites the registry entry) or when a grant succeeds.
+      let cloudLinked = false;
+      if (!cred.cloudGrantFailedAt) {
+        const link = await this.tryLinkCloudSession(email, password);
+        cloudLinked = link === 'linked';
+        if (link === 'no-account') this.setCloudGrantFailed(email, true);
+        else if (link === 'linked') this.setCloudGrantFailed(email, false);
+      }
       return { success: true, session, cloudLinked };
     }
 
@@ -188,8 +221,10 @@ export const authService = {
     }
 
     // 3) Bootstrap platform operator (see docs/CREDENTIALS.md) — used when the
-    //    cloud grant failed transiently; silently retries the cloud link so the
-    //    Platform console gets its RLS-capable session.
+    //    cloud grant in (2) failed transiently. The grant was attempted moments
+    //    ago; retrying it here would only duplicate the failed request (and a
+    //    second console 400). The constant keeps sign-in working registry-side;
+    //    the NEXT sign-in retries the cloud link once auth is reachable.
     if (email === BOOTSTRAP_OPERATOR.email && password === BOOTSTRAP_OPERATOR.password) {
       const session: AuthUserSession = {
         id: 'usr_platform_operator',
@@ -200,8 +235,7 @@ export const authService = {
       if (typeof window !== 'undefined') {
         localStorage.setItem(LOCAL_AUTH_KEY, JSON.stringify(session));
       }
-      const cloudLinked = await this.tryLinkCloudSession(email, password);
-      return { success: true, session, cloudLinked };
+      return { success: true, session, cloudLinked: false };
     }
 
     return {
@@ -214,24 +248,28 @@ export const authService = {
    * Attach a REAL Supabase session to a registry/constant sign-in by replaying
    * the same credentials against cloud auth. If the cloud account exists with
    * the same password, the supabase-js client now holds a JWT and row-level
-   * security authorizes data access. If it fails (no cloud account, different
-   * cloud password, transient error), the local session stays and the caller
-   * surfaces guidance — never blocks sign-in.
+   * security authorizes data access. Outcomes: 'linked' (JWT attached),
+   * 'no-account' (definitive auth rejection — no cloud user / wrong cloud
+   * password), or 'error' (network / transient). Callers persist a skip flag
+   * for 'no-account' so sign-ins stay clean while the account is cloud-less.
    */
-  async tryLinkCloudSession(email: string, password: string): Promise<boolean> {
+  async tryLinkCloudSession(
+    email: string,
+    password: string
+  ): Promise<'linked' | 'no-account' | 'error'> {
     try {
-      if (!isSupabaseConfigured()) return false;
+      if (!isSupabaseConfigured()) return 'error';
       const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error || !data.session?.user) return false;
+      if (error || !data.session?.user) return 'no-account';
       if (email === BOOTSTRAP_OPERATOR.email) {
         const meta = data.session.user.user_metadata || {};
         if (meta.role !== 'superadmin') {
           await this.pinOperatorMetadata();
         }
       }
-      return true;
+      return 'linked';
     } catch {
-      return false;
+      return 'error';
     }
   },
 

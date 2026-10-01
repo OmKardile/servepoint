@@ -16,7 +16,7 @@ export interface TenantState {
   tenantId: string | null;
 }
 
-export function useTenant(): TenantState {
+export function useTenant(reloadKey = 0): TenantState {
   const session = useSession((s) => s.session);
   const [state, setState] = useState<TenantState>({
     loading: true,
@@ -52,7 +52,7 @@ export function useTenant(): TenantState {
           setState({
             loading: false,
             error:
-              'Workspace not found in the cloud. If this business was just provisioned, ensure migrations are applied on Supabase and re-provision if needed.',
+              'This business isn\u2019t in the ServePoint cloud yet \u2014 it was most likely provisioned from an older app version whose cloud saves failed. Re-provision it from the Platform console (Add Business), then sign back in.',
             tenant: null,
             tenantId: null,
           });
@@ -67,7 +67,7 @@ export function useTenant(): TenantState {
     return () => {
       alive = false;
     };
-  }, [session]);
+  }, [session, reloadKey]);
 
   return state;
 }

@@ -3,6 +3,24 @@
 All notable changes to **TSOS (The Cafe Operating System)** are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.0.5] — 2026-10-01 — "Workspace not found" Diagnosed + One Actionable No-Workspace Screen
+
+### Diagnosed — owner screenshots (3× "Workspace not found in the cloud" + one password-grant 400)
+- **Cloud state verified via pooler (read-only)**: `tenants: 0` — the owner's business never reached the cloud. Their earlier screenshot showed the **pre-5.0.2 wizard copy** ("provisioned locally; run it on Supabase…"), proving the run happened on a stale build whose cloud writes failed — the business exists only in that device's local registry.
+- **The 400 explained**: registry-first sign-in replays the same credentials against Supabase Auth (the silent cloud link that earns the JWT for RLS). For an email with **no cloud auth account** (`cheeseburg@gmail.com` never landed — confirmed absent from `auth.users`), that attempt returns 400. It was harmless but repeated on every sign-in.
+
+### Fixed
+- **One unified "No business workspace yet" screen at the shell level** (`NoWorkspaceScreen`): when a signed-in owner/staff account can't resolve a tenant in the cloud, `CafeApp` now renders a single honest, actionable state — the account email, why it happens, a 3-step fix (sign in as the operator → Platform console → + Add Business on the current version → sign back in with the wizard-shown password), Retry + Sign out. Replaces the seven per-screen "Workspace not found" error cards (which remain as defense-in-depth for transient errors).
+- **Grant-failure memory**: `tryLinkCloudSession` now distinguishes `linked` / `no-account` / `error`; a definitive rejection sets `cloudGrantFailedAt` on the registry entry so later sign-ins **skip the doomed attempt** (console stays clean). Cleared automatically on re-provisioning or when a grant succeeds.
+- **Duplicate grant attempt removed**: the bootstrap-operator fallback path no longer re-fires the cloud grant that step 2 attempted moments earlier (previously up to 2× 400s per operator sign-in when auth hiccuped).
+- **Accurate not-found copy** in `useTenant` (migrations are applied; the actual cause is the business isn't in the cloud) + `reloadKey` so the shell's Retry actually re-resolves.
+
+### Verified (browser E2E at 127.0.0.1:3000)
+- Ghost registry-only owner (no cloud user): sign-in → **NoWorkspaceScreen** with exactly ONE 400 grant (first attempt), second sign-in → **zero** token requests (memory works), Retry/Sign out functional.
+- Operator sign-in → exactly one 200 grant → Platform console.
+- Golden path re-proven on the current build: wizard provisioned "Verify Workspace Cafe" (+ owner `verify.owner@coolkafe.in`) → "Saved to cloud" → owner sign-in → workspace resolves (Dashboard shows the business; Food & Drinks + Bills load cleanly; mobile 390px shell intact). Test data fully deleted afterwards — cloud pristine (tenants 0 / subscriptions 0 / audit 0 / auth.users back to operator + smoke owner). `tsc --noEmit` → 0 errors.
+- Login screen untouched (frozen per ADR-0016).
+
 ## [5.0.4] — 2026-10-01 — Login Screen Restored to the Figma & Frozen (ADR-0016)
 
 ### Fixed — "u deleted the damn log in button on screen"

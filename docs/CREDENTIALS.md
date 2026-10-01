@@ -94,6 +94,19 @@ immediately**.
   Supabase and therefore needs the JWT-backed session. If your sign-in is
   registry-only (e.g. the cloud password differs), the wizard says so up front —
   sign out and sign in with the cloud password from this document.
+- **Grant-failure memory (no repeat 400s)**: when the silent cloud link fails
+  DEFINITIVELY for an account (no cloud auth user exists for that email), the app
+  remembers it on the registry entry and skips the attempt on later sign-ins — the
+  browser console stays clean. The flag clears automatically when the account is
+  re-provisioned through the wizard (which rewrites the registry entry) or when a
+  grant succeeds.
+- **"No business workspace yet" screen**: if a signed-in owner/staff account has no
+  business tenant in the cloud, the app shows ONE actionable screen (not per-screen
+  errors): what happened + the 3-step fix. Typical cause: the business was
+  provisioned from an older app version whose cloud saves failed — re-run
+  **Platform console → + Add Business** on the current version (it writes to the
+  cloud), use the same email as the owner, then sign in with the password the
+  wizard shows.
 - The operator account `admin@tsos.dev / admin123456` exists BOTH in the registry
   fallback and as a real confirmed Supabase Auth user (migration 005) — the same
   password works in both paths.
