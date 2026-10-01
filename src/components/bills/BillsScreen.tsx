@@ -9,7 +9,13 @@ import {
   RefreshCw,
   Search,
 } from 'lucide-react';
-import { fetchOrders, updateOrderStatus } from '../../lib/api';
+import {
+  advanceOrder,
+  fetchOrderHistory,
+  fetchOrders,
+  recordPayment,
+} from '../../lib/api';
+import type { OrderStatusEvent, PaymentMethod } from '../../lib/api';
 import { formatMoney, getPrefs } from '../../lib/prefs';
 import { useTenant } from '../../lib/tenant';
 import { useUi } from '../../store/session';
@@ -49,12 +55,15 @@ const STATUS_DOT: Record<string, string> = {
 /**
  * Legacy cloud orders may carry fine-grained statuses (new/preparing/ready/
  * served/pending). They are all "active" in the trio model until paid/cancelled.
+ * With the 001 engine, a completed PAYMENT means "Paid" regardless of where
+ * the order sits in the kitchen lifecycle (NOVA: the counter is the gate).
  */
-function normalizeStatus(raw: unknown): string {
-  const s = String(raw || '').toLowerCase();
-  if (s === 'paid' || s === 'cancelled') return s;
-  if (s === 'active') return 'active';
-  return 'active'; // new, preparing, ready, served, pending, unknown → active
+function displayStatus(o: Pick<Order, 'status' | 'payment_status'>): string {
+  const s = String(o.status || '').toLowerCase();
+  if (s === 'cancelled') return 'cancelled';
+  if (s === 'paid') return 'paid';
+  if (String(o.payment_status || '').toLowerCase() === 'completed') return 'paid';
+  return 'active';
 }
 
 /** Detail-pane status pill fills. */
@@ -190,9 +199,42 @@ const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRet
   const [actionError, setActionError] = useState<string | null>(null);
   const [paidThisSession, setPaidThisSession] = useState<Set<string>>(new Set());
 
-  const lastAction = useRef<{ orderId: string; kind: 'pay' | 'cancel'; patch: OrderPatch } | null>(
-    null
-  );
+  const lastAction = useRef<{
+    orderId: string;
+    kind: 'pay' | 'cancel' | 'advance';
+    patch: OrderPatch;
+  } | null>(null);
+
+  /** Mirror of the orders list for mutation callbacks (fresh totals). */
+  const ordersRef = useRef<Order[]>([]);
+  useEffect(() => {
+    ordersRef.current = orders;
+  }, [orders]);
+
+  /** Append-only status trail of the selected order (migration 007). */
+  const [trail, setTrail] = useState<OrderStatusEvent[]>([]);
+  const [trailLoading, setTrailLoading] = useState(false);
+  useEffect(() => {
+    if (!selectedId || !tenantId) {
+      setTrail([]);
+      return;
+    }
+    let alive = true;
+    setTrailLoading(true);
+    fetchOrderHistory(tenantId, selectedId)
+      .then((rows) => {
+        if (alive) setTrail(rows);
+      })
+      .catch(() => {
+        if (alive) setTrail([]);
+      })
+      .finally(() => {
+        if (alive) setTrailLoading(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [selectedId, tenantId, orders]);
 
   /* Breadcrumbs: Bills › Payment History */
   useEffect(() => {
@@ -223,7 +265,7 @@ const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRet
     const q = search.trim().toLowerCase().replace(/^#/, '');
     const weekAgo = Date.now() - 7 * 24 * 3600 * 1000;
     return orders.filter((o) => {
-      if (statusFilter !== 'all' && normalizeStatus(o.status) !== statusFilter) return false;
+      if (statusFilter !== 'all' && displayStatus(o) !== statusFilter) return false;
       if (dateFilter === 'today' && !isSameLocalDay(o.created_at)) return false;
       if (dateFilter === '7d' && new Date(o.created_at).getTime() < weekAgo) return false;
       if (q) {
@@ -264,15 +306,28 @@ const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRet
     return () => window.removeEventListener('keydown', onKey);
   }, [menuOpen]);
 
-  /* ── Mutations (charge / cancel) — honest errors + retry ── */
+  /* ── Mutations (charge / cancel) — guarded RPCs + honest errors + retry ── */
   const runMutation = useCallback(
     async (orderId: string, patch: OrderPatch, kind: 'pay' | 'cancel') => {
       if (!tenantId) return;
+      const order = ordersRef.current.find((o) => o.id === orderId);
       lastAction.current = { orderId, kind, patch };
       setMutating(true);
       setActionError(null);
       try {
-        await updateOrderStatus(orderId, tenantId, patch);
+        if (kind === 'pay') {
+          // Migration 007 engine: membership-checked RPC writes the payments
+          // ledger row and flips the order in one transaction. The order's
+          // kitchen status is NOT touched — the counter is the gate.
+          await recordPayment(
+            orderId,
+            tenantId,
+            (patch.payment_method as PaymentMethod) || 'cash',
+            Number(order?.total ?? 0)
+          );
+        } else {
+          await advanceOrder(orderId, tenantId, 'cancelled');
+        }
         setOrders((prev) =>
           prev.map((o) => (o.id === orderId ? ({ ...o, ...patch } as Order) : o))
         );
@@ -296,10 +351,36 @@ const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRet
     [tenantId]
   );
 
+  /* ── Kitchen lifecycle advance (Start preparing / Mark ready / Complete) ── */
+  const runAdvance = useCallback(
+    async (orderId: string, toStatus: 'preparing' | 'ready' | 'completed') => {
+      if (!tenantId) return;
+      lastAction.current = { orderId, kind: 'advance', patch: { status: toStatus } };
+      setMutating(true);
+      setActionError(null);
+      try {
+        await advanceOrder(orderId, tenantId, toStatus);
+        setOrders((prev) =>
+          prev.map((o) => (o.id === orderId ? ({ ...o, status: toStatus } as Order) : o))
+        );
+      } catch (err) {
+        setActionError((err as Error)?.message || 'Failed to update the order.');
+      } finally {
+        setMutating(false);
+      }
+    },
+    [tenantId]
+  );
+
   const retryAction = useCallback(() => {
     const last = lastAction.current;
-    if (last) void runMutation(last.orderId, last.patch, last.kind);
-  }, [runMutation]);
+    if (!last) return;
+    if (last.kind === 'pay' || last.kind === 'cancel') {
+      void runMutation(last.orderId, last.patch, last.kind);
+    } else if (last.patch.status) {
+      void runAdvance(last.orderId, last.patch.status as 'preparing' | 'ready' | 'completed');
+    }
+  }, [runMutation, runAdvance]);
 
   const openChooser = useCallback(() => {
     const pm = getPrefs().paymentMethods;
@@ -443,7 +524,7 @@ const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRet
               ))
             : visible.map((o) => {
                 const isSelected = o.id === selectedId;
-                const status = normalizeStatus(o.status);
+                const status = displayStatus(o);
                 return (
                   <div role="listitem" key={o.id}>
                     <button
@@ -568,7 +649,7 @@ const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRet
                     aria-label="Order actions"
                     className="absolute right-0 top-full z-50 mt-1.5 w-56 overflow-hidden rounded-xl border border-[#E3E7E0] bg-white py-1 shadow-lg"
                   >
-                    {selected && normalizeStatus(selected.status) === 'active' ? (
+                    {selected && displayStatus(selected) === 'active' ? (
                       confirmArm ? (
                         <button
                           role="menuitem"
@@ -620,10 +701,10 @@ const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRet
                 </h2>
                 <span
                   className={`shrink-0 rounded-full px-3.5 py-1.5 text-[12px] font-semibold ${
-                    STATUS_PILL[normalizeStatus(selected.status)] || 'bg-[#D9E2DD] text-[#0F3D3E]'
+                    STATUS_PILL[displayStatus(selected)] || 'bg-[#D9E2DD] text-[#0F3D3E]'
                   }`}
                 >
-                  {STATUS_LABEL[normalizeStatus(selected.status)] || String(selected.status)}
+                  {STATUS_LABEL[displayStatus(selected)] || String(selected.status)}
                 </span>
               </div>
 
@@ -717,6 +798,69 @@ const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRet
                 )}
               </div>
 
+              {/* Kitchen lifecycle — the engine's legal next step, if any */}
+              {(() => {
+                const raw = String(selected.status || '').toLowerCase();
+                const next =
+                  raw === 'new' || raw === 'pending' || raw === 'active'
+                    ? { to: 'preparing' as const, label: 'Start preparing' }
+                    : raw === 'preparing'
+                      ? { to: 'ready' as const, label: 'Mark ready' }
+                      : raw === 'ready'
+                        ? { to: 'completed' as const, label: 'Complete order' }
+                        : null;
+                if (!next) return null;
+                return (
+                  <div className="mt-4 flex items-center gap-2">
+                    <button
+                      onClick={() => void runAdvance(selected.id, next.to)}
+                      disabled={mutating}
+                      className="flex h-11 items-center gap-2 rounded-xl border border-[#E3E7E0] bg-white px-4 text-[12.5px] font-semibold text-[#1A1A1A] transition hover:border-[#B88E2F] disabled:opacity-55"
+                    >
+                      {mutating && <Loader2 size={14} className="animate-spin" aria-hidden />}
+                      {next.label}
+                    </button>
+                    <span className="text-[11.5px] text-[#969696]">Kitchen status</span>
+                  </div>
+                );
+              })()}
+
+              {/* Status trail — append-only, trigger-written (migration 007) */}
+              {(trail.length > 0 || trailLoading) && (
+                <div className="mt-5">
+                  <h3 className="text-[13px] font-semibold text-[#1A1A1A]">Timeline</h3>
+                  <div className="mt-2 space-y-1.5">
+                    {trailLoading && trail.length === 0 && (
+                      <div className="sp-skeleton h-4 w-40" />
+                    )}
+                    {trail.map((ev, i) => (
+                      <div
+                        key={`${ev.created_at}-${i}`}
+                        className="flex items-center gap-2 text-[12px] text-[#6B6B6B]"
+                      >
+                        <span
+                          className="h-1.5 w-1.5 shrink-0 rounded-full"
+                          style={{ backgroundColor: STATUS_DOT[displayStatus({ status: ev.to_status, payment_status: '' })] || '#969696' }}
+                          aria-hidden
+                        />
+                        <span className="font-medium text-[#1A1A1A]">
+                          {STATUS_LABEL[displayStatus({ status: ev.to_status, payment_status: '' })] || ev.to_status}
+                        </span>
+                        {ev.from_status && (
+                          <span>
+                            (from {ev.from_status})
+                          </span>
+                        )}
+                        <span aria-hidden>·</span>
+                        <span>{ev.actor_email || 'system'}</span>
+                        <span aria-hidden>·</span>
+                        <span>{hhmm(ev.created_at)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Total (uses order.total as stored — never recomputed) */}
               <div className="mt-4 flex items-center justify-between border-t border-[#E3E7E0] pt-4">
                 <span className="text-[16px] font-bold text-[#1A1A1A]">Total</span>
@@ -729,7 +873,7 @@ const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRet
         </div>
 
         {/* Footer CTA — only for active orders */}
-        {selected && normalizeStatus(selected.status) === 'active' && (
+        {selected && displayStatus(selected) === 'active' && (
           <div className="shrink-0 border-t border-[#E3E7E0] px-5 py-4">
             {chooserOpen ? (
               <div>
@@ -761,7 +905,9 @@ const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRet
                     if (selected && chosenMethod)
                       void runMutation(
                         selected.id,
-                        { status: 'paid', payment_status: 'paid', payment_method: chosenMethod },
+                        // Money fields only — the kitchen status is NOT touched
+                        // (NOVA: the counter is the gate, engine advances status).
+                        { payment_status: 'completed', payment_method: chosenMethod },
                         'pay'
                       );
                   }}

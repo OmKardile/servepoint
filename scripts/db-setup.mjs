@@ -1,4 +1,4 @@
-// Supabase provisioning script: applies ServePoint migrations 001-006 to the live
+// Supabase provisioning script: applies ServePoint migrations 001-007 to the live
 // Supabase project via the Supavisor session pooler (IPv4 path — direct
 // db.<ref>.supabase.co:5432 is IPv6-only on current projects), then verifies.
 // NOT part of the app bundle.
@@ -82,6 +82,8 @@ try {
   await applyFile('005_production_baseline_hardening', 'supabase/migrations/005_production_baseline_hardening.sql', false);
   // 006 sentinel: RLS recursion fix helper in place
   await applyFile('006_fix_rls_recursion', 'supabase/migrations/006_fix_rls_recursion.sql', await functionExists('sp_tenant_member'));
+  // 007 sentinel: order-engine payments ledger in place
+  await applyFile('007_order_engine_payments_history', 'supabase/migrations/007_order_engine_payments_history.sql', await tableExists('payments'));
 
   // ── Verification ──────────────────────────────────────────────────────────
   const tables = await client.query(

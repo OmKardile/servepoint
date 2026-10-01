@@ -3,6 +3,34 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.1.0] — 2026-10-01 — Order Engine: NOVA Discipline (payments ledger + status trail + guarded RPCs)
+
+### Learned from the alternative NOVA build (owner directive + uploaded A-to-Z spec, web-nova v0.5.139)
+The owner supplied the full spec of the alternatively-developed sibling project (41 tables, 51 migrations, guest QR → counter → KDS → money). Adopted its engineering rules for ServePoint's order engine this round: **writes to money paths go through SECURITY DEFINER RPCs**, **every status change leaves an append-only trail**, **payments are a ledger**, **the counter is the gate** (staff record money; the kitchen lifecycle is separate).
+
+### Added — migration 007 (`supabase/migrations/007_order_engine_payments_history.sql`, additive, idempotent)
+- **`payments` ledger**: one row per recorded payment (method cash/UPI/card, amount > 0 CHECK, confirmed_by_email, tenant-scoped RLS via `sp_tenant_member`).
+- **`order_status_history`**: append-only trail written by a SECURITY DEFINER trigger on every `orders.status` change (actor email stamped from the JWT; no client INSERT policy exists — NOVA append-only pattern).
+- **`sp_advance_order(order_id, to_status)`**: the only way statuses change — membership-checked, locks the row, enforces the legal-transition map (new/pending → preparing/cancelled; preparing → ready/cancelled; ready → completed; cancelled is terminal).
+- **`sp_record_payment(order_id, method, amount)`**: the only way money is recorded — membership-checked, atomic ledger row + order flip to `payment_status='completed'`; cancelled orders can never be paid.
+
+### Fixed — three latent New-Sale crashes found by checking the working
+- `createOrder` wrote `status:'active'` — **violates migration 001's orders_status_check** on the live DB → now enters as `'new'`.
+- `createOrder` omitted `location_id` (NOT NULL) and manually inserted `order_number` (GENERATED ALWAYS — DB-assigned only) → both would hard-fail; now auto-ensures a "Main Counter" location and lets the DB number orders.
+- The charge flow wrote `status:'paid'` (also CHECK-illegal) → money fields only now; **Paid is derived from `payment_status='completed'`** (counter-gate display), kitchen status unchanged.
+
+### Changed — Bills is now a full order console
+- Charge/cancel go through the guarded RPCs (with honest fallback to the legacy write ONLY when 007 isn't applied yet — console-warned).
+- **Kitchen lifecycle buttons** in the detail pane (Start preparing → Mark ready → Complete order) via `sp_advance_order`, with the engine's rejection messages surfaced verbatim.
+- **Timeline**: the selected order's append-only status trail (who moved it, when, from → to).
+
+### Verified — local Postgres 16.4 Supabase-replica harness, **15/15 PASS**
+- Applied 001→007 on a fresh cluster: order create → preparing → ready → completed; ledger row (upi ₹84, actor stamped); order flips completed/upi; history trail = 3 transitions with actor emails; cancelled is terminal and unpayable; illegal transitions/unknown status/amount≤0/unknown method all rejected with clear messages; stranger (non-member) denied on RPC **and** sees 0 payments/history rows via RLS. `tsc --noEmit` 0 errors; lint clean; browser sanity clean; login untouched (ADR-0016).
+- **Cloud apply (CLI)**: `SUPABASE_DB_PASSWORD='<db-password>' bun scripts/db-setup.mjs` — now applies 001→007 idempotently. (The DB password is owner-private and not present in this session's environment; the moment it's exported into the session, all future migrations apply automatically without the SQL-editor step.)
+
+### NOVA gap map (roadmap for the next rounds)
+KDS kitchen board · table floor + QR sessions · inventory movements (recipes → auto-deduction) · customers/CRM · offers/coupons · owner reports (sales/items/hours) · EOD reconcile + z-report · shifts & drawer · guest feedback · offline queue · realtime fan-out.
+
 ## [5.0.8] — 2026-10-01 — 006 Applied & Verified Live + Default Conversation Seeding
 
 ### Owner ran migration 006 — fix verified on the live cloud

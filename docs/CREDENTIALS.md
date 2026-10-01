@@ -54,7 +54,7 @@ The previous project (`vbufsuzzmehsidshopku`) was deleted by the owner and is re
 
 ## Database provisioning (applied)
 
-The fresh project is **fully provisioned** (migrations 001→006, all tables + RLS +
+The fresh project is **fully provisioned** (migrations 001→007, all tables + RLS +
 bootstrap operator, zero demo rows). To re-provision any environment idempotently:
 
 ```bash

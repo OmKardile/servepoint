@@ -123,17 +123,41 @@ export interface NewOrderInput {
   items: { name: string; qty: number; unitPrice: number; menuItemId?: string | null; notes?: string }[];
 }
 
+/** Returns the tenant's first location, creating a placeholder counter if none exists yet. */
+async function ensureLocation(tenantId: string): Promise<string> {
+  const { data: existing, error } = await supabase
+    .from('locations')
+    .select('id')
+    .eq('tenant_id', tenantId)
+    .order('created_at', { ascending: true })
+    .limit(1);
+  if (error) throw error;
+  if (existing && existing.length > 0) return (existing[0] as { id: string }).id;
+
+  // orders.location_id is NOT NULL (migration 001) — provision a counter row
+  // once so the first sale can land. Placeholders are honest until the owner
+  // edits outlet details (roadmap: outlet settings).
+  const { data: created, error: insertErr } = await supabase
+    .from('locations')
+    .insert({
+      tenant_id: tenantId,
+      name: 'Main Counter',
+      slug: `counter-${tenantId.slice(0, 8)}`,
+      address: 'Not set',
+      city: 'Not set',
+      state: 'Not set',
+      postal_code: '000000',
+    })
+    .select('id')
+    .single();
+  if (insertErr) throw insertErr;
+  return (created as { id: string }).id;
+}
+
 /** Creates an order + its items; returns the created order. */
 export async function createOrder(tenantId: string, input: NewOrderInput): Promise<Order> {
   requireCloud();
-  const { data: last, error: lastErr } = await supabase
-    .from('orders')
-    .select('order_number')
-    .eq('tenant_id', tenantId)
-    .order('order_number', { ascending: false })
-    .limit(1);
-  if (lastErr) throw lastErr;
-  const nextNumber = ((last?.[0]?.order_number as number) || 0) + 1;
+  const locationId = await ensureLocation(tenantId);
 
   const subtotal = input.items.reduce((s, it) => s + it.qty * it.unitPrice, 0);
   const taxRate = 0.05; // GST 5% — standard F&B rate
@@ -144,9 +168,11 @@ export async function createOrder(tenantId: string, input: NewOrderInput): Promi
     .from('orders')
     .insert({
       tenant_id: tenantId,
-      order_number: nextNumber,
+      location_id: locationId,
       order_type: input.orderType,
-      status: 'active',
+      // Migration 001 CHECK: new|pending|preparing|ready|completed|cancelled.
+      // Orders enter as 'new'; the counter advances them through the engine.
+      status: 'new',
       customer_name: input.customerName || null,
       guest_count: input.guestCount || null,
       subtotal,
@@ -187,6 +213,81 @@ export async function updateOrderStatus(
     .eq('id', orderId)
     .eq('tenant_id', tenantId);
   if (error) throw error;
+}
+
+/* ── Order engine (migration 007 — NOVA discipline) ─────────────────────── */
+
+export type PaymentMethod = 'cash' | 'upi' | 'card';
+
+export interface OrderStatusEvent {
+  from_status: string | null;
+  to_status: string;
+  actor_email: string;
+  created_at: string;
+}
+
+const RPC_MISSING = /PGRST202|Could not find the function|schema cache/i;
+
+/**
+ * Records a payment through the guarded RPC (server-side membership check,
+ * payments ledger row + order flip in one transaction). Falls back to the
+ * legacy direct write ONLY when migration 007 hasn't been applied yet.
+ */
+export async function recordPayment(
+  orderId: string,
+  tenantId: string,
+  method: PaymentMethod,
+  amount: number
+): Promise<void> {
+  requireCloud();
+  const { error } = await supabase.rpc('sp_record_payment', {
+    p_order_id: orderId,
+    p_method: method,
+    p_amount: amount,
+  });
+  if (!error) return;
+  if (RPC_MISSING.test(error.message)) {
+    console.warn('[orders] sp_record_payment unavailable — migration 007 not applied; legacy write used');
+    return updateOrderStatus(orderId, tenantId, { payment_status: 'completed', payment_method: method });
+  }
+  throw error;
+}
+
+/** Advances an order status through the guarded RPC (legal-transition map). */
+export async function advanceOrder(
+  orderId: string,
+  tenantId: string,
+  toStatus: 'pending' | 'preparing' | 'ready' | 'completed' | 'cancelled'
+): Promise<void> {
+  requireCloud();
+  const { error } = await supabase.rpc('sp_advance_order', {
+    p_order_id: orderId,
+    p_to_status: toStatus,
+  });
+  if (!error) return;
+  if (RPC_MISSING.test(error.message)) {
+    console.warn('[orders] sp_advance_order unavailable — migration 007 not applied; legacy write used');
+    return updateOrderStatus(orderId, tenantId, { status: toStatus });
+  }
+  throw error;
+}
+
+/** Append-only status trail for one order (empty until 007 is applied). */
+export async function fetchOrderHistory(tenantId: string, orderId: string): Promise<OrderStatusEvent[]> {
+  requireCloud();
+  const { data, error } = await supabase
+    .from('order_status_history')
+    .select('from_status, to_status, actor_email, created_at')
+    .eq('tenant_id', tenantId)
+    .eq('order_id', orderId)
+    .order('created_at', { ascending: true })
+    .order('id', { ascending: true });
+  if (error) {
+    // Table not there yet (007 unapplied) — the trail is optional UI, stay honest and quiet.
+    if (/schema cache|does not exist/i.test(error.message)) return [];
+    throw error;
+  }
+  return (data || []) as OrderStatusEvent[];
 }
 
 /* ─────────────────────────── Dashboard ──────────────────────────── */
