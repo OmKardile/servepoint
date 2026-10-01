@@ -940,3 +940,25 @@ Stage Summary:
 - Fresh Supabase project fully provisioned and connected; all three reported console errors fixed and proven 200 via REST; app + render.yaml on the new project; no demo data seeded (only the documented bootstrap operator).
 - Unresolved: none for this round. Owner may re-run SUPABASE_DB_PASSWORD='<pw>' bun scripts/db-setup.mjs any time (idempotent).
 - Crons: 0 — owner standing order respected (no automation scheduled).
+
+---
+Task ID: 25
+Agent: glm-5.3
+Task: Owner's first real "Add Business" run failed both cloud writes (screenshot): tenants_status_check violation + "email address invalid" — diagnose and fix the wizard provisioning path end-to-end.
+
+Work Log:
+- Read the screenshot: wizard success screen with two cloud notices (tenants_status_check violation; GoTrue "Email address cheeseburg@gmail.com is invalid") + stale "run on Supabase once migrations are applied" copy.
+- DB probe (scripts/db-probe-status.mjs, deleted after use): tenants_status_check = trial|active|past_due|suspended|cancelled|archived (no 'trialing'); subscriptions CHECK allows 'trialing' but plan_id CHECK = starter|growth|pro|enterprise; auth.users had only the operator (cheeseburg signup never landed).
+- REST battery isolated the email error: cheeseburg@gmail.com was rejected ONCE (email_address_invalid) but accepted on every later attempt — Supabase enhanced email validation does DNS-level checks that fail transiently. Other signups hit 429 over_email_send_rate_limit (project has Confirm email ON; free tier ≈ 2 emails/hour).
+- api.ts provisionBusiness rewrite: status trial/active per tenants CHECK; subscription row (Trial→starter@trialing with 14d trial_end, Standard→growth@active with 30d next_billing_at; explicit row type for supabase-js strict insert typing); platform_audit_logs business.provisioned entry (actor = operator, details + metadata) under "System insert audit logs" policy.
+- authService.signUp hardening: zero-width/NBSP email sanitization, one retry on transient email_address_invalid, dedicated 429 notice pointing to the Confirm-email dashboard toggle, honest device-local wording.
+- Wizard copy: Trial (14 days)/Standard (active) labels; stale migration notice replaced with retry/dashboard guidance.
+- REST E2E (scripts/verify-provision.sh, kept as smoke test): tenant insert → 201, subscription → 201, audit → 201, Platform readback shows all three, then full cleanup → tenants [] pristine.
+- docs/CREDENTIALS.md: new "One-time project setting: turn OFF Confirm email" section (with why); CHANGELOG 5.0.2; tsc 0 errors; browser: login → wizard renders with new labels.
+- Commit 9757847 pushed: 3e2a846..9757847 main == origin/main.
+
+Stage Summary:
+- Wizard provisioning is now fully cloud-green end-to-end (tenant + subscription + audit) and production DB left pristine.
+- Owner action (1 minute, optional but recommended): Supabase Dashboard → Authentication → Sign In / Providers → Email → Confirm email OFF — then wizard-created owners sign in instantly with no email sends/rate limits (documented in docs/CREDENTIALS.md).
+- Owner's earlier local-only provision (cheeseburg@gmail.com owner) can simply be re-run through Add Business — it will go fully cloud-side now.
+- Crons: 0 — owner standing order respected.
