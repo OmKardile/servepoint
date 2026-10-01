@@ -20,6 +20,7 @@ This directory documents all key architectural decisions made in the development
 | **[ADR 0010](0010-login-screen-design-freeze-and-design-system-directives.md)** | Login Screen Design Freeze & Design System Directives (Surface Pack illustrations reserved for login; shadcn/ui reference post-login) | Accepted | 2026-10-01 |
 | **[ADR 0011](0011-servepoint-ui-adoption.md)** | ServePoint UI Adoption — owner Figma as the default post-login design (auth-scoped Tessera pin keeps login frozen) | Accepted | 2026-10-01 |
 | **[ADR 0012](0012-figma-rest-pipeline-and-exact-servepoint-tokens.md)** | Figma REST Pipeline & Exact ServePoint Design Tokens (PAT custody, 57-frame archive, estimated → mined tokens) | Accepted | 2026-10-01 |
+| **[ADR 0013](0013-three-role-model-and-credentials-only-login.md)** | Three-Role Model (superadmin / owner / staff) & Credentials-Only Login (supersedes ADR-0009 role matrix; unfreezes ADR-0010 login scope) | Accepted | 2026-10-01 |
 
 ---
 
