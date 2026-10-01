@@ -962,3 +962,23 @@ Stage Summary:
 - Owner action (1 minute, optional but recommended): Supabase Dashboard → Authentication → Sign In / Providers → Email → Confirm email OFF — then wizard-created owners sign in instantly with no email sends/rate limits (documented in docs/CREDENTIALS.md).
 - Owner's earlier local-only provision (cheeseburg@gmail.com owner) can simply be re-run through Add Business — it will go fully cloud-side now.
 - Crons: 0 — owner standing order respected.
+
+---
+Task ID: 26
+Agent: glm-5.3
+Task: "Why the business isn't getting added" (2× password-grant 400 in console) + owner directive: provisioned emails don't need to be real — no unnecessary authentication.
+
+Work Log:
+- Verified cloud insert path still green (re-ran verify-provision.sh → all 201 → cleanup pristine).
+- Diagnosed the real failure: those 400s = failed cloud password grants → session is registry-only (no JWT) → tenant insert runs as anon → RLS rejects → wizard saved locally only. Also found latent bug #3: wizard QSR option sent 'qsr' (violates tenants_business_type_check 'quick_service').
+- authService.signIn rework (owner directive): 1) registry-first (instant sign-in, zero cloud noise), 2) cloud grant (dashboard users), 3) bootstrap constant; every local path runs tryLinkCloudSession (silent cloud replay of the same creds → JWT for RLS; operator metadata pinned; failures never block sign-in). Emails sanitized (zero-width strip).
+- provisionBusiness: JWT-session guard up front (clear "not cloud-authenticated" message instead of raw RLS error) + 42501/row-level-security mapping to actionable guidance.
+- Wizard: review step shows "Cloud session missing" banner when registry-only; QSR → quick_service.
+- Full browser E2E of owner's exact flow: fresh sign-out → operator sign-in → wizard "Smoke Test Cafe" → "Saved to cloud", no warnings; Businesses tab shows the row; REST confirms tenant (trial) + subscription (starter/trialing) + audit (business.provisioned); smoke.owner@coolkafe.in created CONFIRMED in auth.users → owner has flipped Confirm-email OFF (zero emails/rate limits). All test data deleted → tenants [] pristine.
+- Docs: CREDENTIALS.md "How authentication works" section (registry-first model, silent cloud link, why RLS needs the JWT); CHANGELOG 5.0.3; tsc 0 errors.
+- Commit 51e3019 pushed: 2cea694..51e3019 main == origin/main.
+
+Stage Summary:
+- Provisioning is fully green end-to-end in the real UI; the auth model now matches the owner's directive (invented emails, instant sign-ins, cloud only as silent RLS upgrade).
+- If the operator's typed password differs from the cloud account's, the session stays registry-only and the wizard warns before submit — sign in with the docs/CREDENTIALS.md password for cloud writes.
+- Crons: 0 — owner standing order respected.
