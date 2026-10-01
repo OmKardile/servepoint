@@ -668,3 +668,22 @@ Unresolved Issues / Risks / Next-phase Priorities:
 3. Menu/Inventory mutations still local-only; no automated tests.
 4. Next-highest-value passes now that the roadmap is complete: polish loop on converted surfaces (micro-interactions, empty states), AuthScreen unfreeze awaits owner, SuperAdmin platform RPC aggregates once migration 001 lands.
 5. Session note: verify_and_consume_table_session is idempotent on valid tokens — revisit single-use semantics if the owner wants one-order-per-scan.
+
+---
+Task ID: 21
+Agent: glm-5.3
+Task: Fix preview "Blocked request — host not allowed" (Vite dev-server Host check blocked the preview gateway host)
+
+Work Log:
+- Owner hit Vite's dev-server host allowlist error on the preview panel: "Blocked request. This host (ws-bfaf-...fcapp.run) is not allowed. To allow this host, add ... to server.allowedHosts in vite.config.js".
+- Root cause: Vite 8's dev-server Host-header protection rejects unknown proxied hosts; the preview gateway's host was never allowlisted.
+- Fix: vite.config.ts server block → added `allowedHosts: true` with an explanatory comment (sandbox preview gateway; any host allowed — appropriate for this sandbox, not for public production hosts).
+- Restarted dev server (pkill vite + start-stop-daemon with explicit CWD); Vite 8.3.1 ready in 289ms.
+- Verified: curl with the exact blocked Host header → 200 + app HTML (previously the Blocked request page); agent-browser load → app renders (owner session persisted), zero console errors.
+- Committed + pushed; preview panel should now load for the owner.
+
+Stage Summary:
+- Preview unblocked: `allowedHosts: true` in vite.config.ts; exact gateway host returns 200. App state unchanged (v3.0.0 at 40652e8 + this fix).
+
+Unresolved Issues / Risks / Next-phase Priorities:
+1. Unchanged from Task 20 (migration 001 re-run on live Supabase still owed by owner; menu/inventory mutations local-only; no automated tests).

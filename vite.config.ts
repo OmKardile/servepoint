@@ -12,6 +12,9 @@ export default defineConfig(() => {
       },
     },
     server: {
+      // Allow the preview-panel gateway host (and any sandbox host) — Vite's dev-server
+      // Host check otherwise blocks proxied previews with "Blocked request ... not allowed".
+      allowedHosts: true,
       // HMR is disabled in AI Studio via DISABLE_HMR env var.
       // Do not modify—file watching is disabled to prevent flickering during agent edits.
       hmr: process.env.DISABLE_HMR !== 'true',
