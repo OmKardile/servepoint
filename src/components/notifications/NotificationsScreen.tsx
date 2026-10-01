@@ -11,6 +11,7 @@ import {
   Tag,
 } from 'lucide-react';
 import { fetchNotifications, markNotificationsRead } from '../../lib/api';
+import { dbErrorHint } from '../../lib/dbErrors';
 import { timeAgo } from '../../lib/prefs';
 import { useTenant } from '../../lib/tenant';
 import { useUi } from '../../store/session';
@@ -22,9 +23,6 @@ import type { AppNotification, NotificationCategory } from '../../types';
  * body, clock icon + relative time. Production data only (notifications —
  * migration 004). "Mark all read" persists to Supabase then re-fetches.
  */
-
-const MIGRATION_004_NOTE =
-  'If this says the table does not exist, migration 004 (notifications & messages) has not been applied to Supabase yet.';
 
 const CATEGORY_ICON: Record<NotificationCategory, React.ComponentType<{ size?: number; className?: string }>> = {
   message: MessageSquare,
@@ -62,7 +60,7 @@ const ErrorCard: React.FC<{ message: string; onRetry: () => void }> = ({ message
       </span>
       <h2 className="mt-4 text-[15px] font-semibold text-[#1A1A1A]">Couldn't load notifications</h2>
       <p className="mt-2 break-words text-[13px] text-[#6B6B6B]">{message}</p>
-      <p className="mt-2 text-[12px] text-[#969696]">{MIGRATION_004_NOTE}</p>
+      <p className="mt-2 break-words text-[12px] text-[#969696]">{dbErrorHint(message)}</p>
       <button onClick={onRetry} className="sp-cta mt-5 flex h-11 items-center gap-2 px-6 text-[13.5px]">
         <RefreshCw size={15} aria-hidden />
         Retry

@@ -1060,3 +1060,26 @@ Stage Summary:
 - The product is now ServePoint — smartPOS everywhere user-visible and in every living doc/config; operator display name updated in app, migration seed, and live cloud.
 - Pending: owner's GitHub rename — then `git remote set-url origin https://github.com/OmKardile/servepoint.git` + update doc references (README/technical docs) on the next round that touches them (or immediately on push error).
 - Crons: 0 — owner standing order respected.
+
+---
+Task ID: 31
+Agent: glm-5.3
+Task: Owner screenshots — Messages AND Notifications both show "infinite recursion detected in policy for relation tenant_users" (42P17); diagnose and fix.
+
+Work Log:
+- REST (live): operator password grant → 200 (auth path healthy — closes the earlier 400 question as account-specific); GET /rest/v1/{notifications,conversations} with the operator JWT returned the exact body {"code":"42P17","message":"infinite recursion detected in policy for relation \"tenant_users\""} — diagnosis confirmed, not guessed.
+- Root cause: migration 001's tenant_users policy "Tenant owner manage staff members" does EXISTS (SELECT 1 FROM tenant_users tu …) INSIDE a policy on tenant_users → any statement on the table re-evaluates its own RLS → Postgres 42P17. Migration 004's policies sub-query tenant_users raw, so Messages, Notifications and Settings→Team all died; menu/order/bill surfaces never touch tenant_users directly (definer helpers only) — exactly why only these screens broke. current_tenant_id()/is_superadmin()/tsos_* are all SECURITY DEFINER, so they were not the trigger.
+- DB password NOT available this session (env unset, no history, .env is a Prisma placeholder) → built the fix so it is provably correct offline AND trivially applicable by the owner.
+- NEW supabase/migrations/006_fix_rls_recursion.sql (idempotent, no data touched): sp_tenant_member(uuid) SECURITY DEFINER helper (membership + superadmin override); drops the self-referencing 001 policy (003's definer-based "owner manages tenant_users" supersedes it, re-created + is_superadmin() belt-and-braces); rewrites the three 004 policies onto the helper; pins SET search_path = public on all RLS helpers.
+- NEW local proof harness (tool-results/prove-rls.mjs, gitignored): portable PostgreSQL 16.4 (zonky binaries, user-space, port 5433) + Supabase auth-schema stubs (auth.users / auth.jwt() / auth.uid() / roles authenticated+anon) → applied 001/003/004 → REPRODUCED 42P17 on all three surfaces → applied 006 → 6/6 PASS (Messages list, Notifications list, Team read, chat INSERT, mark-all-read UPDATE, non-member isolation = 0 rows). 006 re-run idempotent ✓. The harness caught a real bug in 006 before the owner saw it (duplicate function attributes after $$ → "conflicting or redundant options") — fixed.
+- Frontend: NEW src/lib/dbErrors.ts — maps raw Postgres/PostgREST messages to precise hints (42P17 → run migration 006 in SQL Editor; missing table → run 004→006); wired into Messages (list error card + thread error), Notifications error card, Settings→Team error (error Note + amber hint Note). The old misleading "migration 004 not applied" blanket note is gone.
+- scripts/db-setup.mjs: applies 006 with a sp_tenant_member sentinel (001→006 now); header + docs/CREDENTIALS.md updated (001→005 → 001→006; new "Fix (2026-10-01): RLS recursion" section with the SQL-editor one-paste + pooler alternative).
+- Verified: npx tsc --noEmit → 0 errors; bun run lint clean; browser E2E — app healthy, zero console/page errors, owner's CheeseBurg confirmed live in the cloud (provisioned minutes earlier, exactly the state that hits this recursion); dev.log clean for this round (the 18:03 authService PARSE_ERROR was Task 30's transient mid-edit state, resolved). Login screen untouched (ADR-0016 freeze respected). Local PG stopped; harness files under /tmp + gitignored tool-results/.
+- Docs: CHANGELOG [5.0.7] (root cause + proof + owner action), docs/CREDENTIALS.md fix section.
+- Commit + push (owner identity) follows this record; remote still tsos-alt until the owner's rename lands.
+
+Stage Summary:
+- Messages / Notifications / Settings→Team are fixed by migration 006 — proven 6/6 on a local Postgres replica that reproduces the exact owner error, byte-identical 42P17.
+- Owner's one-time 10-second action: Supabase Dashboard → SQL Editor → paste supabase/migrations/006_fix_rls_recursion.sql → Run → hit Retry in the app (or run db-setup with SUPABASE_DB_PASSWORD; it now applies 006 automatically).
+- Until 006 runs, those three surfaces now show the precise actionable hint instead of the misleading migration-004 note.
+- Crons: 0 — owner standing order respected.

@@ -22,6 +22,7 @@ import {
 import type { LucideIcon } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { authService } from '../../lib/authService';
+import { dbErrorHint } from '../../lib/dbErrors';
 import { canPerformAction, getRoleMeta } from '../../lib/rbac';
 import { getPrefs, setPrefs, subscribePrefs } from '../../lib/prefs';
 import type { SpPrefs } from '../../lib/prefs';
@@ -862,8 +863,9 @@ const StaffSection: React.FC = () => {
       )}
 
       {!tenantLoading && !tenantError && listError && (
-        <div className="mt-5">
+        <div className="mt-5 space-y-2">
           <Note tone="error">{listError}</Note>
+          <Note tone="amber">{dbErrorHint(listError)}</Note>
         </div>
       )}
 

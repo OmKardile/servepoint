@@ -18,6 +18,7 @@ import {
   fetchMessages,
   sendMessage,
 } from '../../lib/api';
+import { dbErrorHint } from '../../lib/dbErrors';
 import { timeAgo } from '../../lib/prefs';
 import { useTenant } from '../../lib/tenant';
 import { useSession, useUi } from '../../store/session';
@@ -29,9 +30,6 @@ import type { ChatMessage, Conversation } from '../../types';
  * Right: chat thread (sage incoming / white outgoing bubbles) + gold send composer.
  * Production data only (conversations / conversation_messages — migration 004).
  */
-
-const MIGRATION_004_NOTE =
-  'If this says the table does not exist, migration 004 (notifications & messages) has not been applied to Supabase yet.';
 
 function initialsOf(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -100,7 +98,7 @@ const ErrorCard: React.FC<{ message: string; onRetry: () => void }> = ({ message
       </span>
       <h2 className="mt-4 text-[15px] font-semibold text-[#1A1A1A]">Couldn't load messages</h2>
       <p className="mt-2 break-words text-[13px] text-[#6B6B6B]">{message}</p>
-      <p className="mt-2 text-[12px] text-[#969696]">{MIGRATION_004_NOTE}</p>
+      <p className="mt-2 break-words text-[12px] text-[#969696]">{dbErrorHint(message)}</p>
       <button onClick={onRetry} className="sp-cta mt-5 flex h-11 items-center gap-2 px-6 text-[13.5px]">
         <RefreshCw size={15} aria-hidden />
         Retry
@@ -279,7 +277,7 @@ const ChatPane: React.FC<{
                     <AlertTriangle size={18} aria-hidden />
                   </span>
                   <p className="mt-3 break-words text-[13px] text-[#6B6B6B]">{error}</p>
-                  <p className="mt-1 text-[11.5px] text-[#969696]">{MIGRATION_004_NOTE}</p>
+                  <p className="mt-1 break-words text-[11.5px] text-[#969696]">{dbErrorHint(error)}</p>
                   <button onClick={() => void load()} className="sp-cta mt-4 h-11 px-5 text-[13px]">
                     Retry
                   </button>

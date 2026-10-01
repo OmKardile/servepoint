@@ -54,19 +54,30 @@ The previous project (`vbufsuzzmehsidshopku`) was deleted by the owner and is re
 
 ## Database provisioning (applied)
 
-The fresh project is **fully provisioned** (migrations 001→005, all tables + RLS +
+The fresh project is **fully provisioned** (migrations 001→006, all tables + RLS +
 bootstrap operator, zero demo rows). To re-provision any environment idempotently:
 
 ```bash
 SUPABASE_DB_PASSWORD='<db-password>' bun scripts/db-setup.mjs
 ```
 
-The script applies any missing migration (001→005) via the session pooler and prints a
+The script applies any missing migration (001→006) via the session pooler and prints a
 verification summary. Migration files remain in `supabase/migrations/` for the SQL-editor
 route as well.
 
 Until a table's migration is applied, its surface shows an honest error/empty state —
 never a crash.
+
+## Fix (2026-10-01): RLS recursion on Messages / Notifications / Team (migration 006)
+
+Symptom: those screens showed *"infinite recursion detected in policy for relation
+tenant_users"* (Postgres 42P17). Root cause: migration 001's tenant_users policy
+referenced tenant_users itself, and migration 004's policies sub-queried tenant_users.
+
+**One-time fix — Supabase Dashboard → SQL Editor → paste the full contents of
+`supabase/migrations/006_fix_rls_recursion.sql` → Run → back in the app, hit Retry.**
+(Idempotent; touches no data.) Equivalent alternative: `SUPABASE_DB_PASSWORD='<db-password>'
+bun scripts/db-setup.mjs` — db-setup now applies 006 automatically.
 
 ## One-time project setting: turn OFF "Confirm email"
 

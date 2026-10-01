@@ -3,6 +3,21 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.0.7] — 2026-10-01 — Messages & Notifications Fixed: RLS Recursion (migration 006)
+
+### Fixed — "infinite recursion detected in policy for relation tenant_users" (owner screenshots: Messages + Notifications)
+- **Root cause** (proven on a local Postgres 16.4 with a Supabase `auth` stub — reproduced byte-identical `42P17` on all three surfaces, then fixed): migration 001's tenant_users policy `"Tenant owner manage staff members"` queried **tenant_users from inside a policy on tenant_users** — any statement against the table re-triggered its own RLS → Postgres aborted with 42P17. Migration 004's policies (notifications / conversations / conversation_messages) sub-queried `tenant_users` directly, so **every Messages, Notifications and Settings → Team read died**. Menu/order/bill surfaces were unaffected (they use SECURITY DEFINER helpers only) — which is why only these screens broke.
+- **Migration 006** (`supabase/migrations/006_fix_rls_recursion.sql`, idempotent, touches no data): adds `sp_tenant_member(p_tenant_id)` SECURITY DEFINER membership helper (with the platform-superadmin override); **drops the self-referencing 001 policy** (003's definer-based `"owner manages tenant_users"` supersedes it, re-created with an `is_superadmin()` belt-and-braces); rewrites the three 004 policies onto the helper; pins `SET search_path = public` on every RLS helper function.
+- **Honest, precise error copy**: `src/lib/dbErrors.ts` maps raw Postgres/PostgREST messages to actionable hints — the 42P17 case now tells the operator to run migration 006 in the SQL Editor (instead of the misleading "migration 004 not applied" note); missing-table cases get the 004→006 instruction. Wired into Messages (list + thread), Notifications and Settings → Team error cards.
+
+### Verified (local Postgres 16.4 harness + live REST + browser)
+- Local Supabase-replica harness (portable PG 16.4 + `auth.jwt()`/`auth.uid()` stubs + role `authenticated`): **reproduced** 42P17 on conversations/notifications/tenant_users → applied 006 → **6/6 PASS**: Messages list, Notifications list, Team read, chat send (INSERT), mark-all-read (UPDATE), and tenant isolation intact (non-member sees 0 rows). 006 re-run = idempotent ✓ (the harness also caught and fixed a duplicate function-attribute bug in 006 before it reached the owner).
+- Live REST: operator password grant → **200** (auth path healthy); `GET /rest/v1/{notifications,conversations}` → the exact `42P17` body captured, confirming the live diagnosis.
+- Browser E2E: app loads clean, zero console/page errors; the owner's CheeseBurg workspace confirmed live in the cloud (provisioned minutes earlier — they hit exactly this recursion). Login screen untouched (ADR-0016).
+
+### Owner action (10 seconds, one time)
+- **Supabase Dashboard → SQL Editor → paste the contents of `supabase/migrations/006_fix_rls_recursion.sql` → Run → back in the app, hit Retry.** Alternative: `SUPABASE_DB_PASSWORD='<db-password>' bun scripts/db-setup.mjs` (db-setup now applies 006 automatically). Full write-up in `docs/CREDENTIALS.md`.
+
 ## [5.0.6] — 2026-10-01 — Rebrand: ServePoint — smartPOS Everywhere (owner directive)
 
 ### Changed
