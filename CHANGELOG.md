@@ -3,6 +3,19 @@
 All notable changes to **TSOS (The Cafe Operating System)** are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.0.4] — 2026-10-01 — Login Screen Restored to the Figma & Frozen (ADR-0016)
+
+### Fixed — "u deleted the damn log in button on screen"
+- **Root cause**: the v5.0.0 rebuild pass missed `src/components/auth/AuthScreen.tsx` — it still carried v4 `tessera-*` classes (`tessera-cta`/`tessera-grain`/`tessera-block`) whose CSS was deleted with the old stylesheet, so the primary submit button rendered with no background and inherited near-black text on the near-black card = **invisible**.
+- **Rebuilt to the archived Figma frame** `Welcome_Back_219-30095.png`: split layout — white left brand panel (palette-matched `login-illustration.png`, rotating caption carousel with gold active dot, reduced-motion aware) + sage `#E3E7E0` right panel ("Welcome Back!", placeholder-style `sp-input` fields, password show/hide eye toggle per frame, **full-width gold `sp-cta` "Sign in"** with spinner loading state).
+- The frame's social-login row is honestly replaced by the provisioned-accounts note (no OAuth providers configured — no dead buttons); red error alert retained; "© 2026 ServePoint" footer; mobile stacks to the form with a compact brand row; new `src/vite-env.d.ts` for the PNG import.
+
+### Governance — Owner directive: "pls dont change the login page"
+- **ADR-0016: the v5 login screen is frozen at commit `a6fd120`** (supersedes ADR-0010's Tessera-era freeze). The auth surface (`AuthScreen.tsx` + `login-illustration.png`) is read-only for all future passes; hotfixes that must touch it may not alter visuals and must be logged in the worklog.
+
+### Verified
+- `tsc --noEmit` → 0 errors; agent-browser E2E at `127.0.0.1:3000`: button visible in the a11y tree, real sign-in (`admin@tsos.dev`) → Platform console "Supabase: connected"; desktop 1440×900 + mobile 390px screenshots match the frame; zero console/page errors.
+
 ## [5.0.3] — 2026-10-01 — Auth Model: Provisioned Accounts First (owner directive: "no unnecessary authentication")
 
 ### Changed — Registry-first sign-in + cloud session upgrade

@@ -1004,3 +1004,19 @@ Stage Summary:
 - The login screen now equals the Welcome_Back Figma frame and — most importantly — the Sign in button is back, visible and working end-to-end.
 - Every screen has now had its explicit v5.0.0 ServePoint pass; no known v4-class leftovers remain.
 - Crons: 0 — owner standing order respected.
+
+---
+Task ID: 28
+Agent: glm-5.3
+Task: "push ; pls dont change the login page" — confirm push state; record the owner's login-freeze directive.
+
+Work Log:
+- Push state verified: working tree was clean and local HEAD d954fc1 already matched origin (fetched via token) — the Task 27 login rebuild (a6fd120) and its worklog record (d954fc1) were already on GitHub; nothing was pending.
+- Standing directive recorded — ADR-0016 (docs/decisions/0016-login-screen-freeze-v5-welcome-back.md): the v5 login screen (AuthScreen.tsx + src/assets/login-illustration.png) is FROZEN at commit a6fd120 per owner instruction "pls dont change the login page"; supersedes ADR-0010's Tessera-era freeze; auth surface is read-only for all future agent passes; hotfix carve-out unchanged (visuals untouched, must be logged).
+- AuthScreen.tsx itself deliberately left byte-identical (governance lives in the ADR, not a comment in the frozen file).
+- decisions/README.md index row added; CHANGELOG [5.0.4] entry added (login rebuild + freeze directive + verification evidence).
+- Commit + push (owner identity) follows this record.
+
+Stage Summary:
+- Login page is owner-approved and frozen at a6fd120 — no future round will modify it without an explicit "unfreeze login" instruction.
+- main == origin/main after push; crons remain 0 (owner standing order).
