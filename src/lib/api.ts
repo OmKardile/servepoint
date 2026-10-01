@@ -516,6 +516,20 @@ export async function provisionBusiness(input: ProvisionInput): Promise<Provisio
         },
       });
       if (auditErr) console.warn('[provision] audit insert failed:', auditErr.message);
+
+      // Default team conversations (best-effort) — mirrors migration 004's
+      // seed so tenants created AFTER 004 ran get the same Figma Messages
+      // starting state (Front of House / Kitchen). Safe: the tenant row was
+      // just created, so duplicates are impossible.
+      const { error: convErr } = await supabase.from('conversations').insert(
+        ['Front of House', 'Kitchen'].map((name) => ({
+          tenant_id: tenant!.id as string,
+          kind: 'team' as const,
+          name,
+          member_names: ['Front of House', 'Kitchen'],
+        }))
+      );
+      if (convErr) console.warn('[provision] default conversations insert failed:', convErr.message);
     }
   } else {
     cloudError = 'Cloud not configured — registered locally only.';

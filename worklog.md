@@ -1083,3 +1083,23 @@ Stage Summary:
 - Owner's one-time 10-second action: Supabase Dashboard → SQL Editor → paste supabase/migrations/006_fix_rls_recursion.sql → Run → hit Retry in the app (or run db-setup with SUPABASE_DB_PASSWORD; it now applies 006 automatically).
 - Until 006 runs, those three surfaces now show the precise actionable hint instead of the misleading migration-004 note.
 - Crons: 0 — owner standing order respected.
+
+---
+Task ID: 32
+Agent: glm-5.3
+Task: Owner pasted migration 006's verification output (policy table) — confirm the fix state and verify the live cloud end-to-end.
+
+Work Log:
+- Read the owner's pg_policies output: exactly the post-006 state — the self-referencing "Tenant owner manage staff members" policy is GONE; notifications/conversations/conversation_messages carry the rewritten member_all policies; tenant_users has the three definer-only policies (Superadmin full access / Tenant read access / owner manages). Matches the local harness's post-fix state row-for-row.
+- Live REST verification: operator password grant → 200; GET /rest/v1/notifications and /rest/v1/conversations → HTTP 200 (previously 42P17). Fix confirmed on the production cloud.
+- Found + closed a follow-on gap: both endpoints returned [] because CheeseBurg was provisioned AFTER migration 004 applied, so it never received 004's default-conversation seed ("Front of House" / "Kitchen").
+  - provisionBusiness now inserts the same two default team conversations (best-effort, fresh-tenant-id makes duplicates impossible) so every future tenant starts with the Figma Messages state.
+  - CheeseBurg back-seeded via REST as operator (superadmin passes sp_tenant_member via is_superadmin): 201 ×2, readback confirms both rows in 004's exact shape.
+- Verified: tsc 0 errors, lint clean, browser sanity clean (zero console/page errors). Login untouched (ADR-0016).
+- Docs: CHANGELOG [5.0.8]. Commit + push (owner identity) follows; remote still tsos-alt until rename.
+- Crons: 0 — owner standing order respected.
+
+Stage Summary:
+- Migration 006 is applied and live-verified: Messages / Notifications / Settings→Team are unblocked (200 on the exact endpoints that failed).
+- CheeseBurg's Messages now has its two Figma team conversations on Retry; all future provisions seed them automatically.
+- No open blockers from this bug class; the RLS helper pattern (sp_tenant_member) is now the reference for any future policy that needs tenant_users.

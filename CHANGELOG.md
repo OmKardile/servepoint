@@ -3,6 +3,20 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.0.8] — 2026-10-01 — 006 Applied & Verified Live + Default Conversation Seeding
+
+### Owner ran migration 006 — fix verified on the live cloud
+- The owner pasted migration 006's verification output: the self-referencing `"Tenant owner manage staff members"` policy is **gone** and all six policies match the post-fix state exactly (notifications / conversations / conversation_messages on the `sp_tenant_member` helper; `tenant_users` on three definer-only policies).
+- **Live REST proof**: operator password grant → 200; `GET /rest/v1/notifications` and `/rest/v1/conversations` → **HTTP 200** (was 42P17 before 006). Messages, Notifications and Settings → Team are unblocked.
+
+### Fixed — tenants provisioned after 004 never got the default conversations seed
+- Migration 004 seeds "Front of House" / "Kitchen" team conversations for tenants that existed at apply time; CheeseBurg (provisioned later) received none → Messages would show a correct-but-empty list.
+- `provisionBusiness` now inserts the same two default team conversations (best-effort) for every newly provisioned tenant — mirroring 004's seed.
+- **CheeseBurg back-seeded via REST (201)** in 004's exact shape; readback confirms both rows. Hit Retry on Messages → the two team conversations appear.
+
+### Verified
+- `tsc --noEmit` → 0 errors; lint clean; browser sanity clean (zero console/page errors). Login screen untouched (ADR-0016). Crons 0 (owner standing order).
+
 ## [5.0.7] — 2026-10-01 — Messages & Notifications Fixed: RLS Recursion (migration 006)
 
 ### Fixed — "infinite recursion detected in policy for relation tenant_users" (owner screenshots: Messages + Notifications)
