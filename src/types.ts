@@ -145,11 +145,14 @@ export interface Subscription {
 
 export interface AuditLogEntry {
   id: string;
-  actor: string | null;
+  tenant_id?: string | null;
+  actor_email: string;
   action: string;
-  entity: string | null;
-  details?: string | null;
-  created_at: string;
+  details: string;
+  metadata?: Record<string, unknown> | null;
+  timestamp: string;
+  /** Generated alias of `timestamp` (migration 005) — kept for API parity. */
+  created_at?: string;
 }
 
 /** Dashboard aggregates (computed from live orders in api.ts). */

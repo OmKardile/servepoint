@@ -3,6 +3,18 @@
 All notable changes to **TSOS (The Cafe Operating System)** are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.0.1] — 2026-10-01 — Fresh Supabase Provisioning & Platform Hardening (ADR-0015)
+
+### Fixed — Owner reported console errors after the old cloud project was deleted
+- **NEW Supabase project wired in everywhere** (`gehjsxopcowmotgrrcgc`): `src/lib/supabase.ts` (hardcoded public URL + `sb_publishable_…` key), `render.yaml` build env, `help.md`. The deleted project (`vbufsuzzmehsidshopku`) is fully retired.
+- **Full schema applied to the fresh DB** via the new `scripts/db-setup.mjs` (Supavisor session pooler — `aws-0-ap-northeast-2.pooler.supabase.com`, IPv4 path; direct `db.<ref>.supabase.co:5432` is IPv6-only on current projects). Migrations 001→004 applied and verified: 16 public tables, RLS policies in place, **zero rows — no demo data**.
+- **NEW `supabase/migrations/005_production_baseline_hardening.sql`** (idempotent, also applied): ① `platform_audit_logs.created_at` as a STORED generated alias of the canonical `timestamp` column — PostgREST `order=created_at.desc` resolves instead of PGRST204/HTTP 400; ② guarded policy re-ensures (migration 001's exact names) for tenants/subscriptions/platform_audit_logs so partially-migrated environments self-repair; ③ seeds the **bootstrap Platform Operator as a real Supabase Auth user** (`admin@tsos.dev`, bcrypt, `role:"superadmin"` in `raw_user_meta_data`, confirmed) + an active tenant-free `tenant_users` superadmin row so `is_superadmin()` authorizes Platform tables.
+- **Audit-log schema mismatch fixed in the app**: `AuditLogEntry` now matches migration 001's real columns (`actor_email`/`details`/`timestamp`); `fetchAuditLogs` orders by `timestamp`; Platform console (Dashboard activity + Audit tab) renders the correct fields.
+- **Auth hardening**: after a successful cloud password sign-in, the bootstrap operator's `user_metadata.role` is pinned to `superadmin` client-side (updateUser + refreshSession, best-effort) so RLS authorization survives metadata drift.
+
+### Verified
+- REST E2E against the new project — the exact failing calls from the owner's console: password grant `admin@tsos.dev` → **200 JWT**; `GET /rest/v1/platform_audit_logs?order=created_at.desc&limit=50` → **200 []** (was 400); `GET /rest/v1/tenants` → **200 []** (was 403). Browser E2E: sign-in → Platform console (Dashboard/Businesses/Subscriptions/Audit) with clean empty states, no error banners; sign-out returns to login; 390px mobile layout clean; browser console + dev.log free of network errors. `tsc --noEmit` → 0 errors. Secrets hygiene: the DB password lives in `.env`-style local env only (`SUPABASE_DB_PASSWORD`) — never committed.
+
 ## [5.0.0] — 2026-10-01 — Production Rebuild: App Equals the Figma (ADR-0014)
 
 ### Changed — Owner order: "delete everything except login page; redesign everything according to the figma design each and every component; make this end production app; remove any demo or development things"

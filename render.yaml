@@ -66,9 +66,9 @@ services:
       - key: NODE_VERSION
         value: "22"                     # Vite 8 requires Node ≥ 20.19 / 22.12
       - key: VITE_SUPABASE_URL
-        value: https://vbufsuzzmehsidshopku.supabase.co
+        value: https://gehjsxopcowmotgrrcgc.supabase.co
       - key: VITE_SUPABASE_ANON_KEY
-        value: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZidWZzdXp6bWVoc2lkc2hvcGt1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTAyOTE0MjMsImV4cCI6MjEwNTg2NzQyM30.kymgulEpO3R7FRhrfFO-lpmYrAcOqBF82sSW4unZHBE
+        value: sb_publishable_igzjkrzX7PLfNI4hlI8p4g_FeqvHI32
       # Design-pipeline token (owner-provided, file_content: read scope).
       # Used by tooling/agents to read the ServePoint POS Preview Figma and
       # sync design tokens/screenshots into docs/design/servepoint/ (ADR-0012).

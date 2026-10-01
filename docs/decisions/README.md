@@ -22,6 +22,7 @@ This directory documents all key architectural decisions made in the development
 | **[ADR 0012](0012-figma-rest-pipeline-and-exact-servepoint-tokens.md)** | Figma REST Pipeline & Exact ServePoint Design Tokens (PAT custody, 57-frame archive, estimated → mined tokens) | Accepted | 2026-10-01 |
 | **[ADR 0013](0013-three-role-model-and-credentials-only-login.md)** | Three-Role Model (superadmin / owner / staff) & Credentials-Only Login (supersedes ADR-0009 role matrix; unfreezes ADR-0010 login scope) | Accepted | 2026-10-01 |
 | **[ADR 0014](0014-production-rebuild-app-equals-figma.md)** | Production Rebuild — App Equals the Figma (demo/dev purge, single theme, Supabase-only data) | Accepted | 2026-10-01 |
+| **[ADR 0015](0015-fresh-supabase-reprovisioning-and-platform-hardening.md)** | Fresh Supabase Re-provisioning & Platform Hardening (scripted migration apply, migration 005 baseline, bootstrap operator as real Auth user) | Accepted | 2026-10-01 |
 
 ---
 

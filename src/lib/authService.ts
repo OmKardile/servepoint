@@ -135,6 +135,22 @@ export const authService = {
             emailLower === BOOTSTRAP_OPERATOR.email
               ? 'superadmin'
               : normalizeRole(meta.role || 'owner');
+
+          // Platform operator bootstrap: pin role=superadmin into user_metadata
+          // so the RLS helper is_superadmin() (which reads JWT user_metadata)
+          // authorizes Platform tables (tenants / subscriptions / audit logs).
+          // Best-effort — migration 005 seeds this server-side too.
+          if (emailLower === BOOTSTRAP_OPERATOR.email && meta.role !== 'superadmin') {
+            try {
+              await supabase.auth.updateUser({
+                data: { role: 'superadmin', name: BOOTSTRAP_OPERATOR.name, full_name: BOOTSTRAP_OPERATOR.name },
+              });
+              await supabase.auth.refreshSession();
+            } catch {
+              /* metadata pinning is best-effort; session still valid */
+            }
+          }
+
           const session: AuthUserSession = {
             id: data.session.user.id,
             email: data.session.user.email || email,

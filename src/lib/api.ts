@@ -406,7 +406,7 @@ export async function fetchAuditLogs(limit = 50): Promise<AuditLogEntry[]> {
   const { data, error } = await supabase
     .from('platform_audit_logs')
     .select('*')
-    .order('created_at', { ascending: false })
+    .order('timestamp', { ascending: false })
     .limit(limit);
   if (error) throw error;
   return (data || []) as AuditLogEntry[];

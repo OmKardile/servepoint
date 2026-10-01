@@ -213,11 +213,11 @@ const ActivityRow: React.FC<{ log: AuditLogEntry }> = ({ log }) => (
   <div className="flex items-start gap-3 py-3.5">
     <div className="min-w-0 flex-1">
       <p className="truncate text-sm font-semibold text-[#1A1A1A]">{log.action}</p>
-      {log.entity && <p className="mt-0.5 truncate text-xs text-[#6B6B6B]">{log.entity}</p>}
+      {log.details && <p className="mt-0.5 truncate text-xs text-[#6B6B6B]">{log.details}</p>}
     </div>
     <div className="shrink-0 text-right">
-      <p className="text-xs font-medium text-[#6B6B6B]">{log.actor || 'System'}</p>
-      <p className="mt-0.5 text-xs text-[#969696]">{timeAgo(log.created_at)}</p>
+      <p className="text-xs font-medium text-[#6B6B6B]">{log.actor_email || 'System'}</p>
+      <p className="mt-0.5 text-xs text-[#969696]">{timeAgo(log.timestamp)}</p>
     </div>
   </div>
 );
@@ -772,12 +772,11 @@ export const PlatformScreen: React.FC = () => {
             <div key={log.id} className="flex items-start gap-3 py-3.5">
               <div className="min-w-0 flex-1">
                 <p className="break-words text-sm font-semibold text-[#1A1A1A]">{log.action}</p>
-                {log.entity && <p className="mt-0.5 break-words text-xs text-[#6B6B6B]">{log.entity}</p>}
-                {log.details && <p className="mt-0.5 break-words text-xs text-[#969696]">{log.details}</p>}
+                {log.details && <p className="mt-0.5 break-words text-xs text-[#6B6B6B]">{log.details}</p>}
               </div>
               <div className="shrink-0 text-right">
-                <p className="text-xs font-medium text-[#6B6B6B]">{log.actor || 'System'}</p>
-                <p className="mt-0.5 text-xs text-[#969696]">{timeAgo(log.created_at)}</p>
+                <p className="text-xs font-medium text-[#6B6B6B]">{log.actor_email || 'System'}</p>
+                <p className="mt-0.5 text-xs text-[#969696]">{timeAgo(log.timestamp)}</p>
               </div>
             </div>
           ))}

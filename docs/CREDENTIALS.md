@@ -27,6 +27,23 @@ exact same email/password shown at provision time.
 This is the only standing account. It exists so the platform can be entered before any
 business is provisioned. Keep it private.
 
+**This account is a REAL Supabase Auth user** — seeded into the live project by
+`supabase/migrations/005_production_baseline_hardening.sql` (bcrypt password,
+`role: "superadmin"` in user metadata, confirmed email, active tenant-free
+`tenant_users` row) so RLS `is_superadmin()` authorizes the Platform console.
+
+## Live Supabase project
+
+| Setting | Value |
+|---|---|
+| Project ref | `gehjsxopcowmotgrrcgc` |
+| URL | `https://gehjsxopcowmotgrrcgc.supabase.co` |
+| Publishable (anon) key | `sb_publishable_igzjkrzX7PLfNI4hlI8p4g_FeqvHI32` — public by design, RLS-protected |
+| Region / pooler | ap-northeast-2 · `aws-0-ap-northeast-2.pooler.supabase.com` |
+| DB password | Owner-private — **never committed**; kept in the owner's password store and passed as `SUPABASE_DB_PASSWORD` |
+
+The previous project (`vbufsuzzmehsidshopku`) was deleted by the owner and is retired.
+
 ## First-run flow
 
 1. Sign in as the Platform Operator (above).
@@ -35,11 +52,18 @@ business is provisioned. Keep it private.
 3. Sign in as the owner → Settings → **Staff accounts** → create staff logins →
    hand each staff member their credentials.
 
-## Database migrations (owner-run, Supabase SQL editor)
+## Database provisioning (applied)
 
-- `supabase/migrations/001_multi_tenant_saas.sql`
-- `supabase/migrations/003_role_model_staff_merge.sql`
-- `supabase/migrations/004_notifications_messages.sql`
+The fresh project is **fully provisioned** (migrations 001→005, all tables + RLS +
+bootstrap operator, zero demo rows). To re-provision any environment idempotently:
 
-Until 001/003 are applied, cloud data (menu, orders, businesses) will surface honest
-error/empty states; until 004 is applied, Messages/Notifications show the migration note.
+```bash
+SUPABASE_DB_PASSWORD='<db-password>' bun scripts/db-setup.mjs
+```
+
+The script applies any missing migration (001→005) via the session pooler and prints a
+verification summary. Migration files remain in `supabase/migrations/` for the SQL-editor
+route as well.
+
+Until a table's migration is applied, its surface shows an honest error/empty state —
+never a crash.

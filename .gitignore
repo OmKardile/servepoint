@@ -4,3 +4,5 @@ node_modules/
 # Secrets & local-only design uploads (ADR-0012)
 .env
 upload/
+dev.log
+tool-results/
