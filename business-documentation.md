@@ -1,7 +1,7 @@
 # TSOS Business & SaaS Strategy Documentation
 
 - **Product**: TSOS (The Cafe Operating System)
-- **Document Version**: 2.8.1
+- **Document Version**: 2.9.0
 - **Scope**: Multi-Tenant B2B SaaS Business Model, Unit Economics, Monetization & ROI
 
 ---
@@ -81,6 +81,9 @@ Monthly Gross Merchandise Value (GMV): 120 orders * 30 days * ₹350 = ₹1,260,
 ---
 
 ## 5. Loyalty Mechanics & Customer Lifetime Value (LTV)
+
+> **v2.9.0 product note**: the Customers CRM and Offers surfaces now render the owner's ServePoint design language (sage/deep-teal/gold), including the deep-teal loyalty member card with gold Redeem-at-POS CTA and ServePoint tier badges (Platinum deep-teal, Gold pressed-gold, Silver sage, Bronze sage) — the loyalty program's operator-facing presentation matches the premium brand standard.
+
 
 Repeat customers represent 68% of specialty cafe revenues. TSOS implements an automated, gamified loyalty engine:
 

@@ -42,6 +42,13 @@ Log in as **Super Admin** and open `/superadmin` (or use the sidebar's *Switch t
 
 ---
 
+## 👥 Customers & Offers (v2.9.0)
+
+Open **More → Customers & Loyalty** (or **Offers & Promos**). Both surfaces follow the ServePoint look: ivory canvas, white cards with hairline borders, deep-teal accents and gold actions.
+
+- **Customers**: filter by tier tabs (deep-teal active pill); each row shows the sage loyalty chip, tier badge (Platinum = deep-teal, Gold = gold, Silver = sage-slate, Bronze = sage) and a gold progress bar toward the next tier. Click **Receipts / Ledger / Adjust** to open the member detail; the deep-teal member card shows the points balance and the gold **Redeem at POS** button starts a sale with the customer attached. **Register New Customer** (gold button) credits the +25 pts welcome bonus.
+- **Offers**: coupon cards show the sage code chip and status; **Create Coupon** opens the form (code auto-uppercases); **Pause Offer / Activate Offer** (gold link) toggles availability instantly at POS and on the guest storefront.
+
 ## 🧾 Orders Workspace (v2.7.2)
 
 The **Orders → Orders Directory** tab is now a two-pane bill browser (matching the owner's ServePoint Figma) in the default theme:

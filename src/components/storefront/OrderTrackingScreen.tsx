@@ -218,7 +218,7 @@ Powered by TSOS • tsos.dev
             </h2>
 
             <p className="text-xs text-[#6B6B6B]">
-              {trackedOrder.table_label ? `Table ${trackedOrder.table_label}` : 'Pickup Counter'} • {location.name}
+              {trackedOrder.table_label ? `Table ${trackedOrder.table_label}` : 'Guest Order'} • {location.name}
             </p>
           </div>
 
@@ -502,7 +502,7 @@ Powered by TSOS • tsos.dev
           </h2>
 
           <p className="text-xs text-[#57534E]">
-            {trackedOrder.table_label ? `Table ${trackedOrder.table_label}` : 'Pickup Counter'} • {location.name}
+            {trackedOrder.table_label ? `Table ${trackedOrder.table_label}` : 'Guest Order'} • {location.name}
           </p>
         </div>
 

@@ -3,6 +3,16 @@
 All notable changes to **TSOS (The Cafe Operating System)** are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.9.0] — 2026-10-01 — Customers + Offers Explicit ServePoint (Loyalty & Promo Surfaces) + Tracking Label Fix
+
+### Added — Loyalty & promo surfaces rebuilt to the ServePoint language (14th + 15th explicit surfaces)
+- **Customers CRM (`CustomersScreen.tsx`)**: ivory `#F6F5F2` canvas, white header with `#E3E7E0` hairline + sage icon chip (deep-teal glyph) + gold **Register New Customer** `sp-cta`; "1 pt = ₹1" chip and +25 pts bonus note in sage/gold; **4 KPI cards restyled** — white hairline (Enrolled Guests, deep-teal value, mono retired), sage-tint (Active Loyalty Points, deep-teal), gold-tint (Points Redeemed, pressed-gold `#967221`), white (Avg Points/Guest, kept `#17803D`); **deep-teal active tier tabs** with sage hover; table with ivory thead, `#E3E7E0` dividers, sage avatars, **ServePoint tier-badge palette** (Platinum = deep-teal tint, Gold = pressed-gold, Silver = sage-slate, Bronze = sage), sage loyalty chips with deep-teal counts, **gold tier-progress bars on sage tracks**, deep-teal POS Order button, white Receipts ghost with gold glyph; **detail modal**: ivory chrome, deep-teal avatar, **deep-teal gradient loyalty card** (`#0F3D3E→#0B3132`) with gold **Redeem at POS** CTA, deep-teal active tabs; add-customer modal with deep-teal focus rings + sage welcome note. All legacy warm branches preserved behind `isServepoint` ternaries (tessera/dark keep purple/chartreuse).
+- **Offers (`OffersScreen.tsx`)**: ivory canvas, white header + hairline, sage icon chip, gold **Create Coupon** `sp-cta`; offer cards = white with `#E3E7E0` hairline + **gold-border hover**, sage code chips (deep-teal mono codes), sage Active chips / danger-tint Disabled, deep-teal discount values (mono retired), `#6B8579` muted meta, **gold Pause/Activate links**; create modal with hairline inputs + deep-teal submit. Legacy warm preserved.
+- **Fixed — OrderTracking fallback label**: QR orders placed before table binding showed "Pickup Counter"; now "**Guest Order**" (cosmetic debt from the v2.8.1 round notes).
+
+### Verified
+- `tsc --noEmit` → 0 errors. agent-browser E2E: Customers KPI cards / tier tabs / table (sage avatars, gold progress bars) / detail modal (deep-teal loyalty card + gold Redeem) all on-theme; **create-coupon E2E** (MONSOON20 → card renders); **Pause toggle** → Disabled chip + Activate link; **theme round-trip** servepoint → tessera (legacy purple/chartreuse intact) → dark → servepoint; mobile 390px clean; zero console errors.
+
 ## [2.8.1] — 2026-10-01 — Storefront + OrderTracking ServePoint (Guest QR Surfaces) + Deep-Link Session Fixes + Veg Filter/Sort + Live ETA + Bill Sharing
 
 ### Added — Guest QR surfaces rebuilt to the ServePoint language (12th + 13th explicit surfaces)
