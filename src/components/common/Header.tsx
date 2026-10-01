@@ -57,8 +57,6 @@ export const Header: React.FC<HeaderProps> = ({ onSignOut }) => {
       ? 'bg-[#C084FC] text-[#0A1410]'
       : currentProfile.role === 'owner'
       ? 'bg-[#C5F82A] text-[#0A1410]'
-      : currentProfile.role === 'manager'
-      ? 'bg-[#60A5FA] text-[#0A1410]'
       : 'bg-[#34D399] text-[#0A1410]';
 
   const roleAvatarClassWarm =
@@ -66,8 +64,6 @@ export const Header: React.FC<HeaderProps> = ({ onSignOut }) => {
       ? 'bg-purple-600 text-white'
       : currentProfile.role === 'owner'
       ? 'bg-amber-600 text-white'
-      : currentProfile.role === 'manager'
-      ? 'bg-blue-600 text-white'
       : 'bg-emerald-600 text-white';
 
   // Close profile menu when clicking outside

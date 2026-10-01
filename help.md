@@ -42,6 +42,16 @@ Log in as **Super Admin** and open `/superadmin` (or use the sidebar's *Switch t
 
 ---
 
+## 🔐 Sign-In & Roles (v4.0.0)
+
+The platform now has **three roles** and a credentials-based login (email + password — no self-serve signup, no magic links, no demo buttons).
+
+- **Where are the passwords?** In [`docs/CREDENTIALS.md`](docs/CREDENTIALS.md) — copy & paste from there. The login screen no longer displays any credentials.
+- **SuperAdmin (TSOS developer)** — `admin@tsos.dev` / `admin123456`. Always lands on the **SuperAdmin Platform** (Businesses, Provisioning Wizard, Subscriptions, Audit). Use the wizard to create a new cafe: it generates the **owner's password** — copy it from the success screen and hand it over securely.
+- **Owner** — e.g. `owner@coolkafe.com` / `demo123456`. Gets the full cafe app (POS, KDS, Orders, Menu, Inventory, Tables, Customers, Offers, Shifts, Reports, Settings) and creates **staff logins** in **Settings → Staff Accounts → Create Staff Login** (name + email + temporary password).
+- **Staff (merged Manager + Cashier)** — operates the **whole POS app**; no account creation. Old manager/cashier accounts still work — they automatically resolve to Staff. Example: `manager` (alias) / `demo123456`.
+- **Aliases**: typing `admin`, `owner`, `staff`, `manager` or `cashier` as the email works with the default passwords (`admin123456` for SuperAdmin, `demo123456` for cafe accounts).
+
 ## 🍽️ Inventory, Menu, Shifts & Settings (v3.0.0)
 
 The final four operator surfaces are now fully on the ServePoint look (ivory canvas, sage tracks, deep-teal accents, gold actions) — completing the design rollout across the whole app.

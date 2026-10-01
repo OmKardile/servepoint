@@ -3,7 +3,16 @@
  * Point-of-sale and cafe operations platform for India
  */
 
-export type UserRole = 'superadmin' | 'owner' | 'manager' | 'cashier' | 'kitchen' | 'barista' | 'chef' | 'server';
+/**
+ * UserRole — v4.0.0 role model (owner-mandated merge):
+ *  - 'superadmin' : TSOS developer/platform operator — SuperAdmin Platform console ONLY
+ *                   (provisions businesses + owner accounts; never the cafe POS by default).
+ *  - 'owner'      : cafe owner — business dashboards, everything in the cafe app, creates staff logins.
+ *  - 'staff'      : merged Manager+Cashier (v4.0.0) — operates the WHOLE cafe POS app.
+ * Legacy values ('manager'|'cashier'|'kitchen'|'barista'|'chef'|'server') are normalized
+ * to 'staff' at the auth boundary (see normalizeRole in lib/rbac.ts).
+ */
+export type UserRole = 'superadmin' | 'owner' | 'staff';
 
 export type ThemeMode = 'servepoint' | 'tessera' | 'warm' | 'dark' | 'obsidian';
 

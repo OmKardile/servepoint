@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useTsosStore } from '../../lib/store';
 import { SAAS_PLANS } from '../../data/saasSeedData';
 import { TenantBusiness, SubscriptionPlanId, BillingCycle } from '../../types';
+import { authService } from '../../lib/authService';
 import {
   Building2,
   User,
@@ -20,6 +21,7 @@ import {
   QrCode,
   Loader2,
   Cloud,
+  KeyRound,
 } from 'lucide-react';
 import { provisionTenant, isSupabaseConfigured } from '../../lib/supabase';
 
@@ -109,6 +111,7 @@ export const ProvisioningWizard: React.FC = () => {
   const [copiedUrl, setCopiedUrl] = useState<string | null>(null);
   const [isProvisioning, setIsProvisioning] = useState<boolean>(false);
   const [provisionMode, setProvisionMode] = useState<'supabase' | 'offline_fallback'>('offline_fallback');
+  const [generatedOwnerPassword, setGeneratedOwnerPassword] = useState<string>('');
 
   const updateField = (field: keyof WizardState, value: any) => {
     setForm((prev) => {
@@ -156,6 +159,21 @@ export const ProvisioningWizard: React.FC = () => {
   const handleExecuteProvisioning = async () => {
     setIsProvisioning(true);
     try {
+      // v4.0.0: the wizard creates the business OWNER's login account. A strong
+      // temporary password is generated here (shown + copyable on the success
+      // screen) and registered in the local credential registry so the owner can
+      // sign in immediately; when cloud auth is active the same account is pushed
+      // to Supabase Auth (best-effort — the dashboard fallback is documented in
+      // docs/CREDENTIALS.md).
+      const ownerPassword = `tsos-${Math.random().toString(36).slice(2, 8)}${Math.floor(Math.random() * 90 + 10)}`;
+      setGeneratedOwnerPassword(ownerPassword);
+      const ownerName = form.owner_name || 'Admin';
+      const ownerEmail = form.owner_email || 'owner@tsos.dev';
+      await authService.signUp(ownerEmail, ownerPassword, ownerName, 'owner', {
+        slug: form.slug || 'cafe',
+        name: form.name || 'New Cafe',
+      });
+
       const result = await provisionTenant({
         business: {
           name: form.name || 'New Cafe',
@@ -163,8 +181,8 @@ export const ProvisioningWizard: React.FC = () => {
           display_name: form.display_name || form.name || 'New Cafe',
           slug: form.slug || 'cafe',
           business_type: form.business_type,
-          owner_name: form.owner_name || 'Admin',
-          owner_email: form.owner_email || 'owner@tsos.dev',
+          owner_name: ownerName,
+          owner_email: ownerEmail,
           owner_phone: form.owner_phone || '+91 98000 00000',
           owner_pin: form.owner_pin || '1234',
           gst_number: form.gst_number || undefined,
@@ -263,6 +281,30 @@ export const ProvisioningWizard: React.FC = () => {
             <div>
               <span className="text-[#78716C]">Initial PIN:</span>
               <div className="font-mono font-bold text-[#1C1917]">{form.owner_pin}</div>
+            </div>
+          </div>
+
+          {/* v4.0.0 — Owner login credentials (copy & hand over securely) */}
+          <div className="p-3 bg-white rounded-lg border border-[#E9E0D6]">
+            <div className="flex items-center justify-between">
+              <div>
+                <span className="font-semibold text-[#1C1917] flex items-center gap-1.5">
+                  <KeyRound className="w-3.5 h-3.5 text-[#967221]" />
+                  Owner Sign-In Password
+                </span>
+                <div className="font-mono font-bold text-[#1C1917] mt-0.5">{generatedOwnerPassword || '(generated at provision time)'}</div>
+                <div className="text-[10px] text-[#78716C] mt-1">
+                  The owner signs in at the login screen with their email + this password.
+                  Share it securely — it is not shown again.
+                </div>
+              </div>
+              <button
+                onClick={() => copyToClipboard(generatedOwnerPassword, 'owner-pass')}
+                className="flex items-center gap-1 px-2.5 py-1 rounded bg-[#FAF6F0] hover:bg-[#F3ECE4] text-[#1C1917] font-medium transition-colors"
+              >
+                <Copy className="w-3.5 h-3.5" />
+                <span>{copiedUrl === 'owner-pass' ? 'Copied!' : 'Copy'}</span>
+              </button>
             </div>
           </div>
 

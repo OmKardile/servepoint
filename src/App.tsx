@@ -26,7 +26,6 @@ import { StorefrontScreen } from './components/storefront/StorefrontScreen';
 import { OrderTrackingScreen } from './components/storefront/OrderTrackingScreen';
 import { SuperAdminScreen } from './components/superadmin/SuperAdminScreen';
 import { AuthScreen } from './components/auth/AuthScreen';
-import { CafeOnboardingWizard } from './components/auth/CafeOnboardingWizard';
 import { StaffPinPadModal } from './components/auth/StaffPinPadModal';
 import { AccessDeniedNotice } from './components/common/AccessDeniedNotice';
 import { canAccessTab } from './lib/rbac';
@@ -75,9 +74,10 @@ export default function App() {
       }
     }
   }, [themeMode, authSession, isAuthLoading]);
-  const [isOnboardingOpen, setIsOnboardingOpen] = useState<boolean>(false);
 
   // Check auth session on startup
+  // v4.0.0: superadmin (TSOS developer) ALWAYS lands on the SuperAdmin Platform —
+  // never the cafe POS, regardless of the last URL (fixes "superadmin gets POS screen").
   useEffect(() => {
     const checkSession = async () => {
       try {
@@ -89,12 +89,7 @@ export default function App() {
             role: session.role,
           });
           if (session.role === 'superadmin') {
-            const pathname = window.location.pathname.toLowerCase();
-            if (pathname === '/superadmin' || pathname === '/' || pathname === '') {
-              setActiveSurface('superadmin');
-            } else if (session.tenantSlug) {
-              switchTenantScope(session.tenantSlug);
-            }
+            setActiveSurface('superadmin');
           } else if (session.tenantSlug) {
             switchTenantScope(session.tenantSlug);
           }
@@ -135,6 +130,10 @@ export default function App() {
   // tables change re-processed the current URL mid-session and clobbered the
   // just-placed order's navigation (order_track → storefront) + tracked id.
   const handleUrlRoute = () => {
+      // v4.0.0: the SuperAdmin (developer) session is platform-only — URL routes to
+      // cafe surfaces are ignored unless they explicitly Switch to Cafe View.
+      if (authSessionRef.current?.role === 'superadmin') return;
+
       const pathname = window.location.pathname.replace(/^\/|\/$/g, '');
       const segments = pathname.split('/').filter(Boolean);
 
@@ -194,6 +193,8 @@ export default function App() {
 
   const bootRouteRef = useRef({ done: false });
   const routeRef = useRef<() => void>(() => {});
+  const authSessionRef = useRef<AuthUserSession | null>(null);
+  authSessionRef.current = authSession;
   routeRef.current = handleUrlRoute;
 
   useEffect(() => {
@@ -262,21 +263,21 @@ export default function App() {
     }
   }, [currentTenant?.id, loadMenuFromCloud]);
 
-  const handleAuthSuccess = (session: AuthUserSession, isNewUser?: boolean) => {
+  // v4.0.0: no self-serve signup remains — isNewUser/onboarding path retired.
+  // superadmin → platform; owner/staff → their cafe workspace (POS landing).
+  const handleAuthSuccess = (session: AuthUserSession) => {
     setAuthSession(session);
     setCurrentProfile({
       name: session.name,
       role: session.role,
     });
-    if (isNewUser) {
-      setIsOnboardingOpen(true);
-    } else if (session.role === 'superadmin') {
+    if (session.role === 'superadmin') {
       setActiveSurface('superadmin');
     } else if (session.tenantSlug) {
       switchTenantScope(session.tenantSlug);
-      setActiveSurface('web');
-      setActiveWebTab('pos');
     }
+    setActiveSurface(session.role === 'superadmin' ? 'superadmin' : 'web');
+    if (session.role !== 'superadmin') setActiveWebTab('pos');
   };
 
   const handleSignOut = () => {
@@ -298,26 +299,10 @@ export default function App() {
   }
 
   // Auth Guard: If unauthenticated and not on a public route, show AuthScreen
+  // v4.0.0: Register-Cafe self-serve + onboarding wizard removed — accounts are
+  // provisioned by the SuperAdmin (developer) wizard or the cafe Owner.
   if (!authSession && !isPublicRoute()) {
-    return (
-      <>
-        <AuthScreen
-          onSuccess={handleAuthSuccess}
-          onOpenOnboarding={() => setIsOnboardingOpen(true)}
-        />
-        <CafeOnboardingWizard
-          isOpen={isOnboardingOpen}
-          initialOwnerEmail=""
-          initialOwnerName=""
-          onClose={() => setIsOnboardingOpen(false)}
-          onSuccess={(newSlug) => {
-            switchTenantScope(newSlug);
-            setActiveSurface('web');
-            setActiveWebTab('pos');
-          }}
-        />
-      </>
-    );
+    return <AuthScreen onSuccess={handleAuthSuccess} />;
   }
 
   // SuperAdmin Surface
@@ -409,19 +394,6 @@ export default function App() {
           {renderWebContent()}
         </main>
       </div>
-
-      {/* Cafe Onboarding Wizard Modal */}
-      <CafeOnboardingWizard
-        isOpen={isOnboardingOpen}
-        initialOwnerEmail={authSession?.email || ''}
-        initialOwnerName={authSession?.name || ''}
-        onClose={() => setIsOnboardingOpen(false)}
-        onSuccess={(newSlug) => {
-          switchTenantScope(newSlug);
-          setActiveSurface('web');
-          setActiveWebTab('pos');
-        }}
-      />
 
       {/* Manager Override PIN Modal */}
       <StaffPinPadModal

@@ -22,8 +22,11 @@ import {
   Sparkles,
   HelpCircle,
   FileCheck2,
+  UserPlus,
+  KeyRound,
 } from 'lucide-react';
 import { canPerformAction } from '../../lib/rbac';
+import { authService } from '../../lib/authService';
 import {
   generateTestReceiptEscPos,
   triggerCashDrawerKick,
@@ -58,6 +61,7 @@ const SPToggle: React.FC<{
 export const SettingsScreen: React.FC = () => {
   const {
     location,
+    currentTenant,
     feeConfig,
     updateFeeConfig,
     currentProfile,
@@ -88,6 +92,10 @@ export const SettingsScreen: React.FC = () => {
 
   // Thermal printer form state
   const [printerForm, setPrinterForm] = useState<PrinterConfig>({ ...printerConfig });
+
+  // v4.0.0 — Owner creates STAFF logins (merged manager+cashier role)
+  const [staffLoginForm, setStaffLoginForm] = useState({ name: '', email: '', password: '' });
+  const [staffLoginFeedback, setStaffLoginFeedback] = useState<{ ok: boolean; text: string } | null>(null);
 
   const handleSaveFeeConfig = (e: React.FormEvent) => {
     e.preventDefault();
@@ -663,10 +671,87 @@ export const SettingsScreen: React.FC = () => {
                     <div>
                       <h3 className="font-bold text-sm text-[#1A1A1A]">Staff Accounts & Quick Role Switch</h3>
                       <p className="text-xs text-[#6B6B6B]">
-                        Simulate role-based access for Owner, Cashier, and Kitchen staff
+                        Staff is the merged Manager + Cashier role — they operate the whole POS app
                       </p>
                     </div>
                   </div>
+
+                  {/* v4.0.0 — Create Staff Login (owner-only ability) */}
+                  {canPerformAction(currentProfile?.role, 'manage_staff') ? (
+                    <form
+                      onSubmit={async (e) => {
+                        e.preventDefault();
+                        if (!staffLoginForm.name.trim() || !staffLoginForm.email.trim() || staffLoginForm.password.length < 6) return;
+                        setStaffLoginFeedback(null);
+                        const res = await authService.signUp(
+                          staffLoginForm.email,
+                          staffLoginForm.password,
+                          staffLoginForm.name.trim(),
+                          'staff',
+                          { slug: currentTenant?.slug || location.slug, name: location.name }
+                        );
+                        setStaffLoginFeedback({
+                          ok: true,
+                          text: res.error
+                            ? `${staffLoginForm.email.trim().toLowerCase()} created — ${res.error}`
+                            : `Staff login created: ${staffLoginForm.email.trim().toLowerCase()} / ${staffLoginForm.password}`,
+                        });
+                        setStaffLoginForm({ name: '', email: '', password: '' });
+                      }}
+                      className="p-4 rounded-2xl border border-[#E3E7E0] bg-[#F6F5F2] space-y-3"
+                    >
+                      <div className="flex items-center gap-2">
+                        <UserPlus className="w-4 h-4 text-[#0F3D3E]" />
+                        <span className="font-bold text-xs text-[#1A1A1A]">Create Staff Login</span>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-[#D9E2DD] text-[#0F3D3E] font-semibold">Owner only</span>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <input
+                          type="text"
+                          required
+                          value={staffLoginForm.name}
+                          onChange={(e) => setStaffLoginForm({ ...staffLoginForm, name: e.target.value })}
+                          placeholder="Staff name (e.g. Rahul Verma)"
+                          className="px-3 py-2 text-xs rounded-lg border border-[#E3E7E0] bg-white text-[#1A1A1A] focus:border-[#B88E2F] focus:ring-1 focus:ring-[#B88E2F]/30 focus:outline-none"
+                        />
+                        <input
+                          type="email"
+                          required
+                          value={staffLoginForm.email}
+                          onChange={(e) => setStaffLoginForm({ ...staffLoginForm, email: e.target.value })}
+                          placeholder="staff@yourcafe.com"
+                          className="px-3 py-2 text-xs rounded-lg border border-[#E3E7E0] bg-white text-[#1A1A1A] focus:border-[#B88E2F] focus:ring-1 focus:ring-[#B88E2F]/30 focus:outline-none"
+                        />
+                        <input
+                          type="text"
+                          required
+                          minLength={6}
+                          value={staffLoginForm.password}
+                          onChange={(e) => setStaffLoginForm({ ...staffLoginForm, password: e.target.value })}
+                          placeholder="Temporary password (min 6 chars)"
+                          className="px-3 py-2 text-xs rounded-lg border border-[#E3E7E0] bg-white text-[#1A1A1A] focus:border-[#B88E2F] focus:ring-1 focus:ring-[#B88E2F]/30 focus:outline-none"
+                        />
+                      </div>
+                      <div className="flex items-center justify-between gap-3 flex-wrap">
+                        <span className="text-[10px] text-[#6B8579] flex items-center gap-1.5">
+                          <KeyRound className="w-3 h-3" />
+                          Share the password securely — staff sign in at the login screen with email + password.
+                        </span>
+                        <button type="submit" className="sp-cta px-4 py-2 text-xs font-semibold">
+                          Create Staff Login
+                        </button>
+                      </div>
+                      {staffLoginFeedback && (
+                        <div className="p-2.5 rounded-lg bg-[#E8F5EC] border border-[#17803D]/30 text-[11px] text-[#17803D] font-semibold">
+                          {staffLoginFeedback.text}
+                        </div>
+                      )}
+                    </form>
+                  ) : (
+                    <div className="p-3 rounded-xl border border-[#E3E7E0] bg-[#F6F5F2] text-[11px] text-[#6B6B6B]">
+                      Only the cafe <span className="font-bold text-[#0F3D3E]">Owner</span> can create staff logins. Ask your owner to provision an account.
+                    </div>
+                  )}
 
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     {SEED_PROFILES.map((p) => {

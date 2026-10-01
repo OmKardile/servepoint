@@ -82,7 +82,8 @@ export const StaffPinPadModal: React.FC<StaffPinPadModalProps> = ({
     if (verifiedStaff) {
       setCurrentProfile({
         name: verifiedStaff.name,
-        role: verifiedStaff.role === 'cleaner' ? 'kitchen' : verifiedStaff.role,
+        // v4.0.0: every staff PIN login resolves to the merged 'staff' role
+        role: 'staff',
         pin_code: verifiedStaff.pin_code,
       });
       authService.setActiveStaff(verifiedStaff);

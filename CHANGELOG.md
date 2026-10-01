@@ -3,6 +3,25 @@
 All notable changes to **TSOS (The Cafe Operating System)** are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.0.0] — 2026-10-01 — Role Model Rework: superadmin/owner/staff + Login Overhaul (ADR-0010 Unfrozen by Owner Order)
+
+### Changed — Owner-mandated role model & auth rework
+- **NEW ROLE MODEL** (`types.ts`, `lib/rbac.ts`): `UserRole` is now **`superadmin` | `owner` | `staff`**.
+  - **superadmin = TSOS developer**: lands on the SuperAdmin Platform console ALWAYS (restored sessions included); URL routes to cafe surfaces are ignored; the explicit "Switch to Cafe View" dev tool remains for testing.
+  - **owner**: business dashboards + every cafe screen + **Create Staff Login** (Settings → Staff Accounts, owner-only via `canManageStaff`).
+  - **staff = merged Manager+Cashier**: operates the WHOLE cafe POS app (all 11 tabs); account creation stays owner-only.
+  - `normalizeRole()` maps every legacy role (manager/cashier/kitchen/barista/chef/server/waiter/cleaner) → `staff` at the auth boundary; legacy accounts keep working (role auto-merges).
+- **FIX — "superadmin gets POS screen"** (`App.tsx`): session restore routed superadmin to the platform only when the URL happened to be `/superadmin` or `/`; any other persisted URL (e.g. `/coolkafe/pos`) dropped them into the cafe POS. Superadmin now ALWAYS lands on the platform; `handleUrlRoute` early-returns for superadmin sessions.
+- **LOGIN OVERHAUL** (`AuthScreen.tsx` — ADR-0010 freeze lifted by explicit owner order): email + password sign-in ONLY. Removed: "Register Cafe" tab (self-serve signup is dead — the SuperAdmin wizard provisions businesses + owners), "Magic Link" tab, the 4 one-click demo buttons, and the on-screen credentials card. A pointer to **`docs/CREDENTIALS.md`** remains. Email field accepts friendly aliases (`admin` / `owner` / `staff` / `manager` — `type="text" inputMode="email"` so HTML5 validation does not block aliases).
+- **CREDENTIALS MOVED OUT OF THE UI**: new **`docs/CREDENTIALS.md`** documents every account (superadmin/owner/staff + legacy merged accounts + aliases), the provisioning flow, and the Supabase-dashboard fallback for cloud auth.
+- **Provisioning Wizard creates the OWNER login** (`ProvisioningWizard.tsx` + `lib/authService.ts`): a strong temporary password is generated, shown + copyable on the success screen, registered in the new **local credential registry** (`tsos_local_credentials`) so the owner can sign in immediately; cloud push to Supabase Auth is best-effort with a documented dashboard fallback.
+- **Owner creates STAFF logins** (`SettingsScreen.tsx` → Staff Accounts): "Create Staff Login" form (name/email/temp password) → `authService.signUp(..., 'staff', tenant)`; registers locally + cloud best-effort; feedback shows the exact credentials to hand over. Staff/kitchen users see an owner-only notice instead.
+- **authService rework**: role narrowing to the trio, alias map, known-account fallback (incl. `staff@coolkafe.com`), local credential registry, `signUp(email, password, name, role, tenant)` (local registry first — cloud notices are non-blocking), magic-link API removed. PIN pad logins resolve to `staff`.
+- **DB migration `003_role_model_staff_merge.sql`**: `tenant_users.role` folded to `superadmin|owner|staff` (legacy values updated in-place), CHECK constraint replaced, RLS helper functions `tsos_is_tenant_member()/tsos_is_tenant_owner()` + member/owner policies re-created on the new role set. Owner runs it in the Supabase SQL editor (as with 001).
+
+### Verified
+- `tsc --noEmit` + `bun run lint` → 0 errors; fresh-load console clean (menu hydrates from Supabase cloud). agent-browser E2E: login screen shows sign-in only; `admin@tsos.dev` → SuperAdmin Platform (Businesses/Provisioning/Dashboard — NOT the POS) incl. after restart; owner → POS + Settings → **Create Staff Login** created `rahul@coolkafe.com / staffpass1` E2E → sign-out → sign-in as the new staff → lands in POS as "Rahul Verma — Cafe Staff"; legacy `manager` alias → "Cafe Staff"; wrong password → "Invalid email or password. Credentials live in docs/CREDENTIALS.md."
+
 ## [3.0.0] — 2026-10-01 — Inventory + Menu + Shifts + Settings Explicit ServePoint — ADR-0011 Roadmap Complete (19 Surfaces)
 
 ### Added — Final four screens rebuilt to the ServePoint language; the explicit-ServePoint roadmap is now COMPLETE
