@@ -3,6 +3,18 @@
 All notable changes to **TSOS (The Cafe Operating System)** are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.0.3] — 2026-10-01 — Auth Model: Provisioned Accounts First (owner directive: "no unnecessary authentication")
+
+### Changed — Registry-first sign-in + cloud session upgrade
+- **Provisioned accounts now sign in INSTANTLY from the local credential registry** — zero cloud round-trips, no email validation, no rate limits, no console 400 noise. The email does not need to be a real mailbox (owner decision: the superadmin invents the address and hands over the password).
+- **Silent cloud session upgrade** (`tryLinkCloudSession`): after any registry/constant sign-in, the app replays the same credentials against Supabase Auth in the background — when the cloud account exists with the same password, the session gains its JWT so **row-level security** authorizes data (menus, orders, tenants). The bootstrap operator auto-upgrades even when the cloud grant hiccupped transiently (self-heals the two 400s observed).
+- **`provisionBusiness` session guard**: cloud writes now require a JWT-backed session up front — a registry-only session returns actionable guidance ("sign out, sign in with your cloud password") instead of a raw RLS 42501; RLS failures map to the same clear message.
+- **Wizard review step shows a "Cloud session missing" banner** before submitting when the session is registry-only — the operator knows before provisioning, not after.
+- **QSR option fixed**: the wizard sent `'qsr'`, which violates `tenants_business_type_check` — now sends `'quick_service'` (third latent CHECK mismatch).
+
+### Verified
+- Full browser E2E of the owner's exact flow: fresh sign-out → sign in as operator → Add Business wizard (Smoke Test Cafe) → **"Saved to cloud"** with zero warnings; Businesses tab shows the row; REST confirms tenant (trial) + subscription (starter/trialing) + audit (`business.provisioned`) all landed; owner signup created **confirmed** in auth.users (Confirm-email is now OFF — the owner flipped it, so zero emails/rate limits). Test data deleted afterwards — production DB pristine (`tenants: []`). `tsc --noEmit` → 0 errors.
+
 ## [5.0.2] — 2026-10-01 — Wizard Provisioning Fixed Against Live DB
 
 ### Fixed — Owner's first real "Add Business" run hit two cloud failures (screenshot)

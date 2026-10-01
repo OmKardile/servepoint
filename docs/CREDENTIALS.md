@@ -79,3 +79,21 @@ every wizard signup sends a confirmation email (free-tier limit ≈ 2/hour → `
 over_email_send_rate_limit`) and the account stays unconfirmed until the link is
 clicked. With it OFF, wizard-created owners/staff exist **confirmed and can sign in
 immediately**.
+
+## How authentication works (provisioned accounts need no "real" email)
+
+- **Provisioned accounts sign in instantly from the local credential registry** — the
+  email does not need to be a real, reachable mailbox; the operator invents it and
+  hands over the password. No confirmation emails, no magic links, no self-serve.
+- **Silent cloud link**: on every registry sign-in the app replays the same
+  credentials against Supabase Auth in the background. When the cloud account exists
+  with the same password, the session gains its JWT so **row-level security** can
+  authorize tenant data (menus, orders, subscriptions). Supabase Auth is the data
+  authorization layer, not the gatekeeper of sign-in.
+- **Cloud session required for cloud writes**: provisioning a business writes to
+  Supabase and therefore needs the JWT-backed session. If your sign-in is
+  registry-only (e.g. the cloud password differs), the wizard says so up front —
+  sign out and sign in with the cloud password from this document.
+- The operator account `admin@tsos.dev / admin123456` exists BOTH in the registry
+  fallback and as a real confirmed Supabase Auth user (migration 005) — the same
+  password works in both paths.

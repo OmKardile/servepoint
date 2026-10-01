@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { provisionBusiness } from '../../lib/api';
 import { authService } from '../../lib/authService';
+import { supabase } from '../../lib/supabase';
 import { formatMoney } from '../../lib/prefs';
 import type { Tenant } from '../../types';
 
@@ -52,7 +53,8 @@ const BUSINESS_TYPES = [
   { value: 'cafe', label: 'Cafe' },
   { value: 'restaurant', label: 'Restaurant' },
   { value: 'bakery', label: 'Bakery' },
-  { value: 'qsr', label: 'QSR' },
+  // tenants_business_type_check (migration 001) requires 'quick_service'
+  { value: 'quick_service', label: 'QSR' },
 ];
 
 const STEP_LABELS = ['Business', 'Owner account', 'Review'] as const;
@@ -168,9 +170,29 @@ export const ProvisioningWizard: React.FC<ProvisioningWizardProps> = ({
   const [stepErrors, setStepErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [cloudAuthed, setCloudAuthed] = useState(true);
   const [outcome, setOutcome] = useState<ProvisionOutcome | null>(null);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const copyTimer = useRef<number | null>(null);
+
+  // Cloud writes need a JWT-backed Supabase session; a registry-only sign-in
+  // would be rejected by row-level security. Detect it up front so the
+  // operator gets actionable guidance instead of a raw PostgREST error.
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    void supabase.auth
+      .getSession()
+      .then(({ data: { session } }) => {
+        if (!cancelled) setCloudAuthed(Boolean(session?.access_token));
+      })
+      .catch(() => {
+        if (!cancelled) setCloudAuthed(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
 
   /* Fresh wizard on every open; lock body scroll while open. */
   useEffect(() => {
@@ -653,6 +675,19 @@ export const ProvisioningWizard: React.FC<ProvisioningWizardProps> = ({
                 </dd>
               </div>
             </dl>
+
+            {!cloudAuthed && (
+              <div
+                className="flex items-start gap-2 rounded-xl border border-[#EBCF8E] bg-[#F3E8CF] p-3 text-xs leading-relaxed text-[#7A5C1B]"
+                role="status"
+              >
+                <AlertTriangle size={15} className="mt-0.5 shrink-0" aria-hidden />
+                <span className="break-words">
+                  Cloud session missing — the business will be saved on this device only. Sign out and
+                  sign in with your cloud password (docs/CREDENTIALS.md) to write it to Supabase.
+                </span>
+              </div>
+            )}
 
             <p className="text-xs leading-relaxed text-[#6B6B6B]">
               Provisioning creates the business and registers the owner account immediately with the

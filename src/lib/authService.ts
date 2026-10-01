@@ -120,11 +120,35 @@ export const authService = {
   async signIn(
     emailInput: string,
     passwordInput: string
-  ): Promise<{ success: boolean; session?: AuthUserSession; error?: string }> {
-    const email = emailInput.trim().toLowerCase();
+  ): Promise<{ success: boolean; session?: AuthUserSession; error?: string; cloudLinked?: boolean }> {
+    const email = emailInput
+      .replace(/[\u200B-\u200D\u2060\uFEFF]/g, '')
+      .trim()
+      .toLowerCase();
     const password = passwordInput;
 
-    // 1) Cloud auth
+    // 1) Provisioned-account registry (operator-created owners, owner-created
+    //    staff) — instant sign-in, ZERO cloud round-trips, no email validation,
+    //    no rate limits. Then a silent background upgrade attaches a real
+    //    Supabase session so row-level security authorizes data access.
+    const cred = this.findLocalCredential(email, password);
+    if (cred) {
+      const session: AuthUserSession = {
+        id: `usr_${Date.now()}`,
+        email: cred.email,
+        name: cred.name || cred.email.split('@')[0],
+        role: normalizeRole(cred.role),
+        tenantSlug: cred.tenantSlug,
+        tenantName: cred.tenantName,
+      };
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(LOCAL_AUTH_KEY, JSON.stringify(session));
+      }
+      const cloudLinked = await this.tryLinkCloudSession(email, password);
+      return { success: true, session, cloudLinked };
+    }
+
+    // 2) Cloud auth (dashboard-created users)
     try {
       if (isSupabaseConfigured()) {
         const { data, error } = await supabase.auth.signInWithPassword({ email, password });
@@ -141,14 +165,7 @@ export const authService = {
           // authorizes Platform tables (tenants / subscriptions / audit logs).
           // Best-effort — migration 005 seeds this server-side too.
           if (emailLower === BOOTSTRAP_OPERATOR.email && meta.role !== 'superadmin') {
-            try {
-              await supabase.auth.updateUser({
-                data: { role: 'superadmin', name: BOOTSTRAP_OPERATOR.name, full_name: BOOTSTRAP_OPERATOR.name },
-              });
-              await supabase.auth.refreshSession();
-            } catch {
-              /* metadata pinning is best-effort; session still valid */
-            }
+            await this.pinOperatorMetadata();
           }
 
           const session: AuthUserSession = {
@@ -163,31 +180,16 @@ export const authService = {
           if (typeof window !== 'undefined') {
             localStorage.setItem(LOCAL_AUTH_KEY, JSON.stringify(session));
           }
-          return { success: true, session };
+          return { success: true, session, cloudLinked: true };
         }
       }
     } catch (err) {
       console.warn('Cloud auth unavailable, using provisioned-account registry.', err);
     }
 
-    // 2) Local credential registry (wizard-created owners, owner-created staff)
-    const cred = this.findLocalCredential(email, password);
-    if (cred) {
-      const session: AuthUserSession = {
-        id: `usr_${Date.now()}`,
-        email: cred.email,
-        name: cred.name || cred.email.split('@')[0],
-        role: normalizeRole(cred.role),
-        tenantSlug: cred.tenantSlug,
-        tenantName: cred.tenantName,
-      };
-      if (typeof window !== 'undefined') {
-        localStorage.setItem(LOCAL_AUTH_KEY, JSON.stringify(session));
-      }
-      return { success: true, session };
-    }
-
-    // 3) Bootstrap platform operator (see docs/CREDENTIALS.md)
+    // 3) Bootstrap platform operator (see docs/CREDENTIALS.md) — used when the
+    //    cloud grant failed transiently; silently retries the cloud link so the
+    //    Platform console gets its RLS-capable session.
     if (email === BOOTSTRAP_OPERATOR.email && password === BOOTSTRAP_OPERATOR.password) {
       const session: AuthUserSession = {
         id: 'usr_platform_operator',
@@ -198,13 +200,55 @@ export const authService = {
       if (typeof window !== 'undefined') {
         localStorage.setItem(LOCAL_AUTH_KEY, JSON.stringify(session));
       }
-      return { success: true, session };
+      const cloudLinked = await this.tryLinkCloudSession(email, password);
+      return { success: true, session, cloudLinked };
     }
 
     return {
       success: false,
       error: 'Invalid email or password. Credentials are distributed via docs/CREDENTIALS.md.',
     };
+  },
+
+  /**
+   * Attach a REAL Supabase session to a registry/constant sign-in by replaying
+   * the same credentials against cloud auth. If the cloud account exists with
+   * the same password, the supabase-js client now holds a JWT and row-level
+   * security authorizes data access. If it fails (no cloud account, different
+   * cloud password, transient error), the local session stays and the caller
+   * surfaces guidance — never blocks sign-in.
+   */
+  async tryLinkCloudSession(email: string, password: string): Promise<boolean> {
+    try {
+      if (!isSupabaseConfigured()) return false;
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error || !data.session?.user) return false;
+      if (email === BOOTSTRAP_OPERATOR.email) {
+        const meta = data.session.user.user_metadata || {};
+        if (meta.role !== 'superadmin') {
+          await this.pinOperatorMetadata();
+        }
+      }
+      return true;
+    } catch {
+      return false;
+    }
+  },
+
+  /** Pin role=superadmin into the operator's user_metadata (best-effort). */
+  async pinOperatorMetadata(): Promise<void> {
+    try {
+      await supabase.auth.updateUser({
+        data: {
+          role: 'superadmin',
+          name: BOOTSTRAP_OPERATOR.name,
+          full_name: BOOTSTRAP_OPERATOR.name,
+        },
+      });
+      await supabase.auth.refreshSession();
+    } catch {
+      /* best-effort; session remains valid */
+    }
   },
 
   /**

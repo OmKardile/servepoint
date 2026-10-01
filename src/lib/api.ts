@@ -435,6 +435,19 @@ export async function provisionBusiness(input: ProvisionInput): Promise<Provisio
   let tenant: Tenant | null = null;
 
   if (isSupabaseConfigured()) {
+    // Guard: cloud writes require a real (JWT-backed) Supabase session. A
+    // registry-only sign-in would run as anon and RLS would reject the insert.
+    const {
+      data: { session: cloudSession },
+    } = await supabase.auth.getSession();
+    if (!cloudSession?.access_token) {
+      return {
+        tenant: null,
+        cloudError:
+          'Your sign-in is not cloud-authenticated. Sign out, then sign in with your cloud password (docs/CREDENTIALS.md) and retry — nothing was written to the cloud.',
+      };
+    }
+
     // Status MUST satisfy tenants_status_check (migration 001):
     // trial | active | past_due | suspended | cancelled | archived.
     const status = input.planId === 'trial' ? 'trial' : 'active';
@@ -451,7 +464,9 @@ export async function provisionBusiness(input: ProvisionInput): Promise<Provisio
       .select('*')
       .single();
     if (error) {
-      cloudError = error.message;
+      cloudError = /row-level security|42501/i.test(error.message)
+        ? 'Cloud authorization failed — your session is not cloud-authenticated for writes. Sign out and sign in with your cloud password (docs/CREDENTIALS.md).'
+        : error.message;
     } else {
       tenant = data as Tenant;
 
