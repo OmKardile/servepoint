@@ -982,3 +982,25 @@ Stage Summary:
 - Provisioning is fully green end-to-end in the real UI; the auth model now matches the owner's directive (invented emails, instant sign-ins, cloud only as silent RLS upgrade).
 - If the operator's typed password differs from the cloud account's, the session stays registry-only and the wizard warns before submit — sign in with the docs/CREDENTIALS.md password for cloud writes.
 - Crons: 0 — owner standing order respected.
+
+---
+Task ID: 27
+Agent: glm-5.3
+Task: "also u deleted the damn log in button on screen" — the Sign in button is invisible; diagnose and fix.
+
+Work Log:
+- Root cause: the v5.0.0 rebuild pass missed src/components/auth/AuthScreen.tsx entirely — it still carried v4 "tessera" classes (tessera-cta / tessera-grain / tessera-block) whose CSS definitions were deleted with the old stylesheet. Result: the primary submit button rendered with no background and inherited near-black body text (--sp-ink) on the near-black card → literally invisible. Confirmed tessera classes were referenced nowhere else in src/.
+- Rebuilt the screen to the archived Figma frame docs/design/servepoint/frames/Welcome_Back_219-30095.png (studied 23395 / 27310 / 30095 variants; 30095 = final filled design):
+  - Split layout: white left brand panel + sage #E3E7E0 right sign-in panel.
+  - Left: palette-matched AI-generated illustration (src/assets/login-illustration.png — teal blazer + gold trousers presenter, bar/donut charts, gears, plant, matching the frame's scene), rotating 3-slide caption carousel with gold active dot (clickable, auto-advance 5s, paused under prefers-reduced-motion).
+  - Right: "Welcome Back!" + "Please sign in to continue", placeholder-style sp-input fields (sr-only labels for a11y), password show/hide eye toggle per the frame, full-width gold sp-cta "Sign in" (loading state: spinner + "Signing in…").
+  - Frame's Facebook/Google social row honestly replaced with the provisioned-accounts note (no OAuth providers configured — no dead buttons in production); red error alert card retained; "© 2026 ServePoint · Point of Sale Platform" footer.
+  - Mobile <lg: left panel hidden, compact ServePoint brand row above the form; 44px touch targets throughout.
+- Added src/vite-env.d.ts (vite/client types) for the PNG import.
+- Verified: npx tsc --noEmit → 0 errors; bun run lint clean; agent-browser E2E at 127.0.0.1:3000 — signed out stale session, new login renders with the button in the a11y tree, real sign-in admin@tsos.dev/admin123456 → Platform console "Supabase: connected"; desktop 1440x900 + mobile 390px screenshots match the frame; console + page errors zero; dev.log clean.
+- Commit a6fd120 (owner identity) pushed: fab9279..a6fd120 main == origin/main.
+
+Stage Summary:
+- The login screen now equals the Welcome_Back Figma frame and — most importantly — the Sign in button is back, visible and working end-to-end.
+- Every screen has now had its explicit v5.0.0 ServePoint pass; no known v4-class leftovers remain.
+- Crons: 0 — owner standing order respected.
