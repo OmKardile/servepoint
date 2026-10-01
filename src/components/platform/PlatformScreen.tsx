@@ -3,7 +3,6 @@ import {
   AlertTriangle,
   Building2,
   ChevronDown,
-  CookingPot,
   CreditCard,
   Hourglass,
   Inbox,
@@ -23,6 +22,7 @@ import { formatMoney, timeAgo } from '../../lib/prefs';
 import { useSession } from '../../store/session';
 import type { AuditLogEntry, Subscription, Tenant } from '../../types';
 import { ProvisioningWizard } from './ProvisioningWizard';
+import brandMark from '../../assets/brand/mark.png';
 
 /**
  * ServePoint Platform console (v5.0.0, ADR-0013/ADR-0014).
@@ -796,8 +796,8 @@ export const PlatformScreen: React.FC = () => {
       >
         {/* Logo */}
         <div className="mb-6 flex items-center justify-center gap-2.5 md:justify-start md:px-2">
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#B88E2F] font-bold text-white">
-            <CookingPot size={17} aria-hidden />
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#D9E2DD] p-1">
+            <img src={brandMark} alt="ServePoint logo" className="h-full w-full object-contain" />
           </span>
           <span className="hidden min-w-0 md:block">
             <span className="block truncate text-[17px] font-semibold leading-tight text-white">

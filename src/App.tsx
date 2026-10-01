@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from 'react';
-import { CookingPot } from 'lucide-react';
 import { authService } from './lib/authService';
 import { normalizeRole } from './lib/rbac';
 import { useTenant } from './lib/tenant';
@@ -15,6 +14,7 @@ import { NotificationsScreen } from './components/notifications/NotificationsScr
 import { SupportScreen } from './components/support/SupportScreen';
 import { SettingsScreen } from './components/settings/SettingsScreen';
 import { PlatformScreen } from './components/platform/PlatformScreen';
+import brandLockup from './assets/brand/lockup-light.png';
 
 /**
  * v5.0.0 Production router (ADR-0013 role model / ADR-0014 rebuild):
@@ -25,11 +25,8 @@ import { PlatformScreen } from './components/platform/PlatformScreen';
  */
 
 const Splash: React.FC = () => (
-  <div className="flex h-screen flex-col items-center justify-center gap-3 bg-[#F6F5F2]">
-    <span className="flex h-12 w-12 items-center justify-center rounded-full bg-[#B88E2F] text-white">
-      <CookingPot size={22} aria-hidden />
-    </span>
-    <p className="text-sm font-medium text-[#6B6B6B]">ServePoint</p>
+  <div className="flex h-screen flex-col items-center justify-center gap-5 bg-[#F6F5F2]">
+    <img src={brandLockup} alt="ServePoint" className="h-11 w-auto" />
     <span
       className="h-1 w-28 overflow-hidden rounded-full bg-[#E3E7E0]"
       role="status"

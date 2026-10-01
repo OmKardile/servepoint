@@ -3,6 +3,25 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.1.1] — 2026-10-01 — Official Brand Assets Applied (owner-supplied logos)
+
+### Added — real ServePoint logos everywhere the temporary gold CookingPot glyph stood
+The owner supplied the two official logos; both are now committed masters plus generated derivatives:
+- **Flat brand mark** (`ServePoint POS Brand Mark.png`, 2172×724 RGBA, pre-keyed transparent) → trimmed **`src/assets/brand/lockup-light.png`** (full lockup for light surfaces — app Splash) and **`src/assets/brand/mark.png`** (icon alone, square-padded).
+- **3D render logo** (`ServePoint POS Logo (1).png`, opaque near-black bg) → **`public/og-image.jpg`** (1200×630 social card).
+
+### Brand surfaces updated
+- **index.html**: first real favicon set (32 + 128 rounded cream app-icon tiles), apple-touch-icon (180 full-bleed cream), `theme-color` #0F3D3E, `og:image`/`twitter:image` wired to the 3D-render card.
+- **Cafe sidebar + Platform sidebar**: temporary gold circle → sage #D9E2DD rounded tile holding the real mark (dark terminal + orange sun + cream base read perfectly on the dark teal rail); "ServePoint" wordmark text kept for crispness.
+- **Splash**: temporary glyph + text → the full flat lockup.
+- Login screen untouched — ADR-0016 freeze respected (its text wordmark stands until the owner explicitly unfreezes).
+
+### Tooling & provenance
+- **`scripts/build-brand-assets.mjs`** regenerates every derivative from the committed masters (`docs/design/servepoint/brand/src/`, owner's originals preserved) — `bun scripts/build-brand-assets.mjs`; see `docs/design/servepoint/brand/README.md`.
+
+### Verified
+- `tsc --noEmit` → 0 errors; lint clean; browser E2E: favicon in the tab, both sidebars + Splash show the real mark, login pixel-identical, zero console/page errors. Crons 0 (owner standing order).
+
 ## [5.1.0] — 2026-10-01 — Order Engine: NOVA Discipline (payments ledger + status trail + guarded RPCs)
 
 ### Learned from the alternative NOVA build (owner directive + uploaded A-to-Z spec, web-nova v0.5.139)

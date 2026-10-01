@@ -10,6 +10,7 @@ import {
   UserRound,
 } from 'lucide-react';
 import { useSession, useUi, type Section } from '../../store/session';
+import brandMark from '../../assets/brand/mark.png';
 
 const NAV: { id: Section; label: string; icon: React.ElementType }[] = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutGrid },
@@ -65,8 +66,8 @@ export const Sidebar: React.FC<Props> = ({ unreadCount = 0 }) => {
     >
       {/* Logo */}
       <div className="mb-6 flex items-center justify-center gap-2.5 px-2 md:justify-start">
-        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#B88E2F] font-bold text-white">
-          <CookingPot size={17} aria-hidden />
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#D9E2DD] p-1">
+          <img src={brandMark} alt="ServePoint logo" className="h-full w-full object-contain" />
         </span>
         <span className="hidden text-[17px] font-semibold text-white md:inline">ServePoint</span>
       </div>
