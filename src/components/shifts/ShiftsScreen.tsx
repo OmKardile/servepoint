@@ -46,7 +46,9 @@ export const ShiftsScreen: React.FC = () => {
     addStaffMember,
     updateStaffMember,
     setActiveWebTab,
+    themeMode,
   } = useTsosStore();
+  const isServepoint = themeMode === 'servepoint';
 
   // Active view tab: 'roster' (Clock In / History) | 'payroll' (Payroll Calculations) | 'staff' (Staff Directory)
   const [activeSubTab, setActiveSubTab] = useState<'roster' | 'payroll' | 'staff'>('roster');
@@ -55,6 +57,7 @@ export const ShiftsScreen: React.FC = () => {
   const [selectedStaffFilter, setSelectedStaffFilter] = useState<string>('all');
   const [dateFilter, setDateFilter] = useState<'today' | 'week' | 'month' | 'all'>('week');
   const [searchQuery, setSearchQuery] = useState('');
+  const [historyStatusFilter, setHistoryStatusFilter] = useState<'all' | 'open' | 'closed'>('all');
 
   // Modals & Panels
   const [isClockInOpen, setIsClockInOpen] = useState(false);
@@ -95,6 +98,13 @@ export const ShiftsScreen: React.FC = () => {
   useEffect(() => {
     const timer = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(timer);
+  }, []);
+
+  // Shift duration ticker — minute-granularity elapsed time shown on active shift cards
+  const [nowMinute, setNowMinute] = useState<Date>(() => new Date());
+  useEffect(() => {
+    const durationTimer = setInterval(() => setNowMinute(new Date()), 60000);
+    return () => clearInterval(durationTimer);
   }, []);
 
   const showNotification = (type: 'success' | 'error', message: string) => {
@@ -154,6 +164,16 @@ export const ShiftsScreen: React.FC = () => {
       return true;
     });
   }, [safeShifts, dateFilter, selectedStaffFilter, searchQuery]);
+
+  // History table view — All / Open / Closed segmented filter applied on top of date/staff/search filters
+  const visibleHistoryShifts = useMemo(() => {
+    return filteredShifts.filter((shift) => {
+      if (!shift) return false;
+      if (historyStatusFilter === 'open') return shift.status === 'active';
+      if (historyStatusFilter === 'closed') return shift.status === 'completed';
+      return true;
+    });
+  }, [filteredShifts, historyStatusFilter]);
 
   // Payroll Calculation aggregations
   const payrollSummary = useMemo(() => {
@@ -267,6 +287,13 @@ export const ShiftsScreen: React.FC = () => {
     const m = netMins % 60;
     const s = Math.floor((diffMs % 60000) / 1000);
     return { h, m, s, netHours: netMins / 60 };
+  };
+
+  // Minute-granularity shift duration (elapsed from clock-in, net of breaks)
+  const getShiftDuration = (clockIn: string, breakMinutes: number) => {
+    const diffMs = Math.max(0, nowMinute.getTime() - new Date(clockIn).getTime());
+    const netMins = Math.max(0, Math.floor(diffMs / 60000) - breakMinutes);
+    return { h: Math.floor(netMins / 60), m: netMins % 60 };
   };
 
   // Clock In Submit
@@ -396,7 +423,7 @@ export const ShiftsScreen: React.FC = () => {
   };
 
   return (
-    <div className="flex-1 flex flex-col h-[calc(100vh-100px)] overflow-hidden bg-[#FFF9F2]">
+    <div className={`flex-1 flex flex-col h-[calc(100vh-100px)] overflow-hidden ${isServepoint ? 'bg-[#F6F5F2]' : 'bg-[#FFF9F2]'}`}>
       {/* Toast Notification */}
       {notification && (
         <div
@@ -416,14 +443,14 @@ export const ShiftsScreen: React.FC = () => {
       )}
 
       {/* Top Header Bar */}
-      <div className="p-4 bg-white border-b border-[#E9E0D6] flex flex-wrap items-center justify-between gap-3">
+      <div className={`p-4 bg-white border-b flex flex-wrap items-center justify-between gap-3 ${isServepoint ? 'border-[#E3E7E0]' : 'border-[#E9E0D6]'}`}>
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-[#FFF1E6] text-[#F97316] flex items-center justify-center shadow-xs">
+          <div className={`w-10 h-10 rounded-xl flex items-center justify-center shadow-xs ${isServepoint ? 'sp-surface text-[#0F3D3E]' : 'bg-[#FFF1E6] text-[#F97316]'}`}>
             <Clock className="w-5 h-5" />
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h2 className="text-base font-bold text-[#1C1917] leading-tight">
+              <h2 className={`text-base font-bold leading-tight ${isServepoint ? 'text-[#1A1A1A]' : 'text-[#1C1917]'}`}>
                 Staff Shifts & Cafe Payroll
               </h2>
               <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-[#E8F5EC] text-[#17803D] flex items-center gap-1">
@@ -431,7 +458,7 @@ export const ShiftsScreen: React.FC = () => {
                 {activeShifts.length} Clocked In
               </span>
             </div>
-            <div className="text-xs text-[#57534E]">
+            <div className={`text-xs ${isServepoint ? 'text-[#6B6B6B]' : 'text-[#57534E]'}`}>
               Clock-in terminal, live floor hours tracking, and automated wage calculations
             </div>
           </div>
@@ -449,24 +476,32 @@ export const ShiftsScreen: React.FC = () => {
                 showNotification('error', 'No shifts available for drawer reconciliation.');
               }
             }}
-            className="flex items-center gap-1.5 px-3.5 py-2 bg-[#FFF1E6] hover:bg-[#FED7AA] border border-[#FED7AA] text-[#B45309] text-xs font-bold rounded-xl shadow-xs transition-colors"
+            className={`flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-xl shadow-xs transition-colors ${
+              isServepoint
+                ? 'border border-[#E3E7E0] bg-white hover:bg-[#F6F5F2] text-[#0F3D3E]'
+                : 'bg-[#FFF1E6] hover:bg-[#FED7AA] border border-[#FED7AA] text-[#B45309]'
+            }`}
           >
-            <Calculator className="w-3.5 h-3.5 text-[#B45309]" />
+            <Calculator className={`w-3.5 h-3.5 ${isServepoint ? 'text-[#0F3D3E]' : 'text-[#B45309]'}`} />
             <span>Reconcile Cash Drawer</span>
           </button>
 
           <button
             onClick={() => setIsFastPinOpen(true)}
-            className="flex items-center gap-1.5 px-3.5 py-2 bg-[#1C1917] hover:bg-black text-white text-xs font-bold rounded-xl shadow-xs transition-colors cursor-pointer"
+            className={`flex items-center gap-1.5 px-3.5 py-2 text-white text-xs font-bold rounded-xl shadow-xs transition-colors cursor-pointer ${
+              isServepoint ? 'bg-[#0F3D3E] hover:bg-[#0B3132]' : 'bg-[#1C1917] hover:bg-black'
+            }`}
             title="Fast 4-digit numeric keypad clock in"
           >
-            <KeyRound className="w-3.5 h-3.5 text-[#F97316]" />
+            <KeyRound className={`w-3.5 h-3.5 ${isServepoint ? 'text-[#B88E2F]' : 'text-[#F97316]'}`} />
             <span>Fast PIN Clock In</span>
           </button>
 
           <button
             onClick={() => setIsClockInOpen(true)}
-            className="flex items-center gap-1.5 px-3.5 py-2 bg-[#F97316] hover:bg-[#EA580C] text-white text-xs font-semibold rounded-xl shadow-xs transition-colors"
+            className={`flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-xl ${
+              isServepoint ? 'sp-cta' : 'bg-[#F97316] hover:bg-[#EA580C] text-white shadow-xs'
+            } transition-colors`}
           >
             <Play className="w-3.5 h-3.5" />
             <span>Clock In Staff</span>
@@ -474,15 +509,23 @@ export const ShiftsScreen: React.FC = () => {
 
           <button
             onClick={() => setIsManualShiftOpen(true)}
-            className="flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-[#F5F0EB] border border-[#E9E0D6] text-[#1C1917] text-xs font-semibold rounded-xl transition-colors"
+            className={`flex items-center gap-1.5 px-3 py-2 border text-xs font-semibold rounded-xl transition-colors ${
+              isServepoint
+                ? 'bg-white hover:bg-[#F6F5F2] border-[#E3E7E0] text-[#0F3D3E]'
+                : 'bg-white hover:bg-[#F5F0EB] border-[#E9E0D6] text-[#1C1917]'
+            }`}
           >
-            <FileText className="w-3.5 h-3.5 text-[#57534E]" />
+            <FileText className={`w-3.5 h-3.5 ${isServepoint ? 'text-[#0F3D3E]' : 'text-[#57534E]'}`} />
             <span>Log Shift</span>
           </button>
 
           <button
             onClick={() => setActiveWebTab('reports')}
-            className="hidden sm:flex items-center gap-1.5 px-3 py-2 bg-[#FFF1E6] hover:bg-[#FED7AA] text-[#C2410C] text-xs font-semibold rounded-xl border border-[#FDBA74]/40 transition-colors"
+            className={`hidden sm:flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-xl border transition-colors ${
+              isServepoint
+                ? 'bg-white hover:bg-[#F6F5F2] border-[#E3E7E0] text-[#B88E2F] hover:text-[#967221]'
+                : 'bg-[#FFF1E6] hover:bg-[#FED7AA] text-[#C2410C] border-[#FDBA74]/40'
+            }`}
             title="View Sales Heatmap to schedule staff"
           >
             <TrendingUp className="w-3.5 h-3.5" />
@@ -493,15 +536,19 @@ export const ShiftsScreen: React.FC = () => {
       </div>
 
       {/* Subnav & Metrics Bar */}
-      <div className="bg-white border-b border-[#E9E0D6] px-4 py-2 flex flex-wrap items-center justify-between gap-3 text-xs">
+      <div className={`bg-white border-b px-4 py-2 flex flex-wrap items-center justify-between gap-3 text-xs ${isServepoint ? 'border-[#E3E7E0]' : 'border-[#E9E0D6]'}`}>
         {/* Module Sub-Tabs */}
-        <div className="flex items-center gap-1 bg-[#F5F0EB] p-1 rounded-xl">
+        <div className={`flex items-center gap-1 p-1 rounded-xl ${isServepoint ? 'bg-[#D9E2DD]' : 'bg-[#F5F0EB]'}`}>
           <button
             onClick={() => setActiveSubTab('roster')}
             className={`px-3 py-1.5 rounded-lg font-semibold transition-all ${
               activeSubTab === 'roster'
-                ? 'bg-white text-[#F97316] shadow-xs'
-                : 'text-[#57534E] hover:text-[#1C1917]'
+                ? isServepoint
+                  ? 'bg-[#0F3D3E] text-white shadow-xs'
+                  : 'bg-white text-[#F97316] shadow-xs'
+                : isServepoint
+                  ? 'text-[#6B6B6B] hover:text-[#0F3D3E]'
+                  : 'text-[#57534E] hover:text-[#1C1917]'
             }`}
           >
             Active Shifts & History
@@ -510,8 +557,12 @@ export const ShiftsScreen: React.FC = () => {
             onClick={() => setActiveSubTab('payroll')}
             className={`px-3 py-1.5 rounded-lg font-semibold transition-all ${
               activeSubTab === 'payroll'
-                ? 'bg-white text-[#F97316] shadow-xs'
-                : 'text-[#57534E] hover:text-[#1C1917]'
+                ? isServepoint
+                  ? 'bg-[#0F3D3E] text-white shadow-xs'
+                  : 'bg-white text-[#F97316] shadow-xs'
+                : isServepoint
+                  ? 'text-[#6B6B6B] hover:text-[#0F3D3E]'
+                  : 'text-[#57534E] hover:text-[#1C1917]'
             }`}
           >
             Payroll Calculations ({dateFilter})
@@ -520,8 +571,12 @@ export const ShiftsScreen: React.FC = () => {
             onClick={() => setActiveSubTab('staff')}
             className={`px-3 py-1.5 rounded-lg font-semibold transition-all ${
               activeSubTab === 'staff'
-                ? 'bg-white text-[#F97316] shadow-xs'
-                : 'text-[#57534E] hover:text-[#1C1917]'
+                ? isServepoint
+                  ? 'bg-[#0F3D3E] text-white shadow-xs'
+                  : 'bg-white text-[#F97316] shadow-xs'
+                : isServepoint
+                  ? 'text-[#6B6B6B] hover:text-[#0F3D3E]'
+                  : 'text-[#57534E] hover:text-[#1C1917]'
             }`}
           >
             Staff Directory ({staffMembers.length})
@@ -529,15 +584,15 @@ export const ShiftsScreen: React.FC = () => {
         </div>
 
         {/* Quick KPI stats */}
-        <div className="flex items-center gap-4 text-[#57534E]">
+        <div className={`flex items-center gap-4 ${isServepoint ? 'text-[#6B6B6B]' : 'text-[#57534E]'}`}>
           <div>
-            <span className="text-[#A8A29E]">Period Hours: </span>
-            <span className="font-bold font-mono text-[#1C1917]">{totalHoursWorked.toFixed(1)} hrs</span>
+            <span className={isServepoint ? 'text-[#6B8579]' : 'text-[#A8A29E]'}>Period Hours: </span>
+            <span className={`font-bold ${isServepoint ? 'text-[#0F3D3E]' : 'font-mono text-[#1C1917]'}`}>{totalHoursWorked.toFixed(1)} hrs</span>
           </div>
-          <div className="h-3 w-px bg-[#E9E0D6]" />
+          <div className={`h-3 w-px ${isServepoint ? 'bg-[#E3E7E0]' : 'bg-[#E9E0D6]'}`} />
           <div>
-            <span className="text-[#A8A29E]">Estimated Payroll: </span>
-            <span className="font-bold font-mono text-[#17803D]">₹{Math.round(totalGrossPayroll).toLocaleString()}</span>
+            <span className={isServepoint ? 'text-[#6B8579]' : 'text-[#A8A29E]'}>Estimated Payroll: </span>
+            <span className={`font-bold ${isServepoint ? 'text-[#0F3D3E]' : 'font-mono text-[#17803D]'}`}>₹{Math.round(totalGrossPayroll).toLocaleString()}</span>
           </div>
         </div>
       </div>
@@ -552,21 +607,23 @@ export const ShiftsScreen: React.FC = () => {
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <span className="w-2 h-2 rounded-full bg-[#17803D] animate-ping" />
-                  <h3 className="font-bold text-sm text-[#1C1917]">Currently Clocked In on Floor</h3>
+                  <h3 className={`font-bold text-sm ${isServepoint ? 'text-[#1A1A1A]' : 'text-[#1C1917]'}`}>Currently Clocked In on Floor</h3>
                 </div>
-                <span className="text-xs text-[#A8A29E]">{activeShifts.length} employees active</span>
+                <span className={`text-xs ${isServepoint ? 'text-[#6B8579]' : 'text-[#A8A29E]'}`}>{activeShifts.length} employees active</span>
               </div>
 
               {activeShifts.length === 0 ? (
-                <div className="p-6 bg-white rounded-2xl border border-dashed border-[#E9E0D6] text-center">
-                  <div className="w-10 h-10 rounded-full bg-[#FFF1E6] text-[#F97316] flex items-center justify-center mx-auto mb-2">
+                <div className={`p-6 bg-white rounded-2xl border border-dashed text-center ${isServepoint ? 'border-[#E3E7E0]' : 'border-[#E9E0D6]'}`}>
+                  <div className={`w-10 h-10 rounded-full flex items-center justify-center mx-auto mb-2 ${isServepoint ? 'sp-surface text-[#0F3D3E]' : 'bg-[#FFF1E6] text-[#F97316]'}`}>
                     <UserX className="w-5 h-5" />
                   </div>
-                  <div className="text-sm font-semibold text-[#1C1917]">No staff currently clocked in</div>
-                  <div className="text-xs text-[#57534E] mt-0.5">Click "Clock In Staff" to punch in baristas and cashiers.</div>
+                  <div className={`text-sm font-semibold ${isServepoint ? 'text-[#1A1A1A]' : 'text-[#1C1917]'}`}>No staff currently clocked in</div>
+                  <div className={`text-xs mt-0.5 ${isServepoint ? 'text-[#6B6B6B]' : 'text-[#57534E]'}`}>Click "Clock In Staff" to punch in baristas and cashiers.</div>
                   <button
                     onClick={() => setIsClockInOpen(true)}
-                    className="mt-3 px-3.5 py-1.5 bg-[#F97316] text-white text-xs font-semibold rounded-lg hover:bg-[#EA580C] transition-colors"
+                    className={`mt-3 px-3.5 py-1.5 text-xs font-semibold rounded-lg ${
+                      isServepoint ? 'sp-cta' : 'bg-[#F97316] text-white hover:bg-[#EA580C]'
+                    } transition-colors`}
                   >
                     Clock In Now
                   </button>
@@ -575,60 +632,79 @@ export const ShiftsScreen: React.FC = () => {
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                   {activeShifts.map((shift) => {
                     const duration = getLiveDuration(shift.clock_in, shift.break_minutes);
+                    const shiftDuration = getShiftDuration(shift.clock_in, shift.break_minutes);
                     const accruedPay = Math.round(duration.netHours * shift.hourly_rate);
 
                     return (
                       <div
                         key={shift.id}
-                        className="bg-white rounded-2xl p-4 border border-[#FED7AA] shadow-xs flex flex-col justify-between relative overflow-hidden"
+                        className={`bg-white rounded-2xl p-4 border shadow-xs flex flex-col justify-between relative overflow-hidden ${
+                          isServepoint ? 'border-[#E3E7E0]' : 'border-[#FED7AA]'
+                        }`}
                       >
-                        <div className="absolute top-0 right-0 w-2 h-full bg-[#F97316]" />
+                        <div className={`absolute top-0 right-0 w-2 h-full ${isServepoint ? 'bg-[#B88E2F]' : 'bg-[#F97316]'}`} />
 
                         <div>
                           <div className="flex items-center justify-between mb-2">
                             <div>
-                              <h4 className="font-bold text-sm text-[#1C1917]">{shift.staff_name}</h4>
-                              <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wider bg-[#FFF1E6] text-[#C2410C]">
+                              <h4 className={`font-bold text-sm ${isServepoint ? 'text-[#1A1A1A]' : 'text-[#1C1917]'}`}>{shift.staff_name}</h4>
+                              <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wider ${
+                                isServepoint ? 'bg-[#D9E2DD] text-[#0F3D3E]' : 'bg-[#FFF1E6] text-[#C2410C]'
+                              }`}>
                                 {shift.role}
                               </span>
                             </div>
                             <div className="text-right">
-                              <div className="text-xs font-mono font-bold text-[#17803D]">
+                              <div className={`text-xs font-bold ${isServepoint ? 'text-[#0F3D3E]' : 'font-mono text-[#17803D]'}`}>
                                 ₹{accruedPay}
                               </div>
-                              <div className="text-[10px] text-[#A8A29E]">@ ₹{shift.hourly_rate}/hr</div>
+                              <div className={`text-[10px] ${isServepoint ? 'text-[#6B8579]' : 'text-[#A8A29E]'}`}>@ ₹{shift.hourly_rate}/hr</div>
                             </div>
                           </div>
 
                           {/* Live Timer Counter */}
-                          <div className="p-2.5 rounded-xl bg-[#FFF9F2] border border-[#E9E0D6] flex items-center justify-between my-2">
-                            <div className="flex items-center gap-1.5 text-xs text-[#57534E]">
-                              <Clock className="w-3.5 h-3.5 text-[#F97316] animate-spin" style={{ animationDuration: '6s' }} />
+                          <div className={`p-2.5 rounded-xl border flex items-center justify-between my-2 ${
+                            isServepoint ? 'bg-[#F6F5F2] border-[#E3E7E0]' : 'bg-[#FFF9F2] border-[#E9E0D6]'
+                          }`}>
+                            <div className={`flex items-center gap-1.5 text-xs ${isServepoint ? 'text-[#6B6B6B]' : 'text-[#57534E]'}`}>
+                              <Clock className={`w-3.5 h-3.5 animate-spin ${isServepoint ? 'text-[#0F3D3E]' : 'text-[#F97316]'}`} style={{ animationDuration: '6s' }} />
                               <span>Elapsed:</span>
                             </div>
-                            <div className="text-sm font-mono font-bold text-[#1C1917]">
+                            <div className={`text-sm font-bold ${isServepoint ? 'text-[#0F3D3E]' : 'font-mono text-[#1C1917]'}`}>
                               {String(duration.h).padStart(2, '0')}:{String(duration.m).padStart(2, '0')}:
-                              <span className="text-[#F97316]">{String(duration.s).padStart(2, '0')}</span>
+                              <span className={isServepoint ? 'text-[#B88E2F]' : 'text-[#F97316]'}>{String(duration.s).padStart(2, '0')}</span>
                             </div>
                           </div>
 
-                          <div className="text-[11px] text-[#57534E] flex items-center justify-between">
+                          {/* Shift duration live ticker (minute-granularity) */}
+                          <div className="flex items-center justify-between text-[11px] px-0.5">
+                            <span className={isServepoint ? 'text-[#6B8579]' : 'text-[#A8A29E]'}>Shift duration</span>
+                            <span className={`font-semibold ${isServepoint ? 'text-[#0F3D3E]' : 'text-[#1C1917]'}`}>
+                              {shiftDuration.h}h {String(shiftDuration.m).padStart(2, '0')}m
+                            </span>
+                          </div>
+
+                          <div className={`text-[11px] flex items-center justify-between ${isServepoint ? 'text-[#6B6B6B]' : 'text-[#57534E]'}`}>
                             <span>Clocked in at {formatTime(shift.clock_in)}</span>
                             <span>Break: {shift.break_minutes} mins</span>
                           </div>
 
                           {shift.notes && (
-                            <div className="mt-2 text-[11px] text-[#A8A29E] italic truncate">
+                            <div className={`mt-2 text-[11px] italic truncate ${isServepoint ? 'text-[#6B8579]' : 'text-[#A8A29E]'}`}>
                               "{shift.notes}"
                             </div>
                           )}
                         </div>
 
                         {/* Controls */}
-                        <div className="mt-4 pt-3 border-t border-[#F5F0EB] flex items-center gap-1.5">
+                        <div className={`mt-4 pt-3 border-t flex items-center gap-1.5 ${isServepoint ? 'border-[#E3E7E0]' : 'border-[#F5F0EB]'}`}>
                           <button
                             onClick={() => recordBreak(shift.id, 15)}
-                            className="px-2.5 py-1.5 rounded-lg bg-[#F5F0EB] hover:bg-[#E9E0D6] text-[#57534E] text-xs font-semibold flex items-center justify-center gap-1 transition-colors"
+                            className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center justify-center gap-1 transition-colors ${
+                              isServepoint
+                                ? 'bg-[#F6F5F2] hover:bg-[#D9E2DD] text-[#0F3D3E]'
+                                : 'bg-[#F5F0EB] hover:bg-[#E9E0D6] text-[#57534E]'
+                            }`}
                             title="Add 15 min break"
                           >
                             <Coffee className="w-3 h-3" />
@@ -637,7 +713,11 @@ export const ShiftsScreen: React.FC = () => {
 
                           <button
                             onClick={() => setReconcilingShift(shift)}
-                            className="flex-1 px-2 py-1.5 rounded-lg bg-[#FFF9F2] hover:bg-[#FED7AA] border border-[#FED7AA] text-[#B45309] text-xs font-bold flex items-center justify-center gap-1 transition-colors"
+                            className={`flex-1 px-2 py-1.5 rounded-lg border text-xs font-bold flex items-center justify-center gap-1 transition-colors ${
+                              isServepoint
+                                ? 'bg-white hover:bg-[#F6F5F2] border-[#E3E7E0] text-[#0F3D3E]'
+                                : 'bg-[#FFF9F2] hover:bg-[#FED7AA] border-[#FED7AA] text-[#B45309]'
+                            }`}
                             title="Count cash drawer & audit variance"
                           >
                             <Calculator className="w-3 h-3" />
@@ -663,22 +743,59 @@ export const ShiftsScreen: React.FC = () => {
             </div>
 
             {/* Shift History & Filters */}
-            <div className="bg-white rounded-2xl border border-[#E9E0D6] shadow-xs overflow-hidden">
+            <div className={`bg-white rounded-2xl border shadow-xs overflow-hidden ${isServepoint ? 'border-[#E3E7E0]' : 'border-[#E9E0D6]'}`}>
               {/* Filter controls */}
-              <div className="p-4 border-b border-[#E9E0D6] flex flex-wrap items-center justify-between gap-3">
+              <div className={`p-4 border-b flex flex-wrap items-center justify-between gap-3 ${isServepoint ? 'border-[#E3E7E0]' : 'border-[#E9E0D6]'}`}>
                 <div className="flex items-center gap-2 flex-wrap">
-                  <h3 className="font-bold text-sm text-[#1C1917] mr-2">Shift History</h3>
+                  <h3 className={`font-bold text-sm mr-2 ${isServepoint ? 'text-[#1A1A1A]' : 'text-[#1C1917]'}`}>Shift History</h3>
+
+                  {/* Status Filter: All / Open / Closed */}
+                  <div
+                    className={`flex items-center gap-1 p-1 rounded-lg ${
+                      isServepoint ? 'bg-[#D9E2DD]' : 'bg-[#FFF9F2] border border-[#E9E0D6]'
+                    }`}
+                    role="group"
+                    aria-label="Filter shifts by status"
+                  >
+                    {([
+                      { id: 'all', label: 'All' },
+                      { id: 'open', label: 'Open' },
+                      { id: 'closed', label: 'Closed' },
+                    ] as const).map((st) => (
+                      <button
+                        key={st.id}
+                        onClick={() => setHistoryStatusFilter(st.id)}
+                        className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
+                          historyStatusFilter === st.id
+                            ? isServepoint
+                              ? 'bg-[#0F3D3E] text-white font-bold shadow-xs'
+                              : 'bg-white text-[#F97316] font-bold shadow-xs'
+                            : isServepoint
+                              ? 'text-[#6B6B6B] hover:text-[#0F3D3E]'
+                              : 'text-[#57534E] hover:text-[#1C1917]'
+                        }`}
+                      >
+                        {st.label}
+                      </button>
+                    ))}
+                  </div>
 
                   {/* Date Filter Tabs */}
-                  <div className="flex items-center gap-1 bg-[#FFF9F2] p-1 rounded-lg border border-[#E9E0D6]">
+                  <div className={`flex items-center gap-1 p-1 rounded-lg ${
+                    isServepoint ? 'bg-[#D9E2DD]' : 'bg-[#FFF9F2] border border-[#E9E0D6]'
+                  }`}>
                     {(['today', 'week', 'month', 'all'] as const).map((tab) => (
                       <button
                         key={tab}
                         onClick={() => setDateFilter(tab)}
                         className={`px-2.5 py-1 rounded-md text-xs font-medium capitalize transition-colors ${
                           dateFilter === tab
-                            ? 'bg-white text-[#F97316] font-bold shadow-xs'
-                            : 'text-[#57534E] hover:text-[#1C1917]'
+                            ? isServepoint
+                              ? 'bg-[#0F3D3E] text-white font-bold shadow-xs'
+                              : 'bg-white text-[#F97316] font-bold shadow-xs'
+                            : isServepoint
+                              ? 'text-[#6B6B6B] hover:text-[#0F3D3E]'
+                              : 'text-[#57534E] hover:text-[#1C1917]'
                         }`}
                       >
                         {tab === 'today' ? 'Today' : tab === 'week' ? 'Past 7 Days' : tab === 'month' ? 'This Month' : 'All Time'}
@@ -690,7 +807,11 @@ export const ShiftsScreen: React.FC = () => {
                   <select
                     value={selectedStaffFilter}
                     onChange={(e) => setSelectedStaffFilter(e.target.value)}
-                    className="text-xs bg-[#FFF9F2] border border-[#E9E0D6] rounded-lg px-2.5 py-1.5 text-[#1C1917] font-medium focus:outline-none focus:ring-1 focus:ring-[#F97316]"
+                    className={`text-xs rounded-lg px-2.5 py-1.5 font-medium focus:outline-none ${
+                      isServepoint
+                        ? 'bg-white border border-[#E3E7E0] text-[#1A1A1A] focus:border-[#B88E2F] focus:ring-1 focus:ring-[#B88E2F]/30'
+                        : 'bg-[#FFF9F2] border border-[#E9E0D6] text-[#1C1917] focus:ring-1 focus:ring-[#F97316]'
+                    }`}
                   >
                     <option value="all">All Staff Members</option>
                     {staffMembers.map((s) => (
@@ -709,12 +830,20 @@ export const ShiftsScreen: React.FC = () => {
                       placeholder="Search shifts..."
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
-                      className="text-xs pl-8 pr-3 py-1.5 rounded-lg border border-[#E9E0D6] bg-[#FFF9F2] text-[#1C1917] focus:outline-none focus:ring-1 focus:ring-[#F97316] w-36 sm:w-48"
+                      className={`text-xs pl-8 pr-3 py-1.5 rounded-lg border focus:outline-none w-36 sm:w-48 ${
+                        isServepoint
+                          ? 'bg-white border-[#E3E7E0] text-[#1A1A1A] focus:border-[#B88E2F] focus:ring-1 focus:ring-[#B88E2F]/30'
+                          : 'border-[#E9E0D6] bg-[#FFF9F2] text-[#1C1917] focus:ring-1 focus:ring-[#F97316]'
+                      }`}
                     />
                   </div>
                   <button
                     onClick={exportPayrollCSV}
-                    className="flex items-center gap-1 px-3 py-1.5 bg-[#FFF9F2] hover:bg-[#F5F0EB] text-[#57534E] border border-[#E9E0D6] text-xs font-semibold rounded-lg transition-colors"
+                    className={`flex items-center gap-1 px-3 py-1.5 border text-xs font-semibold rounded-lg transition-colors ${
+                      isServepoint
+                        ? 'bg-white hover:bg-[#F6F5F2] border-[#E3E7E0] text-[#0F3D3E]'
+                        : 'bg-[#FFF9F2] hover:bg-[#F5F0EB] text-[#57534E] border-[#E9E0D6]'
+                    }`}
                   >
                     <Download className="w-3.5 h-3.5" />
                     <span className="hidden sm:inline">Export</span>
@@ -725,7 +854,9 @@ export const ShiftsScreen: React.FC = () => {
               {/* Shifts Table */}
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs">
-                  <thead className="bg-[#FFF9F2] border-b border-[#E9E0D6] text-[#57534E] font-semibold uppercase tracking-wider text-[11px]">
+                  <thead className={`border-b font-semibold uppercase tracking-wider text-[11px] ${
+                    isServepoint ? 'bg-[#F6F5F2] border-[#E3E7E0] text-[#6B6B6B]' : 'bg-[#FFF9F2] border-[#E9E0D6] text-[#57534E]'
+                  }`}>
                     <tr>
                       <th className="px-4 py-3">Staff & Role</th>
                       <th className="px-4 py-3">Date</th>
@@ -739,15 +870,15 @@ export const ShiftsScreen: React.FC = () => {
                       <th className="px-4 py-3 text-right">Actions</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-[#F5F0EB]">
-                    {filteredShifts.length === 0 ? (
+                  <tbody className={`divide-y ${isServepoint ? 'divide-[#E3E7E0]' : 'divide-[#F5F0EB]'}`}>
+                    {visibleHistoryShifts.length === 0 ? (
                       <tr>
-                        <td colSpan={10} className="px-4 py-8 text-center text-xs text-[#A8A29E]">
+                        <td colSpan={10} className={`px-4 py-8 text-center text-xs ${isServepoint ? 'text-[#6B8579]' : 'text-[#A8A29E]'}`}>
                           No shift logs found matching the selected filter.
                         </td>
                       </tr>
                     ) : (
-                      filteredShifts.map((shift) => {
+                      visibleHistoryShifts.map((shift) => {
                         const isLive = shift.status === 'active';
                         const liveDur = isLive ? getLiveDuration(shift.clock_in, shift.break_minutes) : null;
                         const netHrs = isLive ? liveDur!.netHours : shift.total_hours || 0;
@@ -755,40 +886,42 @@ export const ShiftsScreen: React.FC = () => {
                         const hasOvertime = (shift.overtime_hours && shift.overtime_hours > 0) || netHrs > 8;
 
                         return (
-                          <tr key={shift.id} className="hover:bg-[#FFF9F2]/50 transition-colors">
-                            <td className="px-4 py-3 font-semibold text-[#1C1917]">
+                          <tr key={shift.id} className={`transition-colors ${isServepoint ? 'hover:bg-[#F6F5F2]/60' : 'hover:bg-[#FFF9F2]/50'}`}>
+                            <td className={`px-4 py-3 font-semibold ${isServepoint ? 'text-[#1A1A1A]' : 'text-[#1C1917]'}`}>
                               <div>{shift.staff_name}</div>
-                              <div className="text-[11px] text-[#A8A29E] font-normal capitalize">
+                              <div className={`text-[11px] font-normal capitalize ${isServepoint ? 'text-[#6B8579]' : 'text-[#A8A29E]'}`}>
                                 {shift.role}
                               </div>
                             </td>
-                            <td className="px-4 py-3 text-[#57534E] font-mono whitespace-nowrap">
+                            <td className={`px-4 py-3 whitespace-nowrap ${isServepoint ? 'text-[#6B6B6B]' : 'text-[#57534E] font-mono'}`}>
                               {formatDate(shift.clock_in)}
                             </td>
-                            <td className="px-4 py-3 text-[#1C1917] font-mono whitespace-nowrap">
+                            <td className={`px-4 py-3 whitespace-nowrap ${isServepoint ? 'text-[#1A1A1A]' : 'text-[#1C1917] font-mono'}`}>
                               <span>{formatTime(shift.clock_in)}</span>
-                              <span className="mx-1 text-[#A8A29E]">→</span>
+                              <span className={`mx-1 ${isServepoint ? 'text-[#6B8579]' : 'text-[#A8A29E]'}`}>→</span>
                               {isLive ? (
-                                <span className="font-semibold text-[#F97316]">Active Now</span>
+                                <span className={`font-semibold ${isServepoint ? 'text-[#B88E2F]' : 'text-[#F97316]'}`}>Active Now</span>
                               ) : (
                                 <span>{formatTime(shift.clock_out)}</span>
                               )}
                             </td>
-                            <td className="px-4 py-3 text-[#57534E] font-mono">
+                            <td className={`px-4 py-3 ${isServepoint ? 'text-[#6B6B6B]' : 'text-[#57534E] font-mono'}`}>
                               {shift.break_minutes}m
                             </td>
-                            <td className="px-4 py-3 font-mono">
-                              <span className="font-bold text-[#1C1917]">{netHrs.toFixed(2)} hrs</span>
+                            <td className="px-4 py-3">
+                              <span className={`font-bold ${isServepoint ? 'text-[#0F3D3E]' : 'text-[#1C1917] font-mono'}`}>{netHrs.toFixed(2)} hrs</span>
                               {hasOvertime && (
-                                <span className="ml-1.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-[#FEF3C7] text-[#B45309]">
+                                <span className={`ml-1.5 px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                                  isServepoint ? 'bg-[#B88E2F]/15 text-[#967221]' : 'bg-[#FEF3C7] text-[#B45309]'
+                                }`}>
                                   OT
                                 </span>
                               )}
                             </td>
-                            <td className="px-4 py-3 font-mono text-[#57534E]">
+                            <td className={`px-4 py-3 ${isServepoint ? 'text-[#6B6B6B]' : 'font-mono text-[#57534E]'}`}>
                               ₹{shift.hourly_rate}/hr
                             </td>
-                            <td className="px-4 py-3 font-mono font-bold text-[#17803D]">
+                            <td className={`px-4 py-3 font-bold ${isServepoint ? 'text-[#0F3D3E]' : 'font-mono text-[#17803D]'}`}>
                               ₹{Math.round(pay)}
                             </td>
                             <td className="px-4 py-3">
@@ -798,7 +931,9 @@ export const ShiftsScreen: React.FC = () => {
                                   Clocked In
                                 </span>
                               ) : (
-                                <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[#F5F0EB] text-[#57534E]">
+                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                                  isServepoint ? 'bg-white text-[#6B6B6B] border border-[#E3E7E0]' : 'bg-[#F5F0EB] text-[#57534E]'
+                                }`}>
                                   Completed
                                 </span>
                               )}
@@ -810,10 +945,16 @@ export const ShiftsScreen: React.FC = () => {
                                   onClick={() => setReconcilingShift(shift)}
                                   className={`px-2 py-1 rounded-lg text-[10px] font-bold flex items-center gap-1.5 shadow-2xs transition-all ${
                                     shift.reconciliation.status === 'balanced'
-                                      ? 'bg-[#DCFCE7] text-[#15803D] hover:bg-[#BBF7D0] border border-[#86EFAC]'
+                                      ? isServepoint
+                                        ? 'bg-[#E8F5EC] text-[#17803D] hover:bg-[#D6EADD] border border-[#B7DCC5]'
+                                        : 'bg-[#DCFCE7] text-[#15803D] hover:bg-[#BBF7D0] border border-[#86EFAC]'
                                       : shift.reconciliation.status === 'surplus'
-                                      ? 'bg-[#DBEAFE] text-[#1E40AF] hover:bg-[#BFDBFE] border border-[#93C5FD]'
-                                      : 'bg-[#FEE2E2] text-[#B91C1C] hover:bg-[#FECACA] border border-[#FCA5A5]'
+                                      ? isServepoint
+                                        ? 'bg-[#B88E2F]/15 text-[#967221] hover:bg-[#B88E2F]/25 border border-[#B88E2F]/40'
+                                        : 'bg-[#DBEAFE] text-[#1E40AF] hover:bg-[#BFDBFE] border border-[#93C5FD]'
+                                      : isServepoint
+                                        ? 'bg-[#FEF2F2] text-[#B42318] hover:bg-[#FDE3E3] border border-[#F5C6C0]'
+                                        : 'bg-[#FEE2E2] text-[#B91C1C] hover:bg-[#FECACA] border border-[#FCA5A5]'
                                   }`}
                                   title="Click to view drawer reconciliation slip"
                                 >
@@ -828,7 +969,11 @@ export const ShiftsScreen: React.FC = () => {
                                 <button
                                   type="button"
                                   onClick={() => setReconcilingShift(shift)}
-                                  className="px-2 py-1 rounded-lg text-[10px] font-semibold text-[#B45309] bg-[#FFF9F2] hover:bg-[#FED7AA]/50 border border-[#FED7AA] flex items-center gap-1 transition-colors"
+                                  className={`px-2 py-1 rounded-lg text-[10px] font-semibold flex items-center gap-1 transition-colors ${
+                                    isServepoint
+                                      ? 'text-[#0F3D3E] bg-white hover:bg-[#F6F5F2] border border-[#E3E7E0]'
+                                      : 'text-[#B45309] bg-[#FFF9F2] hover:bg-[#FED7AA]/50 border border-[#FED7AA]'
+                                  }`}
                                   title="Perform drawer reconciliation count"
                                 >
                                   <Calculator className="w-3 h-3" />
@@ -840,7 +985,11 @@ export const ShiftsScreen: React.FC = () => {
                               <div className="flex items-center justify-end gap-1.5">
                                 <button
                                   onClick={() => setEditingShift(shift)}
-                                  className="p-1 rounded text-[#57534E] hover:text-[#1C1917] hover:bg-[#F5F0EB] transition-colors"
+                                  className={`p-1 rounded transition-colors ${
+                                    isServepoint
+                                      ? 'text-[#6B6B6B] hover:text-[#0F3D3E] hover:bg-[#F6F5F2]'
+                                      : 'text-[#57534E] hover:text-[#1C1917] hover:bg-[#F5F0EB]'
+                                  }`}
                                   title="Edit Shift Details"
                                 >
                                   <Edit2 className="w-3.5 h-3.5" />
@@ -852,7 +1001,11 @@ export const ShiftsScreen: React.FC = () => {
                                       showNotification('success', 'Shift record deleted');
                                     }
                                   }}
-                                  className="p-1 rounded text-[#A8A29E] hover:text-[#B42318] hover:bg-[#FEF2F2] transition-colors"
+                                  className={`p-1 rounded transition-colors ${
+                                    isServepoint
+                                      ? 'text-[#6B8579] hover:text-[#B42318] hover:bg-[#FEF2F2]'
+                                      : 'text-[#A8A29E] hover:text-[#B42318] hover:bg-[#FEF2F2]'
+                                  }`}
                                   title="Delete Shift"
                                 >
                                   <Trash2 className="w-3.5 h-3.5" />
@@ -875,38 +1028,42 @@ export const ShiftsScreen: React.FC = () => {
           <div className="space-y-4">
             {/* Payroll KPIs */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              <div className="bg-white p-4 rounded-2xl border border-[#E9E0D6] shadow-xs">
-                <div className="text-xs text-[#57534E] mb-1">Total Payroll Expenditure</div>
-                <div className="text-2xl font-bold font-mono text-[#17803D]">
+              <div className={`p-4 rounded-2xl border shadow-xs ${isServepoint ? 'bg-[#D9E2DD]/45 border-[#6B8579]/25' : 'bg-white border-[#E9E0D6]'}`}>
+                <div className={`text-xs mb-1 ${isServepoint ? 'font-semibold text-[#0F3D3E]' : 'text-[#57534E]'}`}>Total Payroll Expenditure</div>
+                <div className={`text-2xl font-bold ${isServepoint ? 'text-[#0F3D3E]' : 'font-mono text-[#17803D]'}`}>
                   ₹{Math.round(totalGrossPayroll).toLocaleString()}
                 </div>
-                <div className="text-[11px] text-[#A8A29E] mt-1 capitalize">For {dateFilter === 'today' ? 'Today' : dateFilter === 'week' ? 'Past 7 Days' : dateFilter === 'month' ? 'This Month' : 'All Time'}</div>
+                <div className={`text-[11px] mt-1 capitalize ${isServepoint ? 'text-[#6B8579]' : 'text-[#A8A29E]'}`}>For {dateFilter === 'today' ? 'Today' : dateFilter === 'week' ? 'Past 7 Days' : dateFilter === 'month' ? 'This Month' : 'All Time'}</div>
               </div>
 
-              <div className="bg-white p-4 rounded-2xl border border-[#E9E0D6] shadow-xs">
-                <div className="text-xs text-[#57534E] mb-1">Total Shift Hours</div>
-                <div className="text-2xl font-bold font-mono text-[#1C1917]">
+              <div className={`p-4 rounded-2xl border shadow-xs ${isServepoint ? 'bg-white border-[#E3E7E0]' : 'bg-white border-[#E9E0D6]'}`}>
+                <div className={`text-xs mb-1 ${isServepoint ? 'text-[#6B6B6B]' : 'text-[#57534E]'}`}>Total Shift Hours</div>
+                <div className={`text-2xl font-bold ${isServepoint ? 'text-[#0F3D3E]' : 'font-mono text-[#1C1917]'}`}>
                   {totalHoursWorked.toFixed(1)} hrs
                 </div>
-                <div className="text-[11px] text-[#57534E] mt-1">Across {(payrollSummary || []).reduce((acc, c) => acc + (c?.shiftCount || 0), 0)} shift logs</div>
+                <div className={`text-[11px] mt-1 ${isServepoint ? 'text-[#6B8579]' : 'text-[#57534E]'}`}>Across {(payrollSummary || []).reduce((acc, c) => acc + (c?.shiftCount || 0), 0)} shift logs</div>
               </div>
 
-              <div className="bg-white p-4 rounded-2xl border border-[#E9E0D6] shadow-xs">
-                <div className="text-xs text-[#57534E] mb-1">Avg Hourly Cost</div>
-                <div className="text-2xl font-bold font-mono text-[#F97316]">
+              <div className={`p-4 rounded-2xl border shadow-xs ${isServepoint ? 'bg-[#B88E2F]/10 border-[#B88E2F]/30' : 'bg-white border-[#E9E0D6]'}`}>
+                <div className={`text-xs mb-1 ${isServepoint ? 'font-semibold text-[#967221]' : 'text-[#57534E]'}`}>Avg Hourly Cost</div>
+                <div className={`text-2xl font-bold ${isServepoint ? 'text-[#967221]' : 'font-mono text-[#F97316]'}`}>
                   ₹{totalHoursWorked > 0 ? Math.round(totalGrossPayroll / totalHoursWorked) : 0}/hr
                 </div>
-                <div className="text-[11px] text-[#A8A29E] mt-1">Blended wage rate</div>
+                <div className={`text-[11px] mt-1 ${isServepoint ? 'text-[#6B8579]' : 'text-[#A8A29E]'}`}>Blended wage rate</div>
               </div>
 
-              <div className="bg-gradient-to-br from-[#FFF4E5] to-[#FFF9F2] p-4 rounded-2xl border border-[#FED7AA] shadow-xs flex flex-col justify-between">
+              <div className={`p-4 rounded-2xl border shadow-xs flex flex-col justify-between ${
+                isServepoint ? 'bg-white border-[#E3E7E0]' : 'bg-gradient-to-br from-[#FFF4E5] to-[#FFF9F2] border-[#FED7AA]'
+              }`}>
                 <div>
-                  <div className="text-xs font-semibold text-[#C2410C]">Payroll Export Ready</div>
-                  <div className="text-xs text-[#57534E] mt-1">Compliant CSV payroll file for bank disbursals & accountant audit.</div>
+                  <div className={`text-xs font-semibold ${isServepoint ? 'text-[#0F3D3E]' : 'text-[#C2410C]'}`}>Payroll Export Ready</div>
+                  <div className={`text-xs mt-1 ${isServepoint ? 'text-[#6B6B6B]' : 'text-[#57534E]'}`}>Compliant CSV payroll file for bank disbursals & accountant audit.</div>
                 </div>
                 <button
                   onClick={exportPayrollCSV}
-                  className="mt-3 flex items-center justify-center gap-1.5 px-3 py-1.5 bg-[#F97316] hover:bg-[#EA580C] text-white text-xs font-bold rounded-xl transition-colors shadow-xs"
+                  className={`mt-3 flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-xl transition-colors ${
+                    isServepoint ? 'sp-cta' : 'bg-[#F97316] hover:bg-[#EA580C] text-white shadow-xs'
+                  }`}
                 >
                   <Download className="w-3.5 h-3.5" />
                   <span>Download CSV Slip</span>
@@ -915,24 +1072,30 @@ export const ShiftsScreen: React.FC = () => {
             </div>
 
             {/* Payroll Breakdown Table */}
-            <div className="bg-white rounded-2xl border border-[#E9E0D6] shadow-xs overflow-hidden">
-              <div className="p-4 border-b border-[#E9E0D6] flex flex-wrap items-center justify-between gap-3">
+            <div className={`bg-white rounded-2xl border shadow-xs overflow-hidden ${isServepoint ? 'border-[#E3E7E0]' : 'border-[#E9E0D6]'}`}>
+              <div className={`p-4 border-b flex flex-wrap items-center justify-between gap-3 ${isServepoint ? 'border-[#E3E7E0]' : 'border-[#E9E0D6]'}`}>
                 <div>
-                  <h3 className="font-bold text-sm text-[#1C1917]">Staff Payroll Breakdown</h3>
-                  <div className="text-xs text-[#57534E]">Calculated based on verified clock-in/out timestamps and overtime (&gt;8 hrs @ 1.5x)</div>
+                  <h3 className={`font-bold text-sm ${isServepoint ? 'text-[#1A1A1A]' : 'text-[#1C1917]'}`}>Staff Payroll Breakdown</h3>
+                  <div className={`text-xs ${isServepoint ? 'text-[#6B6B6B]' : 'text-[#57534E]'}`}>Calculated based on verified clock-in/out timestamps and overtime (&gt;8 hrs @ 1.5x)</div>
                 </div>
 
                 <div className="flex items-center gap-2">
-                  <span className="text-xs text-[#57534E]">Timeframe:</span>
-                  <div className="flex items-center gap-1 bg-[#FFF9F2] p-1 rounded-lg border border-[#E9E0D6]">
+                  <span className={`text-xs ${isServepoint ? 'text-[#6B6B6B]' : 'text-[#57534E]'}`}>Timeframe:</span>
+                  <div className={`flex items-center gap-1 p-1 rounded-lg ${
+                    isServepoint ? 'bg-[#D9E2DD]' : 'bg-[#FFF9F2] border border-[#E9E0D6]'
+                  }`}>
                     {(['today', 'week', 'month', 'all'] as const).map((tab) => (
                       <button
                         key={tab}
                         onClick={() => setDateFilter(tab)}
                         className={`px-2.5 py-1 rounded-md text-xs font-medium capitalize transition-colors ${
                           dateFilter === tab
-                            ? 'bg-white text-[#F97316] font-bold shadow-xs'
-                            : 'text-[#57534E] hover:text-[#1C1917]'
+                            ? isServepoint
+                              ? 'bg-[#0F3D3E] text-white font-bold shadow-xs'
+                              : 'bg-white text-[#F97316] font-bold shadow-xs'
+                            : isServepoint
+                              ? 'text-[#6B6B6B] hover:text-[#0F3D3E]'
+                              : 'text-[#57534E] hover:text-[#1C1917]'
                         }`}
                       >
                         {tab}
@@ -944,7 +1107,9 @@ export const ShiftsScreen: React.FC = () => {
 
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs">
-                  <thead className="bg-[#FFF9F2] border-b border-[#E9E0D6] text-[#57534E] font-semibold uppercase tracking-wider text-[11px]">
+                  <thead className={`border-b font-semibold uppercase tracking-wider text-[11px] ${
+                    isServepoint ? 'bg-[#F6F5F2] border-[#E3E7E0] text-[#6B6B6B]' : 'bg-[#FFF9F2] border-[#E9E0D6] text-[#57534E]'
+                  }`}>
                     <tr>
                       <th className="px-4 py-3">Employee Name</th>
                       <th className="px-4 py-3">Role</th>
@@ -957,39 +1122,41 @@ export const ShiftsScreen: React.FC = () => {
                       <th className="px-4 py-3 text-right">Audit Status</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-[#F5F0EB]">
+                  <tbody className={`divide-y ${isServepoint ? 'divide-[#E3E7E0]' : 'divide-[#F5F0EB]'}`}>
                     {payrollSummary.map((item) => (
-                      <tr key={item.staffId} className="hover:bg-[#FFF9F2]/50 transition-colors">
-                        <td className="px-4 py-3 font-semibold text-[#1C1917]">
+                      <tr key={item.staffId} className={`transition-colors ${isServepoint ? 'hover:bg-[#F6F5F2]/60' : 'hover:bg-[#FFF9F2]/50'}`}>
+                        <td className={`px-4 py-3 font-semibold ${isServepoint ? 'text-[#1A1A1A]' : 'text-[#1C1917]'}`}>
                           {item.name}
                         </td>
                         <td className="px-4 py-3">
-                          <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold capitalize bg-[#F5F0EB] text-[#57534E]">
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold capitalize ${
+                            isServepoint ? 'bg-[#D9E2DD] text-[#0F3D3E]' : 'bg-[#F5F0EB] text-[#57534E]'
+                          }`}>
                             {item.role}
                           </span>
                         </td>
-                        <td className="px-4 py-3 font-mono text-[#57534E]">
+                        <td className={`px-4 py-3 ${isServepoint ? 'text-[#6B6B6B]' : 'font-mono text-[#57534E]'}`}>
                           ₹{item.hourlyRate}/hr
                         </td>
-                        <td className="px-4 py-3 font-mono text-[#1C1917]">
+                        <td className={`px-4 py-3 ${isServepoint ? 'text-[#1A1A1A]' : 'font-mono text-[#1C1917]'}`}>
                           {item.shiftCount} shifts
                         </td>
-                        <td className="px-4 py-3 font-mono text-[#57534E]">
+                        <td className={`px-4 py-3 ${isServepoint ? 'text-[#6B6B6B]' : 'font-mono text-[#57534E]'}`}>
                           {item.regularHours.toFixed(2)} hrs
                         </td>
-                        <td className="px-4 py-3 font-mono">
+                        <td className="px-4 py-3">
                           {item.overtimeHours > 0 ? (
-                            <span className="font-bold text-[#B45309]">
+                            <span className={`font-bold ${isServepoint ? 'text-[#967221]' : 'font-mono text-[#B45309]'}`}>
                               +{item.overtimeHours.toFixed(2)} hrs
                             </span>
                           ) : (
-                            <span className="text-[#A8A29E]">0.00 hrs</span>
+                            <span className={isServepoint ? 'text-[#6B8579]' : 'font-mono text-[#A8A29E]'}>0.00 hrs</span>
                           )}
                         </td>
-                        <td className="px-4 py-3 font-mono font-bold text-[#1C1917]">
+                        <td className={`px-4 py-3 font-bold ${isServepoint ? 'text-[#0F3D3E]' : 'font-mono text-[#1C1917]'}`}>
                           {item.totalHours.toFixed(2)} hrs
                         </td>
-                        <td className="px-4 py-3 font-mono font-bold text-base text-[#17803D]">
+                        <td className={`px-4 py-3 font-bold text-base ${isServepoint ? 'text-[#0F3D3E]' : 'font-mono text-[#17803D]'}`}>
                           ₹{Math.round(item.grossPay).toLocaleString()}
                         </td>
                         <td className="px-4 py-3 text-right">
@@ -1000,27 +1167,31 @@ export const ShiftsScreen: React.FC = () => {
                       </tr>
                     ))}
                   </tbody>
-                  <tfoot className="bg-[#FFF9F2] border-t border-[#E9E0D6] font-semibold text-xs">
+                  <tfoot className={`border-t font-semibold text-xs ${
+                    isServepoint ? 'bg-[#F6F5F2] border-[#E3E7E0]' : 'bg-[#FFF9F2] border-[#E9E0D6]'
+                  }`}>
                     <tr>
-                      <td colSpan={4} className="px-4 py-3 text-[#1C1917]">
+                      <td colSpan={4} className={`px-4 py-3 ${isServepoint ? 'text-[#1A1A1A]' : 'text-[#1C1917]'}`}>
                         Grand Total:
                       </td>
-                      <td className="px-4 py-3 font-mono text-[#57534E]">
+                      <td className={`px-4 py-3 ${isServepoint ? 'text-[#6B6B6B]' : 'font-mono text-[#57534E]'}`}>
                         {(payrollSummary || []).reduce((acc, c) => acc + (c?.regularHours || 0), 0).toFixed(2)} hrs
                       </td>
-                      <td className="px-4 py-3 font-mono text-[#B45309]">
+                      <td className={`px-4 py-3 ${isServepoint ? 'text-[#967221]' : 'font-mono text-[#B45309]'}`}>
                         {(payrollSummary || []).reduce((acc, c) => acc + (c?.overtimeHours || 0), 0).toFixed(2)} hrs
                       </td>
-                      <td className="px-4 py-3 font-mono font-bold text-[#1C1917]">
+                      <td className={`px-4 py-3 font-bold ${isServepoint ? 'text-[#0F3D3E]' : 'font-mono text-[#1C1917]'}`}>
                         {totalHoursWorked.toFixed(2)} hrs
                       </td>
-                      <td className="px-4 py-3 font-mono font-bold text-base text-[#17803D]">
+                      <td className={`px-4 py-3 font-bold text-base ${isServepoint ? 'text-[#0F3D3E]' : 'font-mono text-[#17803D]'}`}>
                         ₹{Math.round(totalGrossPayroll).toLocaleString()}
                       </td>
                       <td className="px-4 py-3 text-right">
                         <button
                           onClick={exportPayrollCSV}
-                          className="text-[#F97316] hover:underline font-bold text-xs"
+                          className={`font-bold text-xs hover:underline ${
+                            isServepoint ? 'text-[#B88E2F] hover:text-[#967221]' : 'text-[#F97316]'
+                          }`}
                         >
                           Export CSV
                         </button>
@@ -1038,12 +1209,14 @@ export const ShiftsScreen: React.FC = () => {
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <div>
-                <h3 className="font-bold text-sm text-[#1C1917]">Staff Directory & Wage Setup</h3>
-                <div className="text-xs text-[#57534E]">Configure hourly pay rates, roles, and PIN codes for the clock-in terminal</div>
+                <h3 className={`font-bold text-sm ${isServepoint ? 'text-[#1A1A1A]' : 'text-[#1C1917]'}`}>Staff Directory & Wage Setup</h3>
+                <div className={`text-xs ${isServepoint ? 'text-[#6B6B6B]' : 'text-[#57534E]'}`}>Configure hourly pay rates, roles, and PIN codes for the clock-in terminal</div>
               </div>
               <button
                 onClick={() => setIsAddStaffOpen(true)}
-                className="flex items-center gap-1.5 px-3 py-2 bg-[#F97316] hover:bg-[#EA580C] text-white text-xs font-semibold rounded-xl transition-colors shadow-xs"
+                className={`flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-xl transition-colors ${
+                  isServepoint ? 'sp-cta' : 'bg-[#F97316] hover:bg-[#EA580C] text-white shadow-xs'
+                }`}
               >
                 <Plus className="w-3.5 h-3.5" />
                 <span>Add Employee</span>
@@ -1057,17 +1230,23 @@ export const ShiftsScreen: React.FC = () => {
                 return (
                   <div
                     key={staff.id}
-                    className="bg-white rounded-2xl p-4 border border-[#E9E0D6] shadow-xs flex flex-col justify-between"
+                    className={`bg-white rounded-2xl p-4 border shadow-xs flex flex-col justify-between ${
+                      isServepoint ? 'border-[#E3E7E0]' : 'border-[#E9E0D6]'
+                    }`}
                   >
                     <div>
                       <div className="flex items-start justify-between">
                         <div className="flex items-center gap-2.5">
-                          <div className="w-10 h-10 rounded-full bg-[#FFF1E6] text-[#F97316] font-bold text-sm flex items-center justify-center">
+                          <div className={`w-10 h-10 rounded-full font-bold text-sm flex items-center justify-center ${
+                            isServepoint ? 'bg-[#D9E2DD] text-[#0F3D3E]' : 'bg-[#FFF1E6] text-[#F97316]'
+                          }`}>
                             {staff.name.slice(0, 2).toUpperCase()}
                           </div>
                           <div>
-                            <h4 className="font-bold text-sm text-[#1C1917]">{staff.name}</h4>
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase bg-[#F5F0EB] text-[#57534E]">
+                            <h4 className={`font-bold text-sm ${isServepoint ? 'text-[#1A1A1A]' : 'text-[#1C1917]'}`}>{staff.name}</h4>
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase ${
+                              isServepoint ? 'bg-[#F6F5F2] text-[#6B6B6B] border border-[#E3E7E0]' : 'bg-[#F5F0EB] text-[#57534E]'
+                            }`}>
                               {staff.role}
                             </span>
                           </div>
@@ -1079,36 +1258,42 @@ export const ShiftsScreen: React.FC = () => {
                             On Shift
                           </span>
                         ) : (
-                          <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-[#F5F0EB] text-[#A8A29E]">
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${
+                            isServepoint ? 'bg-white text-[#6B6B6B] border border-[#E3E7E0]' : 'bg-[#F5F0EB] text-[#A8A29E]'
+                          }`}>
                             Off Shift
                           </span>
                         )}
                       </div>
 
-                      <div className="grid grid-cols-2 gap-2 my-3 p-2.5 rounded-xl bg-[#FFF9F2] border border-[#E9E0D6] text-xs">
+                      <div className={`grid grid-cols-2 gap-2 my-3 p-2.5 rounded-xl border text-xs ${
+                        isServepoint ? 'bg-[#F6F5F2] border-[#E3E7E0]' : 'bg-[#FFF9F2] border-[#E9E0D6]'
+                      }`}>
                         <div>
-                          <div className="text-[10px] text-[#A8A29E]">Hourly Wage</div>
-                          <div className="font-bold font-mono text-[#1C1917]">₹{staff.hourly_rate}/hr</div>
+                          <div className={`text-[10px] ${isServepoint ? 'text-[#6B8579]' : 'text-[#A8A29E]'}`}>Hourly Wage</div>
+                          <div className={`font-bold ${isServepoint ? 'text-[#0F3D3E]' : 'font-mono text-[#1C1917]'}`}>₹{staff.hourly_rate}/hr</div>
                         </div>
                         <div>
-                          <div className="text-[10px] text-[#A8A29E]">Clock-in PIN</div>
-                          <div className="font-mono text-[#57534E]">•••• ({staff.pin_code})</div>
+                          <div className={`text-[10px] ${isServepoint ? 'text-[#6B8579]' : 'text-[#A8A29E]'}`}>Clock-in PIN</div>
+                          <div className={isServepoint ? 'text-[#1A1A1A]' : 'font-mono text-[#57534E]'}>•••• ({staff.pin_code})</div>
                         </div>
                         <div>
-                          <div className="text-[10px] text-[#A8A29E]">Contact Phone</div>
-                          <div className="font-mono text-[#57534E] text-[11px]">{staff.phone}</div>
+                          <div className={`text-[10px] ${isServepoint ? 'text-[#6B8579]' : 'text-[#A8A29E]'}`}>Contact Phone</div>
+                          <div className={`text-[11px] ${isServepoint ? 'text-[#6B6B6B]' : 'font-mono text-[#57534E]'}`}>{staff.phone}</div>
                         </div>
                         <div>
-                          <div className="text-[10px] text-[#A8A29E]">Joined Date</div>
-                          <div className="text-[#57534E] text-[11px]">{staff.joined_date}</div>
+                          <div className={`text-[10px] ${isServepoint ? 'text-[#6B8579]' : 'text-[#A8A29E]'}`}>Joined Date</div>
+                          <div className={`text-[11px] ${isServepoint ? 'text-[#6B6B6B]' : 'text-[#57534E]'}`}>{staff.joined_date}</div>
                         </div>
                       </div>
                     </div>
 
-                    <div className="pt-2 border-t border-[#F5F0EB] flex items-center justify-between text-xs">
+                    <div className={`pt-2 border-t flex items-center justify-between text-xs ${isServepoint ? 'border-[#E3E7E0]' : 'border-[#F5F0EB]'}`}>
                       <button
                         onClick={() => setEditingStaff(staff)}
-                        className="text-[#F97316] hover:underline font-semibold flex items-center gap-1"
+                        className={`font-semibold flex items-center gap-1 hover:underline ${
+                          isServepoint ? 'text-[#B88E2F] hover:text-[#967221]' : 'text-[#F97316]'
+                        }`}
                       >
                         <Edit2 className="w-3 h-3" />
                         <span>Edit Wage & Info</span>
@@ -1147,17 +1332,17 @@ export const ShiftsScreen: React.FC = () => {
       {/* ================= MODAL: CLOCK IN STAFF ================= */}
       {isClockInOpen && (
         <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-5 border border-[#E9E0D6] shadow-xl animate-in fade-in zoom-in-95 duration-150">
-            <div className="flex items-center justify-between pb-3 border-b border-[#E9E0D6]">
+          <div className={`bg-white rounded-2xl max-w-md w-full p-5 border shadow-xl animate-in fade-in zoom-in-95 duration-150 ${isServepoint ? 'border-[#E3E7E0]' : 'border-[#E9E0D6]'}`}>
+            <div className={`flex items-center justify-between pb-3 border-b ${isServepoint ? 'border-[#E3E7E0]' : 'border-[#E9E0D6]'}`}>
               <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg bg-[#FFF1E6] text-[#F97316] flex items-center justify-center">
+                <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${isServepoint ? 'sp-surface text-[#0F3D3E]' : 'bg-[#FFF1E6] text-[#F97316]'}`}>
                   <Play className="w-4 h-4" />
                 </div>
-                <h3 className="font-bold text-sm text-[#1C1917]">Clock In Staff Member</h3>
+                <h3 className={`font-bold text-sm ${isServepoint ? 'text-[#1A1A1A]' : 'text-[#1C1917]'}`}>Clock In Staff Member</h3>
               </div>
               <button
                 onClick={() => setIsClockInOpen(false)}
-                className="text-[#A8A29E] hover:text-[#1C1917] text-sm"
+                className={`text-sm ${isServepoint ? 'text-[#6B8579] hover:text-[#1A1A1A]' : 'text-[#A8A29E] hover:text-[#1C1917]'}`}
               >
                 ✕
               </button>
@@ -1165,13 +1350,13 @@ export const ShiftsScreen: React.FC = () => {
 
             <form onSubmit={handleClockInSubmit} className="space-y-4 pt-4 text-xs">
               <div>
-                <label className="block font-semibold text-[#1C1917] mb-1">
+                <label className={`block font-semibold mb-1 ${isServepoint ? 'text-[#1A1A1A]' : 'text-[#1C1917]'}`}>
                   Select Employee <span className="text-[#B42318]">*</span>
                 </label>
                 <select
                   value={selectedClockInStaffId}
                   onChange={(e) => setSelectedClockInStaffId(e.target.value)}
-                  className="w-full bg-[#FFF9F2] border border-[#E9E0D6] rounded-xl px-3 py-2 text-[#1C1917] font-medium focus:outline-none focus:ring-2 focus:ring-[#F97316]"
+                  className={`w-full ${isServepoint ? 'bg-white border border-[#E3E7E0] rounded-xl px-3 py-2 text-[#1A1A1A] font-medium focus:border-[#B88E2F] focus:ring-1 focus:ring-[#B88E2F]/30 focus:outline-none' : 'bg-[#FFF9F2] border border-[#E9E0D6] rounded-xl px-3 py-2 text-[#1C1917] font-medium focus:outline-none focus:ring-2 focus:ring-[#F97316]'}`}
                   required
                 >
                   <option value="">-- Choose Employee --</option>
@@ -1188,7 +1373,7 @@ export const ShiftsScreen: React.FC = () => {
               </div>
 
               <div>
-                <label className="block font-semibold text-[#1C1917] mb-1">
+                <label className={`block font-semibold mb-1 ${isServepoint ? 'text-[#1A1A1A]' : 'text-[#1C1917]'}`}>
                   Security PIN Code (optional verification)
                 </label>
                 <input
@@ -1197,12 +1382,12 @@ export const ShiftsScreen: React.FC = () => {
                   placeholder="Enter 4-digit PIN (default: 1234 or staff PIN)"
                   value={clockInPin}
                   onChange={(e) => setClockInPin(e.target.value)}
-                  className="w-full bg-[#FFF9F2] border border-[#E9E0D6] rounded-xl px-3 py-2 text-[#1C1917] font-mono focus:outline-none focus:ring-2 focus:ring-[#F97316]"
+                  className={`w-full ${isServepoint ? 'bg-white border border-[#E3E7E0] rounded-xl px-3 py-2 text-[#1A1A1A] focus:border-[#B88E2F] focus:ring-1 focus:ring-[#B88E2F]/30 focus:outline-none' : 'bg-[#FFF9F2] border border-[#E9E0D6] rounded-xl px-3 py-2 text-[#1C1917] font-mono focus:outline-none focus:ring-2 focus:ring-[#F97316]'}`}
                 />
               </div>
 
               <div>
-                <label className="block font-semibold text-[#1C1917] mb-1">
+                <label className={`block font-semibold mb-1 ${isServepoint ? 'text-[#1A1A1A]' : 'text-[#1C1917]'}`}>
                   Shift Notes / Assigned Station (optional)
                 </label>
                 <input
@@ -1210,7 +1395,7 @@ export const ShiftsScreen: React.FC = () => {
                   placeholder="e.g. Espresso bar, cashier counter, pastry baking"
                   value={clockInNotes}
                   onChange={(e) => setClockInNotes(e.target.value)}
-                  className="w-full bg-[#FFF9F2] border border-[#E9E0D6] rounded-xl px-3 py-2 text-[#1C1917] focus:outline-none focus:ring-2 focus:ring-[#F97316]"
+                  className={`w-full ${isServepoint ? 'bg-white border border-[#E3E7E0] rounded-xl px-3 py-2 text-[#1A1A1A] focus:border-[#B88E2F] focus:ring-1 focus:ring-[#B88E2F]/30 focus:outline-none' : 'bg-[#FFF9F2] border border-[#E9E0D6] rounded-xl px-3 py-2 text-[#1C1917] focus:outline-none focus:ring-2 focus:ring-[#F97316]'}`}
                 />
               </div>
 
@@ -1218,13 +1403,13 @@ export const ShiftsScreen: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setIsClockInOpen(false)}
-                  className="px-4 py-2 rounded-xl border border-[#E9E0D6] font-semibold text-[#57534E] hover:bg-[#F5F0EB]"
+                  className={isServepoint ? 'px-4 py-2 rounded-xl border border-[#E3E7E0] bg-white font-semibold text-[#6B6B6B] hover:bg-[#F6F5F2]' : 'px-4 py-2 rounded-xl border border-[#E9E0D6] font-semibold text-[#57534E] hover:bg-[#F5F0EB]'}
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 rounded-xl bg-[#F97316] hover:bg-[#EA580C] text-white font-bold shadow-xs transition-colors"
+                  className={isServepoint ? 'px-4 py-2 rounded-xl sp-cta text-xs' : 'px-4 py-2 rounded-xl bg-[#F97316] hover:bg-[#EA580C] text-white font-bold shadow-xs transition-colors'}
                 >
                   Confirm Clock In
                 </button>
@@ -1237,45 +1422,45 @@ export const ShiftsScreen: React.FC = () => {
       {/* ================= MODAL: CLOCK OUT CONFIRMATION ================= */}
       {clockOutTarget && (
         <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-5 border border-[#E9E0D6] shadow-xl animate-in fade-in zoom-in-95 duration-150">
-            <div className="flex items-center justify-between pb-3 border-b border-[#E9E0D6]">
+          <div className={`bg-white rounded-2xl max-w-md w-full p-5 border shadow-xl animate-in fade-in zoom-in-95 duration-150 ${isServepoint ? 'border-[#E3E7E0]' : 'border-[#E9E0D6]'}`}>
+            <div className={`flex items-center justify-between pb-3 border-b ${isServepoint ? 'border-[#E3E7E0]' : 'border-[#E9E0D6]'}`}>
               <div className="flex items-center gap-2">
                 <div className="w-8 h-8 rounded-lg bg-[#FEF2F2] text-[#B42318] flex items-center justify-center">
                   <Square className="w-4 h-4 fill-current" />
                 </div>
                 <div>
-                  <h3 className="font-bold text-sm text-[#1C1917]">Clock Out {clockOutTarget.staff_name}</h3>
+                  <h3 className={`font-bold text-sm ${isServepoint ? 'text-[#1A1A1A]' : 'text-[#1C1917]'}`}>Clock Out {clockOutTarget.staff_name}</h3>
                   <div className="text-[11px] text-[#A8A29E] capitalize">{clockOutTarget.role} • ₹{clockOutTarget.hourly_rate}/hr</div>
                 </div>
               </div>
               <button
                 onClick={() => setClockOutTarget(null)}
-                className="text-[#A8A29E] hover:text-[#1C1917] text-sm"
+                className={`text-sm ${isServepoint ? 'text-[#6B8579] hover:text-[#1A1A1A]' : 'text-[#A8A29E] hover:text-[#1C1917]'}`}
               >
                 ✕
               </button>
             </div>
 
             <form onSubmit={handleClockOutSubmit} className="space-y-4 pt-4 text-xs">
-              <div className="p-3 bg-[#FFF9F2] rounded-xl border border-[#E9E0D6] space-y-1">
+              <div className={`p-3 rounded-xl border space-y-1 ${isServepoint ? 'bg-[#F6F5F2] border-[#E3E7E0]' : 'bg-[#FFF9F2] border-[#E9E0D6]'}`}>
                 <div className="flex justify-between">
-                  <span className="text-[#57534E]">Clock In Time:</span>
-                  <span className="font-mono font-bold text-[#1C1917]">{formatTime(clockOutTarget.clock_in)}</span>
+                  <span className={isServepoint ? 'text-[#6B6B6B]' : 'text-[#57534E]'}>Clock In Time:</span>
+                  <span className={`font-bold ${isServepoint ? 'text-[#0F3D3E]' : 'font-mono text-[#1C1917]'}`}>{formatTime(clockOutTarget.clock_in)}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-[#57534E]">Current Clock Out:</span>
-                  <span className="font-mono font-bold text-[#1C1917]">{formatTime(new Date().toISOString())}</span>
+                  <span className={isServepoint ? 'text-[#6B6B6B]' : 'text-[#57534E]'}>Current Clock Out:</span>
+                  <span className={`font-bold ${isServepoint ? 'text-[#0F3D3E]' : 'font-mono text-[#1C1917]'}`}>{formatTime(new Date().toISOString())}</span>
                 </div>
-                <div className="flex justify-between text-[#17803D] pt-1 border-t border-[#E9E0D6]">
+                <div className={`flex justify-between text-[#17803D] pt-1 border-t ${isServepoint ? 'border-[#E3E7E0]' : 'border-[#E9E0D6]'}`}>
                   <span>Estimated Shift Net Hours:</span>
-                  <span className="font-mono font-bold">
+                  <span className="font-bold">
                     {getLiveDuration(clockOutTarget.clock_in, clockOutBreaks).netHours.toFixed(2)} hrs
                   </span>
                 </div>
               </div>
 
               <div>
-                <label className="block font-semibold text-[#1C1917] mb-1">
+                <label className={`block font-semibold mb-1 ${isServepoint ? 'text-[#1A1A1A]' : 'text-[#1C1917]'}`}>
                   Total Break Minutes (unpaid / deducted)
                 </label>
                 <div className="flex items-center gap-2">
@@ -1285,14 +1470,14 @@ export const ShiftsScreen: React.FC = () => {
                     max={240}
                     value={clockOutBreaks}
                     onChange={(e) => setClockOutBreaks(Number(e.target.value))}
-                    className="flex-1 bg-[#FFF9F2] border border-[#E9E0D6] rounded-xl px-3 py-2 text-[#1C1917] font-mono focus:outline-none focus:ring-2 focus:ring-[#F97316]"
+                    className={`flex-1 ${isServepoint ? 'bg-white border border-[#E3E7E0] rounded-xl px-3 py-2 text-[#1A1A1A] focus:border-[#B88E2F] focus:ring-1 focus:ring-[#B88E2F]/30 focus:outline-none' : 'bg-[#FFF9F2] border border-[#E9E0D6] rounded-xl px-3 py-2 text-[#1C1917] font-mono focus:outline-none focus:ring-2 focus:ring-[#F97316]'}`}
                   />
-                  <span className="text-xs text-[#57534E]">minutes</span>
+                  <span className={`text-xs ${isServepoint ? 'text-[#6B6B6B]' : 'text-[#57534E]'}`}>minutes</span>
                 </div>
               </div>
 
               <div>
-                <label className="block font-semibold text-[#1C1917] mb-1">
+                <label className={`block font-semibold mb-1 ${isServepoint ? 'text-[#1A1A1A]' : 'text-[#1C1917]'}`}>
                   Closing Notes (optional)
                 </label>
                 <input
@@ -1300,17 +1485,19 @@ export const ShiftsScreen: React.FC = () => {
                   placeholder="e.g. Completed till handover, clean bar counter"
                   value={clockOutNotes}
                   onChange={(e) => setClockOutNotes(e.target.value)}
-                  className="w-full bg-[#FFF9F2] border border-[#E9E0D6] rounded-xl px-3 py-2 text-[#1C1917] focus:outline-none focus:ring-2 focus:ring-[#F97316]"
+                  className={`w-full ${isServepoint ? 'bg-white border border-[#E3E7E0] rounded-xl px-3 py-2 text-[#1A1A1A] focus:border-[#B88E2F] focus:ring-1 focus:ring-[#B88E2F]/30 focus:outline-none' : 'bg-[#FFF9F2] border border-[#E9E0D6] rounded-xl px-3 py-2 text-[#1C1917] focus:outline-none focus:ring-2 focus:ring-[#F97316]'}`}
                 />
               </div>
 
               {/* End of shift reconciliation trigger */}
-              <div className="p-3 bg-[#FFF9F2] border border-[#FED7AA] rounded-xl flex items-center justify-between gap-2">
+              <div className={`p-3 border rounded-xl flex items-center justify-between gap-2 ${
+                isServepoint ? 'bg-[#F6F5F2] border-[#E3E7E0]' : 'bg-[#FFF9F2] border-[#FED7AA]'
+              }`}>
                 <div className="flex items-center gap-2">
-                  <Calculator className="w-4 h-4 text-[#B45309] shrink-0" />
+                  <Calculator className={`w-4 h-4 shrink-0 ${isServepoint ? 'text-[#0F3D3E]' : 'text-[#B45309]'}`} />
                   <div>
-                    <div className="font-bold text-xs text-[#1C1917]">Audit Cash Drawer First</div>
-                    <div className="text-[10px] text-[#57534E]">Count denominations and verify against system sales</div>
+                    <div className={`font-bold text-xs ${isServepoint ? 'text-[#1A1A1A]' : 'text-[#1C1917]'}`}>Audit Cash Drawer First</div>
+                    <div className={`text-[10px] ${isServepoint ? 'text-[#6B6B6B]' : 'text-[#57534E]'}`}>Count denominations and verify against system sales</div>
                   </div>
                 </div>
                 <button
@@ -1320,7 +1507,11 @@ export const ShiftsScreen: React.FC = () => {
                     setClockOutTarget(null);
                     setReconcilingShift(target);
                   }}
-                  className="px-2.5 py-1.5 rounded-lg bg-[#FFF1E6] hover:bg-[#FED7AA] text-[#B45309] font-bold text-xs border border-[#FED7AA] transition-colors"
+                  className={`px-2.5 py-1.5 rounded-lg font-bold text-xs border transition-colors ${
+                    isServepoint
+                      ? 'bg-white hover:bg-[#F6F5F2] text-[#0F3D3E] border-[#E3E7E0]'
+                      : 'bg-[#FFF1E6] hover:bg-[#FED7AA] text-[#B45309] border-[#FED7AA]'
+                  }`}
                 >
                   Count Till Now
                 </button>
@@ -1330,7 +1521,7 @@ export const ShiftsScreen: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setClockOutTarget(null)}
-                  className="px-4 py-2 rounded-xl border border-[#E9E0D6] font-semibold text-[#57534E] hover:bg-[#F5F0EB]"
+                  className={isServepoint ? 'px-4 py-2 rounded-xl border border-[#E3E7E0] bg-white font-semibold text-[#6B6B6B] hover:bg-[#F6F5F2]' : 'px-4 py-2 rounded-xl border border-[#E9E0D6] font-semibold text-[#57534E] hover:bg-[#F5F0EB]'}
                 >
                   Cancel
                 </button>
@@ -1349,17 +1540,17 @@ export const ShiftsScreen: React.FC = () => {
       {/* ================= MODAL: MANUAL SHIFT LOG ================= */}
       {isManualShiftOpen && (
         <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-5 border border-[#E9E0D6] shadow-xl animate-in fade-in zoom-in-95 duration-150">
-            <div className="flex items-center justify-between pb-3 border-b border-[#E9E0D6]">
+          <div className={`bg-white rounded-2xl max-w-md w-full p-5 border shadow-xl animate-in fade-in zoom-in-95 duration-150 ${isServepoint ? 'border-[#E3E7E0]' : 'border-[#E9E0D6]'}`}>
+            <div className={`flex items-center justify-between pb-3 border-b ${isServepoint ? 'border-[#E3E7E0]' : 'border-[#E9E0D6]'}`}>
               <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg bg-[#EFF6FF] text-[#2563EB] flex items-center justify-center">
+                <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${isServepoint ? 'sp-surface text-[#0F3D3E]' : 'bg-[#EFF6FF] text-[#2563EB]'}`}>
                   <FileText className="w-4 h-4" />
                 </div>
-                <h3 className="font-bold text-sm text-[#1C1917]">Log Past or Manual Shift</h3>
+                <h3 className={`font-bold text-sm ${isServepoint ? 'text-[#1A1A1A]' : 'text-[#1C1917]'}`}>Log Past or Manual Shift</h3>
               </div>
               <button
                 onClick={() => setIsManualShiftOpen(false)}
-                className="text-[#A8A29E] hover:text-[#1C1917] text-sm"
+                className={`text-sm ${isServepoint ? 'text-[#6B8579] hover:text-[#1A1A1A]' : 'text-[#A8A29E] hover:text-[#1C1917]'}`}
               >
                 ✕
               </button>
@@ -1367,13 +1558,13 @@ export const ShiftsScreen: React.FC = () => {
 
             <form onSubmit={handleManualShiftSubmit} className="space-y-3 pt-4 text-xs">
               <div>
-                <label className="block font-semibold text-[#1C1917] mb-1">
+                <label className={`block font-semibold mb-1 ${isServepoint ? 'text-[#1A1A1A]' : 'text-[#1C1917]'}`}>
                   Employee <span className="text-[#B42318]">*</span>
                 </label>
                 <select
                   value={manualStaffId}
                   onChange={(e) => setManualStaffId(e.target.value)}
-                  className="w-full bg-[#FFF9F2] border border-[#E9E0D6] rounded-xl px-3 py-2 text-[#1C1917] font-medium focus:outline-none focus:ring-2 focus:ring-[#F97316]"
+                  className={`w-full ${isServepoint ? 'bg-white border border-[#E3E7E0] rounded-xl px-3 py-2 text-[#1A1A1A] font-medium focus:border-[#B88E2F] focus:ring-1 focus:ring-[#B88E2F]/30 focus:outline-none' : 'bg-[#FFF9F2] border border-[#E9E0D6] rounded-xl px-3 py-2 text-[#1C1917] font-medium focus:outline-none focus:ring-2 focus:ring-[#F97316]'}`}
                   required
                 >
                   <option value="">-- Choose Employee --</option>
@@ -1387,33 +1578,33 @@ export const ShiftsScreen: React.FC = () => {
 
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="block font-semibold text-[#1C1917] mb-1">
+                  <label className={`block font-semibold mb-1 ${isServepoint ? 'text-[#1A1A1A]' : 'text-[#1C1917]'}`}>
                     Clock In <span className="text-[#B42318]">*</span>
                   </label>
                   <input
                     type="datetime-local"
                     value={manualClockIn}
                     onChange={(e) => setManualClockIn(e.target.value)}
-                    className="w-full bg-[#FFF9F2] border border-[#E9E0D6] rounded-xl px-2.5 py-2 text-[#1C1917] focus:outline-none focus:ring-2 focus:ring-[#F97316]"
+                    className={`w-full ${isServepoint ? 'bg-white border border-[#E3E7E0] rounded-xl px-2.5 py-2 text-[#1A1A1A] focus:border-[#B88E2F] focus:ring-1 focus:ring-[#B88E2F]/30 focus:outline-none' : 'bg-[#FFF9F2] border border-[#E9E0D6] rounded-xl px-2.5 py-2 text-[#1C1917] focus:outline-none focus:ring-2 focus:ring-[#F97316]'}`}
                     required
                   />
                 </div>
                 <div>
-                  <label className="block font-semibold text-[#1C1917] mb-1">
+                  <label className={`block font-semibold mb-1 ${isServepoint ? 'text-[#1A1A1A]' : 'text-[#1C1917]'}`}>
                     Clock Out <span className="text-[#B42318]">*</span>
                   </label>
                   <input
                     type="datetime-local"
                     value={manualClockOut}
                     onChange={(e) => setManualClockOut(e.target.value)}
-                    className="w-full bg-[#FFF9F2] border border-[#E9E0D6] rounded-xl px-2.5 py-2 text-[#1C1917] focus:outline-none focus:ring-2 focus:ring-[#F97316]"
+                    className={`w-full ${isServepoint ? 'bg-white border border-[#E3E7E0] rounded-xl px-2.5 py-2 text-[#1A1A1A] focus:border-[#B88E2F] focus:ring-1 focus:ring-[#B88E2F]/30 focus:outline-none' : 'bg-[#FFF9F2] border border-[#E9E0D6] rounded-xl px-2.5 py-2 text-[#1C1917] focus:outline-none focus:ring-2 focus:ring-[#F97316]'}`}
                     required
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block font-semibold text-[#1C1917] mb-1">
+                <label className={`block font-semibold mb-1 ${isServepoint ? 'text-[#1A1A1A]' : 'text-[#1C1917]'}`}>
                   Break Duration (minutes)
                 </label>
                 <input
@@ -1422,12 +1613,12 @@ export const ShiftsScreen: React.FC = () => {
                   max={180}
                   value={manualBreaks}
                   onChange={(e) => setManualBreaks(Number(e.target.value))}
-                  className="w-full bg-[#FFF9F2] border border-[#E9E0D6] rounded-xl px-3 py-2 text-[#1C1917] font-mono focus:outline-none focus:ring-2 focus:ring-[#F97316]"
+                  className={`w-full ${isServepoint ? 'bg-white border border-[#E3E7E0] rounded-xl px-3 py-2 text-[#1A1A1A] focus:border-[#B88E2F] focus:ring-1 focus:ring-[#B88E2F]/30 focus:outline-none' : 'bg-[#FFF9F2] border border-[#E9E0D6] rounded-xl px-3 py-2 text-[#1C1917] font-mono focus:outline-none focus:ring-2 focus:ring-[#F97316]'}`}
                 />
               </div>
 
               <div>
-                <label className="block font-semibold text-[#1C1917] mb-1">
+                <label className={`block font-semibold mb-1 ${isServepoint ? 'text-[#1A1A1A]' : 'text-[#1C1917]'}`}>
                   Shift Notes / Adjustment Reason
                 </label>
                 <input
@@ -1435,7 +1626,7 @@ export const ShiftsScreen: React.FC = () => {
                   placeholder="e.g. Forgot to clock out on POS terminal"
                   value={manualNotes}
                   onChange={(e) => setManualNotes(e.target.value)}
-                  className="w-full bg-[#FFF9F2] border border-[#E9E0D6] rounded-xl px-3 py-2 text-[#1C1917] focus:outline-none focus:ring-2 focus:ring-[#F97316]"
+                  className={`w-full ${isServepoint ? 'bg-white border border-[#E3E7E0] rounded-xl px-3 py-2 text-[#1A1A1A] focus:border-[#B88E2F] focus:ring-1 focus:ring-[#B88E2F]/30 focus:outline-none' : 'bg-[#FFF9F2] border border-[#E9E0D6] rounded-xl px-3 py-2 text-[#1C1917] focus:outline-none focus:ring-2 focus:ring-[#F97316]'}`}
                 />
               </div>
 
@@ -1443,13 +1634,13 @@ export const ShiftsScreen: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setIsManualShiftOpen(false)}
-                  className="px-4 py-2 rounded-xl border border-[#E9E0D6] font-semibold text-[#57534E] hover:bg-[#F5F0EB]"
+                  className={isServepoint ? 'px-4 py-2 rounded-xl border border-[#E3E7E0] bg-white font-semibold text-[#6B6B6B] hover:bg-[#F6F5F2]' : 'px-4 py-2 rounded-xl border border-[#E9E0D6] font-semibold text-[#57534E] hover:bg-[#F5F0EB]'}
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 rounded-xl bg-[#2563EB] hover:bg-[#1D4ED8] text-white font-bold shadow-xs transition-colors"
+                  className={isServepoint ? 'px-4 py-2 rounded-xl sp-cta text-xs' : 'px-4 py-2 rounded-xl bg-[#2563EB] hover:bg-[#1D4ED8] text-white font-bold shadow-xs transition-colors'}
                 >
                   Save Shift Log
                 </button>
@@ -1462,17 +1653,17 @@ export const ShiftsScreen: React.FC = () => {
       {/* ================= MODAL: ADD STAFF MEMBER ================= */}
       {isAddStaffOpen && (
         <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-5 border border-[#E9E0D6] shadow-xl animate-in fade-in zoom-in-95 duration-150">
-            <div className="flex items-center justify-between pb-3 border-b border-[#E9E0D6]">
+          <div className={`bg-white rounded-2xl max-w-md w-full p-5 border shadow-xl animate-in fade-in zoom-in-95 duration-150 ${isServepoint ? 'border-[#E3E7E0]' : 'border-[#E9E0D6]'}`}>
+            <div className={`flex items-center justify-between pb-3 border-b ${isServepoint ? 'border-[#E3E7E0]' : 'border-[#E9E0D6]'}`}>
               <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg bg-[#FFF1E6] text-[#F97316] flex items-center justify-center">
+                <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${isServepoint ? 'sp-surface text-[#0F3D3E]' : 'bg-[#FFF1E6] text-[#F97316]'}`}>
                   <Users className="w-4 h-4" />
                 </div>
-                <h3 className="font-bold text-sm text-[#1C1917]">Add Cafe Staff Member</h3>
+                <h3 className={`font-bold text-sm ${isServepoint ? 'text-[#1A1A1A]' : 'text-[#1C1917]'}`}>Add Cafe Staff Member</h3>
               </div>
               <button
                 onClick={() => setIsAddStaffOpen(false)}
-                className="text-[#A8A29E] hover:text-[#1C1917] text-sm"
+                className={`text-sm ${isServepoint ? 'text-[#6B8579] hover:text-[#1A1A1A]' : 'text-[#A8A29E] hover:text-[#1C1917]'}`}
               >
                 ✕
               </button>
@@ -1480,7 +1671,7 @@ export const ShiftsScreen: React.FC = () => {
 
             <form onSubmit={handleAddStaffSubmit} className="space-y-3 pt-4 text-xs">
               <div>
-                <label className="block font-semibold text-[#1C1917] mb-1">
+                <label className={`block font-semibold mb-1 ${isServepoint ? 'text-[#1A1A1A]' : 'text-[#1C1917]'}`}>
                   Full Name <span className="text-[#B42318]">*</span>
                 </label>
                 <input
@@ -1488,20 +1679,20 @@ export const ShiftsScreen: React.FC = () => {
                   placeholder="e.g. Ramesh Chandra"
                   value={newStaffName}
                   onChange={(e) => setNewStaffName(e.target.value)}
-                  className="w-full bg-[#FFF9F2] border border-[#E9E0D6] rounded-xl px-3 py-2 text-[#1C1917] focus:outline-none focus:ring-2 focus:ring-[#F97316]"
+                  className={`w-full ${isServepoint ? 'bg-white border border-[#E3E7E0] rounded-xl px-3 py-2 text-[#1A1A1A] focus:border-[#B88E2F] focus:ring-1 focus:ring-[#B88E2F]/30 focus:outline-none' : 'bg-[#FFF9F2] border border-[#E9E0D6] rounded-xl px-3 py-2 text-[#1C1917] focus:outline-none focus:ring-2 focus:ring-[#F97316]'}`}
                   required
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="block font-semibold text-[#1C1917] mb-1">
+                  <label className={`block font-semibold mb-1 ${isServepoint ? 'text-[#1A1A1A]' : 'text-[#1C1917]'}`}>
                     Role <span className="text-[#B42318]">*</span>
                   </label>
                   <select
                     value={newStaffRole}
                     onChange={(e) => setNewStaffRole(e.target.value as StaffRole)}
-                    className="w-full bg-[#FFF9F2] border border-[#E9E0D6] rounded-xl px-3 py-2 text-[#1C1917] font-medium focus:outline-none focus:ring-2 focus:ring-[#F97316]"
+                    className={`w-full ${isServepoint ? 'bg-white border border-[#E3E7E0] rounded-xl px-3 py-2 text-[#1A1A1A] font-medium focus:border-[#B88E2F] focus:ring-1 focus:ring-[#B88E2F]/30 focus:outline-none' : 'bg-[#FFF9F2] border border-[#E9E0D6] rounded-xl px-3 py-2 text-[#1C1917] font-medium focus:outline-none focus:ring-2 focus:ring-[#F97316]'}`}
                   >
                     <option value="barista">Barista</option>
                     <option value="cashier">Cashier</option>
@@ -1513,7 +1704,7 @@ export const ShiftsScreen: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="block font-semibold text-[#1C1917] mb-1">
+                  <label className={`block font-semibold mb-1 ${isServepoint ? 'text-[#1A1A1A]' : 'text-[#1C1917]'}`}>
                     Hourly Wage (₹) <span className="text-[#B42318]">*</span>
                   </label>
                   <input
@@ -1522,7 +1713,7 @@ export const ShiftsScreen: React.FC = () => {
                     max={2000}
                     value={newStaffRate}
                     onChange={(e) => setNewStaffRate(Number(e.target.value))}
-                    className="w-full bg-[#FFF9F2] border border-[#E9E0D6] rounded-xl px-3 py-2 text-[#1C1917] font-mono focus:outline-none focus:ring-2 focus:ring-[#F97316]"
+                    className={`w-full ${isServepoint ? 'bg-white border border-[#E3E7E0] rounded-xl px-3 py-2 text-[#1A1A1A] focus:border-[#B88E2F] focus:ring-1 focus:ring-[#B88E2F]/30 focus:outline-none' : 'bg-[#FFF9F2] border border-[#E9E0D6] rounded-xl px-3 py-2 text-[#1C1917] font-mono focus:outline-none focus:ring-2 focus:ring-[#F97316]'}`}
                     required
                   />
                 </div>
@@ -1530,7 +1721,7 @@ export const ShiftsScreen: React.FC = () => {
 
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="block font-semibold text-[#1C1917] mb-1">
+                  <label className={`block font-semibold mb-1 ${isServepoint ? 'text-[#1A1A1A]' : 'text-[#1C1917]'}`}>
                     Phone Number
                   </label>
                   <input
@@ -1538,12 +1729,12 @@ export const ShiftsScreen: React.FC = () => {
                     placeholder="+91 98XXX XXXXX"
                     value={newStaffPhone}
                     onChange={(e) => setNewStaffPhone(e.target.value)}
-                    className="w-full bg-[#FFF9F2] border border-[#E9E0D6] rounded-xl px-3 py-2 text-[#1C1917] focus:outline-none focus:ring-2 focus:ring-[#F97316]"
+                    className={`w-full ${isServepoint ? 'bg-white border border-[#E3E7E0] rounded-xl px-3 py-2 text-[#1A1A1A] focus:border-[#B88E2F] focus:ring-1 focus:ring-[#B88E2F]/30 focus:outline-none' : 'bg-[#FFF9F2] border border-[#E9E0D6] rounded-xl px-3 py-2 text-[#1C1917] focus:outline-none focus:ring-2 focus:ring-[#F97316]'}`}
                   />
                 </div>
 
                 <div>
-                  <label className="block font-semibold text-[#1C1917] mb-1">
+                  <label className={`block font-semibold mb-1 ${isServepoint ? 'text-[#1A1A1A]' : 'text-[#1C1917]'}`}>
                     Clock-in PIN
                   </label>
                   <input
@@ -1552,7 +1743,7 @@ export const ShiftsScreen: React.FC = () => {
                     placeholder="4 digits (e.g. 2345)"
                     value={newStaffPin}
                     onChange={(e) => setNewStaffPin(e.target.value)}
-                    className="w-full bg-[#FFF9F2] border border-[#E9E0D6] rounded-xl px-3 py-2 text-[#1C1917] font-mono focus:outline-none focus:ring-2 focus:ring-[#F97316]"
+                    className={`w-full ${isServepoint ? 'bg-white border border-[#E3E7E0] rounded-xl px-3 py-2 text-[#1A1A1A] focus:border-[#B88E2F] focus:ring-1 focus:ring-[#B88E2F]/30 focus:outline-none' : 'bg-[#FFF9F2] border border-[#E9E0D6] rounded-xl px-3 py-2 text-[#1C1917] font-mono focus:outline-none focus:ring-2 focus:ring-[#F97316]'}`}
                   />
                 </div>
               </div>
@@ -1561,13 +1752,13 @@ export const ShiftsScreen: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setIsAddStaffOpen(false)}
-                  className="px-4 py-2 rounded-xl border border-[#E9E0D6] font-semibold text-[#57534E] hover:bg-[#F5F0EB]"
+                  className={isServepoint ? 'px-4 py-2 rounded-xl border border-[#E3E7E0] bg-white font-semibold text-[#6B6B6B] hover:bg-[#F6F5F2]' : 'px-4 py-2 rounded-xl border border-[#E9E0D6] font-semibold text-[#57534E] hover:bg-[#F5F0EB]'}
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 rounded-xl bg-[#F97316] hover:bg-[#EA580C] text-white font-bold shadow-xs transition-colors"
+                  className={isServepoint ? 'px-4 py-2 rounded-xl sp-cta text-xs' : 'px-4 py-2 rounded-xl bg-[#F97316] hover:bg-[#EA580C] text-white font-bold shadow-xs transition-colors'}
                 >
                   Add Staff Member
                 </button>
@@ -1580,32 +1771,32 @@ export const ShiftsScreen: React.FC = () => {
       {/* ================= MODAL: EDIT SHIFT ================= */}
       {editingShift && (
         <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-5 border border-[#E9E0D6] shadow-xl animate-in fade-in zoom-in-95 duration-150">
-            <div className="flex items-center justify-between pb-3 border-b border-[#E9E0D6]">
+          <div className={`bg-white rounded-2xl max-w-md w-full p-5 border shadow-xl animate-in fade-in zoom-in-95 duration-150 ${isServepoint ? 'border-[#E3E7E0]' : 'border-[#E9E0D6]'}`}>
+            <div className={`flex items-center justify-between pb-3 border-b ${isServepoint ? 'border-[#E3E7E0]' : 'border-[#E9E0D6]'}`}>
               <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg bg-[#FFF1E6] text-[#F97316] flex items-center justify-center">
+                <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${isServepoint ? 'sp-surface text-[#0F3D3E]' : 'bg-[#FFF1E6] text-[#F97316]'}`}>
                   <Edit2 className="w-4 h-4" />
                 </div>
-                <h3 className="font-bold text-sm text-[#1C1917]">Edit Shift Record</h3>
+                <h3 className={`font-bold text-sm ${isServepoint ? 'text-[#1A1A1A]' : 'text-[#1C1917]'}`}>Edit Shift Record</h3>
               </div>
               <button
                 onClick={() => setEditingShift(null)}
-                className="text-[#A8A29E] hover:text-[#1C1917] text-sm"
+                className={`text-sm ${isServepoint ? 'text-[#6B8579] hover:text-[#1A1A1A]' : 'text-[#A8A29E] hover:text-[#1C1917]'}`}
               >
                 ✕
               </button>
             </div>
 
             <div className="space-y-3 pt-4 text-xs">
-              <div className="text-sm font-bold text-[#1C1917]">
+              <div className={`text-sm font-bold ${isServepoint ? 'text-[#1A1A1A]' : 'text-[#1C1917]'}`}>
                 {editingShift.staff_name}{' '}
-                <span className="text-xs text-[#A8A29E] font-normal capitalize">
+                <span className={`text-xs font-normal capitalize ${isServepoint ? 'text-[#6B8579]' : 'text-[#A8A29E]'}`}>
                   ({editingShift.role})
                 </span>
               </div>
 
               <div>
-                <label className="block font-semibold text-[#1C1917] mb-1">
+                <label className={`block font-semibold mb-1 ${isServepoint ? 'text-[#1A1A1A]' : 'text-[#1C1917]'}`}>
                   Break Duration (minutes)
                 </label>
                 <input
@@ -1619,12 +1810,12 @@ export const ShiftsScreen: React.FC = () => {
                       break_minutes: Number(e.target.value),
                     })
                   }
-                  className="w-full bg-[#FFF9F2] border border-[#E9E0D6] rounded-xl px-3 py-2 text-[#1C1917] font-mono focus:outline-none focus:ring-2 focus:ring-[#F97316]"
+                  className={`w-full ${isServepoint ? 'bg-white border border-[#E3E7E0] rounded-xl px-3 py-2 text-[#1A1A1A] focus:border-[#B88E2F] focus:ring-1 focus:ring-[#B88E2F]/30 focus:outline-none' : 'bg-[#FFF9F2] border border-[#E9E0D6] rounded-xl px-3 py-2 text-[#1C1917] font-mono focus:outline-none focus:ring-2 focus:ring-[#F97316]'}`}
                 />
               </div>
 
               <div>
-                <label className="block font-semibold text-[#1C1917] mb-1">
+                <label className={`block font-semibold mb-1 ${isServepoint ? 'text-[#1A1A1A]' : 'text-[#1C1917]'}`}>
                   Hourly Rate for Shift (₹)
                 </label>
                 <input
@@ -1636,12 +1827,12 @@ export const ShiftsScreen: React.FC = () => {
                       hourly_rate: Number(e.target.value),
                     })
                   }
-                  className="w-full bg-[#FFF9F2] border border-[#E9E0D6] rounded-xl px-3 py-2 text-[#1C1917] font-mono focus:outline-none focus:ring-2 focus:ring-[#F97316]"
+                  className={`w-full ${isServepoint ? 'bg-white border border-[#E3E7E0] rounded-xl px-3 py-2 text-[#1A1A1A] focus:border-[#B88E2F] focus:ring-1 focus:ring-[#B88E2F]/30 focus:outline-none' : 'bg-[#FFF9F2] border border-[#E9E0D6] rounded-xl px-3 py-2 text-[#1C1917] font-mono focus:outline-none focus:ring-2 focus:ring-[#F97316]'}`}
                 />
               </div>
 
               <div>
-                <label className="block font-semibold text-[#1C1917] mb-1">
+                <label className={`block font-semibold mb-1 ${isServepoint ? 'text-[#1A1A1A]' : 'text-[#1C1917]'}`}>
                   Shift Notes
                 </label>
                 <input
@@ -1653,7 +1844,7 @@ export const ShiftsScreen: React.FC = () => {
                       notes: e.target.value,
                     })
                   }
-                  className="w-full bg-[#FFF9F2] border border-[#E9E0D6] rounded-xl px-3 py-2 text-[#1C1917] focus:outline-none focus:ring-2 focus:ring-[#F97316]"
+                  className={`w-full ${isServepoint ? 'bg-white border border-[#E3E7E0] rounded-xl px-3 py-2 text-[#1A1A1A] focus:border-[#B88E2F] focus:ring-1 focus:ring-[#B88E2F]/30 focus:outline-none' : 'bg-[#FFF9F2] border border-[#E9E0D6] rounded-xl px-3 py-2 text-[#1C1917] focus:outline-none focus:ring-2 focus:ring-[#F97316]'}`}
                 />
               </div>
 
@@ -1661,7 +1852,7 @@ export const ShiftsScreen: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setEditingShift(null)}
-                  className="px-4 py-2 rounded-xl border border-[#E9E0D6] font-semibold text-[#57534E] hover:bg-[#F5F0EB]"
+                  className={isServepoint ? 'px-4 py-2 rounded-xl border border-[#E3E7E0] bg-white font-semibold text-[#6B6B6B] hover:bg-[#F6F5F2]' : 'px-4 py-2 rounded-xl border border-[#E9E0D6] font-semibold text-[#57534E] hover:bg-[#F5F0EB]'}
                 >
                   Cancel
                 </button>
@@ -1676,7 +1867,7 @@ export const ShiftsScreen: React.FC = () => {
                     showNotification('success', 'Shift updated successfully');
                     setEditingShift(null);
                   }}
-                  className="px-4 py-2 rounded-xl bg-[#F97316] hover:bg-[#EA580C] text-white font-bold shadow-xs transition-colors"
+                  className={isServepoint ? 'px-4 py-2 rounded-xl sp-cta text-xs' : 'px-4 py-2 rounded-xl bg-[#F97316] hover:bg-[#EA580C] text-white font-bold shadow-xs transition-colors'}
                 >
                   Save Changes
                 </button>
@@ -1689,17 +1880,17 @@ export const ShiftsScreen: React.FC = () => {
       {/* ================= MODAL: EDIT STAFF INFO & WAGE ================= */}
       {editingStaff && (
         <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-5 border border-[#E9E0D6] shadow-xl animate-in fade-in zoom-in-95 duration-150">
-            <div className="flex items-center justify-between pb-3 border-b border-[#E9E0D6]">
+          <div className={`bg-white rounded-2xl max-w-md w-full p-5 border shadow-xl animate-in fade-in zoom-in-95 duration-150 ${isServepoint ? 'border-[#E3E7E0]' : 'border-[#E9E0D6]'}`}>
+            <div className={`flex items-center justify-between pb-3 border-b ${isServepoint ? 'border-[#E3E7E0]' : 'border-[#E9E0D6]'}`}>
               <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg bg-[#FFF1E6] text-[#F97316] flex items-center justify-center">
+                <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${isServepoint ? 'sp-surface text-[#0F3D3E]' : 'bg-[#FFF1E6] text-[#F97316]'}`}>
                   <Users className="w-4 h-4" />
                 </div>
-                <h3 className="font-bold text-sm text-[#1C1917]">Edit {editingStaff.name}</h3>
+                <h3 className={`font-bold text-sm ${isServepoint ? 'text-[#1A1A1A]' : 'text-[#1C1917]'}`}>Edit {editingStaff.name}</h3>
               </div>
               <button
                 onClick={() => setEditingStaff(null)}
-                className="text-[#A8A29E] hover:text-[#1C1917] text-sm"
+                className={`text-sm ${isServepoint ? 'text-[#6B8579] hover:text-[#1A1A1A]' : 'text-[#A8A29E] hover:text-[#1C1917]'}`}
               >
                 ✕
               </button>
@@ -1707,7 +1898,7 @@ export const ShiftsScreen: React.FC = () => {
 
             <div className="space-y-3 pt-4 text-xs">
               <div>
-                <label className="block font-semibold text-[#1C1917] mb-1">
+                <label className={`block font-semibold mb-1 ${isServepoint ? 'text-[#1A1A1A]' : 'text-[#1C1917]'}`}>
                   Hourly Rate (₹/hr)
                 </label>
                 <input
@@ -1721,12 +1912,12 @@ export const ShiftsScreen: React.FC = () => {
                       hourly_rate: Number(e.target.value),
                     })
                   }
-                  className="w-full bg-[#FFF9F2] border border-[#E9E0D6] rounded-xl px-3 py-2 text-[#1C1917] font-mono focus:outline-none focus:ring-2 focus:ring-[#F97316]"
+                  className={`w-full ${isServepoint ? 'bg-white border border-[#E3E7E0] rounded-xl px-3 py-2 text-[#1A1A1A] focus:border-[#B88E2F] focus:ring-1 focus:ring-[#B88E2F]/30 focus:outline-none' : 'bg-[#FFF9F2] border border-[#E9E0D6] rounded-xl px-3 py-2 text-[#1C1917] font-mono focus:outline-none focus:ring-2 focus:ring-[#F97316]'}`}
                 />
               </div>
 
               <div>
-                <label className="block font-semibold text-[#1C1917] mb-1">
+                <label className={`block font-semibold mb-1 ${isServepoint ? 'text-[#1A1A1A]' : 'text-[#1C1917]'}`}>
                   Terminal PIN Code
                 </label>
                 <input
@@ -1739,12 +1930,12 @@ export const ShiftsScreen: React.FC = () => {
                       pin_code: e.target.value,
                     })
                   }
-                  className="w-full bg-[#FFF9F2] border border-[#E9E0D6] rounded-xl px-3 py-2 text-[#1C1917] font-mono focus:outline-none focus:ring-2 focus:ring-[#F97316]"
+                  className={`w-full ${isServepoint ? 'bg-white border border-[#E3E7E0] rounded-xl px-3 py-2 text-[#1A1A1A] focus:border-[#B88E2F] focus:ring-1 focus:ring-[#B88E2F]/30 focus:outline-none' : 'bg-[#FFF9F2] border border-[#E9E0D6] rounded-xl px-3 py-2 text-[#1C1917] font-mono focus:outline-none focus:ring-2 focus:ring-[#F97316]'}`}
                 />
               </div>
 
               <div>
-                <label className="block font-semibold text-[#1C1917] mb-1">
+                <label className={`block font-semibold mb-1 ${isServepoint ? 'text-[#1A1A1A]' : 'text-[#1C1917]'}`}>
                   Phone Number
                 </label>
                 <input
@@ -1756,7 +1947,7 @@ export const ShiftsScreen: React.FC = () => {
                       phone: e.target.value,
                     })
                   }
-                  className="w-full bg-[#FFF9F2] border border-[#E9E0D6] rounded-xl px-3 py-2 text-[#1C1917] focus:outline-none focus:ring-2 focus:ring-[#F97316]"
+                  className={`w-full ${isServepoint ? 'bg-white border border-[#E3E7E0] rounded-xl px-3 py-2 text-[#1A1A1A] focus:border-[#B88E2F] focus:ring-1 focus:ring-[#B88E2F]/30 focus:outline-none' : 'bg-[#FFF9F2] border border-[#E9E0D6] rounded-xl px-3 py-2 text-[#1C1917] focus:outline-none focus:ring-2 focus:ring-[#F97316]'}`}
                 />
               </div>
 
@@ -1764,7 +1955,7 @@ export const ShiftsScreen: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setEditingStaff(null)}
-                  className="px-4 py-2 rounded-xl border border-[#E9E0D6] font-semibold text-[#57534E] hover:bg-[#F5F0EB]"
+                  className={isServepoint ? 'px-4 py-2 rounded-xl border border-[#E3E7E0] bg-white font-semibold text-[#6B6B6B] hover:bg-[#F6F5F2]' : 'px-4 py-2 rounded-xl border border-[#E9E0D6] font-semibold text-[#57534E] hover:bg-[#F5F0EB]'}
                 >
                   Cancel
                 </button>
@@ -1775,7 +1966,7 @@ export const ShiftsScreen: React.FC = () => {
                     showNotification('success', `Updated wage and profile for ${editingStaff.name}`);
                     setEditingStaff(null);
                   }}
-                  className="px-4 py-2 rounded-xl bg-[#F97316] hover:bg-[#EA580C] text-white font-bold shadow-xs transition-colors"
+                  className={isServepoint ? 'px-4 py-2 rounded-xl sp-cta text-xs' : 'px-4 py-2 rounded-xl bg-[#F97316] hover:bg-[#EA580C] text-white font-bold shadow-xs transition-colors'}
                 >
                   Save Changes
                 </button>

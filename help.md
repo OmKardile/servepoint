@@ -42,6 +42,15 @@ Log in as **Super Admin** and open `/superadmin` (or use the sidebar's *Switch t
 
 ---
 
+## 🍽️ Inventory, Menu, Shifts & Settings (v3.0.0)
+
+The final four operator surfaces are now fully on the ServePoint look (ivory canvas, sage tracks, deep-teal accents, gold actions) — completing the design rollout across the whole app.
+
+- **Stock & Recipes (Inventory)** — the tab switcher (Stock / Recipes / Audit) uses deep-teal active pills; stock cards highlight low stock with a red tint ring and gold hover border; **Generate Restock Order List** builds a purchase order with white quantity inputs (gold focus) and a gold **1-Click Apply Restock**.
+- **Menu & Variants** — a live **availability strip** ("7 of 7 items available • 0 sold out") sits above the table and reacts to filters and toggles; the **Sort menu items** dropdown orders the list by Name A–Z, Price Low–High or High–Low; category pills are deep-teal when active; **Add Menu Item** is gold.
+- **Staff & Shifts** — every active shift card now shows a **live Shift duration** (elapsed time net of breaks, refreshed every minute); the history list can be filtered **All / Open / Closed**; the Drawer Reconciliation flow shows the sage Cash-Audit chip with gold Match Expected / Save Audit actions.
+- **Settings & Fee Engine** — restyled to the owner's Figma: a sage section-nav card (Printer & Hardware / Checkout Settings / Staff Accounts / Cafe Profile / Reset Data) with a deep-teal active row, setting rows with **gold toggle switches** and hairline dividers, and a full-width gold **Save Changes**. All sections and handlers work exactly as before.
+
 ## 👥 Customers & Offers (v2.9.0)
 
 Open **More → Customers & Loyalty** (or **Offers & Promos**). Both surfaces follow the ServePoint look: ivory canvas, white cards with hairline borders, deep-teal accents and gold actions.

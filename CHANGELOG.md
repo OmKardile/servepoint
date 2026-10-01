@@ -3,6 +3,21 @@
 All notable changes to **TSOS (The Cafe Operating System)** are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.0] — 2026-10-01 — Inventory + Menu + Shifts + Settings Explicit ServePoint — ADR-0011 Roadmap Complete (19 Surfaces)
+
+### Added — Final four screens rebuilt to the ServePoint language; the explicit-ServePoint roadmap is now COMPLETE
+- **Inventory (`InventoryScreen.tsx` + `RestockOrderModal.tsx`, 16th surface)**: ivory `#F6F5F2` canvas, `#E3E7E0` hairlines, sage `sp-surface` icon chips, tab switcher on sage `#D9E2DD` track with deep-teal `#0F3D3E` active pills; Recharts chart fully themed (`#E3E7E0` grid, green/red bars, white tooltip with deep-teal header); filter pills deep-teal active; stock cards with gold hover border + `#B42318` low-stock tint ring, deep-teal bold stock numbers (mono retired), progress bars on sage tracks; Recipes tab ivory rows + deep-teal prices; Audit Logs ivory thead with pressed-gold KDS auto-deduct; Restock modal gold focus rings + gold `sp-cta` submit; RestockOrderModal ivory header/footer strips, white qty inputs with gold focus, gold 1-Click Apply Restock.
+- **Menu & Catalog (`MenuScreen.tsx`, 17th surface)**: deep-teal active category pills on white hairline tracks, gold `sp-cta` **Add Menu Item**, availability summary strip, ivory thead table with deep-teal bold prices (mono retired), `#E3E7E0` ghost Edit/Delete buttons, gold-focus modals (Add/Edit gold submit, New Category deep-teal submit); veg/non-veg regulatory badges + In Stock/Sold Out chips kept semantic.
+- **NEW Menu feature — availability summary strip**: "X of Y items available • N sold out" chip above the table, reactive to filters/search/toggles (gold sold-out count, sage chip).
+- **NEW Menu feature — sort control**: Name A–Z / Price Low–High / Price High–Low dropdown applied to filtered items (verified: ₹40 samosa first under Low–High).
+- **Staff & Shifts (`ShiftsScreen.tsx` + `DrawerReconciliationModal.tsx`, 18th surface)**: ivory canvas, `sp-cta` gold CTAs (Clock In Staff / Add Employee / modal submits), deep-teal secondary buttons + active pills on sage tracks, sage/gold/danger reconciliation chips, sage payroll KPI tile + gold-tint Avg Hourly Cost card, sage staff avatars/wells, `#F6F5F2` table theads; Drawer Reconciliation: sage "Cash Audit" chip, gold-tint Expected in Till, sage count-mode toggle, gold Match Expected chip, `#E8F5EC`/gold/`#FEF2F2` variance states, gold Save Audit (danger-red Save & Clock Out kept intentionally).
+- **NEW Shifts feature — live shift-duration ticker**: every active shift card shows elapsed "Shift duration" (net of breaks) via a 60s `setInterval` (cleaned up on unmount).
+- **NEW Shifts feature — history filter**: All / Open / Closed segmented control on shift history (payroll math intentionally still uses the unfiltered set).
+- **Settings (`SettingsScreen.tsx`, 19th surface — restructured per Figma `Checkout_Settings_219-29597`)**: left **sage `#D9E2DD` section-nav card** (Printer & Hardware / Checkout Settings / Staff Accounts / Cafe Profile / Reset Data) with deep-teal active rows; page header "Checkout Settings" with sage icon chip; setting rows (bold label + description + gold toggle + hairline dividers); gold-focus inputs; full-width gold **Save Changes**; new `SPToggle` component (gold track, `role="switch"`, ARIA-checked/labelled). All 5 sections, every field, and every handler preserved — ServePoint-only branch; legacy warm JSX untouched.
+
+### Verified
+- `tsc --noEmit` → 0 errors; `bun run lint` clean. agent-browser E2E: Inventory (Restock CTA + modals), Menu (availability strip "7 of 7 • 0 sold out", sort → ₹40 first), Settings (sage nav + deep-teal active row + section switching), Shifts (duration tickers ×2, All/Open/Closed click-tested both ways); dark round-trip legacy intact; zero console errors.
+
 ## [2.9.0] — 2026-10-01 — Customers + Offers Explicit ServePoint (Loyalty & Promo Surfaces) + Tracking Label Fix
 
 ### Added — Loyalty & promo surfaces rebuilt to the ServePoint language (14th + 15th explicit surfaces)

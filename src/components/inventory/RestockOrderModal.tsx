@@ -35,7 +35,8 @@ export const RestockOrderModal: React.FC<RestockOrderModalProps> = ({
   onClose,
   onRestockSuccess,
 }) => {
-  const { ingredients, bulkRestockIngredients } = useTsosStore();
+  const { ingredients, bulkRestockIngredients, themeMode } = useTsosStore();
+  const isServepoint = themeMode === 'servepoint';
 
   const [filterMode, setFilterMode] = useState<'low_only' | 'all'>('low_only');
   const [copied, setCopied] = useState(false);
@@ -188,16 +189,16 @@ export const RestockOrderModal: React.FC<RestockOrderModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
-      <div className="bg-white rounded-2xl max-w-3xl w-full border border-[#E9E0D6] shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150 my-auto">
+      <div className={`bg-white rounded-2xl max-w-3xl w-full border shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150 my-auto ${isServepoint ? 'border-[#E3E7E0]' : 'border-[#E9E0D6]'}`}>
         {/* Header */}
-        <div className="p-4 bg-[#FFF9F2] border-b border-[#E9E0D6] flex items-center justify-between">
+        <div className={`p-4 border-b flex items-center justify-between ${isServepoint ? 'bg-[#F6F5F2] border-[#E3E7E0]' : 'bg-[#FFF9F2] border-[#E9E0D6]'}`}>
           <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-[#FFF1E6] text-[#F97316] flex items-center justify-center shadow-xs">
+            <div className={`w-9 h-9 rounded-xl flex items-center justify-center shadow-xs ${isServepoint ? 'sp-surface text-[#0F3D3E]' : 'bg-[#FFF1E6] text-[#F97316]'}`}>
               <ClipboardList className="w-5 h-5" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="font-bold text-sm sm:text-base text-[#1C1917]">
+                <h3 className={`font-bold text-sm sm:text-base ${isServepoint ? 'text-[#1A1A1A]' : 'text-[#1C1917]'}`}>
                   Generate Restock Order List
                 </h3>
                 {lowStockItems.length > 0 && (
@@ -207,14 +208,14 @@ export const RestockOrderModal: React.FC<RestockOrderModalProps> = ({
                   </span>
                 )}
               </div>
-              <p className="text-xs text-[#57534E] mt-0.5">
+              <p className={`text-xs mt-0.5 ${isServepoint ? 'text-[#6B6B6B]' : 'text-[#57534E]'}`}>
                 Automatically calculates replenishments required to maintain kitchen par levels
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="text-[#78716C] hover:text-[#1C1917] p-1.5 rounded-lg hover:bg-black/5 transition-colors"
+            className={`p-1.5 rounded-lg hover:bg-black/5 transition-colors ${isServepoint ? 'text-[#6B6B6B] hover:text-[#1A1A1A]' : 'text-[#78716C] hover:text-[#1C1917]'}`}
           >
             <X className="w-5 h-5" />
           </button>
@@ -223,15 +224,19 @@ export const RestockOrderModal: React.FC<RestockOrderModalProps> = ({
         {/* Content */}
         <div className="p-4 sm:p-5 space-y-4 max-h-[75vh] overflow-y-auto">
           {/* Filter & Metric Row */}
-          <div className="flex flex-wrap items-center justify-between gap-3 bg-[#FFFDF9] p-3 rounded-xl border border-[#E9E0D6]">
-            <div className="flex items-center gap-1 bg-[#F5F0EB] p-0.5 rounded-lg text-xs">
+          <div className={`flex flex-wrap items-center justify-between gap-3 p-3 rounded-xl border ${isServepoint ? 'bg-[#F6F5F2] border-[#E3E7E0]' : 'bg-[#FFFDF9] border-[#E9E0D6]'}`}>
+            <div className={`flex items-center gap-1 p-0.5 rounded-lg text-xs ${isServepoint ? 'bg-[#D9E2DD]' : 'bg-[#F5F0EB]'}`}>
               <button
                 type="button"
                 onClick={() => setFilterMode('low_only')}
                 className={`px-3 py-1.5 rounded-md font-semibold transition-all ${
                   filterMode === 'low_only'
-                    ? 'bg-white text-[#1C1917] shadow-xs'
-                    : 'text-[#57534E] hover:text-[#1C1917]'
+                    ? isServepoint
+                      ? 'bg-[#0F3D3E] text-white'
+                      : 'bg-white text-[#1C1917] shadow-xs'
+                    : isServepoint
+                      ? 'text-[#6B6B6B] hover:text-[#1A1A1A]'
+                      : 'text-[#57534E] hover:text-[#1C1917]'
                 }`}
               >
                 Low Stock Only ({lowStockItems.length})
@@ -241,31 +246,37 @@ export const RestockOrderModal: React.FC<RestockOrderModalProps> = ({
                 onClick={() => setFilterMode('all')}
                 className={`px-3 py-1.5 rounded-md font-semibold transition-all ${
                   filterMode === 'all'
-                    ? 'bg-white text-[#1C1917] shadow-xs'
-                    : 'text-[#57534E] hover:text-[#1C1917]'
+                    ? isServepoint
+                      ? 'bg-[#0F3D3E] text-white'
+                      : 'bg-white text-[#1C1917] shadow-xs'
+                    : isServepoint
+                      ? 'text-[#6B6B6B] hover:text-[#1A1A1A]'
+                      : 'text-[#57534E] hover:text-[#1C1917]'
                 }`}
               >
                 All Raw Ingredients ({ingredients.length})
               </button>
             </div>
 
-            <div className="flex items-center gap-4 text-xs font-mono">
+            <div className={`flex items-center gap-4 text-xs ${isServepoint ? '' : 'font-mono'}`}>
               <div>
-                <span className="text-[#A8A29E]">SKUs:</span>{' '}
-                <strong className="text-[#1C1917] text-sm">{orderSummary.totalItems}</strong>
+                <span className={isServepoint ? 'text-[#6B8579]' : 'text-[#A8A29E]'}>SKUs:</span>{' '}
+                <strong className={`text-sm ${isServepoint ? 'text-[#0F3D3E]' : 'text-[#1C1917]'}`}>{orderSummary.totalItems}</strong>
               </div>
               <div>
-                <span className="text-[#A8A29E]">Est. PO Total:</span>{' '}
-                <strong className="text-[#F97316] text-sm">₹{orderSummary.totalEstimatedCost.toLocaleString()}</strong>
+                <span className={isServepoint ? 'text-[#6B8579]' : 'text-[#A8A29E]'}>Est. PO Total:</span>{' '}
+                <strong className={`text-sm ${isServepoint ? 'text-[#0F3D3E]' : 'text-[#F97316]'}`}>₹{orderSummary.totalEstimatedCost.toLocaleString()}</strong>
               </div>
             </div>
           </div>
 
           {/* Table of items to restock */}
-          <div className="border border-[#E9E0D6] rounded-xl overflow-hidden">
+          <div className={`border rounded-xl overflow-hidden ${isServepoint ? 'border-[#E3E7E0]' : 'border-[#E9E0D6]'}`}>
             <div className="max-h-72 overflow-y-auto">
               <table className="w-full text-left text-xs border-collapse">
-                <thead className="bg-[#FFF9F2] text-[#57534E] font-semibold sticky top-0 border-b border-[#E9E0D6] z-10">
+                <thead className={`font-semibold sticky top-0 border-b z-10 ${
+                  isServepoint ? 'bg-[#F6F5F2] text-[#6B6B6B] border-[#E3E7E0]' : 'bg-[#FFF9F2] text-[#57534E] border-[#E9E0D6]'
+                }`}>
                   <tr>
                     <th className="p-2.5">Item & Unit</th>
                     <th className="p-2.5 text-right">Current</th>
@@ -275,10 +286,10 @@ export const RestockOrderModal: React.FC<RestockOrderModalProps> = ({
                     <th className="p-2.5 text-right">Est. Cost</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-[#E9E0D6] bg-white">
+                <tbody className={`divide-y bg-white ${isServepoint ? 'divide-[#E3E7E0]' : 'divide-[#E9E0D6]'}`}>
                   {targetIngredients.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="text-center py-8 text-[#A8A29E]">
+                      <td colSpan={6} className={`text-center py-8 ${isServepoint ? 'text-[#6B8579]' : 'text-[#A8A29E]'}`}>
                         All inventory stock levels are healthy! No items need restocking.
                       </td>
                     </tr>
@@ -292,27 +303,33 @@ export const RestockOrderModal: React.FC<RestockOrderModalProps> = ({
                       return (
                         <tr
                           key={item.id}
-                          className={isLow ? 'bg-[#FEF2F2]/40 hover:bg-[#FEF2F2]/70' : 'hover:bg-[#FFFDF9]'}
+                          className={
+                            isLow
+                              ? 'bg-[#FEF2F2]/40 hover:bg-[#FEF2F2]/70'
+                              : isServepoint
+                                ? 'hover:bg-[#F6F5F2]/60'
+                                : 'hover:bg-[#FFFDF9]'
+                          }
                         >
-                          <td className="p-2.5 font-semibold text-[#1C1917]">
+                          <td className={`p-2.5 font-semibold ${isServepoint ? 'text-[#1A1A1A]' : 'text-[#1C1917]'}`}>
                             <div className="flex items-center gap-1.5">
                               {isLow && <AlertTriangle className="w-3.5 h-3.5 text-[#B42318] shrink-0" />}
                               <span>{item.name}</span>
                             </div>
-                            <span className="text-[10px] text-[#A8A29E]">Unit: {item.unit}</span>
+                            <span className={`text-[10px] ${isServepoint ? 'text-[#6B8579]' : 'text-[#A8A29E]'}`}>Unit: {item.unit}</span>
                           </td>
 
-                          <td className="p-2.5 text-right font-mono font-bold text-[#1C1917]">
+                          <td className={`p-2.5 text-right font-bold ${isServepoint ? 'text-[#0F3D3E]' : 'font-mono text-[#1C1917]'}`}>
                             {item.stock_qty.toLocaleString()} {item.unit}
                           </td>
 
-                          <td className="p-2.5 text-right font-mono text-[#57534E]">
+                          <td className={`p-2.5 text-right ${isServepoint ? 'text-[#6B6B6B]' : 'font-mono text-[#57534E]'}`}>
                             {item.low_stock_threshold.toLocaleString()} {item.unit}
                           </td>
 
                           <td className="p-2.5 text-right">
                             {isLow ? (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#FEF2F2] text-[#B42318] border border-[#FECACA]">
+                              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#FEF2F2] text-[#B42318] border ${isServepoint ? 'border-[#B42318]/25' : 'border-[#FECACA]'}`}>
                                 Deficit: {item.low_stock_threshold - item.stock_qty} {item.unit}
                               </span>
                             ) : (
@@ -329,13 +346,17 @@ export const RestockOrderModal: React.FC<RestockOrderModalProps> = ({
                                 min={0}
                                 value={qty}
                                 onChange={(e) => handleQtyChange(item.id, Number(e.target.value) || 0)}
-                                className="w-20 text-right font-mono font-bold bg-[#FFFDF9] border border-[#E9E0D6] rounded-lg px-2 py-1 text-xs focus:ring-1 focus:ring-[#F97316] text-[#1C1917]"
+                                className={`w-20 text-right font-bold rounded-lg px-2 py-1 text-xs focus:outline-hidden ${
+                                  isServepoint
+                                    ? 'bg-white border border-[#E3E7E0] focus:border-[#B88E2F] focus:ring-1 focus:ring-[#B88E2F]/30 text-[#0F3D3E]'
+                                    : 'bg-[#FFFDF9] border border-[#E9E0D6] focus:ring-1 focus:ring-[#F97316] font-mono text-[#1C1917]'
+                                }`}
                               />
-                              <span className="text-[10px] text-[#57534E] w-6 text-left">{item.unit}</span>
+                              <span className={`text-[10px] w-6 text-left ${isServepoint ? 'text-[#6B8579]' : 'text-[#57534E]'}`}>{item.unit}</span>
                             </div>
                           </td>
 
-                          <td className="p-2.5 text-right font-mono font-bold text-[#F97316]">
+                          <td className={`p-2.5 text-right font-bold ${isServepoint ? 'text-[#0F3D3E]' : 'font-mono text-[#F97316]'}`}>
                             ₹{estTotal.toLocaleString()}
                           </td>
                         </tr>
@@ -349,7 +370,7 @@ export const RestockOrderModal: React.FC<RestockOrderModalProps> = ({
 
           {/* Supplier Order Remarks */}
           <div>
-            <label className="block text-xs font-semibold text-[#1C1917] mb-1">
+            <label className={`block text-xs font-semibold mb-1 ${isServepoint ? 'text-[#1A1A1A]' : 'text-[#1C1917]'}`}>
               Supplier Delivery Notes & Invoice Instructions
             </label>
             <input
@@ -357,18 +378,24 @@ export const RestockOrderModal: React.FC<RestockOrderModalProps> = ({
               value={supplierNotes}
               onChange={(e) => setSupplierNotes(e.target.value)}
               placeholder="e.g. Deliver before 9 AM, gate B entry, invoice to Artisan Cafe Pvt Ltd"
-              className="w-full bg-[#FFF9F2] border border-[#E9E0D6] rounded-xl px-3 py-2 text-xs text-[#1C1917] focus:ring-2 focus:ring-[#F97316] focus:outline-hidden"
+              className={`w-full rounded-xl px-3 py-2 text-xs focus:outline-hidden ${
+                isServepoint
+                  ? 'bg-white border border-[#E3E7E0] text-[#1A1A1A] focus:border-[#B88E2F] focus:ring-1 focus:ring-[#B88E2F]/30'
+                  : 'bg-[#FFF9F2] border border-[#E9E0D6] text-[#1C1917] focus:ring-2 focus:ring-[#F97316]'
+              }`}
             />
           </div>
         </div>
 
         {/* Footer Actions */}
-        <div className="p-4 bg-[#FFF9F2] border-t border-[#E9E0D6] flex flex-wrap items-center justify-between gap-2">
+        <div className={`p-4 border-t flex flex-wrap items-center justify-between gap-2 ${isServepoint ? 'bg-[#F6F5F2] border-[#E3E7E0]' : 'bg-[#FFF9F2] border-[#E9E0D6]'}`}>
           <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={handleCopyPO}
-              className="px-3 py-2 rounded-xl bg-white border border-[#D5C9BD] hover:bg-[#F5EBE1] text-[#1C1917] font-semibold text-xs flex items-center gap-1.5 transition-colors shadow-xs"
+              className={`px-3 py-2 rounded-xl font-semibold text-xs flex items-center gap-1.5 transition-colors shadow-xs ${
+                isServepoint ? 'bg-white border border-[#E3E7E0] hover:bg-[#F6F5F2] text-[#0F3D3E]' : 'bg-white border border-[#D5C9BD] hover:bg-[#F5EBE1] text-[#1C1917]'
+              }`}
             >
               {copied ? (
                 <>
@@ -386,9 +413,11 @@ export const RestockOrderModal: React.FC<RestockOrderModalProps> = ({
             <button
               type="button"
               onClick={handleExportCSV}
-              className="px-3 py-2 rounded-xl bg-white border border-[#D5C9BD] hover:bg-[#F5EBE1] text-[#1C1917] font-semibold text-xs flex items-center gap-1.5 transition-colors shadow-xs"
+              className={`px-3 py-2 rounded-xl font-semibold text-xs flex items-center gap-1.5 transition-colors shadow-xs ${
+                isServepoint ? 'bg-white border border-[#E3E7E0] hover:bg-[#F6F5F2] text-[#0F3D3E]' : 'bg-white border border-[#D5C9BD] hover:bg-[#F5EBE1] text-[#1C1917]'
+              }`}
             >
-              <FileSpreadsheet className="w-3.5 h-3.5 text-[#10B981]" />
+              <FileSpreadsheet className={`w-3.5 h-3.5 ${isServepoint ? 'text-[#17803D]' : 'text-[#10B981]'}`} />
               <span>Download CSV</span>
             </button>
           </div>
@@ -397,7 +426,9 @@ export const RestockOrderModal: React.FC<RestockOrderModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="px-3.5 py-2 rounded-xl border border-[#E9E0D6] font-semibold text-xs text-[#57534E] hover:bg-[#F5F0EB]"
+              className={`px-3.5 py-2 rounded-xl border font-semibold text-xs ${
+                isServepoint ? 'border-[#E3E7E0] text-[#6B6B6B] hover:bg-[#F6F5F2]' : 'border-[#E9E0D6] text-[#57534E] hover:bg-[#F5F0EB]'
+              }`}
             >
               Close
             </button>
@@ -406,7 +437,9 @@ export const RestockOrderModal: React.FC<RestockOrderModalProps> = ({
               type="button"
               onClick={handleApplyRestock}
               disabled={applied || orderSummary.totalItems === 0}
-              className="px-4 py-2 rounded-xl bg-[#17803D] hover:bg-[#156f35] text-white font-bold text-xs shadow-xs flex items-center gap-1.5 transition-colors disabled:opacity-50"
+              className={`px-4 py-2 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-colors disabled:opacity-50 ${
+                isServepoint ? 'sp-cta' : 'bg-[#17803D] hover:bg-[#156f35] text-white shadow-xs'
+              }`}
             >
               <RefreshCw className={`w-3.5 h-3.5 ${applied ? 'animate-spin' : ''}`} />
               <span>{applied ? 'Stock Updated in TSOS!' : '1-Click Apply Restock to Stock'}</span>
