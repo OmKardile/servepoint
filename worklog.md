@@ -917,3 +917,26 @@ Unresolved Issues / Risks / Next-phase Priorities:
 2. Cloud auth rejected the wizard-generated temp password for new users ("Email address is invalid" notice) — accounts still sign in via the local registry; if the owner wants full cloud-auth parity, create users in the Supabase dashboard (documented in CREDENTIALS.md).
 3. Features outside the Figma (KDS, inventory, shifts, reports, QR storefront) are removed — they need owner-approved design frames before any return.
 4. No cron running (owner hold); next work on explicit owner instruction only.
+
+---
+Task ID: 24
+Agent: glm-5.3
+Task: New fresh Supabase DB (owner deleted old project) — rewire app + render.yaml, provision the clean DB end-to-end, fix the reported console errors (audit-logs 400 / tenants 403 / password grant 400), continue the v5 production round.
+
+Work Log:
+- Diagnosed owner console errors against the old project: platform_audit_logs 400 = PostgREST PGRST204 (app ordered by created_at; migration 001's canonical column is "timestamp"); tenants 403 = RLS enabled with no satisfiable policy (no superadmin metadata/membership); password grant 400 = no cloud users.
+- Wired the new project (gehjsxopcowmotgrrcgc) into src/lib/supabase.ts (URL + sb_publishable key), render.yaml envVars, help.md.
+- Probed connectivity: direct db.<ref>:5432 is IPv6-only (ECONNREFUSED); discovered the Supavisor session pooler by sweeping aws-{0..3}-{regions}: found aws-0-ap-northeast-2.pooler.supabase.com (user postgres.<ref>).
+- Wrote scripts/db-setup.mjs (idempotent: per-migration sentinels → applies 001→005 → verification block). First run applied 001-004; fixed 005 against GoTrue's GENERATED auth.identities.email column; final run green: 16 public tables, policies (tenants 4 / subscriptions 2 / audit 3), audit columns include generated created_at, bootstrap operator seeded (auth.users + identities + tenant-free tenant_users superadmin row), 0 rows of data.
+- Wrote supabase/migrations/005_production_baseline_hardening.sql: created_at STORED generated alias of timestamp; guarded policy re-ensures (001's exact names) for tenants/subscriptions/platform_audit_logs; bootstrap operator seed (bcrypt via pgcrypto located dynamically, role=superadmin in raw_user_meta_data, confirmed).
+- REST E2E (the exact failing URLs): password grant admin@tsos.dev/admin123456 → 200 JWT; GET platform_audit_logs?order=created_at.desc&limit=50 → 200 [] (was 400); GET tenants → 200 [] (was 403).
+- App fixes: AuditLogEntry type matches real schema (actor_email/details/timestamp); fetchAuditLogs orders by timestamp; PlatformScreen ActivityRow + Audit tab render actor_email/timestamp/details; authService pins user_metadata.role=superadmin for the bootstrap operator after cloud sign-in (updateUser + refreshSession, best-effort).
+- Browser E2E (agent-browser): login → Platform console, Dashboard/Businesses/Subscriptions/Audit all clean empty states; sign-out works; 390px mobile layout clean; console + dev.log error-free; tsc --noEmit 0 errors.
+- Secrets hygiene: deleted one-off probe scripts containing the DB password; db-setup.mjs now reads SUPABASE_DB_PASSWORD from env (verified no secrets in tracked tree); tool-results/ + dev.log gitignored; dropped a stray auto-commit (tool-results dump) via soft reset before pushing.
+- Docs synced: CHANGELOG 5.0.1, docs/CREDENTIALS.md (live project table, bootstrap account now real cloud user, db-setup usage), ADR-0015 + decisions index, help.md URL.
+- Commit 1b5468f (owner identity) pushed: d5a0fd8..1b5468f main == origin/main.
+
+Stage Summary:
+- Fresh Supabase project fully provisioned and connected; all three reported console errors fixed and proven 200 via REST; app + render.yaml on the new project; no demo data seeded (only the documented bootstrap operator).
+- Unresolved: none for this round. Owner may re-run SUPABASE_DB_PASSWORD='<pw>' bun scripts/db-setup.mjs any time (idempotent).
+- Crons: 0 — owner standing order respected (no automation scheduled).
