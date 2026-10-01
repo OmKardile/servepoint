@@ -1040,3 +1040,23 @@ Stage Summary:
 - The owner's blocker is DATA, not code: their business isn't in the cloud because it was provisioned from a stale build. Unblock = hard-refresh/redeploy the current build, sign in as admin@tsos.dev, re-run Add Business (writes to the cloud now), use the same owner email, sign the owner in with the wizard-shown password.
 - The confusing console 400 no longer repeats (grant-failure memory), and a missing workspace now shows one clear actionable screen instead of per-screen errors.
 - Crons: 0 — owner standing order respected.
+
+---
+Task ID: 30
+Agent: glm-5.3
+Task: Owner: "i like the new branding — ServePoint - smartPOS — change everywhere" + GitHub repo will be renamed to servepoint (switch when the old link errors).
+
+Work Log:
+- Inventoried every TSOS/SmartPOS mention (src, config, 30+ docs). Deliberate exclusions per governance: frozen AuthScreen (ADR-0016), admin@tsos.dev credential, live RLS function names tsos_is_tenant_* (referenced by applied policies), QR salt, tsos_auth_session localStorage key, Render service name tsos-pos (renaming in render.yaml would re-provision the service), historical records (CHANGELOG bodies, ADRs, worklogs, compacts, request history).
+- Precise code/config edits: sidebar footer -> "© 2026 ServePoint · smartPOS"; index.html title/og -> "ServePoint — smartPOS" + honest meta description (old one advertised v5-removed KDS/inventory/loyalty); metadata.json name; package.json name react-example -> servepoint; authService operator name -> 'ServePoint Developer'; rbac/types comments; migration 005 seed name (future reprovisions); schema.sql + render.yaml comments.
+- LIVE cloud updated: auth.users raw_user_meta_data for admin@tsos.dev -> name/full_name 'ServePoint Developer' (verified by readback).
+- Doc sweep: 105+ replacements across 24 living files (README, help, technical/business docs, design.md, design-tokens.json, all forward-looking specs, docs/README index, scripts/db-setup.mjs header, decisions.md, compact.md, CONTINUE/PROMPT).
+- CHANGELOG: header rebranded with "formerly TSOS" note + [5.0.6] entry + repo-rename governance note.
+- Verified: tsc 0 errors; lint clean; agent-browser — page title "ServePoint — smartPOS", login pixel-identical (frozen), operator profile card shows "ServePoint Developer", rendered-UI DOM scan = zero TSOS/old-SmartPOS strings (only the admin@tsos.dev credential remains, by design); dev.log clean.
+- Repo rename: tested both URLs — OmKardile/servepoint does not exist yet, tsos-alt alive at 12c390c → pushed 8cefb57 to the old URL (GitHub will redirect post-rename); flip remote + doc references to servepoint as soon as the old link errors (owner instruction).
+- Commit 8cefb57 pushed: 12c390c..8cefb57 main == origin/main.
+
+Stage Summary:
+- The product is now ServePoint — smartPOS everywhere user-visible and in every living doc/config; operator display name updated in app, migration seed, and live cloud.
+- Pending: owner's GitHub rename — then `git remote set-url origin https://github.com/OmKardile/servepoint.git` + update doc references (README/technical docs) on the next round that touches them (or immediately on push error).
+- Crons: 0 — owner standing order respected.
