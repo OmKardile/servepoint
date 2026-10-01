@@ -61,23 +61,27 @@ bootstrap operator, zero demo rows). To re-provision any environment idempotentl
 SUPABASE_DB_PASSWORD='<db-password>' bun scripts/db-setup.mjs
 ```
 
-The script applies any missing migration (001→006) via the session pooler and prints a
+The script applies any missing migration (001→007) via the session pooler and prints a
 verification summary. Migration files remain in `supabase/migrations/` for the SQL-editor
 route as well.
+
+**CLI SQL channel is OPERATIONAL (since 2026-10-01, v5.1.2):** the owner supplied the DB
+password in-chat; migrations 001→007 were applied from the CLI and live-verified. Every
+future migration now applies automatically via `db-setup.mjs` — no SQL-editor step. The
+password is passed only as an env var on the command line and is never stored in the repo,
+the worklog, or any committed file.
 
 Until a table's migration is applied, its surface shows an honest error/empty state —
 never a crash.
 
 ## Fix (2026-10-01): RLS recursion on Messages / Notifications / Team (migration 006)
 
-Symptom: those screens showed *"infinite recursion detected in policy for relation
-tenant_users"* (Postgres 42P17). Root cause: migration 001's tenant_users policy
-referenced tenant_users itself, and migration 004's policies sub-queried tenant_users.
-
-**One-time fix — Supabase Dashboard → SQL Editor → paste the full contents of
-`supabase/migrations/006_fix_rls_recursion.sql` → Run → back in the app, hit Retry.**
-(Idempotent; touches no data.) Equivalent alternative: `SUPABASE_DB_PASSWORD='<db-password>'
-bun scripts/db-setup.mjs` — db-setup now applies 006 automatically.
+**RESOLVED (2026-10-01, migration 006 applied and live-verified; superseded by the CLI SQL
+channel above — 006 ran from the CLI on re-provision).** Historical note: those screens
+showed *"infinite recursion detected in policy for relation tenant_users"* (Postgres 42P17).
+Root cause: migration 001's tenant_users policy referenced tenant_users itself, and
+migration 004's policies sub-queried tenant_users. Fix: `006_fix_rls_recursion.sql`
+(idempotent; touches no data).
 
 ## One-time project setting: turn OFF "Confirm email"
 

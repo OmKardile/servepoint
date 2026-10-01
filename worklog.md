@@ -1126,3 +1126,26 @@ Stage Summary:
 - Three latent New-Sale crashes against the live schema were found and fixed BEFORE the owner hit them.
 - Next rounds (roadmap): KDS board → table floor/QR sessions → reports/EOD → inventory auto-deduction → customers/offers → shifts → feedback → offline/realtime.
 - ONE owner unblock for "EXECUTE SQL FROM CLI": export SUPABASE_DB_PASSWORD in the session (or run `SUPABASE_DB_PASSWORD='<pw>' bun scripts/db-setup.mjs` once) — then every future migration applies automatically from the CLI.
+
+---
+Task ID: 34
+Agent: glm-5.3
+Task: "logos" (owner uploaded the two official brand PNGs) + mid-round owner message: DB password in-chat, "CONTINUE / BEGIN THE CRON JOBS / keep pushing".
+
+Work Log:
+- Probed both PNGs with sharp before touching anything: "Brand Mark" = 2172×724 RGBA **pre-keyed transparent** (83.7% alpha=0, soft AA edges, content bbox 1754×332, icon|wordmark gap found at x=598); "Logo (1)" = 3D render, opaque, near-black #050505–#090909 background. (First probe pass was garbage — 16-bit-depth interpretation bug — fixed with raw({depth:'uchar'}).)
+- NEW scripts/build-brand-assets.mjs (committed): generates lockup-light.png (900w trim), mark.png (512 square-padded icon), favicon.png + favicon-32.png (rounded cream app-icon tiles), apple-touch-icon.png (180 full-bleed cream), og-image.jpg (1200×630 letterboxed 3D render). Masters committed at docs/design/servepoint/brand/src/ + brand/README.md provenance + regen command.
+- index.html: the app's FIRST favicon set (32+128), apple-touch-icon, theme-color #0F3D3E, og:image/twitter:image.
+- Sidebar.tsx + PlatformScreen.tsx: temporary gold CookingPot circle → sage #D9E2DD rounded-xl tile holding the real mark (near-black "Serve" would vanish on teal, so wordmark stays as text); App.tsx Splash: gold glyph + text row → full flat lockup. CookingPot import removed from PlatformScreen. AuthScreen byte-identical (ADR-0016).
+- Mid-round the owner supplied the DB password → "EXECUTE SQL FROM CLI" delivered on the spot: db-setup.mjs via session pooler → 001–004+006 SKIP (sentinels matched), 005 idempotent re-apply, **007 APPLIED** — payments + order_status_history now live production tables. REST proof: sp_advance_order on a dummy UUID → engine's own P0002 "Order not found" (no PGRST202 fallback); GET /rest/v1/payments → 200 [] (RLS correct). Password used ONLY as a CLI env var — swept the repo to confirm it exists in no file.
+- Verified: tsc 0 errors; lint clean; favicon-32/favicon/apple-touch/og all HTTP 200; agent-browser E2E — Platform sidebar renders the real mark in the sage tile (screenshot), sign-out → login pixel-identical (screenshot), statics clean. Dev log clean (HMR lines only).
+- Docs: CHANGELOG [5.1.1] (brand) + [5.1.2] (CLI SQL + crons); CREDENTIALS.md — CLI channel marked OPERATIONAL, 006 section marked RESOLVED.
+- CRON: owner explicitly reversed the crons-0 standing order ("BEGIN THE CRON JOBS") → recurring 15-minute webDevReview job created (fixed_rate 900s) with the mandatory assess→QA→fix/develop→handover description.
+- Commit + push (owner identity) follows this record.
+
+Stage Summary:
+- Real ServePoint branding end-to-end: favicon in the tab, mark on both dark rails, full lockup on the Splash, 3D render as the social card; every derivative regenerable via `bun scripts/build-brand-assets.mjs`.
+- Migration 007 (order engine) is LIVE — sp_advance_order / sp_record_payment are the real write path from this moment; the Bills console legacy fallback is dead code on this project.
+- CLI SQL channel is open: future migrations apply automatically from the CLI; the owner never opens the SQL Editor again.
+- Crons: 15-min webDevReview ACTIVE (owner directive supersedes the old crons-0 rule).
+

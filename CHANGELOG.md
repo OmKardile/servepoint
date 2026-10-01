@@ -3,6 +3,16 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.1.2] — 2026-10-01 — "EXECUTE SQL FROM CLI" delivered: migration 007 is LIVE + crons begun
+
+### CLI SQL channel opened (owner supplied the DB password in-chat)
+- `SUPABASE_DB_PASSWORD='…' bun scripts/db-setup.mjs` connected via the session pooler as `postgres.gehjsxopcowmotgrrcgc` and ran the chain idempotently: 001–004 + 006 correctly SKIPped (sentinels matched), 005 re-applied (idempotent by design), **007 APPLIED ✓** — `payments` and `order_status_history` are now live production tables. The password exists only as a command-line env var — never in the repo, worklog, or any committed file.
+- **Live REST proof**: `POST /rest/v1/rpc/sp_advance_order` on a dummy UUID → the engine's own `{"code":"P0002","message":"Order not found"}` (the guarded RPC exists and executes — no PGRST202 fallback anymore); `GET /rest/v1/payments` → **200 `[]`** (RLS working; tenant-free operator correctly sees zero rows). The Bills console's guarded RPCs now hit the real cloud; the legacy-write fallback is dead code on this project.
+- From now on every migration applies from the CLI automatically — the owner never touches the SQL Editor again.
+
+### Crons begun (owner directive — supersedes the "crons 0" standing order)
+- A recurring 15-minute **webDevReview** job now drives autonomous rounds: status assessment + agent-browser QA → fix bugs or advance the NOVA roadmap (KDS board next) → worklog handover each round.
+
 ## [5.1.1] — 2026-10-01 — Official Brand Assets Applied (owner-supplied logos)
 
 ### Added — real ServePoint logos everywhere the temporary gold CookingPot glyph stood
