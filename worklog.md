@@ -643,3 +643,28 @@ Unresolved Issues / Risks / Next-phase Priorities:
 1. orders INSERT RLS (42501) + customers/offers anon 404 — migration 001 re-run on live Supabase still owed by owner (unchanged).
 2. Note for future agents: store initializer migrates stored 'tessera' → 'servepoint' on boot (v2.6.6 migration), so legacy warm/tessera must be reached via setThemeMode (dark works for legacy-branch checks).
 3. The drawer modal's "Save Reconciliation & Clock Out" stays danger red #B42318 in ServePoint (intentional semantic danger, not legacy orange).
+
+---
+Task ID: 20
+Agent: glm-5.3 (coordinator)
+Task: Answer owner's "implemented the figma design prototype?" + continue ALL — final ADR-0011 roadmap pass: Inventory + Menu + Shifts + Settings explicit ServePoint (v3.0.0, surfaces 16-19) via parallel subagents 20-a/20-b
+
+Work Log:
+- Answered the owner's question: YES — the Figma (ServePoint) prototype was implemented progressively since v2.6.6; 15 surfaces were explicit as of v2.9.0; remaining were Inventory/Menu/Shifts/Settings. FIGMA_TOKEN verified present in .env (ADR-0012 honored); git clean at v2.9.0; dev server 200.
+- Verified the Figma frame archive (57 frames) and re-read the design references for this pass: Food_&_Drinks_219-29357 (menu tiles, gold selected), Checkout_Settings_219-29597 (sage section-nav card, gold toggles, full-width gold Save Changes).
+- Dispatched parallel subagents: 20-a (Inventory + RestockOrderModal + Menu) and 20-b (Shifts + DrawerReconciliationModal + Settings), each with strict file scopes, the ServePoint token cheat sheet, legacy-byte-preservation rules, and 2 new features each. Both completed: tsc/lint clean, own E2E verified, worklog sections appended.
+- Central verification: npx tsc --noEmit → 0; bun run lint → 0; agent-browser E2E — Inventory (Restock CTA), Menu (availability strip "7 of 7 items available • 0 sold out", sort Price Low–High → ₹40 samosa first), Settings (sage nav card, deep-teal active "Printer & Hardware" row, section switching; screenshot visually matches the Figma frame), Shifts (Shift duration tickers ×2, All/Open/Closed filter click-tested); dark round-trip legacy intact (pixel sample 20,38,32); zero console errors (known 42501 RLS only).
+- Docs synced (7): CHANGELOG [3.0.0]; technical-documentation 3.0.0 + explicit-surfaces extended with the four surfaces + ROADMAP COMPLETE note; business-documentation 3.0.0 + v3.0.0 product note; compact.md 3.0.0 + shipped paragraph; README bullet; help.md new "🍽️ Inventory, Menu, Shifts & Settings (v3.0.0)" section; decisions.md ADR-0011 consequences updated to COMPLETE (19/19) — no new ADR (0011/0012 continuation).
+- Commit cb0c59a pushed to main (14 files, +1783/−532); git log clean (no stray auto-committer commits).
+
+Stage Summary:
+- v3.0.0 shipped: **the ADR-0011 explicit-ServePoint roadmap is COMPLETE** — every operator surface (19 total) now renders the owner's Figma design language. All 4 final screens converted + 4 new operator features (menu availability strip, menu sort, shift-duration ticker, shift-history filter).
+- All explicit ServePoint surfaces: Header, WebNavbar, PosScreen cards, CartDrawer, PaymentModal, Dine-in Tables, Reports/Dashboard + internals, ReceiptModal, Orders two-pane, SuperAdmin shell + dashboard, Storefront, OrderTracking, Customers, Offers, Inventory, Menu, Shifts, Settings.
+- Subagent notes worth keeping: (a) the store's v2.6.6 migration remaps persisted 'tessera'→'servepoint' at boot, so legacy-theme verification must use the header toggle, not localStorage; (b) semantic colors (green/red stock health, danger-red Save & Clock Out, FSSAI veg marks) intentionally kept outside the gold/sage palette.
+
+Unresolved Issues / Risks / Next-phase Priorities:
+1. orders INSERT RLS (42501) + customers/offers anon 404 — migration 001 DDL/policies re-run on the live Supabase project still owed by the owner (no Postgres connection string in sandbox).
+2. Realtime POS→KDS cloud-path E2E still pending the RLS fix; local Zustand path verified.
+3. Menu/Inventory mutations still local-only; no automated tests.
+4. Next-highest-value passes now that the roadmap is complete: polish loop on converted surfaces (micro-interactions, empty states), AuthScreen unfreeze awaits owner, SuperAdmin platform RPC aggregates once migration 001 lands.
+5. Session note: verify_and_consume_table_session is idempotent on valid tokens — revisit single-use semantics if the owner wants one-order-per-scan.
