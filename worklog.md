@@ -561,3 +561,34 @@ Unresolved Issues / Risks / Next-phase Priorities:
 3. Menu builder mutations still local-only; no automated tests.
 4. Session note: verify_and_consume_table_session is idempotent on valid tokens (probed twice) — revisit single-use semantics if the owner wants one-order-per-scan.
 5. Tracking "Pickup Counter" label appears when an order lacks table_label (e.g. QR orders placed before table binding) — cosmetic, candidate for next round.
+
+---
+Task ID: 19
+Agent: glm-5.3
+Task: Continue after context compaction — answer owner's "last request/response" question, repair sandbox worktree noise, land FIGMA_TOKEN in .env (ADR-0012), then Customers + Offers explicit ServePoint pass + OrderTracking label fix (v2.9.0)
+
+Work Log:
+- Resumed from compaction: answered the owner's question (last requests = Figma PAT "save in env render too" + "continue ALL"; response cut off mid-execution).
+- Found the fig2sketch conversion products were 22-byte empty ZIP stubs (silent failure) — moot: ServePoint frames were already exported via the PAT in earlier rounds (docs/design/servepoint/frames/, 57 PNGs).
+- Discovered worklog was far ahead of the stale summary: Tasks 11-18 had run (v2.8.1 shipped, Storefront/OrderTracking explicit ServePoint, guest journey fixed E2E).
+- Sandbox noise repair: worktree had 189 mode-change files, docs/design/servepoint/** deleted, .gitignore rewritten 25→2 lines (un-ignoring .env*/upload/db/prisma — secrets hazard). `git restore .` → clean at HEAD (v2.8.1). Design exports restored (57 frames verified).
+- ADR-0012 compliance: render.yaml already declares FIGMA_TOKEN (sync:false, Render secret class); appended `FIGMA_TOKEN=figd_UPH…` to gitignored .env (was missing) — owner's "save in env render too" now fully honored.
+- Dev server: was down; start-stop-daemon relaunch with explicit CWD inside bash -c (the earlier "Script not found dev" was a CWD artifact); stable on port 3000.
+- ANSI-cleaner false alarm: OrdersScreen "const anualPrintOrder" corruption appeared in tool output only (cleaner eats `[m` byte pairs in transit); file verified fine via tsc — no repair needed.
+- v2.9.0 code: OffersScreen.tsx full explicit ServePoint rewrite (isServepoint ternaries, legacy warm preserved): ivory canvas, white+hairline header, sage icon chips, gold Create Coupon sp-cta, white cards w/ gold-border hover, sage code chips (deep-teal mono), sage Active/danger Disabled chips, deep-teal values (mono retired), gold Pause/Activate links, modal w/ deep-teal submit. CustomersScreen.tsx targeted explicit pass: themeMode+isServepoint added; ServePoint tier-badge palette (Platinum deep-teal tint / Gold pressed-gold / Silver sage-slate / Bronze sage); ivory canvas; header sage chip + gold Register CTA; 4 KPI cards (white hairline / sage-tint deep-teal / gold-tint pressed-gold / white green); deep-teal active tier tabs + sage hover; table ivory thead + #E3E7E0 dividers + sage avatars + sage loyalty chips + gold progress bars on sage tracks + deep-teal POS Order button + white Receipts ghost w/ gold glyph; detail modal deep-teal avatar + deep-teal gradient loyalty card (#0F3D3E→#0B3132) + gold Redeem at POS + deep-teal active tabs; add-modal deep-teal focus rings + sage note. Fixed MultiEdit orphan (duplicate tier-tabs array left after filter-bar replacement) — removed.
+- OrderTrackingScreen.tsx: fallback label 'Pickup Counter' → 'Guest Order' (both occurrences; table-less QR orders, cosmetic debt from Task 18).
+- Docs: CHANGELOG [2.9.0]; technical-documentation 2.9.0 + explicit-surfaces extended (Customers+Offers added; next → Inventory/Menu/Tables/Shifts/Settings loop); business-documentation 2.9.0 + v2.9.0 product note in §5 Loyalty; compact.md 2.9.0 + shipped paragraph; README bullet; help.md new "👥 Customers & Offers (v2.9.0)" section. decisions.md unchanged (no new ADR — ADR-0011/0012 continuation).
+- Verified: npx tsc --noEmit → 0 errors; git check-ignore .env → ignored (secrets safe); agent-browser E2E — Owner demo login → Customers (KPI cards, tier tabs, table w/ sage avatars + gold progress bars, detail modal w/ deep-teal loyalty card + gold Redeem, all screenshot-verified) → Offers (cards + Create Coupon modal → MONSOON20 created E2E → card renders) → Pause toggle → Disabled + Activate; theme round-trip servepoint→tessera (legacy purple/chartreuse intact)→dark→servepoint; mobile 390px clean; zero console errors.
+- Commit 9ac9e3b pushed to main (9 files, +287/−114); no stray auto-committer commits this round.
+
+Stage Summary:
+- v2.9.0 shipped: Customers CRM + Offers are the 14th/15th explicit ServePoint surfaces — the loyalty/promo group now matches the owner's Figma language, including the deep-teal gradient loyalty member card with gold Redeem-at-POS.
+- All explicit ServePoint surfaces: Header, WebNavbar, PosScreen cards, CartDrawer, PaymentModal, Dine-in Tables, Reports/Dashboard + internals, ReceiptModal, Orders two-pane, SuperAdmin shell + dashboard, Storefront, OrderTracking, Customers, Offers.
+- Next highest-value passes per ADR-0011 roadmap: Inventory, Menu builder, Tables (remaining bits), Shifts, Settings loop.
+
+Unresolved Issues / Risks / Next-phase Priorities:
+1. orders INSERT RLS (42501) + customers/offers anon 404 — migration 001 DDL/policies re-run on the live Supabase project still owed by the owner (no Postgres connection string in sandbox).
+2. Realtime POS→KDS cloud-path E2E still pending the RLS fix; local Zustand path verified.
+3. Menu builder mutations still local-only; no automated tests.
+4. Sandbox housekeeping risks recur between rounds: watch for (a) worktree mode-change/deletion noise → `git restore .`, (b) dev server reaped → start-stop-daemon with explicit CWD, (c) tool-output ANSI cleaner eating `[m` → verify with tsc before "repairing" files.
+5. Session note: verify_and_consume_table_session is idempotent on valid tokens — revisit single-use semantics if the owner wants one-order-per-scan.
