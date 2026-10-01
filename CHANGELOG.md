@@ -1,7 +1,16 @@
 # Changelog
 
-All notable changes to **TSOS (The Cafe Operating System)** are recorded in this file.
+All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [5.0.6] — 2026-10-01 — Rebrand: ServePoint — smartPOS Everywhere (owner directive)
+
+### Changed
+- **Product renamed TSOS → ServePoint across the entire living tree** (owner: "i like the new branding — ServePoint - smartPOS — change everywhere"): UI strings, `index.html` title/og tags + honest meta description (the old one advertised KDS/inventory/loyalty features removed in v5.0.0), `metadata.json`, `package.json` name (`react-example` → `servepoint`), sidebar footer (© 2026 ServePoint · smartPOS), operator display name (`ServePoint Developer` — app constant, migration 005 seed for future reprovisions, and the LIVE cloud `auth.users` metadata updated via pooler), and 20+ living docs (README, help, technical/business docs, design reference, all forward-looking specs, render.yaml comments, design-tokens.json).
+- **Deliberately NOT renamed** (identifiers/history, not branding): the `admin@tsos.dev` operator email (documented credential, seeded in cloud auth), live DB function names `tsos_is_tenant_*` (referenced by applied RLS policies), the QR salt, `tsos_auth_session` localStorage key, the Render service name `tsos-pos` (renaming it in render.yaml would re-provision the service), the frozen login screen (ADR-0016), and historical records (CHANGELOG entry bodies, ADRs, worklogs, compacts).
+
+### Governance — GitHub repo rename
+- Owner renames `OmKardile/tsos-alt` → `OmKardile/servepoint`; pushes continue on the old URL until it errors (GitHub redirects renamed repos), then remote + doc references flip to the new name.
 
 ## [5.0.5] — 2026-10-01 — "Workspace not found" Diagnosed + One Actionable No-Workspace Screen
 

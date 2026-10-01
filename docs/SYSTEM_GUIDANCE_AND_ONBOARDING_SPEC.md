@@ -1,4 +1,4 @@
-# TSOS System Guidance & First-Time Usage Specification
+# ServePoint System Guidance & First-Time Usage Specification
 **Document Version:** 1.0.0  
 **Target Audience:** Cafe Operators, Cashiers, Baristas, and Automated AI Implementation Engines  
 **Modules Covered:** Contextual Hover Tooltips, Interactive Onboarding Tour, Dynamic Surface Switcher, Keyboard Accelerators, and Training Mode
@@ -7,7 +7,7 @@
 
 ## 1. System Overview
 
-Cafe staff experience rapid turnover. To eliminate lengthy software training and operator error during peak service hours, TSOS incorporates a zero-latency, two-tiered guidance engine:
+Cafe staff experience rapid turnover. To eliminate lengthy software training and operator error during peak service hours, ServePoint incorporates a zero-latency, two-tiered guidance engine:
 1. **Tier 1: Contextual Hover Tooltips (`GuidanceTooltip.tsx`):** Ambient, non-intrusive floating badges that activate on hover or keyboard focus, displaying operational guidance, keyboard shortcuts, and business impact.
 2. **Tier 2: Guided Interactive Walkthrough Tour (`OnboardingTourModal.tsx`):** A step-by-step interactive onboarding sequence that walks first-time users through the POS register, order customization, loyalty redemption, KDS kitchen workflows, table maps, and fiscal reconciliation.
 
@@ -15,7 +15,7 @@ Cafe staff experience rapid turnover. To eliminate lengthy software training and
 
 ## 2. Guidance Data Dictionary (`src/data/guidanceData.ts`)
 
-Every interactive feature in TSOS is registered in a centralized dictionary containing the following schema:
+Every interactive feature in ServePoint is registered in a centralized dictionary containing the following schema:
 
 ```typescript
 export interface GuidanceItem {
@@ -54,17 +54,17 @@ export interface GuidanceItem {
 
 ## 3. Interactive Walkthrough Tour Sequence
 
-When a user launches TSOS for the first time (or clicks the **Tour** button in the header), the state machine initiates a step-by-step interactive walkthrough:
+When a user launches ServePoint for the first time (or clicks the **Tour** button in the header), the state machine initiates a step-by-step interactive walkthrough:
 
 ### Step 1: Welcome & Mission
 - **Tab:** `pos`
 - **Focus:** Application header & brand banner.
-- **Narrative:** Introduces TSOS as the open, high-speed cafe operating system with zero monthly subscription fees and instant thermal printing.
+- **Narrative:** Introduces ServePoint as the open, high-speed cafe operating system with zero monthly subscription fees and instant thermal printing.
 
 ### Step 2: Multi-Surface Architecture & Cloud Sync
 - **Tab:** `pos`
 - **Focus:** Surface switcher and Cloud Sync status pill.
-- **Narrative:** Demonstrates how TSOS unifies Web, Android, Windows, and Customer Storefront into a single synchronized database, maintaining offline operability.
+- **Narrative:** Demonstrates how ServePoint unifies Web, Android, Windows, and Customer Storefront into a single synchronized database, maintaining offline operability.
 
 ### Step 3: Catalog Navigation & Item Modifiers
 - **Tab:** `pos`

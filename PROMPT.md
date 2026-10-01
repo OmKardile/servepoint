@@ -1,12 +1,12 @@
-# MASTER PROMPT: TSOS (The Simple Operating System) - Omnichannel Cafe & Restaurant POS Engine
+# MASTER PROMPT: ServePoint (The Simple Operating System) - Omnichannel Cafe & Restaurant POS Engine
 
-> **Prompt Usage**: Provide this prompt to any AI coding assistant (Gemini, Claude, Antigravity, Cursor, ChatGPT) to reproduce the complete **TSOS** multi-surface cafe operating system from scratch in React 19, TypeScript 7, Tailwind CSS 4.3, Lucide Icons, and Zustand 5.
+> **Prompt Usage**: Provide this prompt to any AI coding assistant (Gemini, Claude, Antigravity, Cursor, ChatGPT) to reproduce the complete **ServePoint** multi-surface cafe operating system from scratch in React 19, TypeScript 7, Tailwind CSS 4.3, Lucide Icons, and Zustand 5.
 
 ---
 
 ```markdown
 You are a senior full-stack software architect and native systems engineer.
-Build **TSOS (The Simple Operating System)** — an omnichannel, offline-resilient, hardware-integrated Point of Sale, Kitchen Display System (KDS), Table-Side Ordering Storefront, and Management OS for specialty cafes, roasteries, bakeries, and QSRs.
+Build **ServePoint (The Simple Operating System)** — an omnichannel, offline-resilient, hardware-integrated Point of Sale, Kitchen Display System (KDS), Table-Side Ordering Storefront, and Management OS for specialty cafes, roasteries, bakeries, and QSRs.
 
 ---
 
@@ -52,7 +52,7 @@ The application must execute across 5 distinct operational surfaces driven by a 
   - `platform_fee` = `feeConfig.default_fee_payer === 'customer' ? feeConfig.per_order_fee : 0`
   - `grand_total` = `Math.max(0, taxable_amount + tax_total + platform_fee)`
 
-### 2.3 TSOS Club Loyalty Engine
+### 2.3 ServePoint Club Loyalty Engine
 - **Earn Rate**: 1 Loyalty Point per ₹10 spent on subtotal (floored).
 - **Redemption Rate**: 1 Point = ₹1.00 cash discount.
 - **Dynamic Tiering**:

@@ -1,4 +1,4 @@
-# TSOS Mobile Native Clients Specification (Android & iOS)
+# ServePoint Mobile Native Clients Specification (Android & iOS)
 **Document Version:** 1.0.0  
 **Android Platform:** Kotlin 2.1, Jetpack Compose, Android 10+ (API 29 to 35)  
 **iOS Platform:** Swift 6.0, SwiftUI, iOS 16+  
@@ -10,7 +10,7 @@
 ## 1. Android Native Handheld Architecture (Kotlin & Jetpack Compose)
 
 ### 1.1 Tech Stack
-- **UI Framework:** Jetpack Compose (Declarative UI matching TSOS design tokens)
+- **UI Framework:** Jetpack Compose (Declarative UI matching ServePoint design tokens)
 - **Architecture:** MVI / Clean Architecture (ViewModel + StateFlow + Kotlin Coroutines)
 - **Local Database:** Room Database with SQLCipher encryption and TypeConverters
 - **Network & Sync:** Retrofit 2 + OkHttp with WebSocket client + WorkManager for offline replay
@@ -160,7 +160,7 @@ class CoreBluetoothPrinterManager: NSObject, CBCentralManagerDelegate, CBPeriphe
 ---
 
 ## 3. Offline Data Synchronization & Conflict Resolution
-Both Android and iOS clients implement the standard TSOS offline replication lifecycle:
+Both Android and iOS clients implement the standard ServePoint offline replication lifecycle:
 1. **Local Append First:** Orders placed on mobile are immediately saved to local Room/SwiftData with `status = 'pending_sync'`.
 2. **KOT Immediate Print:** Even if Wi-Fi is disconnected, local handhelds print the KOT via Bluetooth directly to the kitchen printer.
 3. **Background Sync Worker (`WorkManager` / `BGAppRefreshTask`):** Automatically detects restored internet connectivity, batches offline orders, and executes HTTPS `POST /api/orders/sync-batch`.
@@ -176,7 +176,7 @@ The Customer Android (Kotlin/Jetpack Compose) and iOS (SwiftUI) applications are
 - **Table Booking & Floor Map:** Allows guests to view table occupancy, select party size (1-8 guests), and reserve or check into their table.
 - **Interactive Menu:** Displays cafe categories, pure-veg/vegan/non-veg dietary flags, calorie & allergen badges, and customizable item sheets (milk choice, sweetness, extra shots).
 - **Table Cart & Loyalty Redemption:** Integrates customer points balance (1 pt = ₹1 discount) with coupon codes and transparent CGST/SGST/Platform fee breakdown.
-- **Instant UPI Intent Checkout:** Initiates standard NPCI UPI payment intents (`upi://pay?pa=merchant@upi&am=...&pn=TSOS+Cafe`) with automatic receipt generation and KOT routing to the kitchen.
+- **Instant UPI Intent Checkout:** Initiates standard NPCI UPI payment intents (`upi://pay?pa=merchant@upi&am=...&pn=ServePoint+Cafe`) with automatic receipt generation and KOT routing to the kitchen.
 - **Live KDS Tracker:** Real-time visual progress from Order Placed → Brewing in Kitchen → Table Delivery, with dining assistance calls (Water, Server).
 
 ### 4.2 Jetpack Compose Customer Implementation Pattern (Kotlin)

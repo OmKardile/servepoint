@@ -1,12 +1,12 @@
-# TSOS Loyalty Points System & CRM Architecture
+# ServePoint Loyalty Points System & CRM Architecture
 
-This document provides a comprehensive technical and operational specification for the **Loyalty Points System** in TSOS (The Restaurant & Cafe Operating System).
+This document provides a comprehensive technical and operational specification for the **Loyalty Points System** in ServePoint (The Restaurant & Cafe Operating System).
 
 ---
 
 ## 1. Executive Summary
 
-The TSOS Loyalty Engine is designed to drive repeat footfall, increase average order value (AOV), and provide real-time point accrual and redemption across Point of Sale (POS), QR Storefronts, and Back-Office CRM.
+The ServePoint Loyalty Engine is designed to drive repeat footfall, increase average order value (AOV), and provide real-time point accrual and redemption across Point of Sale (POS), QR Storefronts, and Back-Office CRM.
 
 ### Core Value Proposition:
 - **Automatic Accrual:** 1 Loyalty Point earned for every ₹10 spent on order subtotal (10% reward yield).
@@ -136,7 +136,7 @@ export interface Order {
 4. On completing payment in `PaymentModal`:
    - Customer's point balance is decremented by the redeemed amount.
    - A redemption ledger record is committed with reference to `newOrder.id`.
-   - Thermal Receipt displays a dedicated **TSOS Club Loyalty** section with points redeemed and discount received.
+   - Thermal Receipt displays a dedicated **ServePoint Club Loyalty** section with points redeemed and discount received.
 
 ### 4.3 Points Accrual on Order Completion
 1. When the order transitions to `'completed'` in the Kitchen Display System (KDS) or Orders view:
@@ -174,4 +174,4 @@ export interface Order {
 - **`PaymentModal.tsx`**:
   - Detailed loyalty discount breakdown and pending points accrual notice.
 - **`ReceiptModal.tsx`**:
-  - Thermal printing format with dedicated TSOS Club section.
+  - Thermal printing format with dedicated ServePoint Club section.

@@ -1,6 +1,6 @@
 /**
  * v5.0.0 RBAC (ADR-0013 trio, ADR-0014 production).
- * superadmin = platform operator (TSOS developer) — platform console only.
+ * superadmin = platform operator (ServePoint developer) — platform console only.
  * owner      = runs the business — whole app + staff-account creation.
  * staff      = merged manager+cashier — operates the whole app, no account creation.
  */

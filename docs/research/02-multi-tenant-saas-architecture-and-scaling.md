@@ -1,7 +1,7 @@
 # Research: Multi-Tenant B2B SaaS Architecture & Scaling Model
 
 - **Author**: Lead Full-Stack Security Architect
-- **Target Platform**: TSOS Cloud POS & Tableside Self-Ordering Storefront
+- **Target Platform**: ServePoint Cloud POS & Tableside Self-Ordering Storefront
 - **Date**: 2026-09-25
 
 ---
@@ -38,7 +38,7 @@ CREATE INDEX idx_orders_tenant_created ON orders(tenant_id, created_at DESC);
 
 ## 3. High-Concurrency Dining Hours Strategy
 
-During peak breakfast and lunch rush hours (12:00 PM – 2:30 PM), restaurants experience intense read/write spikes. TSOS employs the following resilience patterns:
+During peak breakfast and lunch rush hours (12:00 PM – 2:30 PM), restaurants experience intense read/write spikes. ServePoint employs the following resilience patterns:
 
 1. **Read Replica / CDN Caching**: Static menu catalog (`menu_items`, `menu_variants`, `addons`) is cached on edge CDN with stale-while-revalidate invalidation upon staff catalog edits.
 2. **PostgreSQL Connection Pooling**: Transaction-mode Supabase Pooler (`port 6543` / `port 5432` on AWS AP-South-1) sustains hundreds of concurrent diners with minimal database worker exhaustion.

@@ -1,5 +1,5 @@
 /**
- * TSOS v5.0.0 — Production types (ServePoint rebuild, ADR-0014).
+ * ServePoint v5.0.0 — Production types (ADR-0014 rebuild).
  * Mirrors the live Supabase schema (migrations 001/003/004). No demo types.
  */
 

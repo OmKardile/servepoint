@@ -1,4 +1,4 @@
-# TSOS Thermal Printer Integration Specification
+# ServePoint Thermal Printer Integration Specification
 **Document Version:** 2.0.0  
 **Target Hardware:** 58mm (2-inch, 32/384 dots) & 80mm (3-inch, 48/576 dots) Thermal Receipt & Kitchen Printers  
 **Supported Protocols:** ESC/POS (Epson Standard Code for Point of Sale), Star Line Mode  
@@ -8,13 +8,13 @@
 
 ## 1. Architectural Overview
 
-TSOS integrates a hardware-agnostic thermal printing subsystem designed for high-velocity cafe and restaurant operations. The system produces two distinct document classes:
+ServePoint integrates a hardware-agnostic thermal printing subsystem designed for high-velocity cafe and restaurant operations. The system produces two distinct document classes:
 1. **Customer Tax Invoice / Bill:** Formatted with Cafe Branding, GSTIN, FSSAI License, Itemized Subtotals, CGST/SGST Tax Breakup, Applied Loyalty Discounts, Payment Method, and Dynamic QR Codes (UPI Payment / E-Invoice).
 2. **Kitchen Order Ticket (KOT):** High-contrast, large-font routing slip featuring Order Type (Dine-In / Takeaway / Delivery), Table Number, Running KOT Sequence, Timestamp, Server Name, Special Cooking Instructions, and Line-Item Ingredient Modifiers.
 
 ```
 +-------------------------------------------------------------------------+
-|                              TSOS App                                   |
+|                              ServePoint App                                   |
 |   (useTsosStore: printerConfig { connection_type, paper_width, ... })   |
 +------------------------------------+------------------------------------+
                                      |
@@ -120,7 +120,7 @@ export function centerText(text: string, width: 32 | 48): string {
                 Ph: +91 98765 43210                  
             GSTIN: 29AAAAA0000A1Z5 | FSSAI: 1122...  
 ------------------------------------------------
-Invoice No: TSOS-2026-0842       Table: T-04 (Dine-In)
+Invoice No: ServePoint-2026-0842       Table: T-04 (Dine-In)
 Date: 19/09/2026 16:45           Cashier: Priya S.
 ------------------------------------------------
 Item Description             Qty x Rate        Total
@@ -135,7 +135,7 @@ Subtotal:                                       740.00
 CGST (2.5%):                                     18.50
 SGST (2.5%):                                     18.50
 Loyalty Points Discount (50 pts):               -50.00
-TSOS Convenience Fee (Absorbed):                  0.00
+ServePoint Convenience Fee (Absorbed):                  0.00
 ------------------------------------------------
 GRAND TOTAL:                                 INR 727.00
 ------------------------------------------------
@@ -146,7 +146,7 @@ Loyalty Balance: 142 pts (+72 pts earned today!)
                Scan for E-Bill & Receipt
                      [ QR CODE ]
            Thank you for visiting The Sensory Oasis!
-                  Powered by TSOS
+                  Powered by ServePoint
 ```
 
 ### 5.2 Kitchen Order Ticket (KOT) (80mm Example)
@@ -217,7 +217,7 @@ async function writeBleChunks(characteristic: BluetoothRemoteGATTCharacteristic,
   ```
 
 ### 6.3 Browser Print Engine Fallback (`@media print`)
-- When physical ESC/POS hardware is disconnected, TSOS opens a responsive print modal rendered with CSS typography tuned for 58mm/80mm thermal rolls:
+- When physical ESC/POS hardware is disconnected, ServePoint opens a responsive print modal rendered with CSS typography tuned for 58mm/80mm thermal rolls:
 ```css
 @media print {
   body * { visibility: hidden; }
@@ -252,7 +252,7 @@ async function writeBleChunks(characteristic: BluetoothRemoteGATTCharacteristic,
 
 ## 8. Manual 'Print Receipt' Workstation & Web Bluetooth Module
 
-TSOS includes a dedicated manual receipt workstation (`ManualPrintReceiptModal.tsx`) providing cashiers and managers with granular control over physical POS slips and direct Web Bluetooth thermal printer discovery:
+ServePoint includes a dedicated manual receipt workstation (`ManualPrintReceiptModal.tsx`) providing cashiers and managers with granular control over physical POS slips and direct Web Bluetooth thermal printer discovery:
 
 ### 8.1 Web Bluetooth Discovery & GATT Pairing
 - **Standard BLE Service UUIDs:**
@@ -293,7 +293,7 @@ for (let offset = 0; offset < binaryData.length; offset += CHUNK_SIZE) {
 
 ## 9. Print Logs & Hardware Audit Subsystem (`OrdersScreen`)
 
-To ensure complete accountability, operational reliability, and rapid troubleshooting during rush hours, TSOS incorporates a dedicated **Print Logs & Hardware Audit Workstation** accessible directly within the `OrdersScreen` via the sub-navigation tab switcher.
+To ensure complete accountability, operational reliability, and rapid troubleshooting during rush hours, ServePoint incorporates a dedicated **Print Logs & Hardware Audit Workstation** accessible directly within the `OrdersScreen` via the sub-navigation tab switcher.
 
 ### 9.1 Data Schema (`PrintLogEntry`)
 Every print attempt—whether dispatched automatically upon checkout, manually triggered via the Thermal Workstation, or run as a diagnostic self-test—is recorded in the centralized Zustand store (`printLogs`) and persisted to `localStorage`:

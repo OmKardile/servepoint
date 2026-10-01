@@ -1,4 +1,4 @@
-# TSOS Windows Native POS Client Specification
+# ServePoint Windows Native POS Client Specification
 **Document Version:** 1.0.0  
 **Framework Target:** .NET 9.0 Desktop (C# 13, WPF / WinUI 3)  
 **Target Hardware:** All-in-One Touchscreen POS Terminals (Posiflex, Elo, HP Engage, Sunmi D2), Windows 10/11 IoT Enterprise  
@@ -8,7 +8,7 @@
 
 ## 1. Architecture & Design Patterns
 
-The Windows Native TSOS application is structured around the **Model-View-ViewModel (MVVM)** design pattern with strict offline-first resilience. It operates with sub-millisecond local UI response times and direct hardware integration via Win32 APIs.
+The Windows Native ServePoint application is structured around the **Model-View-ViewModel (MVVM)** design pattern with strict offline-first resilience. It operates with sub-millisecond local UI response times and direct hardware integration via Win32 APIs.
 
 ```
 +------------------------------------------------------------------------+
@@ -47,7 +47,7 @@ The Windows Native TSOS application is structured around the **Model-View-ViewMo
 
 ## 2. Direct Win32 Thermal Printing (Zero-Spooler Delay)
 
-Unlike standard Windows printing which rasterizes documents to XPS/GDI (causing 2-4 second latency), TSOS Windows Native uses the unmanaged Win32 Spooler API (`winspool.drv`) via P/Invoke to send raw ESC/POS binary streams directly to the printer in under **5 milliseconds**:
+Unlike standard Windows printing which rasterizes documents to XPS/GDI (causing 2-4 second latency), ServePoint Windows Native uses the unmanaged Win32 Spooler API (`winspool.drv`) via P/Invoke to send raw ESC/POS binary streams directly to the printer in under **5 milliseconds**:
 
 ### 2.1 C# `RawPrinterHelper.cs` Implementation
 ```csharp
@@ -89,7 +89,7 @@ public static class RawPrinterHelper
     public static bool SendBytesToPrinter(string szPrinterName, byte[] pBytes)
     {
         IntPtr hPrinter;
-        var di = new DOCINFOA { pDocName = "TSOS Receipt", pDataType = "RAW" };
+        var di = new DOCINFOA { pDocName = "ServePoint Receipt", pDataType = "RAW" };
         if (!OpenPrinter(szPrinterName.Normalize(), out hPrinter, IntPtr.Zero)) return false;
 
         bool success = false;

@@ -1,6 +1,6 @@
-# TSOS Technical Documentation & Architecture Specification
+# ServePoint Technical Documentation & Architecture Specification
 
-- **System**: TSOS (The Cafe Operating System)
+- **System**: ServePoint — smartPOS
 - **Version**: 5.0.0 (production rebuild, ADR-0014)
 - **Architect**: Lead Full-Stack Security & Platform Architect
 - **Updated**: October 1, 2026
@@ -9,7 +9,7 @@
 
 ## 1. System Overview & Architecture
 
-TSOS is a cloud-native, multi-tenant B2B SaaS platform engineered specifically for cafes, specialty coffee roasters, bakeries, and quick-service restaurants (QSRs). It provides a unified system spanning counter POS, kitchen display (KDS), inventory recipe depletion, shifts reconciliation, and guest tableside self-ordering.
+ServePoint is a cloud-native, multi-tenant B2B SaaS platform engineered specifically for cafes, specialty coffee roasters, bakeries, and quick-service restaurants (QSRs). It provides a unified system spanning counter POS, kitchen display (KDS), inventory recipe depletion, shifts reconciliation, and guest tableside self-ordering.
 
 ```mermaid
 graph TD
@@ -185,7 +185,7 @@ Diners who scan a static table QR URL (`/coolkafe/t4?token=sec_xyz`) have that U
 
 ## 6. Industrial Obsidian Mode Design System
 
-TSOS features a global, single-button **Obsidian Mode** theme designed for high-contrast visibility and glare reduction.
+ServePoint features a global, single-button **Obsidian Mode** theme designed for high-contrast visibility and glare reduction.
 
 ### 6.1 Theme Token Specifications
 

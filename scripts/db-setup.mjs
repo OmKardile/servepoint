@@ -1,4 +1,4 @@
-// Supabase provisioning script: applies TSOS migrations 001-005 to the live
+// Supabase provisioning script: applies ServePoint migrations 001-005 to the live
 // Supabase project via the Supavisor session pooler (IPv4 path — direct
 // db.<ref>.supabase.co:5432 is IPv6-only on current projects), then verifies.
 // NOT part of the app bundle.

@@ -1,6 +1,6 @@
-# TSOS Research & Architecture Specifications
+# ServePoint Research & Architecture Specifications
 
-This directory contains research papers, technical analyses, security threat models, and architectural deep-dives for the **TSOS Multi-Tenant Cafe Operating System**.
+This directory contains research papers, technical analyses, security threat models, and architectural deep-dives for the **ServePoint Multi-Tenant Cafe Operating System**.
 
 ---
 

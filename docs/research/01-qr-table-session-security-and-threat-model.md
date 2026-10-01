@@ -1,7 +1,7 @@
 # Research & Threat Model: Ephemeral Table QR Session Security
 
 - **Author**: Lead Full-Stack Security Architect
-- **Target Platform**: TSOS Cloud POS & Tableside Self-Ordering Storefront
+- **Target Platform**: ServePoint Cloud POS & Tableside Self-Ordering Storefront
 - **Date**: 2026-09-25
 
 ---
@@ -22,7 +22,7 @@ When a diner scans this code:
 
 ### 1.2 Attack & Accidental Vectors
 
-| Vector | Description | Severity | Mitigation in TSOS |
+| Vector | Description | Severity | Mitigation in ServePoint |
 |---|---|---|---|
 | **Accidental History Replay** | User reopens mobile browser days later; background reload or accidental click triggers an order. | High | 10-Minute Ephemeral Token with server-side expiry (`expires_at < now()`). |
 | **Cross-Table Spoofing** | Attacker sitting at Table 1 scans their code, changes payload to Table 8 to harass another party. | Critical | Server-side cryptographic check: `session.table_id == order.table_id`. |

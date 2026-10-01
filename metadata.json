@@ -1,5 +1,5 @@
 {
-  "name": "TSOS — Cafe POS & Operations",
+  "name": "ServePoint — smartPOS",
   "description": "Point-of-sale and cafe operations platform for Indian cafes with POS, customer loyalty points, real-time cloud DB sync status, KDS, inventory deduction, and tables.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]

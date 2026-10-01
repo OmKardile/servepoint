@@ -44,7 +44,7 @@ const LOCAL_CREDENTIALS_KEY = 'servepoint_local_credentials';
 const BOOTSTRAP_OPERATOR = {
   email: 'admin@tsos.dev',
   password: 'admin123456',
-  name: 'TSOS Developer',
+  name: 'ServePoint Developer',
 };
 
 export const authService = {

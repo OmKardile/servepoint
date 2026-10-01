@@ -1,16 +1,16 @@
-# TSOS Multi-Surface Architecture & Comprehensive Page Mapping
+# ServePoint Multi-Surface Architecture & Comprehensive Page Mapping
 
-This document provides a complete technical and functional catalog of all surfaces in TSOS (The Simple Operating System), detailing their components, routes, linked pages, and real-time interaction flows.
+This document provides a complete technical and functional catalog of all surfaces in ServePoint (The Simple Operating System), detailing their components, routes, linked pages, and real-time interaction flows.
 
 ---
 
-## 1. Overview of the 5 TSOS Surfaces
+## 1. Overview of the 5 ServePoint Surfaces
 
-TSOS is architected as an **omnichannel cafe & restaurant OS**, operating across 5 specialized execution surfaces connected by a unified reactive state layer and offline-resilient local storage.
+ServePoint is architected as an **omnichannel cafe & restaurant OS**, operating across 5 specialized execution surfaces connected by a unified reactive state layer and offline-resilient local storage.
 
 ```
                                ┌──────────────────────────────────────────────┐
-                               │             TSOS Unified Store               │
+                               │             ServePoint Unified Store               │
                                │   (Menu, Orders, KDS, Loyalty, Inventory)    │
                                └──────────────────────┬───────────────────────┘
                                                       │
@@ -39,7 +39,7 @@ The full-scale desktop browser interface used by cafe owners, managers, cashiers
 | **Inventory** | `inventory` | Real-time ingredient tracking (g, ml, pcs), automated recipe consumption deduction per menu item sold, restock logging, low stock alerts, supplier orders. | Connected directly to recipe yields and menu item sales. |
 | **Menu Matrix** | `menu` | Visual category builder, item creation, 5% GST tax setup, recipe mapping, veg/non-veg flags, variant & addon modifiers, out-of-stock toggles. | Controls live catalogs visible in **POS**, **Windows**, **Android**, and **QR Storefront**. |
 | **Tables & Floor**| `tables` | Interactive floor plan, seating capacity, table occupancy status (`free`, `occupied`, `reserved`), unique QR code generation for every table with 1-click test launcher. | Generates QR tokens that route guests directly to **Surface 4 (QR Storefront)** with table context. |
-| **Customers & CRM**| `customers` | TSOS Club loyalty ledger, 4-tier engine (Bronze, Silver, Gold, Platinum), points adjustment tools, and **Receipt History** (expandable line item bills, ESC/POS re-print, and direct email copy dispatch). | Links customer profile to **POS Checkout** with 1-click points redemption. |
+| **Customers & CRM**| `customers` | ServePoint Club loyalty ledger, 4-tier engine (Bronze, Silver, Gold, Platinum), points adjustment tools, and **Receipt History** (expandable line item bills, ESC/POS re-print, and direct email copy dispatch). | Links customer profile to **POS Checkout** with 1-click points redemption. |
 | **Offers & Promos**| `offers` | Coupon codes (percentage, flat amount, BOGO), minimum order thresholds, date validity rules, and active toggles. | Auto-validated during cart calculations in **POS** and **QR Storefront**. |
 | **Staff & Shifts** | `shifts` | Cash drawer management, opening float, cash drops, register reconciliation, shift handover summaries, staff role PIN validation. | Reconciles end-of-day register totals with recorded POS cash payments. |
 | **Reports** | `reports` | Daily sales graphs, hourly traffic heatmaps, top-selling coffee beans & food items, category revenue breakdown, GST tax summary, CSV exports. | Aggregates data from all connected surfaces. |
@@ -78,7 +78,7 @@ The zero-install mobile web application launched by customers scanning the QR co
   - Item detail bottom-sheet with customizable milk variants, syrups, temperature options, and kitchen notes
   - Floating cart preview bar with live subtotal, 5% GST, and platform fee breakdown
   - Instant UPI QR & Card pay checkout
-  - TSOS Club loyalty points phone-lookup
+  - ServePoint Club loyalty points phone-lookup
 - **Links**: On order submission, smoothly forwards the guest to **Surface 5 (Live Order Tracking)** with their generated order number.
 
 ---
@@ -100,7 +100,7 @@ Users and developers reviewing enterprise POS systems and analytics suites frequ
 
 1. **Marketing V1 vs Marketing V2**:
    - **Marketing V1 (Static Rules & Coupons)**: Traditional promotional codes with fixed percentage or flat discounts (e.g., `WELCOME50`, `COFFEE15`), managed in the **Offers** tab.
-   - **Marketing V2 (Automated Lifecycle & Tier Triggers)**: Modern behavioral marketing integrated with TSOS Loyalty. Automatically sends automated WhatsApp/SMS/Email triggers based on customer cohorts (e.g., *7-day absent high-value Gold customers*, *Birthday double points perks*, or *Post-order review requests*).
+   - **Marketing V2 (Automated Lifecycle & Tier Triggers)**: Modern behavioral marketing integrated with ServePoint Loyalty. Automatically sends automated WhatsApp/SMS/Email triggers based on customer cohorts (e.g., *7-day absent high-value Gold customers*, *Birthday double points perks*, or *Post-order review requests*).
 2. **Sources (Acquisition & Channel Attribution)**:
    - Tracks which ordering channels generate revenue: **Counter POS Dine-In**, **Table-side QR Storefront**, **Takeaway Kiosk**, and **Third-Party Integrations**.
    - Enables operators to see average spend differences between cashier-assisted orders and self-service QR orders.

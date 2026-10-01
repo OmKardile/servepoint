@@ -1,6 +1,6 @@
-# TSOS Master Replication Blueprint for AI Engines
+# ServePoint Master Replication Blueprint for AI Engines
 **Document Version:** 1.0.0  
-**Purpose:** This document is an exhaustive, self-contained technical prompt and architectural blueprint. Any Large Language Model or automated coding agent (e.g., Gemini, Claude, GPT, Antigravity) can ingest this single file and generate the exact, complete TSOS cafe operating system with identical UI, database schema, ESC/POS thermal printing, customer loyalty, zero-subscription fee engine, and native clients.
+**Purpose:** This document is an exhaustive, self-contained technical prompt and architectural blueprint. Any Large Language Model or automated coding agent (e.g., Gemini, Claude, GPT, Antigravity) can ingest this single file and generate the exact, complete ServePoint cafe operating system with identical UI, database schema, ESC/POS thermal printing, customer loyalty, zero-subscription fee engine, and native clients.
 
 ---
 
@@ -8,7 +8,7 @@
 
 ```markdown
 You are an expert full-stack systems engineer and native desktop/mobile developer.
-Your task is to build TSOS (The Cafe Operating System) — a comprehensive, offline-first, high-velocity Point of Sale, Kitchen Display System (KDS), Table-Side Ordering Storefront, and Cafe Management Suite designed for specialty coffee shops, bakeries, and QSRs.
+Your task is to build ServePoint — smartPOS — a comprehensive, offline-first, high-velocity Point of Sale, Kitchen Display System (KDS), Table-Side Ordering Storefront, and Cafe Management Suite designed for specialty coffee shops, bakeries, and QSRs.
 
 ### Core Architectural Pillars:
 1. Zero Monthly Subscription Fee Engine: The platform charges ₹0/month base software fee. Monetization relies on a ₹1/order platform fee, with an intelligent auto-flip threshold allowing cafes to absorb the fee or pass it transparently to consumers.
@@ -114,7 +114,7 @@ export interface OrderItem {
 
 export interface Order {
   id: string;
-  order_number: string;                       // e.g. "TSOS-2026-0842"
+  order_number: string;                       // e.g. "ServePoint-2026-0842"
   location_id: string;
   order_type: OrderType;
   table_id?: string;
@@ -185,7 +185,7 @@ export const ESC_POS_COMMANDS = {
 
 ## 5. Implementation Roadmap for Replicating AI Systems
 
-When instructing another AI to generate TSOS from scratch:
+When instructing another AI to generate ServePoint from scratch:
 1. **Initialize State:** Create Zustand store `useTsosStore` seeded with categories, menu items with recipes, tables, initial customers with loyalty history, and printer settings.
 2. **Implement POS Screen:** Build 3-column responsive layout (Category filter, recipe card grid with veg indicator, and cart drawer with table assignment and customer loyalty attachment).
 3. **Add Guidance System:** Register guidance dictionary in `src/data/guidanceData.ts`, wrap interactive elements in `GuidanceTooltip`, and mount `OnboardingTourModal`.

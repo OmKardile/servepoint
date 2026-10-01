@@ -1,6 +1,6 @@
-# TSOS Cloud Database Synchronization & Offline Resilience
+# ServePoint Cloud Database Synchronization & Offline Resilience
 
-This document outlines the **Cloud Database Synchronization & Offline Resilience Architecture** for TSOS (The Restaurant & Cafe Operating System).
+This document outlines the **Cloud Database Synchronization & Offline Resilience Architecture** for ServePoint (The Restaurant & Cafe Operating System).
 
 ---
 
@@ -8,7 +8,7 @@ This document outlines the **Cloud Database Synchronization & Offline Resilience
 
 Restaurant and cafe POS systems operate in mission-critical retail environments where internet dropouts, Wi-Fi flakiness, or cloud backend downtime cannot be permitted to halt billing, order taking, or food preparation.
 
-TSOS implements an **Offline-First Transaction Layer** with **Real-Time Cloud Synchronization**:
+ServePoint implements an **Offline-First Transaction Layer** with **Real-Time Cloud Synchronization**:
 - **Continuous Local Operation:** In the event of backend or internet failure, staff can continue creating orders, clocking shifts, and managing inventory without interruption.
 - **Immediate Visual Warning:** The UI features a real-time connection status indicator in the top header and a persistent alert banner when cloud synchronization is lost.
 - **Queued Replay Synchronization:** Any changes created while offline are queued in local state and auto-replayed once the cloud connection is re-established.

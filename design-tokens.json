@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "name": "TSOS Design System Tokens",
+  "name": "ServePoint Design System Tokens",
   "version": "1.0.0",
   "archetype": "Warm Bakery & Specialty Cafe POS",
   "tokens": {

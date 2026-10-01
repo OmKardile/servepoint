@@ -1,6 +1,6 @@
-# TSOS Business & SaaS Strategy Documentation
+# ServePoint Business & SaaS Strategy Documentation
 
-- **Product**: TSOS (The Cafe Operating System)
+- **Product**: ServePoint — smartPOS
 - **Document Version**: 3.0.0
 - **Scope**: Multi-Tenant B2B SaaS Business Model, Unit Economics, Monetization & ROI
 
@@ -12,7 +12,7 @@ Independent specialty coffee shops, artisan bakeries, and quick-service restaura
 1. **Predatory Aggregators**: Food delivery apps taking 20–30% commissions on digital orders while monopolizing customer data and loyalty.
 2. **Antiquated Legacy POS Systems**: Heavy, proprietary Windows terminals costing ₹50,000+ upfront with rigid contracts, zero tableside ordering, and disconnected kitchen workflows.
 
-**TSOS (The Cafe Operating System)** bridges this divide as a modern, cloud-native B2B SaaS operating system. By enabling direct tableside QR ordering with 10-minute anti-fraud protection, real-time Kitchen Display Systems (KDS), and automated recipe inventory depletion on commodity consumer hardware (iPads, Android tablets, laptops, phones), TSOS lowers the cost of opening and operating a specialty food business.
+**ServePoint — smartPOS** bridges this divide as a modern, cloud-native B2B SaaS operating system. By enabling direct tableside QR ordering with 10-minute anti-fraud protection, real-time Kitchen Display Systems (KDS), and automated recipe inventory depletion on commodity consumer hardware (iPads, Android tablets, laptops, phones), ServePoint lowers the cost of opening and operating a specialty food business.
 
 ---
 
@@ -40,7 +40,7 @@ Independent specialty coffee shops, artisan bakeries, and quick-service restaura
 
 ## 3. Subscription Pricing & Monetization Model
 
-TSOS employs a hybrid SaaS monetization model combining predictable monthly subscriptions with a lightweight per-order transaction fee.
+ServePoint employs a hybrid SaaS monetization model combining predictable monthly subscriptions with a lightweight per-order transaction fee.
 
 ### 3.1 SaaS Subscription Tiers
 
@@ -51,7 +51,7 @@ TSOS employs a hybrid SaaS monetization model combining predictable monthly subs
 | **Enterprise** | **₹5,999** / mo | Unlimited | Unlimited Stations | Centralized multi-store franchise dashboard, developer API access, custom branding, dedicated account manager, and priority 99.9% SLA. |
 
 ### 3.2 Hybrid Platform Fee Engine
-In addition to subscriptions, TSOS includes a configurable platform fee engine on tableside self-orders:
+In addition to subscriptions, ServePoint includes a configurable platform fee engine on tableside self-orders:
 - **Default Fee**: ₹5 per completed QR tableside order.
 - **Configurable Payer Model**:
   - `Customer Payer`: Added transparently to the guest's checkout bill as a "Platform Convenience Fee" (zero cost to the cafe owner).
@@ -68,7 +68,7 @@ For an average independent cafe doing **120 orders per day** at an Average Order
 Monthly Gross Merchandise Value (GMV): 120 orders * 30 days * ₹350 = ₹1,260,000 / month
 ```
 
-| Operational Area | Without TSOS | With TSOS | Monthly Savings |
+| Operational Area | Without ServePoint | With ServePoint | Monthly Savings |
 |---|---|---|---|
 | **Front-of-House Labor** | 3 servers running paper menus, taking orders, and processing card machines. | 1 runner/server; diners order and pay directly via 10-minute tableside QR. | **₹22,000** (1 less staff salary) |
 | **Ingredient Shrinkage & Waste** | Unmonitored milk/coffee bean overuse; 7% monthly loss. | Automated recipe depletion with reorder alerts; loss reduced to 2%. | **₹18,900** (saved food costs) |
@@ -76,20 +76,20 @@ Monthly Gross Merchandise Value (GMV): 120 orders * 30 days * ₹350 = ₹1,260,
 | **Accidental Remote Orders** | Ghost orders from home browser history causing food waste. | 10-Minute Ephemeral QR auto-lock completely blocks remote orders. | **₹3,500** (zero wasted tickets) |
 | **Total Monthly Net Benefit** | — | — | **+₹104,400 / month** |
 
-> **Payback Period**: With the TSOS Pro subscription at ₹2,999/month, the investment pays for itself within **24 hours** of monthly operations.
+> **Payback Period**: With the ServePoint Pro subscription at ₹2,999/month, the investment pays for itself within **24 hours** of monthly operations.
 
 ---
 
 ## 5. Loyalty Mechanics & Customer Lifetime Value (LTV)
 
-> **v4.0.0 product note (owner-mandated rework)**: the platform now runs a three-role model — **SuperAdmin (TSOS developer)** provisions businesses + owner accounts from the platform console; **Owners** get business dashboards, the full cafe app and staff-account creation; **Staff** (merged Manager+Cashier) operates the entire POS. Self-serve signup, magic links and demo buttons are gone from the login (email + password only; credentials in `docs/CREDENTIALS.md`). This matches how the business actually onboards: developer → owner → staff.
+> **v4.0.0 product note (owner-mandated rework)**: the platform now runs a three-role model — **SuperAdmin (ServePoint developer)** provisions businesses + owner accounts from the platform console; **Owners** get business dashboards, the full cafe app and staff-account creation; **Staff** (merged Manager+Cashier) operates the entire POS. Self-serve signup, magic links and demo buttons are gone from the login (email + password only; credentials in `docs/CREDENTIALS.md`). This matches how the business actually onboards: developer → owner → staff.
 
 > **v3.0.0 product note**: the final four operator surfaces — Inventory & Recipes, Menu & Catalog, Staff & Shifts, and Settings — now render the owner's ServePoint design language, completing the full-suite brand alignment (19/19 surfaces). New operator abilities ship alongside: menu availability summary + price/name sorting, live shift-duration tickers, and shift-history filtering.
 
 > **v2.9.0 product note**: the Customers CRM and Offers surfaces now render the owner's ServePoint design language (sage/deep-teal/gold), including the deep-teal loyalty member card with gold Redeem-at-POS CTA and ServePoint tier badges (Platinum deep-teal, Gold pressed-gold, Silver sage, Bronze sage) — the loyalty program's operator-facing presentation matches the premium brand standard.
 
 
-Repeat customers represent 68% of specialty cafe revenues. TSOS implements an automated, gamified loyalty engine:
+Repeat customers represent 68% of specialty cafe revenues. ServePoint implements an automated, gamified loyalty engine:
 
 ### 5.1 The Accrual & Redemption Math
 - **Point Accrual**: 1 loyalty point earned for every ₹10 spent (effective 10% point accrual rate).
@@ -121,7 +121,7 @@ graph LR
 
 ### Strategic Growth Initiatives
 1. **Integrated Soundbox & Payments**: Partner with domestic payment aggregators (Razorpay, Paytm, Cashfree) to ship branded UPI audio soundboxes for instant counter payment verification.
-2. **Direct Supplier Marketplace**: Allow coffee bean roasters and dairy distributors to accept automated purchase orders directly from TSOS low-stock notifications.
+2. **Direct Supplier Marketplace**: Allow coffee bean roasters and dairy distributors to accept automated purchase orders directly from ServePoint low-stock notifications.
 3. **Franchise Analytics Intelligence**: Benchmark top-selling SKUs, hourly staffing efficiency, and prep SLA across all participating franchise outlets.
 4. **Zero-Friction Hospitality Flow**: Eliminate native app installation barriers completely. Diners scan table QR stickers directly with their native smartphone camera to order in mobile browser tabs with 10-minute session security; counter terminals deploy on cross-platform Electron.js wrapping the web POS for direct USB/Serial thermal printing.
 
@@ -133,4 +133,4 @@ graph LR
 
 ## Product Note — v5.0.0 Production Rebuild (October 1, 2026)
 
-By owner order the product was rebuilt to equal the ServePoint Figma design end-to-end, with every demo and development artifact removed. The commercial product is now: **ServePoint** — a focused restaurant operating app (Dashboard analytics; Food & Drinks ordering with cart and GST-compliant checkout; Bills with payment collection; team Messaging; Notifications; production Settings incl. owner-managed staff accounts) plus a **Platform console** through which the TSOS team provisions cafe businesses and their owner accounts (SaaS trials and subscriptions recorded in Supabase). Three roles: Platform Operator → Owner → Staff. Credentials are distributed deliberately (docs/CREDENTIALS.md); nothing is self-serve. Features outside the Figma (KDS, inventory, shifts, reports, QR storefront) are removed pending owner-approved designs.
+By owner order the product was rebuilt to equal the ServePoint Figma design end-to-end, with every demo and development artifact removed. The commercial product is now: **ServePoint** — a focused restaurant operating app (Dashboard analytics; Food & Drinks ordering with cart and GST-compliant checkout; Bills with payment collection; team Messaging; Notifications; production Settings incl. owner-managed staff accounts) plus a **Platform console** through which the ServePoint team provisions cafe businesses and their owner accounts (SaaS trials and subscriptions recorded in Supabase). Three roles: Platform Operator → Owner → Staff. Credentials are distributed deliberately (docs/CREDENTIALS.md); nothing is self-serve. Features outside the Figma (KDS, inventory, shifts, reports, QR storefront) are removed pending owner-approved designs.

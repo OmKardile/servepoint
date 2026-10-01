@@ -1,4 +1,4 @@
-# TSOS Inventory, Supply Chain & Culinary Recipe Depletion Specification
+# ServePoint Inventory, Supply Chain & Culinary Recipe Depletion Specification
 **Document Version:** 2.0.0  
 **Target Systems:** Cafe Kitchen Inventory, Central Commissary, Ingredient Supply Chain Analytics  
 **Component Implementation:** `src/components/inventory/InventoryScreen.tsx`, `RestockOrderModal.tsx`, `useTsosStore`
@@ -7,7 +7,7 @@
 
 ## 1. Architectural Overview
 
-The TSOS Inventory Subsystem provides end-to-end stock tracking from raw bulk ingredients (flour, coffee beans, milk, sugar) to automated per-order recipe depletion during POS checkout and online/mobile table ordering. 
+The ServePoint Inventory Subsystem provides end-to-end stock tracking from raw bulk ingredients (flour, coffee beans, milk, sugar) to automated per-order recipe depletion during POS checkout and online/mobile table ordering. 
 
 Managers and kitchen head chefs gain immediate visual clarity on replenishment urgency through an integrated **Recharts Supply Chain Analytics Breakdown** that maps low-stock alert thresholds against culinary menu categories.
 

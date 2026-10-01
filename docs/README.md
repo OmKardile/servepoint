@@ -1,6 +1,6 @@
-# TSOS Architecture & Documentation Repository
+# ServePoint Architecture & Documentation Repository
 
-Welcome to the central documentation hub for **TSOS (The Cafe Operating System)** — an enterprise-grade, multi-tenant B2B SaaS platform for cafes, specialty coffee shops, and quick-service restaurants (QSRs).
+Welcome to the central documentation hub for **ServePoint — smartPOS** — an enterprise-grade, multi-tenant B2B SaaS platform for cafes, specialty coffee shops, and quick-service restaurants (QSRs).
 
 ---
 

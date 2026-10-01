@@ -1,7 +1,7 @@
-# TSOS PRODUCTION ROADMAP & MONOREPO MIGRATION BLUEPRINT (`CONTINUE.md`)
+# ServePoint PRODUCTION ROADMAP & MONOREPO MIGRATION BLUEPRINT (`CONTINUE.md`)
 
 > **FOR ANTIGRAVITY / AI CODING AGENT**:
-> This document is the definitive execution blueprint for refactoring the unified TSOS prototype into an enterprise-grade multi-target monorepo. Execute every step, directory split, component extraction, and native bridge exactly as specified below.
+> This document is the definitive execution blueprint for refactoring the unified ServePoint prototype into an enterprise-grade multi-target monorepo. Execute every step, directory split, component extraction, and native bridge exactly as specified below.
 
 ---
 
@@ -398,7 +398,7 @@ Transform the repository into a high-performance monorepo supporting 4 isolated 
    - Interactive table layout editor with dynamic occupancy badges (`available`, `occupied`, `billing`).
    - Dynamic Table QR Code generator: Downloads printable vector QR tent cards with pre-encoded table tokens linking to `customerapp/`.
 8. **Customer CRM & Receipt History (`/customers`)**:
-   - Customer profile directory with TSOS Club tier badges (`Bronze`, `Silver`, `Gold`, `Platinum`).
+   - Customer profile directory with ServePoint Club tier badges (`Bronze`, `Silver`, `Gold`, `Platinum`).
    - **Receipt History Tab**: Full past order history for selected customer, itemized bill breakdown, thermal re-print, and digital bill email dispatch with `mailto:` fallback.
    - Points Ledger & Manual Adjustment Form: Immutable points credit/debit with staff note audit trails.
 9. **Offers & Coupons (`/offers`)**:
@@ -429,7 +429,7 @@ Transform the repository into a high-performance monorepo supporting 4 isolated 
    - Floating cart drawer displaying live item list, modifiers, and quantities.
    - Pricing ledger: Subtotal, 5% GST (2.5% CGST + 2.5% SGST), ₹1.00 platform fee, and Grand Total.
    - Coupon code entry field with instant discount validation.
-4. **TSOS Club Loyalty Phone Lookup**:
+4. **ServePoint Club Loyalty Phone Lookup**:
    - Guest enters their 10-digit mobile number to view their available points balance and apply instant ₹ discounts.
 5. **Instant Payment Gateway Simulation**:
    - Dynamic UPI QR Code generator (intent links for Google Pay, PhonePe, Paytm, BHIM).
@@ -591,7 +591,7 @@ Antigravity must consult and adhere to all specifications documented in the proj
 | `/docs/WINDOWS_NATIVE_CLIENT_SPECIFICATION.md` | Windows Native Client (.NET/WinUI/Tauri) | Direct USB thermal printing, RJ11 cash drawer kick pulse, dual customer-facing pole display, offline SQLite sync. |
 | `/docs/MOBILE_NATIVE_CLIENTS_ANDROID_IOS_SPEC.md` | Staff Handheld App (iOS/Android) | Floor staff table-side ordering, portable 58mm Bluetooth thermal printing, camera QR loyalty scanner. |
 | `/docs/PRINTER_INTEGRATION_SPECIFICATION.md` | Thermal Hardware & ESC/POS Protocol | Raw byte generator (`ESC @`, `GS !`, `GS V`), Bluetooth GATT service UUIDs, WebUSB, Port 9100 TCP sockets, print audit logs. |
-| `/docs/LOYALTY_SYSTEM_ARCHITECTURE.md` | TSOS Club Customer CRM | 4-tier engine (Bronze, Silver, Gold, Platinum), 1 pt / ₹10 earn rate, 1 pt = ₹1 redemption, immutable points ledger. |
+| `/docs/LOYALTY_SYSTEM_ARCHITECTURE.md` | ServePoint Club Customer CRM | 4-tier engine (Bronze, Silver, Gold, Platinum), 1 pt / ₹10 earn rate, 1 pt = ₹1 redemption, immutable points ledger. |
 | `/docs/INVENTORY_SUPPLY_CHAIN_AND_ANALYTICS_SPEC.md` | Real-time Inventory & Depletion | Recipe ingredient deduction on order completion, fractional unit tracking (g/ml/pcs), restock logging, low-stock alerts. |
 | `/docs/CLOUD_SYNC_AND_OFFLINE_RESILIENCE.md` | Offline-First Sync & Networking | Heartbeat latency monitor, offline transaction buffering queue, auto-reconciliation on reconnect. |
 | `/docs/SYSTEM_GUIDANCE_AND_ONBOARDING_SPEC.md` | Contextual Help & Staff Onboarding | Guided onboarding tours, cashier tooltips, keyboard hotkeys (`/` search, `Esc` cancel, `Space` pay). |

@@ -1,5 +1,5 @@
 -- ============================================================================
--- TSOS Migration 005 — Production Baseline Hardening (v5.0.0.1, ADR-0015)
+-- ServePoint Migration 005 — Production Baseline Hardening (v5.0.0.1, ADR-0015)
 --
 -- Purpose (all statements idempotent — safe to re-run on any environment):
 --   1. platform_audit_logs.created_at — generated alias of the canonical
@@ -123,7 +123,7 @@ BEGIN
       v_email, v_hash,
       now(), now(), now(),
       '{"provider":"email","providers":["email"]}'::jsonb,
-      '{"role":"superadmin","name":"TSOS Developer","full_name":"TSOS Developer"}'::jsonb,
+      '{"role":"superadmin","name":"ServePoint Developer","full_name":"ServePoint Developer"}'::jsonb,
       '', '', '', '',
       '', '', '',
       false, false

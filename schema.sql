@@ -1,5 +1,5 @@
 -- =============================================================================
--- TSOS (The Cafe Operating System)
+-- ServePoint — smartPOS
 -- MIGRATION 002: EPHEMERAL 10-MINUTE TABLE QR SESSION TOKEN ARCHITECTURE
 -- =============================================================================
 

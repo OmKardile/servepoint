@@ -1,4 +1,4 @@
-# TableSide Platform OS (TSOS) — Universal Design System & UX Specification
+# TableSide Platform OS (ServePoint) — Universal Design System & UX Specification
 
 > **Document Classification:** Comprehensive System Specification & Design Blueprint  
 > **Version:** 2.0.0 (Enterprise Multi-Tenant SaaS & Native Ecosystem)  
@@ -11,7 +11,7 @@
 
 Hospitality point-of-sale and table ordering systems operate under the most unforgiving real-world conditions: blinding ambient sunlight on outdoor patios, steam and dim lighting in busy kitchens, rushed line queues during morning rushes, greasy or wet fingers on touchscreens, and distracted diners scanning QR codes while talking.
 
-The **TableSide Platform OS (TSOS)** design philosophy rejects "generic SaaS aesthetics" and "AI slop" (such as meaningless purple gradients, neon glowing borders, ungrounded glassmorphism, or nested card mazes). Instead, it implements an intentional, high-craft, optically calibrated design language engineered specifically for hospitality speed, ergonomic precision, and sensory warmth.
+The **TableSide Platform OS (ServePoint)** design philosophy rejects "generic SaaS aesthetics" and "AI slop" (such as meaningless purple gradients, neon glowing borders, ungrounded glassmorphism, or nested card mazes). Instead, it implements an intentional, high-craft, optically calibrated design language engineered specifically for hospitality speed, ergonomic precision, and sensory warmth.
 
 ### Core Principles
 
@@ -207,8 +207,8 @@ In dark mode, shadows disappear visually against dark canvas backgrounds. Depth 
 | **4. Self-Service Kiosk** | Walk-in Customers | Independent order and digital UPI / Card payment | Warm Light High-Contrast | 1. "Touch anywhere to start"<br>2. Jumbo visual item cards<br>3. Add-on recommendation prompt<br>4. Dynamic UPI QR display | End-to-end order in < 60 seconds |
 | **5. Waiter Companion PWA** | Floor Waiters | Table management, taking orders tableside, calling KDS | Mobile Light Compact | 1. Visual floor plan / table grid<br>2. Table occupancy status<br>3. Quick repeat round button<br>4. Split check calculator | 3 taps to send order to kitchen |
 | **6. SuperAdmin SaaS Operations** | Platform Operator / Developer | Tenant onboarding, subscription deals, audit log review | Deep Neutral Slate (`#1C1917` header) | 1. Total SaaS MRR & active cafes<br>2. 9-Step Provisioning Wizard<br>3. Business status toggle switches<br>4. Tamper-evident audit trail | Provision new cafe in < 3 minutes |
-| **7. Native Windows Client** | Fixed POS Terminals, Receipt Hub | Heavy-duty local order entry, raw ESC/POS thermal printing | Windows Fluent + TSOS Warm | 1. Real-time USB/COM printer status<br>2. Offline queue recovery indicator<br>3. Full keyboard shortcut map (`F1`–`F12`) | Zero input lag (120 FPS local) |
-| **8. Customer Android App** | Regular Patrons, Loyalty Members | Table scan, loyalty stamps, re-order favorites, push alerts | Material You + TSOS Warm | 1. One-tap QR camera scanner<br>2. Dynamic loyalty tier card<br>3. Live order tracking timeline<br>4. Saved payment UPI VPAs | App boot-to-order in < 10 seconds |
+| **7. Native Windows Client** | Fixed POS Terminals, Receipt Hub | Heavy-duty local order entry, raw ESC/POS thermal printing | Windows Fluent + ServePoint Warm | 1. Real-time USB/COM printer status<br>2. Offline queue recovery indicator<br>3. Full keyboard shortcut map (`F1`–`F12`) | Zero input lag (120 FPS local) |
+| **8. Customer Android App** | Regular Patrons, Loyalty Members | Table scan, loyalty stamps, re-order favorites, push alerts | Material You + ServePoint Warm | 1. One-tap QR camera scanner<br>2. Dynamic loyalty tier card<br>3. Live order tracking timeline<br>4. Saved payment UPI VPAs | App boot-to-order in < 10 seconds |
 
 ---
 
@@ -256,7 +256,7 @@ In dark mode, shadows disappear visually against dark canvas backgrounds. Depth 
 - **Out of Stock / Invalid Action:** Low 180Hz double-thud buzz with visual shake animation (`x: [-4, 4, -2, 2, 0]`).
 
 ### 8.2 Animation Speeds & Motion Design (`motion/react`)
-Every motion in TSOS communicates state change—never decorative distraction.
+Every motion in ServePoint communicates state change—never decorative distraction.
 
 | Motion Trigger | Duration | Easing Curve | Motion Behavior |
 | :--- | :--- | :--- | :--- |
@@ -382,7 +382,7 @@ Copy-pasteable CSS variable definitions to be maintained in `src/index.css`:
 
 ## 11. Maintenance & Review Checklist for Engineers
 
-Before committing any component or screen to the TSOS ecosystem, verify:
+Before committing any component or screen to the ServePoint ecosystem, verify:
 
 - [ ] **Color Check:** Are all hex codes drawn exclusively from `--tsos-*` tokens? (Zero arbitrary `#333`, `#eee`, or uncalibrated blues).
 - [ ] **Contrast Verification:** Does body copy test $\ge 4.5:1$ against its immediate container?

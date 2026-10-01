@@ -1,12 +1,12 @@
 # ─────────────────────────────────────────────────────────────────────────────
-# TSOS — The Cafe Operating System · Render Blueprint (Infrastructure-as-Code)
+# ServePoint — The Cafe Operating System · Render Blueprint (Infrastructure-as-Code)
 # ADR-0008: Multi-Platform Cloud Deployment (Render Static + Vercel Edge)
 #
 # Apply: Render Dashboard → New + → Blueprint → select this repository.
 # Render reads this file and provisions the service below.
 #
 # WHY A STATIC SITE AND NOT A WEB SERVICE?
-#   TSOS is a pure client-side Vite SPA. Every backend concern — PostgreSQL,
+#   ServePoint is a pure client-side Vite SPA. Every backend concern — PostgreSQL,
 #   Auth, Realtime websockets, Row Level Security — lives in Supabase, so no
 #   Node/SSR/API server process is needed at runtime. A Render Web Service
 #   free instance sleeps after 15 min of inactivity (50s+ cold starts —

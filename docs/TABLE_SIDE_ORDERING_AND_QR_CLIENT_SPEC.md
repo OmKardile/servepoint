@@ -1,4 +1,4 @@
-# TSOS Table-Side Ordering & Customer QR Client Specification
+# ServePoint Table-Side Ordering & Customer QR Client Specification
 **Document Version:** 2.0.0 (Authoritative System Design)  
 **Target Platform:** Mobile Browser Web App / Progressive Web App (PWA)  
 **Production Host:** `https://tablesideordering-web.vercel.app/`  
@@ -9,7 +9,7 @@
 
 ## 1. Architectural Overview
 
-TSOS Table-Side Ordering eliminates waitstaff delays by empowering guests to scan an encrypted QR code placed on their dining table, browse the digital menu with high-resolution photography and allergen tags, customize coffee modifiers, and place orders directly to the Kitchen Display System (KDS).
+ServePoint Table-Side Ordering eliminates waitstaff delays by empowering guests to scan an encrypted QR code placed on their dining table, browse the digital menu with high-resolution photography and allergen tags, customize coffee modifiers, and place orders directly to the Kitchen Display System (KDS).
 
 ```
 +--------------------------------------------------------------------+
@@ -37,7 +37,7 @@ TSOS Table-Side Ordering eliminates waitstaff delays by empowering guests to sca
                                   |
                                   v
 +--------------------------------------------------------------------+
-|                           TSOS POS & KDS                           |
+|                           ServePoint POS & KDS                           |
 |  - Validates session bound to location_id and table_id             |
 |  - Auto-accepts order & assigns to Table 1                         |
 |  - Auto-prints Kitchen Order Ticket (KOT) on Thermal Printer       |
@@ -106,7 +106,7 @@ Guests can choose between two checkout modes:
 2. **Instant Digital Payment (UPI Intent / QR):**
    - **Desktop / Tablet scan:** Renders dynamic UPI QR code containing standard NPCI UPI payload:
    ```
-   upi://pay?pa=sensoryoasis@icici&pn=TheSensoryOasis&am=727.00&cu=INR&tn=Order-T04-TSOS842
+   upi://pay?pa=sensoryoasis@icici&pn=TheSensoryOasis&am=727.00&cu=INR&tn=Order-T04-ServePoint842
    ```
    - **Mobile Smartphone:** Tapping **Pay with UPI** triggers the native Android/iOS App Chooser launching Google Pay, PhonePe, Paytm, or Cred directly.
 

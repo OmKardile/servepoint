@@ -99,7 +99,7 @@ export const Sidebar: React.FC<Props> = ({ unreadCount = 0 }) => {
         </button>
       </div>
 
-      <p className="mt-3 hidden text-center text-[10px] text-white/40 md:block">© 2026 SmartPOS Setup</p>
+      <p className="mt-3 hidden text-center text-[10px] text-white/40 md:block">© 2026 ServePoint · smartPOS</p>
     </aside>
   );
 };
