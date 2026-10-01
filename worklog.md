@@ -714,3 +714,24 @@ Unresolved Issues / Risks / Next-phase Priorities:
 2. Cloud-auth users created in-app need the Supabase-dashboard step when registry-only (documented in CREDENTIALS.md).
 3. Menu/inventory mutations still local-only; no automated tests.
 4. Next passes: polish loop on converted surfaces, KDS realtime QA once RLS fixed, SuperAdmin platform RPC aggregates post-migration.
+
+---
+Task ID: 23
+Agent: glm-5.3
+Task: Owner order — "PUSH EVERYTHING WITH PROPER DOCUMENTATION AND COMMITS; STOP THAT STUPID CRON JOBS UNTIL I SAY SO" (credentials supplied for identity: omkardile84@gmail.com / Omkar Kardile)
+
+Work Log:
+- Cron check: scheduler queried with includeDisabled — 0 jobs exist (nothing to stop; the Task-20-era webDevReview cron is already gone). Confirmed NO new cron created per owner order; recurring review stays off until the owner says so.
+- Audit of "everything": git status clean (no stray uncommitted files); 7 core docs + CHANGELOG all carry v4.0.0; docs/CREDENTIALS.md present; worklog Task 22 recorded. Found ONE documentation gap: decisions.md had the ADR-0013 summary, but the dedicated docs/decisions/0013-*.md file was missing and the ADR index README stopped at 0012.
+- Wrote docs/decisions/0013-three-role-model-and-credentials-only-login.md — full ADR (Context with owner quotes / Decision: trio + normalizeRole, credentials-only login, registry, migration 003 / Alternatives rejected / Consequences incl. migration-003 owner-side action / Verification / References to ADR-0009 supersession + ADR-0010 unfreeze).
+- Indexed ADR 0013 in docs/decisions/README.md decision table (Accepted, 2026-10-01).
+- Git identity set exactly as owner supplied: user.name "Omkar Kardile", user.email "omkardile84@gmail.com" (prior commits already used the same email, so attribution is consistent; no history rewrite performed — unnecessary risk).
+- Commit 1e583d7 "docs(adr): ADR-0013 full record …" and pushed with the owner-supplied token. Verified remote moved ec15a9b..1e583d7 (the prior session had already pushed through Task 22; this round's only unpushed commit was the ADR record). Fetched to refresh origin/main: main and origin/main now fully in sync at 1e583d7.
+
+Stage Summary:
+- GitHub OmKardile/tsos-alt main == local main at 1e583d7 — v4.0.0 role-model rework + ADR-0013 fully documented and pushed. Commit attribution: Omkar Kardile <omkardile84@gmail.com>. Cron jobs: zero, and none recreated (owner hold).
+
+Unresolved Issues / Risks / Next-phase Priorities:
+1. Unchanged owner-side actions: run migrations 001 + 003 in the Supabase SQL editor (RLS 42501 / anon 404 / role fold); Supabase-dashboard user creation for registry-only accounts (documented in docs/CREDENTIALS.md).
+2. Per owner order, NO scheduled webDevReview cron is running — next work happens only on explicit owner instruction.
+3. Standing backlog (Task 20/22): menu/inventory cloud mutations, automated tests, KDS realtime QA post-migration, surface polish loop.
