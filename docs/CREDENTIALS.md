@@ -67,3 +67,15 @@ route as well.
 
 Until a table's migration is applied, its surface shows an honest error/empty state —
 never a crash.
+
+## One-time project setting: turn OFF "Confirm email"
+
+**Supabase Dashboard → Authentication → Sign In / Providers → Email → toggle
+"Confirm email" OFF → Save.**
+
+Why: accounts here are **provisioned, not self-registered** — the operator hands the
+owner their credentials directly, so a confirmation email adds nothing. With it ON,
+every wizard signup sends a confirmation email (free-tier limit ≈ 2/hour → `429
+over_email_send_rate_limit`) and the account stays unconfirmed until the link is
+clicked. With it OFF, wizard-created owners/staff exist **confirmed and can sign in
+immediately**.

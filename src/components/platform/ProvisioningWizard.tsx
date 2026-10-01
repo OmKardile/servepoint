@@ -305,7 +305,7 @@ export const ProvisioningWizard: React.FC<ProvisioningWizardProps> = ({
 
   const monthlyPrice = Number(form.monthlyPrice);
   const pricePreview = Number.isNaN(monthlyPrice) ? '—' : formatMoney(monthlyPrice);
-  const planLabel = form.plan === 'trial' ? 'Trial (status: trialing)' : 'Standard (status: active)';
+  const planLabel = form.plan === 'trial' ? 'Trial (status: trial)' : 'Standard (status: active)';
 
   const copyButton = (key: string, text: string, label: string) => (
     <button
@@ -495,7 +495,7 @@ export const ProvisioningWizard: React.FC<ProvisioningWizardProps> = ({
                   onChange={(e) => patch({ plan: e.target.value as PlanChoice })}
                   className={inputClass}
                 >
-                  <option value="trial">Trial (trialing)</option>
+                  <option value="trial">Trial (14 days)</option>
                   <option value="standard">Standard (active)</option>
                 </select>
               </div>
@@ -710,8 +710,8 @@ export const ProvisioningWizard: React.FC<ProvisioningWizardProps> = ({
               >
                 <AlertTriangle size={15} className="mt-0.5 shrink-0" aria-hidden />
                 <span className="break-words">
-                  Cloud notice: {outcome.cloudError} — the business was provisioned locally; run it on
-                  Supabase once migrations are applied.
+                  Cloud notice: {outcome.cloudError} — the business is saved locally only. Retry Add
+                  Business in a moment, or create the tenant row in Supabase (docs/CREDENTIALS.md).
                 </span>
               </div>
             ) : (

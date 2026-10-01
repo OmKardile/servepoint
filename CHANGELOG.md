@@ -3,6 +3,19 @@
 All notable changes to **TSOS (The Cafe Operating System)** are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.0.2] — 2026-10-01 — Wizard Provisioning Fixed Against Live DB
+
+### Fixed — Owner's first real "Add Business" run hit two cloud failures (screenshot)
+- **`tenants_status_check` violation fixed**: the wizard inserted `status: 'trialing'`, but `tenants.status` CHECK allows only `trial | active | past_due | suspended | cancelled | archived`. `provisionBusiness` now maps Trial → `'trial'`, Standard → `'active'` (the DB is the source of truth; migration 001 already applied).
+- **Subscription row now created** (best-effort, one per tenant via `uq_tenant_subscription`): wizard's two-plan model maps to the `plan_id` CHECK enum — Trial → `starter` @ `trialing` (14-day trial_end), Standard → `growth` @ `active` with 30-day `next_billing_at` — so the Platform Subscriptions tab and MRR metric populate on first provision.
+- **Platform audit trail is now live**: every provisioning writes `platform_audit_logs` (`action: business.provisioned`, actor = operator email, details + metadata JSON) under the "System insert audit logs" policy — the Platform Audit tab shows real activity.
+- **"Email address is invalid" diagnosed**: Supabase's enhanced email validation does DNS-level checks that failed transiently (the same address passed on retry — proven by REST battery). `authService.signUp` now sanitizes emails (zero-width/NBSP strip, trim, lowercase) and **retries once** on `email_address_invalid` before surfacing.
+- **`429 over_email_send_rate_limit` handled properly**: the new project has "Confirm email" ON (default) — free tier allows ≈2 confirmation emails/hour, which blocks wizard signups. The notice now says exactly that with the one-toggle fix; **docs/CREDENTIALS.md documents the dashboard step** (Authentication → Sign In / Providers → Email → Confirm email OFF) so provisioned accounts exist confirmed and sign in immediately.
+- **Stale copy removed**: the wizard no longer says "run it on Supabase once migrations are applied" (migrations ARE applied); honest retry/dashboard guidance instead.
+
+### Verified
+- REST E2E of the exact fixed path as the operator: tenant insert (`status: trial`) → 201, subscription (`starter/trialing`) → 201, audit (`business.provisioned`) → 201, Platform readback shows all three → then deleted, leaving the production DB pristine (`tenants: []`). `tsc --noEmit` → 0 errors.
+
 ## [5.0.1] — 2026-10-01 — Fresh Supabase Provisioning & Platform Hardening (ADR-0015)
 
 ### Fixed — Owner reported console errors after the old cloud project was deleted

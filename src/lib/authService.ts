@@ -213,13 +213,18 @@ export const authService = {
    * can sign in immediately), then pushes to Supabase Auth best-effort.
    */
   async signUp(
-    email: string,
+    emailInput: string,
     password: string,
     name: string,
     role: 'owner' | 'staff' = 'staff',
     tenant?: { slug?: string; name?: string }
   ): Promise<{ success: boolean; error?: string }> {
-    const cleanEmail = email.trim().toLowerCase();
+    // Sanitize: Supabase's enhanced email validation is strict — invisible
+    // characters (zero-width, NBSP) or stray whitespace cause real rejections.
+    const cleanEmail = emailInput
+      .replace(/[\u200B-\u200D\u2060\uFEFF]/g, '')
+      .trim()
+      .toLowerCase();
 
     this.registerLocalCredential({
       email: cleanEmail,
@@ -232,30 +237,49 @@ export const authService = {
 
     try {
       if (isSupabaseConfigured()) {
-        const { error } = await supabase.auth.signUp({
-          email: cleanEmail,
-          password,
-          options: {
-            data: {
-              name,
-              full_name: name,
-              role,
-              tenant_slug: tenant?.slug,
-              tenant_name: tenant?.name,
+        const attempt = () =>
+          supabase.auth.signUp({
+            email: cleanEmail,
+            password,
+            options: {
+              data: {
+                name,
+                full_name: name,
+                role,
+                tenant_slug: tenant?.slug,
+                tenant_name: tenant?.name,
+              },
             },
-          },
-        });
+          });
+
+        let { error } = await attempt();
+        // GoTrue's email validation does DNS-level checks that can fail
+        // transiently (observed: a valid address rejected once, accepted on
+        // retry) — retry once before surfacing the error.
+        if (error && /email.*(invalid|not valid)/i.test(error.message)) {
+          await new Promise((resolve) => setTimeout(resolve, 800));
+          ({ error } = await attempt());
+        }
         if (error) {
+          if (/rate.?limit|too many/i.test(error.message)) {
+            return {
+              success: true,
+              error:
+                'Cloud auth notice: confirmation-email rate limit reached (free tier ≈ 2/hour). ' +
+                'For instant provisioning, turn OFF "Confirm email" in Supabase → Authentication → Sign In / Providers → Email ' +
+                '(docs/CREDENTIALS.md). The account is registered locally and ready to sign in on this device.',
+            };
+          }
           return {
             success: true,
-            error: `Cloud auth notice: ${error.message}. Account is registered and ready to sign in.`,
+            error: `Cloud auth notice: ${error.message}. Account is registered locally and ready to sign in on this device.`,
           };
         }
       }
     } catch (err: any) {
       return {
         success: true,
-        error: `Cloud auth unavailable (${err?.message || 'offline'}). Account is registered and ready to sign in.`,
+        error: `Cloud auth unavailable (${err?.message || 'offline'}). Account is registered locally and ready to sign in on this device.`,
       };
     }
     return { success: true };

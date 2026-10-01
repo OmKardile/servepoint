@@ -435,13 +435,16 @@ export async function provisionBusiness(input: ProvisionInput): Promise<Provisio
   let tenant: Tenant | null = null;
 
   if (isSupabaseConfigured()) {
+    // Status MUST satisfy tenants_status_check (migration 001):
+    // trial | active | past_due | suspended | cancelled | archived.
+    const status = input.planId === 'trial' ? 'trial' : 'active';
     const { data, error } = await supabase
       .from('tenants')
       .insert({
         name: input.name,
         slug: input.slug,
         business_type: input.businessType,
-        status: 'trialing',
+        status,
         city: input.city || null,
         owner_email: input.ownerEmail,
       })
@@ -451,6 +454,53 @@ export async function provisionBusiness(input: ProvisionInput): Promise<Provisio
       cloudError = error.message;
     } else {
       tenant = data as Tenant;
+
+      // Subscription (best-effort — one row per tenant via uq_tenant_subscription).
+      // plan_id MUST satisfy the CHECK (starter|growth|pro|enterprise): the
+      // wizard's two-plan model maps Trial→starter(trialing) and
+      // Standard→growth(active) until real billing tiers ship.
+      const in30Days = new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString();
+      const in14Days = new Date(Date.now() + 14 * 24 * 3600 * 1000).toISOString();
+      const isTrial = input.planId === 'trial';
+      const subscription: {
+        tenant_id: string;
+        plan_id: string;
+        billing_cycle: 'monthly';
+        monthly_price: number;
+        final_monthly_rate: number;
+        status: string;
+        trial_end?: string | null;
+        next_billing_at?: string | null;
+      } = {
+        tenant_id: tenant.id,
+        plan_id: isTrial ? 'starter' : 'growth',
+        billing_cycle: 'monthly',
+        monthly_price: isTrial ? 0 : input.monthlyPrice,
+        final_monthly_rate: isTrial ? 0 : input.monthlyPrice,
+        status: isTrial ? 'trialing' : 'active', // subscriptions.status_check allows 'trialing'
+        trial_end: isTrial ? in14Days : null,
+        next_billing_at: isTrial ? null : in30Days,
+      };
+      const { error: subErr } = await supabase.from('subscriptions').insert(subscription);
+      if (subErr) console.warn('[provision] subscription insert failed:', subErr.message);
+
+      // Platform audit trail (best-effort; "System insert audit logs" policy).
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      const { error: auditErr } = await supabase.from('platform_audit_logs').insert({
+        tenant_id: tenant.id,
+        actor_email: user?.email || input.ownerEmail,
+        action: 'business.provisioned',
+        details: `${input.name} (${input.slug}) · plan ${input.planId} · owner ${input.ownerEmail}`,
+        metadata: {
+          slug: input.slug,
+          plan: input.planId,
+          business_type: input.businessType,
+          owner_email: input.ownerEmail,
+        },
+      });
+      if (auditErr) console.warn('[provision] audit insert failed:', auditErr.message);
     }
   } else {
     cloudError = 'Cloud not configured — registered locally only.';
