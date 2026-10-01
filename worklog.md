@@ -687,3 +687,30 @@ Stage Summary:
 
 Unresolved Issues / Risks / Next-phase Priorities:
 1. Unchanged from Task 20 (migration 001 re-run on live Supabase still owed by owner; menu/inventory mutations local-only; no automated tests).
+
+---
+Task ID: 22
+Agent: glm-5.3
+Task: Owner-ordered role-model rework — superadmin=developer platform only (wizard creates owners), owner=dashboards+staff creation, manager+cashier merged into 'staff' (whole POS), credentials-only login (no magic link / register cafe / one-click / on-screen creds), DB rework (v4.0.0)
+
+Work Log:
+- Fixed the reported bug root cause: App.tsx checkSession only routed superadmin to the Platform when the URL was /superadmin or / — any other persisted URL dropped them into the cafe POS. Now superadmin ALWAYS lands on the platform; handleUrlRoute early-returns for superadmin sessions (explicit "Switch to Cafe View" dev tool retained).
+- Role model: UserRole = 'superadmin' | 'owner' | 'staff'; normalizeRole() in rbac.ts folds legacy manager/cashier/kitchen/barista/chef/server/waiter/cleaner → staff. RBAC: owner & superadmin canManageStaff; staff = all 11 tabs (whole POS) but no account creation.
+- Login overhaul (ADR-0010 freeze lifted by explicit owner order): AuthScreen rebuilt — email+password only; removed Register Cafe tab, Magic Link tab, 4 one-click demo buttons, on-screen credentials card; added pointer to docs/CREDENTIALS.md; email input type="text" inputMode="email" so HTML5 validation doesn't block aliases (found via E2E: "manager" alias was being blocked by type=email).
+- authService rework: AuthUserSession.role narrowed to trio; alias map (admin/superadmin/developer/owner/staff/manager/cashier); known-account fallback incl. staff@coolkafe.com; NEW local credential registry (tsos_local_credentials) — provisioned/created accounts sign in instantly offline; signUp(email, password, name, role, tenant) registers locally first + Supabase Auth best-effort (cloud notices non-blocking); sendMagicLink removed; PIN pad logins resolve to 'staff'.
+- Provisioning Wizard: generates a strong owner password at provision time, shows + copy button on the success screen, registers the owner account (role=owner, tenant-scoped) in the registry + cloud best-effort.
+- Settings → Staff Accounts: new "Create Staff Login" form (name/email/temp password, owner-only via canPerformAction manage_staff; staff see an owner-only notice) — E2E created rahul@coolkafe.com/staffpass1 and signed in with it (landed in POS as "Rahul Verma — Cafe Staff").
+- DB rework: supabase/migrations/003_role_model_staff_merge.sql — folds tenant_users.role to superadmin|owner|staff (legacy updated in place), CHECK constraint replaced, RLS helpers tsos_is_tenant_member()/tsos_is_tenant_owner() + member/owner policies rebuilt on the new role set. Owner must run it in the Supabase SQL editor (same constraint as migration 001 — no Postgres connection string in sandbox).
+- docs/CREDENTIALS.md created: all accounts (superadmin/owner/staff + legacy merged + aliases), provisioning flow, Supabase-dashboard fallback for cloud auth.
+- seedData profiles → new trio; Header role avatar branches updated.
+- Docs synced (7+1): CHANGELOG [4.0.0]; technical-documentation 4.0.0 (ADR-0010 unfreeze + v4.0.0 role model bullet); business-documentation 4.0.0 + product note; compact.md 4.0.0 + shipped paragraph; README bullet; help.md new "🔐 Sign-In & Roles (v4.0.0)" section; decisions.md — ADR-0010 status update (unfrozen by owner order) + new ADR-0013.
+- Verified: npx tsc --noEmit + bun run lint → 0; fresh-load console clean (menu hydrates from Supabase cloud; the earlier "Failed to reload App.tsx" console entries were stale mid-edit HMR buffer artifacts — confirmed clean after dev-server restart + about:blank console clear). agent-browser E2E: login shows sign-in only; admin → Platform (not POS) incl. after restart; owner → POS + created staff login E2E; new staff sign-in → POS as Cafe Staff; legacy 'manager' alias → Cafe Staff; wrong password → clear error. Commit 4e75408 pushed.
+
+Stage Summary:
+- v4.0.0 shipped: the platform's identity model now matches the real org — developer (superadmin) provisions → owner runs the business + creates staff logins → staff (merged manager+cashier) operates the whole POS. Login is credentials-only; secrets live in docs/CREDENTIALS.md. DB migration 003 prepared for the owner to run.
+
+Unresolved Issues / Risks / Next-phase Priorities:
+1. Owner must run migrations 001 + 003 in the Supabase SQL editor (orders INSERT RLS 42501 + customers/offers anon 404 + the new role fold). No Postgres connection string in sandbox.
+2. Cloud-auth users created in-app need the Supabase-dashboard step when registry-only (documented in CREDENTIALS.md).
+3. Menu/inventory mutations still local-only; no automated tests.
+4. Next passes: polish loop on converted surfaces, KDS realtime QA once RLS fixed, SuperAdmin platform RPC aggregates post-migration.
