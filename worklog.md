@@ -1020,3 +1020,23 @@ Work Log:
 Stage Summary:
 - Login page is owner-approved and frozen at a6fd120 — no future round will modify it without an explicit "unfreeze login" instruction.
 - main == origin/main after push; crons remain 0 (owner standing order).
+
+---
+Task ID: 29
+Agent: glm-5.3
+Task: Owner screenshots — 3× "Workspace not found in the cloud" (Bills/Messages/Food & Drinks) + password-grant 400 on the new Supabase project; diagnose and fix.
+
+Work Log:
+- Read the owner's uploads: a 17:57 screenshot showed the wizard success screen with the PRE-5.0.2 copy ("provisioned locally; run it on Supabase once migrations are applied") — proof the owner's Add Business run happened on a stale build, so the business + owner (cheeseburg@gmail.com) were saved to the local registry only.
+- Read-only pooler check (throwaway script, deleted): TENANTS 0 (business never reached the cloud), auth.users = operator + smoke.owner only (cheeseburg absent → explains the 400 grant), tenant_users = operator only.
+- Root cause chain: stale build → cloud writes failed → registry-only business → v5 is Supabase-only → every workspace screen honestly reports "Workspace not found"; the 400 = tryLinkCloudSession replaying credentials for an email with no cloud user (harmless, repeated every sign-in).
+- Fixes: (1) NEW src/components/shell/NoWorkspaceScreen.tsx — ONE unified actionable state (email, why, 3-step fix incl. re-provision on the current build, Retry + Sign out) gated in CafeApp via useTenant(reloadKey) — replaces 7 per-screen error cards (kept as defense-in-depth); (2) authService grant-failure memory — tryLinkCloudSession returns linked/no-account/error, definitive rejection persists cloudGrantFailedAt on the registry entry (skip future attempts; cleared on re-provision/success); (3) operator fallback path no longer duplicates the grant attempt; (4) useTenant accurate copy + reloadKey.
+- Browser E2E (127.0.0.1:3000): injected ghost registry-only owner → NoWorkspaceScreen renders (desktop + mobile), network shows exactly ONE 400 grant on first sign-in and ZERO on the second (memory works); operator → one 200 grant → Platform; full wizard golden path re-proven: provisioned "Verify Workspace Cafe" + verify.owner@coolkafe.in → "Saved to cloud" → owner sign-in resolves the workspace (Dashboard shows business name; Food & Drinks + Bills load; 390px shell intact); cleanup via pooler → cloud pristine (tenants 0 / subscriptions 0 / audit 0 / auth.users 2).
+- tsc 0 errors, lint clean, dev.log clean, no new console/page errors. Login page untouched (ADR-0016 freeze respected).
+- Docs: CHANGELOG 5.0.5, docs/CREDENTIALS.md auth section (grant-failure memory + no-workspace screen + re-provision instruction).
+- Commit 6867324 (owner identity) pushed: b305bdb..6867324 main == origin/main.
+
+Stage Summary:
+- The owner's blocker is DATA, not code: their business isn't in the cloud because it was provisioned from a stale build. Unblock = hard-refresh/redeploy the current build, sign in as admin@tsos.dev, re-run Add Business (writes to the cloud now), use the same owner email, sign the owner in with the wizard-shown password.
+- The confusing console 400 no longer repeats (grant-failure memory), and a missing workspace now shows one clear actionable screen instead of per-screen errors.
+- Crons: 0 — owner standing order respected.
