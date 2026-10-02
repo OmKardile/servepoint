@@ -3,6 +3,22 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.1.3] — 2026-10-01 — Test → Debug → Retest: live-cloud E2E round (owners can finally sell)
+
+### Live-cloud E2E battery on the real 007 engine (REST, superadmin probe) — 11/11 PASS
+New probe (`tool-results/probe-live-engine.mjs`, gitignored) ran the REAL guarded RPCs on the cloud: order create (201, `new`, DB-numbered) → `sp_advance_order` ×2 → `sp_record_payment` upi ₹240 → order flips completed/upi → ledger row verified → trail rows actor-stamped → backward transition rejected → **double payment rejected (new 008 guard)**. Cleanup via pooler (FK cascade) — cloud pristine.
+
+### Fixed — THREE real bugs the probe/UI round uncovered
+1. **Double payment accepted (money bug)** — `sp_record_payment` guarded only cancelled orders; a second charge on a paid order booked the money twice. **Migration 008** re-creates the function with `Order has already been paid` (guard verified live: rejected with the exact message).
+2. **Owners could never sell (RLS hole since provisioning was born)** — the wizard created the tenant + auth user but NEVER the owner's `tenant_users` membership row; `tsos_is_tenant_member()` / `sp_tenant_member()` were false for every owner, all owner reads silently rode on public storefront policies, and **every owner write returned 42501** (found as: location insert 403 while placing the first real UI order). **Migration 009**: (a) trigger on `tenants` INSERT seeds the owner membership keyed by `owner_email`; (b) definer RPC `sp_claim_tenant_memberships()` stamps `user_id` onto email-matching rows at sign-in (covers the wizard's tenant-before-auth-user ordering); (c) client calls the claim after every cloud grant. Live owners (CheeseBurg + test tenant) backfilled from the CLI. Root cause proven by policies dump + JWT metadata inspection before touching anything.
+3. **`createOrder` sent a phantom `guest_count` column** (doesn't exist in 001) → 400 on every order. Table/guest context now parks in `notes` (`Table: … · Guests: …`) until table-sessions ship.
+
+### Full UI golden path re-proven (agent-browser, as a REAL provisioned owner)
+Wizard provision "Test Round Cafe" ("Saved to cloud") → owner sign-in → Food & Drinks (seeded menu) → cart → Place Order → **order in cloud (201)** → Bills: Start preparing → Mark ready → Charge UPI ₹126 → **Paid + Payment recorded** → ledger row (`upi, 126, testround.owner@…`) + append-only trail actor-stamped — desktop + mobile screenshots. Test tenant + auth user then deleted; cloud pristine (1 tenant, 0 orders).
+
+### Verified
+- `tsc --noEmit` 0 errors; lint clean; migrations 001→009 applied from the CLI (sentinels green); dev.log clean. Login untouched (ADR-0016).
+
 ## [5.1.2] — 2026-10-01 — "EXECUTE SQL FROM CLI" delivered: migration 007 is LIVE + crons begun
 
 ### CLI SQL channel opened (owner supplied the DB password in-chat)

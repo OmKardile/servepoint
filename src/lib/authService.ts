@@ -213,6 +213,10 @@ export const authService = {
           if (typeof window !== 'undefined') {
             localStorage.setItem(LOCAL_AUTH_KEY, JSON.stringify(session));
           }
+          // Migration 009: claim email-keyed tenant_users rows (definer RPC).
+          if (emailLower !== BOOTSTRAP_OPERATOR.email) {
+            await this.claimTenantMemberships();
+          }
           return { success: true, session, cloudLinked: true };
         }
       }
@@ -267,6 +271,10 @@ export const authService = {
           await this.pinOperatorMetadata();
         }
       }
+      // Migration 009: stamp user_id onto this account's email-keyed
+      // tenant_users row(s) (wizard seeds them before the auth user exists).
+      // Awaited so the first workspace query already passes member RLS.
+      await this.claimTenantMemberships();
       return 'linked';
     } catch {
       return 'error';
@@ -286,6 +294,21 @@ export const authService = {
       await supabase.auth.refreshSession();
     } catch {
       /* best-effort; session remains valid */
+    }
+  },
+
+  /**
+   * Migration 009 self-claim: stamp the signed-in user's id onto any
+   * email-keyed tenant_users row still missing user_id (wizard provisions
+   * the membership before the cloud auth user exists). Definer RPC, so a
+   * brand-new owner can claim their own row without pre-existing RLS rights.
+   */
+  async claimTenantMemberships(): Promise<void> {
+    try {
+      const { error } = await supabase.rpc('sp_claim_tenant_memberships');
+      if (error) console.warn('[auth] membership claim failed:', error.message);
+    } catch (err) {
+      console.warn('[auth] membership claim unavailable:', err);
     }
   },
 

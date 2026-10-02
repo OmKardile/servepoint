@@ -1149,3 +1149,27 @@ Stage Summary:
 - CLI SQL channel is open: future migrations apply automatically from the CLI; the owner never opens the SQL Editor again.
 - Crons: 15-min webDevReview ACTIVE (owner directive supersedes the old crons-0 rule).
 
+---
+Task ID: 35
+Agent: glm-5.3
+Task: "continue / test debug retest iterate" — rigorous live-cloud E2E of the just-applied order engine; fix what breaks.
+
+Work Log:
+- Live-cloud REST battery on the REAL 007 engine (probe as operator/superadmin on CheeseBurg): first run 6/11 — 5 "failures" were harness bugs (RPCs are void → 204 not 200; trail is 2 kitchen rows, money never moves kitchen status) BUT one was REAL: **sp_record_payment accepted a second payment on a paid order**.
+- Fix 1 — migration 008_payment_guards.sql: re-creates sp_record_payment with a `payment_status='completed'` guard (`Order has already been paid`). Wired into db-setup.mjs (sentinel = guard text inside pg_get_functiondef). Applied via CLI → probe re-run → **11/11 PASS** including double-pay rejection with the exact message.
+- Full UI golden path (agent-browser, real provisioned owner): wizard provision "Test Round Cafe" → "Saved to cloud" + owner creds shown → sign-in → workspace loads → seeded menu via pooler (categories + 3 items) → Food & Drinks → cart → Place Order → **cloud had ZERO orders** — network log: POST /locations → 403.
+- Debug with live evidence (policies dump + function definitions + JWT metadata + tenant_users contents): **the wizard never created the owner's tenant_users membership row** — only the operator row existed. Every owner read silently rode on PUBLIC storefront policies; every member policy (tsos_is_tenant_member / sp_tenant_member) was false → every owner write 42501/403 since provisioning was born. CheeseBurg's owner had the same hole.
+- Fix 2 — migration 009_owner_membership.sql: (a) trigger trg_tenants_seed_owner (AFTER INSERT, SECURITY DEFINER) seeds the owner membership keyed by owner_email (user_id NULL if the auth user doesn't exist yet — the wizard inserts the tenant BEFORE signUp); (b) definer RPC sp_claim_tenant_memberships() stamps user_id onto lower(email)-matching NULL rows using the verified JWT email; (c) authService.claimTenantMemberships() called (awaited) after every successful cloud grant (tryLinkCloudSession + cloud-grant sign-in path). Applied via CLI + backfilled BOTH live owners (cheeseburg@gmail.com, testround.owner@coolkafe.in) with direct user_id joins.
+- Retest: POST /locations → **201**. Next failure: POST /orders → 400 — Fix 3: createOrder sent phantom `guest_count` (no such column in 001); now parked in notes (`Table: … · Guests: …`). Retest again: POST /orders → **201**.
+- Full golden path green end-to-end: Order #3 → Start preparing → Mark ready (sp_advance_order) → Charge UPI ₹126 (sp_record_payment) → Paid badge + "Payment recorded" → ledger row (upi, 126, actor testround.owner@…) + trail rows actor-stamped; desktop (1440) + mobile (390) screenshots. 
+- Cleanup: test tenant + audit row + auth user deleted via pooler → cloud pristine (1 tenant CheeseBurg, 0 orders, 0 payments, tenant_users = operator + CheeseBurg owner).
+- Verified: tsc 0 errors; lint clean; migrations 001→009 sentinel-green from CLI; dev.log clean (dev server had been killed externally mid-round — restarted). Login untouched (ADR-0016).
+- Docs: CHANGELOG [5.1.3]; CREDENTIALS.md provisioning section → 001→009. Commit + push (owner identity) follows this record.
+
+Stage Summary:
+- The order engine is not just deployed — it is PROVEN on the live cloud end-to-end (REST 11/11 + full UI golden path), and two latent money/authorization bugs (double-pay, owner-membership RLS hole) are fixed at the schema level with idempotent migrations (008/009).
+- Every wizard-provisioned owner now automatically gets a membership row (trigger) + user_id (claim at sign-in) — provisioning is self-contained.
+- Next rounds: KDS kitchen board (top of the NOVA roadmap; statuses + trigger trail already in place), then table floor/QR sessions, reports/EOD.
+- Crons: 15-min webDevReview ACTIVE.
+
+

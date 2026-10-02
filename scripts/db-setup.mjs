@@ -1,4 +1,4 @@
-// Supabase provisioning script: applies ServePoint migrations 001-007 to the live
+// Supabase provisioning script: applies ServePoint migrations 001-009 to the live
 // Supabase project via the Supavisor session pooler (IPv4 path — direct
 // db.<ref>.supabase.co:5432 is IPv6-only on current projects), then verifies.
 // NOT part of the app bundle.
@@ -84,6 +84,20 @@ try {
   await applyFile('006_fix_rls_recursion', 'supabase/migrations/006_fix_rls_recursion.sql', await functionExists('sp_tenant_member'));
   // 007 sentinel: order-engine payments ledger in place
   await applyFile('007_order_engine_payments_history', 'supabase/migrations/007_order_engine_payments_history.sql', await tableExists('payments'));
+  // 008 sentinel: double-payment guard present inside sp_record_payment
+  const payGuard = async () => {
+    const { rows } = await client.query(
+      `SELECT pg_get_functiondef('public.sp_record_payment(uuid,text,numeric)'::regprocedure) AS def`
+    );
+    return String(rows[0]?.def ?? '').includes('already been paid');
+  };
+  await applyFile('008_payment_guards', 'supabase/migrations/008_payment_guards.sql', await payGuard());
+  // 009 sentinel: owner-membership self-claim function in place
+  await applyFile(
+    '009_owner_membership',
+    'supabase/migrations/009_owner_membership.sql',
+    await functionExists('sp_claim_tenant_memberships')
+  );
 
   // ── Verification ──────────────────────────────────────────────────────────
   const tables = await client.query(

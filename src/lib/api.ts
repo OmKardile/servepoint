@@ -164,6 +164,17 @@ export async function createOrder(tenantId: string, input: NewOrderInput): Promi
   const taxAmount = Math.round(subtotal * taxRate * 100) / 100;
   const total = Math.round((subtotal + taxAmount) * 100) / 100;
 
+  // orders has NO guest_count column (migration 001) — sending one 400s.
+  // Table/guest context is parked in notes until the table-sessions roadmap
+  // item gives it a real home.
+  const contextNotes = [
+    input.notes || null,
+    input.tableLabel ? `Table: ${input.tableLabel}` : null,
+    input.orderType === 'dine_in' && input.guestCount ? `Guests: ${input.guestCount}` : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+
   const { data: created, error } = await supabase
     .from('orders')
     .insert({
@@ -174,12 +185,11 @@ export async function createOrder(tenantId: string, input: NewOrderInput): Promi
       // Orders enter as 'new'; the counter advances them through the engine.
       status: 'new',
       customer_name: input.customerName || null,
-      guest_count: input.guestCount || null,
       subtotal,
       tax_amount: taxAmount,
       total,
       payment_status: 'pending',
-      notes: input.notes || null,
+      notes: contextNotes || null,
     })
     .select('*')
     .single();
