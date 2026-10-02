@@ -499,12 +499,34 @@ export async function createTable(
 export async function updateTable(
   tableId: string,
   tenantId: string,
-  patch: { status?: TableStatus; active_order_id?: string | null }
+  patch: {
+    status?: TableStatus;
+    active_order_id?: string | null;
+    table_number?: string;
+    capacity?: number;
+    section?: string;
+  }
 ): Promise<void> {
   requireCloud();
   const { error } = await supabase
     .from('dining_tables')
     .update(patch)
+    .eq('id', tableId)
+    .eq('tenant_id', tenantId);
+  if (error) throw error;
+}
+
+/**
+ * Retire a table from the floor. The schema does the honest thing on its own:
+ * orders that referenced it keep their amounts with table_id SET NULL (001),
+ * and the table's guest QR sessions die with it (002 CASCADE). Callers guard
+ * — a table that still holds an active order must never reach this path.
+ */
+export async function deleteTable(tableId: string, tenantId: string): Promise<void> {
+  requireCloud();
+  const { error } = await supabase
+    .from('dining_tables')
+    .delete()
     .eq('id', tableId)
     .eq('tenant_id', tenantId);
   if (error) throw error;

@@ -3,6 +3,19 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.35.0] — 2026-10-03 — The floor can be rearranged: table edit & retire, and reserved turns gold
+
+### Added — table management on the drill panel (Edit + Remove)
+- The floor could only grow: **Add table** existed, but renaming a table, changing its seat count or moving it to another section, and retiring a table entirely, all needed the database. The table drill panel now carries a management row — **Edit** opens the (now shared) table dialog prefilled with the table's current number, seats and section and saves through an honest duplicate check that mirrors the 001 digit-matcher (same text or same digits under a different dressing — `T3` vs `Patio-3` is refused with the clashing table's name). **Remove** retires an idle table behind the same two-step arm discipline as the bulk cut and Bills cancel (3s self-disarm).
+- The Remove guard is honest about why: a table that still holds an order or a reservation shows *disabled* Remove with "Seat or clear the table before removing it"; an idle one reads "Idle table — safe to retire"; the armed confirm names the consequences — "Orders keep their amounts; this table's QR links stop working."
+- The schema carries the history: orders that referenced a removed table keep their amounts with `table_id` SET NULL (001), and the table's guest QR sessions die with it (002 CASCADE). Both proven live: #106 cancelled → table auto-released by the 011 trigger → removed → order intact with `table_id: null`, 0 orphan sessions.
+
+### Improved — reserved wears the gold (styling detail)
+- Reserved tables were visually teal — same family as available — while their CTA and panel icon had already gone gold in 5.31. The reserved identity is now one color everywhere: the card's left border and status-chip dot, the panel's armchair icon and the "Seat reserved guests" CTA all read **DS gold `#B88E2F`**. A reserved table now catches the eye across the floor exactly the way its CTA already did.
+
+### Verified
+- `tsc` 0 after every edit; zero page errors. **Full live journey** (no DB staging — every step through the real UI): created T3 via Add table → Reserve → drill panel → **"Seat reserved guests — start ticket on T3"** (the parked CTA test from Tasks 67–71) landed on Food & Drinks with the cart chip "T3 · 4 guests" (capacity pre-filled) → 1 × Flat White via the item dialog → Place order → **#106 placed** → floor showed OCCUPIED 3 with T3 held by the 011 trigger → Bills two-step Cancel → T3 honestly released. Then the new tools: Edit (seats 4→2, section → Patio, verified on the card), duplicate guard (`T1` refused), Remove disabled-while-reserved → enabled-when-idle → confirm → floor back to T1/T2 with AVAILABLE 0 · OCCUPIED 2. DB integrity: #106 cancelled with `table_id: null`, 0 orphan sessions, screenshot `scripts/qa74-floor-managed.png`. Also chased and cleared a false alarm: Bills' "20:32" on #106 is browser-UTC rendering of a 02:02 IST order (headless Chrome runs UTC; EOD/CSV use IST by design). Found a **QA leftover from an earlier round**: order #67 (customer note "offer-path sanity after 022") still sits active-unpaid in the ledger — flagged for the owner, not silently deleted. sw `5.35.0-r1`.
+
 ## [5.34.0] — 2026-10-03 — The day, exported: Close-out wears its h1 and hands the ledger to the spreadsheet
 
 ### Added — day-ledger CSV export (Close-out header, beside Print z-report)

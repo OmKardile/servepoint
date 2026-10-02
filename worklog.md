@@ -2102,3 +2102,25 @@ Stage Summary:
 - Ideas parked: reserved-seat CTA live test (T3 via real Add dialog); EOD Z-report logo (deliberate); DS showcase link from /showcase (owner OK); serve DS showcase under public/ (owner OK); URL write-back on in-app nav (deliberate non-goal); storage folder silting report (someday); drawer movements CSV (the movements list is small and on-screen — only if asked).
 - Watch items carried: DB password ROTATION (owner decision — the old credential remains in git history).
 - Crons: 15-min webDevReview (job 430321) + DAILY deep pass (job 431587, 09:00 IST).
+
+---
+Task ID: 74 (completion — 15-min webDevReview round, trace 202610030424)
+Agent: glm-5.3 (cron webDevReview round)
+Task: Post-5.34.0 orientation + QA sweep, then the round's pair: the floor can be rearranged (table Edit + Remove on the drill panel) + reserved wears the gold. Bonus: the parked reserved-seat CTA live test (T3) finally ran — end to end, no staging.
+
+Work Log:
+- Orientation clean (HEAD 6c600fc = 5.34.0 pushed; tree clean; tsc 0; dev 200).
+- Parked CTA LIVE TEST (closed): created T3 via the real Add-table dialog → Reserve via card → drill panel → gold CTA "Seat reserved guests — start ticket on T3" → landed on Food & Drinks with cart chip "T3 · 4 guests" (guestCount pre-filled from capacity) → added 1 × Flat White via the item detail dialog → Place order → toast "Order #106 placed" → floor OCCUPIED 3 (011 trigger auto-held T3) → Bills two-step Cancel ("Cancel order" → "Confirm cancel?") → T3 honestly released (AVAILABLE 1 / OCCUPIED 2). The whole journey ran through the real UI — zero DB fixtures.
+- TABLE MANAGEMENT (feature): api.updateTable patch grew table_number/capacity/section + new api.deleteTable (orders SET NULL per 001, sessions CASCADE per 002 — documented in the fn doc). Drill panel footer grows a management row: Edit (opens AddTableDialog generalized with `initial` — prefilled, "Edit table T3" title, "Save changes") with a client-side duplicate guard mirroring the 001 digit-matcher (text OR digit-equality, excludes self, names the clash); Remove with two-step arm + 3s self-disarm, guarded canRemove = status==='available' && !active_order_id, disabled hint "Seat or clear the table before removing it", armed consequence line "Orders keep their amounts; this table's QR links stop working."
+- RESERVED GOLD (styling): STATUS_META.reserved.dot #0F3D3E → #B88E2F — one change ripples everywhere the reserved identity shows: card left border, status chip dot, panel armchair icon; joins the gold CTA (5.31). Reserved is now gold-coded end to end (verified computed style rgb(184,142,47) on the T3 card).
+- E2E of the new tools (real UI): Edit T3 seats 4→2 + section Patio → card reads "2 seats"; duplicate guard refuses "T1" ("Another table is already called T1."); Remove disabled while reserved → Clear → enabled ("Idle table — safe to retire") → armed → confirmed → panel closed, floor back to T1/T2 (AVAILABLE 0 · OCCUPIED 2). DB integrity: #106 cancelled with table_id null, 0 orphan sessions, T3's sessions cascaded. Screenshot scripts/qa74-floor-managed.png.
+- False alarm chased and cleared: Bills showed "20:32" on just-placed #106 — headless Chrome runs UTC; Bills renders browser-local time while EOD/CSV use IST. Not a bug; recorded so nobody re-chases it.
+- QA leftover FOUND: order #67 (customer note "offer-path sanity after 022 · via QR · Table T1") sits active-unpaid in the ledger — an earlier round's offer-path test that never got cleaned. Also #68/#69/#96 (active-unpaid, untagged, from the same era). Flagged for the owner; not silently deleted this round. CounterInbox currently holds their pending "Ok — fire to kitchen" prompts.
+- sw servepoint-v5.35.0-r1; CHANGELOG [5.35.0]; tsc 0 after every edit.
+
+Stage Summary:
+- 5.35.0 — the floor can be rearranged. Surfaces: src/lib/api.ts + src/components/floor/FloorScreen.tsx + public/sw.js + CHANGELOG.md + worklog.md (+1 screenshot). No migration, no schema change; cloud state: T3 created and removed (0 trace), #106 cancelled via real UI (cancelled rows are honest ledger history).
+- Parked item CLOSED: reserved-seat CTA live test. New watch items: #67/#68/#69/#96 active-unpaid QA-era leftovers (owner decision: void via Bills UI or keep as demo state); CounterInbox pending prompts for the same.
+- Ideas parked: CounterInbox bulk "Ok all" (risky); drawer movements CSV (only if asked); DS showcase links (owner OK pending).
+- Watch items carried: DB password ROTATION (owner decision).
+- Crons: 15-min webDevReview (job 430321) + DAILY deep pass (job 431587, 09:00 IST).

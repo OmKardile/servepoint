@@ -9,12 +9,14 @@ import {
   ExternalLink,
   Link2,
   Loader2,
+  Pencil,
   Plus,
   Printer,
   QrCode,
   RefreshCw,
   Scissors,
   Smartphone,
+  Trash2,
   Users,
   X,
 } from 'lucide-react';
@@ -32,6 +34,7 @@ import {
 } from 'recharts';
 import {
   createTable,
+  deleteTable,
   fetchOrders,
   fetchTableSessions,
   fetchTables,
@@ -264,7 +267,7 @@ const SpHourDeltaTooltip: React.FC<{
 const STATUS_META: Record<TableStatus, { label: string; bg: string; fg: string; dot: string }> = {
   available: { label: 'Available', bg: '#EAF4EC', fg: '#2E7D32', dot: '#2E7D32' },
   occupied: { label: 'Occupied', bg: '#FDF3E4', fg: '#8A5A16', dot: '#C2571B' },
-  reserved: { label: 'Reserved', bg: '#F1F4F1', fg: '#0F3D3E', dot: '#0F3D3E' },
+  reserved: { label: 'Reserved', bg: '#F1F4F1', fg: '#0F3D3E', dot: '#B88E2F' },
   billing: { label: 'Billing', bg: '#FDECEA', fg: '#B4483C', dot: '#B4483C' },
 };
 
@@ -342,15 +345,18 @@ function AddTableDialog({
   error,
   onAdd,
   onClose,
+  initial,
 }: {
   busy: boolean;
   error: string | null;
   onAdd: (number: string, capacity: number, section: string) => void;
   onClose: () => void;
+  /** When present the dialog edits an existing table instead of adding one. */
+  initial?: { number: string; capacity: number; section: string };
 }) {
-  const [number, setNumber] = useState('');
-  const [capacity, setCapacity] = useState('4');
-  const [section, setSection] = useState('Main Floor');
+  const [number, setNumber] = useState(initial?.number ?? '');
+  const [capacity, setCapacity] = useState(String(initial?.capacity ?? 4));
+  const [section, setSection] = useState(initial?.section ?? 'Main Floor');
   const capNum = Number.parseInt(capacity, 10);
 
   useEffect(() => {
@@ -362,11 +368,11 @@ function AddTableDialog({
   }, [onClose]);
 
   return (
-    <div className="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label="Add table">
+    <div className="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label={initial ? 'Edit table' : 'Add table'}>
       <button type="button" aria-label="Close dialog" onClick={onClose} className="absolute inset-0 h-full w-full cursor-default bg-[#0F3D3E]/45" />
       <div className="absolute inset-x-2 top-1/2 mx-auto max-w-[420px] -translate-y-1/2 rounded-3xl bg-white p-5 shadow-2xl sm:inset-x-0">
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-[15px] font-bold text-[#1A1A1A]">Add a table</h2>
+          <h2 className="text-[15px] font-bold text-[#1A1A1A]">{initial ? `Edit table ${initial.number}` : 'Add a table'}</h2>
           <button
             type="button"
             onClick={onClose}
@@ -416,7 +422,7 @@ function AddTableDialog({
               style={{ background: '#0F3D3E' }}
             >
               {busy && <Loader2 size={14} className="animate-spin" aria-hidden />}
-              Add table
+              {initial ? 'Save changes' : 'Add table'}
             </button>
           </div>
         </div>
@@ -460,6 +466,9 @@ function TableDrill({
   onCut,
   bulkCutBusy,
   onCutAll,
+  onEdit,
+  onRemove,
+  removeBusy,
   onClose,
 }: {
   table: DiningTable;
@@ -471,6 +480,9 @@ function TableDrill({
   onCut: (sessionId: string) => void;
   bulkCutBusy: boolean;
   onCutAll: (sessionIds: string[]) => void;
+  onEdit: () => void;
+  onRemove: () => void;
+  removeBusy: boolean;
   onClose: () => void;
 }): React.ReactElement {
   const meta = STATUS_META[table.status];
@@ -478,8 +490,12 @@ function TableDrill({
   const [copied, setCopied] = useState<'link' | 'token' | null>(null);
   const [shown, setShown] = useState(false);
   const [bulkArm, setBulkArm] = useState(false);
+  const [removeArmed, setRemoveArmed] = useState(false);
   const url = guestUrlOf(table);
   const isLive = table.status === 'occupied' || table.status === 'billing';
+  /* A table that still holds an order (or a reservation) can't be retired —
+     the guard is honest: the hint names what to do first. */
+  const canRemove = table.status === 'available' && !table.active_order_id;
 
   /* Live windows on THIS table (clock-derived, same rule as the rows). Two or
      more earns the bulk cut — with one, the row's own cut is the honest tool. */
@@ -492,6 +508,13 @@ function TableDrill({
     const t = window.setTimeout(() => setBulkArm(false), 3000);
     return () => window.clearTimeout(t);
   }, [bulkArm]);
+
+  /* the remove confirm disarms itself, same discipline as the bulk-cut arm */
+  useEffect(() => {
+    if (!removeArmed) return;
+    const t = window.setTimeout(() => setRemoveArmed(false), 3000);
+    return () => window.clearTimeout(t);
+  }, [removeArmed]);
 
   useEffect(() => {
     const raf = requestAnimationFrame(() => setShown(true));
@@ -840,6 +863,47 @@ function TableDrill({
               </p>
             </div>
           )}
+
+          {/* ── table management (5.35.0): the floor can be rearranged, not
+              only grown. Edit renames/re-seats/re-sections; Remove retires a
+              table that is genuinely idle (no order holding it). ── */}
+          <div className="mt-auto flex items-center gap-2 border-t border-[#E3E7E0] pt-3">
+            <button
+              type="button"
+              onClick={onEdit}
+              className="flex h-10 items-center gap-1.5 rounded-full border border-[#E3E7E0] px-3.5 text-[12.5px] font-semibold text-[#0F3D3E] transition-colors hover:border-[#B88E2F] hover:bg-[#FBF7EC]"
+            >
+              <Pencil size={13} aria-hidden /> Edit
+            </button>
+            {removeArmed ? (
+              <button
+                type="button"
+                disabled={removeBusy}
+                onClick={onRemove}
+                className="flex h-10 items-center gap-1.5 rounded-full bg-[#FEF2F2] px-3.5 text-[12.5px] font-bold text-[#B42318] transition-colors hover:bg-[#FDE7E5] disabled:opacity-55"
+              >
+                {removeBusy && <Loader2 size={13} className="animate-spin" aria-hidden />}
+                Confirm remove?
+              </button>
+            ) : (
+              <button
+                type="button"
+                disabled={!canRemove || removeBusy}
+                title={canRemove ? 'Retire this table from the floor' : 'Seat or clear the table before removing it'}
+                onClick={() => setRemoveArmed(true)}
+                className="flex h-10 items-center gap-1.5 rounded-full border border-[#E3E7E0] px-3.5 text-[12.5px] font-semibold text-[#B4483C] transition-colors hover:bg-[#FDF3F2] disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <Trash2 size={13} aria-hidden /> Remove
+              </button>
+            )}
+            <p className="min-w-0 flex-1 truncate text-right text-[10.5px] text-[#969696]">
+              {removeArmed
+                ? 'Orders keep their amounts; this table\'s QR links stop working.'
+                : canRemove
+                  ? 'Idle table — safe to retire'
+                  : 'Busy tables can\'t be removed'}
+            </p>
+          </div>
         </div>
       </aside>
     </div>
@@ -856,6 +920,8 @@ export function FloorScreen(): React.ReactElement {
   const [rtState, setRtState] = useState<RealtimeState>('connecting');
   const [busyId, setBusyId] = useState<string | null>(null);
   const [addOpen, setAddOpen] = useState(false);
+  const [editTable, setEditTable] = useState<DiningTable | null>(null);
+  const [removeBusy, setRemoveBusy] = useState(false);
   const [confirmId, setConfirmId] = useState<string | null>(null);
   const [cutArmId, setCutArmId] = useState<string | null>(null);
   const [cutBusyId, setCutBusyId] = useState<string | null>(null);
@@ -1654,6 +1720,54 @@ export function FloorScreen(): React.ReactElement {
         />
       )}
 
+      {editTable && (
+        <AddTableDialog
+          busy={busyId === 'editing'}
+          error={actionError}
+          initial={{
+            number: editTable.table_number,
+            capacity: editTable.capacity,
+            section: editTable.section || 'Main Floor',
+          }}
+          onClose={() => {
+            setEditTable(null);
+            setActionError(null);
+          }}
+          onAdd={(number, capacity, section) => {
+            if (busyId === 'editing') return; // double-dispatch guard
+            /* duplicate check mirrors the 001 digit-matcher: same text, or
+               same digits under a different dressing ("T3" vs "Patio-3"). */
+            const norm = (s: string) => s.trim().toLowerCase();
+            const digits = (s: string) => s.replace(/[^0-9]/g, '');
+            const clash = (tables ?? []).find(
+              (t) =>
+                t.id !== editTable.id &&
+                (norm(t.table_number) === norm(number) ||
+                  (digits(number) !== '' && digits(t.table_number) === digits(number))),
+            );
+            if (clash) {
+              setActionError(`Another table is already called ${clash.table_number}.`);
+              return;
+            }
+            setBusyId('editing');
+            setActionError(null);
+            updateTable(editTable.id, tenantId, {
+              table_number: number,
+              capacity,
+              section,
+            })
+              .then(() => {
+                setEditTable(null);
+                return reload();
+              })
+              .catch((err) => {
+                setActionError(err instanceof Error ? err.message : 'Could not update the table.');
+              })
+              .finally(() => setBusyId(null));
+          }}
+        />
+      )}
+
       {drillTable && (
         <TableDrill
           table={drillTable}
@@ -1665,6 +1779,25 @@ export function FloorScreen(): React.ReactElement {
           onCut={(id) => void cutSession(id)}
           bulkCutBusy={bulkCutBusy === drillTable.id}
           onCutAll={(ids) => void cutAllSessions(drillTable.id, ids)}
+          onEdit={() => {
+            setActionError(null);
+            setEditTable(drillTable);
+          }}
+          onRemove={() => {
+            if (removeBusy) return; // double-dispatch guard
+            setRemoveBusy(true);
+            setActionError(null);
+            deleteTable(drillTable.id, tenantId)
+              .then(() => {
+                setDrillId(null);
+                return reload();
+              })
+              .catch((err) => {
+                setActionError(err instanceof Error ? err.message : 'Could not remove the table.');
+              })
+              .finally(() => setRemoveBusy(false));
+          }}
+          removeBusy={removeBusy}
           onClose={() => setDrillId(null)}
         />
       )}
