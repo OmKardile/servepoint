@@ -147,4 +147,12 @@ await save(
   path.join(ROOT, 'public/og-image.jpg')
 );
 
+// ── 4. Showcase hero from the 3D render (web-weight) ────────────────────────
+// Full-width hero on /showcase: 1600px wide JPEG at q85 — ~10x lighter than
+// the committed master PNG (1.1 MB → ~90 KB).
+await save(
+  await sharp(SRC_3D).resize({ width: 1600 }).jpeg({ quality: 85 }).toBuffer(),
+  path.join(ROOT, 'src/assets/brand/hero-3d.jpg')
+);
+
 console.log('\nAll brand assets built.');

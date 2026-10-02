@@ -15,6 +15,8 @@ import { NotificationsScreen } from './components/notifications/NotificationsScr
 import { SupportScreen } from './components/support/SupportScreen';
 import { SettingsScreen } from './components/settings/SettingsScreen';
 import { PlatformScreen } from './components/platform/PlatformScreen';
+import ShowcasePage from './components/pages/ShowcasePage';
+import IndexHelpPage from './components/pages/IndexHelpPage';
 import brandLockup from './assets/brand/lockup-light.png';
 
 /**
@@ -23,7 +25,12 @@ import brandLockup from './assets/brand/lockup-light.png';
  *  - superadmin → Platform console ALWAYS (developer/operators; never the cafe app).
  *  - owner / staff → the ServePoint cafe app per the Figma (Dashboard, Food & Drinks,
  *    Messages, Bills, Settings + Notifications, Support).
+ *  - /showcase + /index-help → public, unauthenticated product surfaces (v5.2.1):
+ *    plain-path routing on the SPA fallback — the POS stays king at "/".
  */
+
+/** Reads the browser path ONCE (these are standalone pages, not in-app tabs). */
+const usePathname = (): string => useState(() => window.location.pathname)[0];
 
 const Splash: React.FC = () => (
   <div className="flex h-screen flex-col items-center justify-center gap-5 bg-[#F6F5F2]">
@@ -79,6 +86,7 @@ const CafeApp: React.FC = () => {
 };
 
 const App: React.FC = () => {
+  const pathname = usePathname(); // public surfaces route on the plain path
   const { session, setSession, setReady } = useSession();
   const [restoring, setRestoring] = useState(true);
 
@@ -102,6 +110,10 @@ const App: React.FC = () => {
   }, [setSession, setReady]);
 
   if (restoring) return <Splash />;
+
+  // Public product surfaces bypass auth entirely (no session restore flicker).
+  if (pathname === '/showcase') return <ShowcasePage />;
+  if (pathname === '/index-help' || pathname === '/help') return <IndexHelpPage />;
 
   if (!session) {
     return (

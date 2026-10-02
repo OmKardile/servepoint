@@ -3,6 +3,18 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.2.1] — 2026-10-02 — Public surfaces: /showcase + /index-help
+
+### Added — two standalone public pages (owner request: "check /showcase /index-help and develop them")
+Neither route existed (only historical mentions from the pre-rebuild era) — both are now real product surfaces, routed on the plain path via the SPA fallback (the POS stays king at `/`):
+- **`/showcase`** (`src/components/pages/ShowcasePage.tsx`) — the product tour: Instrument-Serif italic hero ("Run the counter, the kitchen and the books — from one screen."), 3D brand render as a hero card (new web-weight derivative `src/assets/brand/hero-3d.jpg`, 1600px q85 ≈ 48 KB — ~20× lighter than the 1.1 MB master, added as step 4 of `build-brand-assets.mjs` so it regenerates with the rest), six feature cards (multi-tenancy, guarded order engine, live KDS, payments ledger, team messaging, realtime), a deep-teal engineering strip (stack chips + three stat blocks: 10 migrations / 2 engine RPCs / 0 mock paths), and closing CTA.
+- **`/index-help`** (alias `/help`) — the getting-started guide: three roles explained (operator / owner / staff), the golden path as six numbered steps, owner + operator operational notes, and a five-question FAQ accordion (single-open behavior; data isolation, double-charge guard, realtime, password reset). No credential is ever printed — accounts are provisioned, by design.
+- **Routing**: `usePathname()` reads the browser path once in `App.tsx`; `/showcase` and `/index-help` render before auth/session logic (no session flicker, fully unauthenticated). Footer nav on both pages links App / Showcase / Help; sticky-footer rule honored (`min-h-screen flex flex-col` + `mt-auto`).
+- **Discoverability**: Support screen gained a "Product links" card (Megaphone icon) with buttons to both surfaces — the auth screen stays untouched (ADR-0016).
+
+### Verified
+- tsc 0 errors; lint clean. agent-browser E2E: /showcase renders at 1440 + 390 (hero, features, nav); "How it works" navigates to /index-help; FAQ accordion opens/closes correctly; `/` still renders the frozen login byte-identical. Screenshots saved.
+
 ## [5.2.0] — 2026-10-02 — Kitchen Display System: the live rail (NOVA roadmap #1)
 
 ### Added — Kitchen screen (owner + staff)

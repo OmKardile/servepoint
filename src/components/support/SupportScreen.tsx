@@ -9,6 +9,7 @@ import {
   Info,
   Loader2,
   Mail,
+  Megaphone,
   RefreshCw,
   Send,
 } from 'lucide-react';
@@ -270,6 +271,35 @@ const SupportContent: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
                 <span className="font-semibold text-[#0F3D3E]">docs/</span> folder of the ServePoint repository.
               </p>
             </div>
+          </div>
+        </section>
+
+        {/* Product links — public surfaces (v5.2.1) */}
+        <section className="sp-card p-5" aria-label="Product links">
+          <div className="flex items-center gap-4">
+            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#D9E2DD] text-[#0F3D3E]">
+              <Megaphone size={19} aria-hidden />
+            </span>
+            <div className="min-w-0 flex-1">
+              <h3 className="text-[14px] font-semibold text-[#1A1A1A]">Product links</h3>
+              <p className="mt-0.5 text-[13px] leading-relaxed text-[#6B6B6B]">
+                Shareable pages that don't need a sign-in — great for showing ServePoint off.
+              </p>
+            </div>
+          </div>
+          <div className="mt-4 grid gap-2 sm:grid-cols-2">
+            <a
+              href="/showcase"
+              className="flex h-10 items-center justify-center rounded-xl border border-[#E3E7E0] bg-white text-[13px] font-semibold text-[#0F3D3E] transition hover:border-[#B88E2F]/50 hover:text-[#7A5B18]"
+            >
+              Product showcase
+            </a>
+            <a
+              href="/index-help"
+              className="flex h-10 items-center justify-center rounded-xl border border-[#E3E7E0] bg-white text-[13px] font-semibold text-[#0F3D3E] transition hover:border-[#B88E2F]/50 hover:text-[#7A5B18]"
+            >
+              Getting-started guide
+            </a>
           </div>
         </section>
 

@@ -1196,3 +1196,24 @@ Stage Summary:
 - Realtime infra (010 + subscribeOrdersRealtime) is reusable for the next NOVA items (table floor sessions, notifications live ping).
 - Next rounds: table floor/QR sessions (dining_tables + table_sessions already exist in schema 001/002 — UI is the gap), reports/EOD, inventory auto-deduction.
 - Crons: 15-min webDevReview ACTIVE.
+
+---
+Task ID: 37
+Agent: glm-5.3
+Task: "anything for me to do? --- check /showcase /index-help and develop them"
+
+Work Log:
+- Checked both paths: they did NOT exist in the codebase (only stale pre-rebuild mentions of a "Tessera showcase" era) — Vite SPA fallback returned 200 with the POS rendered at those paths. So the task became: develop both public surfaces for real.
+- NEW src/components/pages/ShowcasePage.tsx (/showcase): Instrument-Serif italic hero, 3D brand render hero card, six feature cards (multi-tenancy / guarded engine / live KDS / ledger / messaging / realtime), deep-teal engineering strip (stack chips + 10-migrations / 2-RPCs / 0-mock-paths stats), closing CTA, sticky footer with App/Showcase/Help nav. New web-weight derivative src/assets/brand/hero-3d.jpg (1600px q85, 48 KB vs 1.1 MB master) added as step 4 of scripts/build-brand-assets.mjs — regenerated with the whole brand set.
+- NEW src/components/pages/IndexHelpPage.tsx (/index-help, alias /help): roles explained (operator/owner/staff), golden path as 6 numbered steps, owner+operator operational notes, 5-question FAQ accordion (single-open). No credentials printed anywhere.
+- Routing: usePathname() in App.tsx reads the path once; /showcase + /index-help render before auth/session logic — fully public, zero session flicker; "/" remains the POS/login (ADR-0016 untouched, byte-verified).
+- Discoverability: SupportScreen gained a "Product links" card with buttons to both surfaces (auth screen untouched per ADR-0016).
+- E2E (agent-browser): /showcase renders 1440+390 (screenshots), "How it works" → /index-help navigation works, FAQ accordion opens/closes (single-open), / still shows the frozen login. tsc 0, lint clean, dev.log HMR-only.
+- Owner action items answered in-chat: (1) GitHub repo rename to `servepoint` still pending (authenticated ls-remote confirms OmKardile/servepoint does not exist; tsos-alt alive at 8b754ce) — flip `git remote set-url origin` as soon as it's done; (2) nothing else blocking — cloud pristine from Task 36.
+- Docs: CHANGELOG [5.2.1]. Commit + push (owner identity) follow this record.
+
+Stage Summary:
+- ServePoint now has a shareable public face: /showcase for the pitch, /index-help for onboarding — both unauthenticated, on-brand, cross-linked, and regenerable.
+- Pending owner action unchanged: GitHub rename tsos-alt → servepoint, then flip the remote + doc references.
+- Next rounds (NOVA): table floor/QR sessions UI (schema ready), reports/EOD, inventory auto-deduction.
+- Crons: 15-min webDevReview ACTIVE (job 430073).
