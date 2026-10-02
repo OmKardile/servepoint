@@ -18,6 +18,7 @@ import { KitchenScreen } from './components/kitchen/KitchenScreen';
 import { FloorScreen } from './components/floor/FloorScreen';
 import { MenuScreen } from './components/menu/MenuScreen';
 import { NotificationsScreen } from './components/notifications/NotificationsScreen';
+import { MessagesScreen } from './components/messages/MessagesScreen';
 import { SupportScreen } from './components/support/SupportScreen';
 import { SettingsScreen } from './components/settings/SettingsScreen';
 import { PlatformScreen } from './components/platform/PlatformScreen';
@@ -120,6 +121,7 @@ const CafeApp: React.FC = () => {
       {section === 'floor' && <FloorScreen />}
       {section === 'menu' && <MenuScreen />}
       {section === 'notifications' && <NotificationsScreen />}
+      {section === 'messages' && <MessagesScreen />}
       {section === 'support' && <SupportScreen />}
       {section === 'settings' && <SettingsScreen />}
     </AppShell>

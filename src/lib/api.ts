@@ -1056,6 +1056,39 @@ export function subscribeNotificationsRealtime(
   };
 }
 
+/** v5.41.0 — the staff line is heard live: conversation_messages AND
+ * conversations joined the realtime publication in migration 031, so a
+ * sent line pings instantly (the thread refetches, the list preview
+ * moves). Own scoped channel — the Task 79 lesson (badge/list collision)
+ * applies to every chat consumer too. */
+export function subscribeMessagesRealtime(
+  tenantId: string,
+  onPing: () => void,
+  onState: (s: RealtimeState) => void
+): () => void {
+  requireCloud();
+  const channel = supabase
+    .channel(`messages-${tenantId}`)
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'conversation_messages', filter: `tenant_id=eq.${tenantId}` },
+      () => onPing()
+    )
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'conversations', filter: `tenant_id=eq.${tenantId}` },
+      () => onPing()
+    )
+    .subscribe((status) => {
+      if (status === 'SUBSCRIBED') onState('live');
+      else if (status === 'TIMED_OUT' || status === 'CHANNEL_ERROR' || status === 'CLOSED') onState('offline');
+      else onState('connecting');
+    });
+  return () => {
+    void supabase.removeChannel(channel);
+  };
+}
+
 export async function fetchConversations(tenantId: string): Promise<Conversation[]> {
   requireCloud();
   const { data, error } = await supabase

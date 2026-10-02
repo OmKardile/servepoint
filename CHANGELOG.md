@@ -3,6 +3,22 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.41.0] — 2026-10-03 — The staff line: 004's other half, finally built
+
+### Added — team messages (the Messages surface, migration 031)
+- Migration 004 was titled "Notifications & Messages" and built BOTH halves — but only notifications ever got a screen. The team-chat backend (conversations + conversation_messages, RLS'd, seeded per-tenant "Front of House" and "Kitchen" rooms) and even the API layer (`fetchConversations`/`fetchMessages`/`sendMessage`) have existed since the first build with **zero UI consumers** — the staff line lived only as tables in the dark. 5.41.0 builds the visible half:
+  - **Two-pane chat**: rooms on the left (avatar chip tinted by a deterministic name-hash, name, server-stamped preview, relative time; active room carries the gold border), the thread on the right (room header with the 004 member list, day dividers — Today / Yesterday / date — and name-attributed bubbles: mine deep-teal right-aligned, others white left-aligned with the sender's name). Phones get the room→thread swap with a back button. Enter sends; Shift+Enter breaks a line; the composer disables while sending and shows honest errors.
+  - **Migration `031_message_line.sql`**: both chat tables join `supabase_realtime` (a sent line lands on every signed-in terminal instantly), and a new AFTER INSERT trigger stamps the parent conversation's `last_message`/`last_message_at` with `clock_timestamp()` — the 004 schema keeps the preview ON the conversation row, so the list never joins or re-sorts client-side and the stamp is server truth. The seeded rooms ship with NULL previews; the UI reads that honestly as "No messages yet". Applied with three proofs (trigger on duty, publication updated, rollback probe proving the stamp) + zero residue.
+  - **Deliberate**: a chat message does NOT ring the notifications bell — the Messages screen is its own delivery surface with its own realtime channel; duplicating every line into Notifications would make the bell noise.
+- Sidebar grows **Messages** under OTHERS (before Notifications), deep-linkable at `/messages`; the screen joins the sweep (now 13 deep links).
+
+### Changed — layout hardening found during the build
+- `md:flex` proved unreliable in the current Tailwind build (verified absent from the generated CSS while sibling utilities generated — checked in-browser with a recursive stylesheet walk). The two-pane layout ships on **verified-generated** utilities only: `md:grid-cols-3` + `md:col-span-2` + `md:block`, with inner flex wrappers carrying the structure. Comment in the source records why.
+- **[Styling]** the thread's day dividers (hairline + centered label), the deterministic avatar-tone system (sage/amber/teal-wash/gold-wash/rose-wash by name hash — stable across sessions so "Kitchen" always looks like Kitchen), mine-vs-theirs bubble geometry (rounded-br-md vs rounded-bl-md tails), and the honest composer states (gold send, disabled-when-empty, spinner while sending).
+
+### Verified
+- `tsc` 0 after every edit. **E2E through the real UI** (`scripts/qa80-messages-empty.png`, `qa80-foh-thread.png`): rooms list honest at "No messages yet" → FOH line typed + sent via button → bubble under "Today" divider, room preview updated live (server-stamped via the 031 trigger, realtime pinged) → Kitchen line sent via **Enter key** → switch back, thread persists, mine-bubble right-aligned (computed `flex-end`). **DB truth** (`scripts/qa80-line.mjs`): exactly 2 messages (sender "QR Owner", QA-tagged bodies), both rooms' previews stamped server-side with matching bodies, both tables published. 13/13 screens land, 0 page errors. sw `5.41.0-r1`.
+
 ## [5.40.0] — 2026-10-03 — The bell actually rings
 
 ### Added — notification generators (migration 030)

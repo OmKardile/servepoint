@@ -29,6 +29,7 @@ export type Section =
   | 'menu'
   | 'settings'
   | 'notifications'
+  | 'messages'
   | 'support';
 
 interface UiState {

@@ -7,6 +7,7 @@ import {
   CookingPot,
   Headphones,
   LayoutGrid,
+  MessagesSquare,
   MoonStar,
   BarChart3,
   Package,
@@ -33,6 +34,7 @@ const NAV: { id: Section; label: string; icon: React.ElementType }[] = [
 ];
 
 const OTHERS: { id: Section; label: string; icon: React.ElementType }[] = [
+  { id: 'messages', label: 'Messages', icon: MessagesSquare },
   { id: 'notifications', label: 'Notifications', icon: Bell },
   { id: 'support', label: 'Support', icon: Headphones },
 ];
