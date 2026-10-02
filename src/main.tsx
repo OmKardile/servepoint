@@ -38,3 +38,16 @@ createRoot(document.getElementById('root')!).render(
     </ProductionErrorBoundary>
   </StrictMode>,
 );
+
+/**
+ * PWA service worker (v5.6.0) — PRODUCTION ONLY.
+ * Registering in dev would cache Vite's unbundled modules and break HMR;
+ * in production the SW gives the counter tablet offline resilience.
+ */
+if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch((err) => {
+      console.warn('[ServePoint] service worker registration skipped:', err);
+    });
+  });
+}

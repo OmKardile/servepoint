@@ -6,3 +6,6 @@ node_modules/
 upload/
 dev.log
 tool-results/
+dist/
+preview.log
+preview.pid

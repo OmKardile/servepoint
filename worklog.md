@@ -1388,3 +1388,35 @@ Stage Summary:
 - Remaining NOVA parity: guest i18n, PWA (manifest+SW for the counter tablet), shared lib/csv.ts refactor (Bills+Reports duplicate csvCell), COGS wiring (inventory cost into Close-out/Reports).
 - Watch: tsc-clean repo still had a stale dev.log parse error from a parallel HMR state — always timestamp-check dev.log lines before attributing.
 - Crons: 15-min webDevReview (job 430321).
+
+---
+Task ID: 44 (CLAIM — in progress)
+Agent: glm-5.3 (cron webDevReview round)
+Task: Claiming "PWA (manifest + SW for the counter tablet)" — public/manifest.webmanifest (icons 192/512/maskable), public/sw.js (hand-rolled: precached shell, network-first navigation with timeout + offline SPA fallback, cache-first hashed assets, network-only for Supabase/realtime, PROD-only registration so dev HMR is untouched), index.html PWA meta set, NEW install-prompt card + offline banner UI in App, E2E via vite preview build. Parallel agents: please do NOT take PWA/sw/manifest this round; guest i18n / csv refactor / COGS remain free.
+
+---
+Task ID: 44
+Agent: glm-5.3 (cron webDevReview round)
+Task: NOVA PWA parity — installable counter tablet (manifest + icons), hand-rolled service worker (offline shell), install-card + offline-banner UX, full offline E2E
+
+Work Log:
+- Health sweep clean (tsc 0 / dev 200 / tree at d85478d 5.5.0). NOVA remaining list had PWA unclaimed → wrote the CLAIM entry before building. Parallel rounds: none mid-flight (last HMR 10:49 AM, all committed).
+- Icons: scripts/make-pwa-icons.py (Pillow) — Lanczos upscales of the brand favicon → icon-192/512 + maskable-512 (full-bleed cream sampled from the tile, glyph composited at 76% INSIDE the safe zone; cropped 10px into the source tile to drop the baked-in corner stroke that showed as faint arcs). Visually verified all three.
+- public/manifest.webmanifest (standalone + display_override, en-IN, theme #0F3D3E) + index.html PWA meta set (manifest link, iOS apple-mobile-web-app-*, status-bar default so content never slides under the notch). apple-touch-icon already existed.
+- public/sw.js HAND-ROLLED (no workbox): precache shell; navigations network-first w/ 5s watchdog → cached match → SPA shell → styled offline notice; hashed assets cache-first; fonts cache-first; **Supabase network-only** (data/realtime/auth never cached — orders and payments can never be served stale); VERSION-graded caches evicted on activate; skipWaiting + clients.claim.
+- Registration in main.tsx is PROD-only (import.meta.env.PROD) — dev HMR untouched; browser-verified: zero SW on :3000, SW active on the built app.
+- NEW src/components/shell/PwaLayer.tsx mounted as the root frame in App.tsx (App → AppRoutes + <PwaLayer/> wrapper): offline banner on ALL surfaces (mode self-derived from pathname: staff/public/guest; guest gets menu-stale copy), install card on staff surfaces ONLY after a REAL beforeinstallprompt (never a fake button), 7-day dismiss cooldown in localStorage, hides in standalone + on appinstalled. Styling matches the brand: gold-spine white card, mark.png tile, serif headline, pulsing amber beacon on the dark offline pill; keyframes + prefers-reduced-motion in index.css.
+- OFFLINE E2E (vite preview :4173, production build): found and fixed THREE real SW bugs the hard way, each with browser evidence:
+  1. First load of a session is NOT SW-controlled → hashed /assets/*.js were never runtime-cached → offline reload = shell HTML but EMPTY root. Fix: scripts/inject-sw-precache.mjs (wired into package.json build) injects the dist/assets manifest into sw.js BUILD_ASSETS at build time (12 files).
+  2. Precache wrote build assets into SHELL_CACHE while runtime lookups read ASSET_CACHE (0 hits) → split: shell→shell, build→assets.
+  3. THE SUBTLE ONE: vite preview stamps `Vary: Origin` on module assets; crossorigin module requests send an Origin header that precache requests don't → strict cache.match missed perfectly good cached scripts (page-context match worked, SW-context missed — classic). Fix: ignoreVary:true on all lookups. Also cachePutClean strips content-encoding/content-length from stored responses (fetch() returns decoded bodies; stale gzip headers would double-decompress on the offline path).
+- FINAL PROOF, all with the server KILLED: full offline boot (login screen from cache, zero network) → offline /showcase deep link rendered → logged-in offline reload restored the QR Owner session + complete app shell (Wi-Fi blips ⇒ counter keeps running). Online: beforeinstallprompt fired → install card rendered (screenshot /tmp/pwa-install-card.png) → Not now → card gone + cooldown stored. Offline banner verified on dev (3000) AND preview (4173). Zero page errors throughout.
+- Versioning note: VERSION constant in sw.js is release-graded (v5.6.0-r3 during dev); bump on every shell-changing deploy so old caches evict.
+- Docs: CHANGELOG [5.6.0] — heading-swallow trap hit a 5TH time (5.5.0 marker eaten by my insert; caught by the grep-^##\[ protocol and restored pre-commit). tsc 0 / lint clean.
+
+Stage Summary:
+- ServePoint is now an INSTALLABLE PWA that runs offline: manifest + maskable icons + hand-rolled SW (precache → network-first navigation → network-only money paths) + honest offline/install UX. The cafe loop is now resilient to the one thing every Indian cafe Wi-Fi does eventually: nothing.
+- E2E evidence chain: preview :4173 → SW active (7 shell + 12 build assets) → server killed → offline boot ✓ → offline deep link ✓ → offline session restore ✓. Restart preview any time with: start-stop-daemon --start --background --make-pidfile --pidfile preview.pid --startas /bin/sh -- -c 'cd /home/z/my-project && exec bun x vite preview --host 127.0.0.1 --port 4173 --strictPort'.
+- Remaining NOVA parity: guest i18n (EN/HI/KN on /menu), shared lib/csv.ts refactor (Bills+Reports duplicate csvCell), COGS wiring (inventory cost → Close-out/Reports), update-notification toast when a new SW version waits.
+- Watch: sw.js VERSION must be bumped on every shell-changing deploy; the inject step runs automatically via `bun run build`.
+- Crons: 15-min webDevReview (job 430321).

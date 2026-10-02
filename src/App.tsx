@@ -23,6 +23,7 @@ import { PlatformScreen } from './components/platform/PlatformScreen';
 import ShowcasePage from './components/pages/ShowcasePage';
 import IndexHelpPage from './components/pages/IndexHelpPage';
 import { GuestGatePage, GuestMenuPage, GuestTrackPage } from './components/guest/GuestPages';
+import { PwaLayer } from './components/shell/PwaLayer';
 import brandLockup from './assets/brand/lockup-light.png';
 
 /**
@@ -98,7 +99,7 @@ const CafeApp: React.FC = () => {
   );
 };
 
-const App: React.FC = () => {
+const AppRoutes: React.FC = () => {
   const pathname = usePathname(); // public surfaces route on the plain path
   const { session, setSession, setReady } = useSession();
   const [restoring, setRestoring] = useState(true);
@@ -145,5 +146,17 @@ const App: React.FC = () => {
 
   return <CafeApp />;
 };
+
+/**
+ * Root frame (v5.6.0): every surface — staff, public, guest — gets the PWA
+ * layer (offline banner; install card on staff surfaces only, where the
+ * component itself narrows the audience from the plain path).
+ */
+const App: React.FC = () => (
+  <>
+    <PwaLayer />
+    <AppRoutes />
+  </>
+);
 
 export default App;
