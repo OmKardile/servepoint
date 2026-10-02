@@ -118,6 +118,7 @@ async function attachItems(orders: OrderRow[], tenantId: string): Promise<Order[
       unit_price: Number(it.unit_price),
       item_total: Number(it.item_total),
       notes: it.notes,
+      checked_at: it.checked_at ?? null,
       addons: addonsByItem.get(it.id) || [],
     });
     byOrder.set(it.order_id, list);
@@ -341,6 +342,22 @@ export async function advanceOrder(
     return updateOrderStatus(orderId, tenantId, { status: toStatus });
   }
   throw error;
+}
+
+/**
+ * The kitchen's tick (v5.39.0, migration 029): flip one ticket line's
+ * checked_at. timestamp = fired, NULL = waiting on the line. RLS scopes the
+ * write to the tenant; the 029 trigger refuses ticks on cancelled/completed
+ * tickets server-side (ORDER_NOT_ACTIVE) — the UI only shows ticks on live
+ * cards anyway.
+ */
+export async function setOrderItemChecked(itemId: string, checked: boolean): Promise<void> {
+  requireCloud();
+  const { error } = await supabase
+    .from('order_items')
+    .update({ checked_at: checked ? new Date().toISOString() : null })
+    .eq('id', itemId);
+  if (error) throw error;
 }
 
 /** Append-only status trail for one order (empty until 007 is applied). */

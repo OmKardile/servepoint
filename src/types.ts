@@ -48,6 +48,9 @@ export interface OrderItem {
   unit_price: number;
   item_total: number;
   notes?: string | null;
+  /** v5.39.0 — the kitchen's tick: NULL = waiting on the line, timestamp =
+   *  fired. Guarded server-side (029): only live tickets can be ticked. */
+  checked_at?: string | null;
   image_url?: string | null;
   addons?: { name: string; price: number }[];
 }

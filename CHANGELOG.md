@@ -3,6 +3,17 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.39.0] — 2026-10-03 — Fire as you go: the pass learns to tick
+
+### Added — KDS item check-off (migration 029)
+- The pass showed the cook WHAT to make, but not WHAT'S DONE — a four-line ticket during a rush lived in the cook's head. Every line on a **live** KDS card is now a checkbox (migration `029_order_item_checks.sql` adds `order_items.checked_at TIMESTAMPTZ` — a timestamp, not a boolean, because *when* it fired matters as much as whether). Tap when it drops: the qty chip flips to a green check, the line strikes through, and the card's **fired-fraction bar** counts the ticket down ("fired 1/2", teal fill → green at the end). When the last line fires the card crowns an **ALL FIRED** chip. Tap again to put a line back on the rail — the book forgives a mis-tap.
+- **Server truth, two layers**: the tick rides plain RLS-scoped CRUD (order_items' "Tenant full access" policy from 007 covers it), and a new BEFORE UPDATE trigger refuses any tick on a **cancelled/completed** ticket with `ORDER_NOT_ACTIVE` — no fiction on dead tickets. Applied with three proofs: column type exact, terminal-tick refused (probe rolled back), tick + un-tick on a live ticket pass (probe rolled back) — zero residue.
+- **A race found live and fixed**: the first E2E tick was written to the DB, then a 30s-poll refetch that had *started before the commit* landed after the optimistic flip and clobbered it — the UI contradicted the database for one poll cycle. Fix: an in-flight overlay (`pendingTicksRef`) that every refetch applies, so no refetch can ever disagree with a write that is already on its way. Also fixed: `attachItems`' explicit field mapping was silently dropping the new column (found because the tick survived a reload in the DB but not on the board).
+- **[Styling] the red tier breathes**: a ticket waiting 20+ minutes (the `waitTone` red tier) now pulses its timer chip — urgency visible from across the kitchen, on top of 5.31's green ready-wash and the card's urgency border. The urgency tone is computed once per card and drives the border, the timer and the pulse together.
+
+### Verified
+- `tsc` 0 after every edit. **E2E through the real UI** (`scripts/qa78-kds.png`): order #48's line → tick → checked chip + ALL FIRED + "fired 1/1" → un-tick → back to "fired 0/1" → re-tick → un-tick (full round trip, 0 page errors). The tick persisted across a full page reload mid-E2E (the DB is the truth). **DB truth** (`scripts/qa78-kds.mjs`): column TIMESTAMPTZ present, zero ticked rows in the final honest state, live tickets #48/#66 intact. sw `5.39.0-r1`.
+
 ## [5.38.0] — 2026-10-03 — The book: the phone promises, on the record
 
 ### Added — reservations (migration 028 + the Floor's booking ledger)

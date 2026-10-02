@@ -2188,3 +2188,25 @@ Stage Summary:
 - Remaining parked: drawer movements CSV (only if asked); CounterInbox bulk "Ok all" (risky); DS showcase links (owner OK pending); EOD Z-report logo (deliberate); URL write-back (non-goal); storage folder silting report (someday).
 - Watch items carried: DB password ROTATION (owner decision); #67/#68/#69/#96 active-unpaid QA-era leftovers (owner decision).
 - Crons: 15-min webDevReview (job 430321) + DAILY deep pass (job 431587, 09:00 IST).
+
+---
+Task ID: 78 (completion — 15-min webDevReview round, trace 202610030543)
+Agent: glm-5.3 (cron webDevReview round)
+Task: Post-5.38.0 orientation + QA sweep, then the round's pair: the kitchen's tick (KDS item check-off, migration 029) + the red tier breathes.
+
+Work Log:
+- Orientation clean (HEAD a0c4dc2 = 5.38.0 pushed; tree clean; tsc 0; dev 200). QA sweep: 11/11 deep links land with h1s, 0 console/page errors; The book (5.38.0) still renders its cancelled row on the Floor. Stable round — no bugs to fix.
+- Focus rationale: deep-read of the KDS found the real gap — the pass shows WHAT to make but not WHAT'S DONE. Aging tones (green→10m amber→20m red) existed since the early build, but the cook couldn't tick lines, and a 10-hour-old ticket read the same as a fresh one besides the border color. NOVA "KDS deepening", taken.
+- MIGRATION 029_order_item_checks.sql: `order_items.checked_at TIMESTAMPTZ` (a timestamp, not a boolean — when it fired matters) + BEFORE UPDATE trigger refusing ticks on cancelled/completed tickets (ORDER_NOT_ACTIVE) while always allowing un-check; NO RLS change (007's "Tenant full access on own order_items" ALL policy covers staff writes) and NO realtime change (order_items already published, 010). Applied via scripts/apply-029.mjs with three proofs (column type exact, terminal-tick refused, live tick + un-tick pass — probes rolled back, zero residue).
+- API (src/lib/api.ts): setOrderItemChecked(itemId, checked). types.ts: OrderItem.checked_at. BUG FOUND AND FIXED: attachItems' explicit field mapping silently DROPPED the new column — the tick survived a page reload in the DB but not on the board; one line added.
+- UI (KitchenScreen.tsx): every line on a live card is a role=checkbox button — tap fires it (qty chip flips to a green check, line strikes through); a fired-fraction progress bar counts the ticket down ("fired 1/2", teal → green); ALL FIRED chip crowns a fully-fired card; un-tap puts the line back. Completed tickets stay non-interactive (honest). RACE FOUND LIVE AND FIXED: the first E2E tick hit the DB but a 30s-poll refetch that started before the commit landed after the optimistic flip and clobbered it — UI contradicted the DB for one cycle. Fix: pendingTicksRef overlay applied by EVERY refetch, cleared when the write resolves (revert + banner on refusal).
+- [Mandatory styling]: the red tier breathes — a 20m+ ticket's timer chip pulses (animate-pulse); urgency tone computed once per card, driving border + timer + pulse together.
+- E2E (real UI): order #48 → tick → checked + ALL FIRED + "fired 1/1" → un-tick → 0/1 → re-tick → un-tick (full round trip; tick proven persistent across reload mid-E2E; final state clean). 0 page errors. Screenshot scripts/qa78-kds.png. DB truth (scripts/qa78-kds.mjs): column TIMESTAMPTZ, zero ticked rows (honest end state — no fiction on stale QA tickets), #48/#66 intact.
+- sw servepoint-v5.39.0-r1; CHANGELOG [5.39.0]; tsc 0 after every edit.
+
+Stage Summary:
+- 5.39.0 — fire as you go. Surfaces: supabase/migrations/029_order_item_checks.sql + scripts/apply-029.mjs + scripts/qa78-kds.mjs + src/lib/api.ts + src/types.ts + src/components/kitchen/KitchenScreen.tsx + public/sw.js + CHANGELOG.md + worklog.md (+1 screenshot). Cloud state: 0 ticked rows, guard trigger live, 0 orphans.
+- The KDS arc now: guarded rail (007) → realtime (010) → table chips (5.25) → crest + ready wash (5.31) → item ticks + breathing reds (5.39).
+- Remaining parked: drawer movements CSV (only if asked); CounterInbox bulk "Ok all" (risky); DS showcase links (owner OK pending); EOD Z-report logo (deliberate); URL write-back (non-goal); storage folder silting report (someday); KDS "bump back" recall (needs engine reversal support — deliberate).
+- Watch items carried: DB password ROTATION (owner decision); #67/#68/#69/#96 active-unpaid QA-era leftovers (owner decision).
+- Crons: 15-min webDevReview (job 430321) + DAILY deep pass (job 431587, 09:00 IST).

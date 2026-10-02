@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Armchair,
   BellRing,
+  Check,
   CheckCheck,
   ChefHat,
   ChefHat as ChefIdle,
@@ -13,7 +14,13 @@ import {
   Volume2,
   VolumeX,
 } from 'lucide-react';
-import { advanceOrder, fetchOrders, subscribeOrdersRealtime, type RealtimeState } from '../../lib/api';
+import {
+  advanceOrder,
+  fetchOrders,
+  setOrderItemChecked,
+  subscribeOrdersRealtime,
+  type RealtimeState,
+} from '../../lib/api';
 import { useTenant } from '../../lib/tenant';
 import type { Order } from '../../types';
 
@@ -30,6 +37,11 @@ import type { Order } from '../../types';
  * tile (same brand row the guest ticket has worn since 5.28), and READY
  * cards get a quiet green wash so the run-the-food moment reads from
  * across the kitchen. No logo set → the header is exactly pre-5.31.
+ * v5.39.0: the pass learns to tick (migration 029) — every line on a live
+ * ticket is a checkbox the cook taps the moment it fires: struck through,
+ * qty chip flips to a check. A fired-fraction bar counts the ticket down
+ * ("fired 1/2"), an ALL FIRED chip crowns a finished rail card, and the
+ * red-tier timer (20m+) breathes — urgency you can see from the pass.
  */
 
 /* ───────────────────────────── board model ────────────────────────────── */
@@ -158,7 +170,9 @@ const KdsCard: React.FC<{
   busy: boolean;
   onAdvance: (o: Order, to: 'preparing' | 'ready' | 'completed') => void;
   onCancel: (o: Order) => void;
-}> = ({ order, nowMs, busy, onAdvance, onCancel }) => {
+  /** v5.39.0 — tick one line fired / waiting (optimistic in the parent). */
+  onToggleItem: (orderId: string, itemId: string, checked: boolean, prevCheckedAt: string | null | undefined) => void;
+}> = ({ order, nowMs, busy, onAdvance, onCancel, onToggleItem }) => {
   const stage = stageOf(String(order.status))!;
   const terminal = stage === 'completed';
   const paid = String(order.payment_status).toLowerCase() === 'completed';
@@ -173,6 +187,16 @@ const KdsCard: React.FC<{
     stage === 'new' ? 'Start preparing' : stage === 'preparing' ? 'Mark ready' : stage === 'ready' ? 'Complete' : null;
   const ActionIcon = stage === 'new' ? Flame : stage === 'preparing' ? BellRing : CheckCheck;
 
+  /* v5.39.0 — urgency tone once: the left border, the timer chip and the
+     red-tier breathing all read the same number. */
+  const tone = terminal ? '#D9E2DD' : waitTone(order.created_at, nowMs, false);
+  const breathes = !terminal && tone === '#B42318';
+
+  /* the fired count — NULL checked_at = waiting, timestamp = off the cook's mind */
+  const items = order.items || [];
+  const fired = items.filter((it) => it.checked_at).length;
+  const allFired = items.length > 0 && fired === items.length;
+
   return (
     <article
       className={`rounded-2xl border border-[#EDEBE6] p-3.5 shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition ${
@@ -183,7 +207,7 @@ const KdsCard: React.FC<{
       } ${
         busy ? 'opacity-60' : 'hover:shadow-[0_4px_14px_rgba(15,23,42,0.08)]'
       }`}
-      style={{ borderLeft: `3px solid ${terminal ? '#D9E2DD' : waitTone(order.created_at, nowMs, false)}` }}
+      style={{ borderLeft: `3px solid ${tone}` }}
       aria-label={`Order ${order.order_number} — ${STAGES.find((s) => s.key === stage)?.title}`}
     >
       <header className="flex items-start justify-between gap-2">
@@ -207,33 +231,99 @@ const KdsCard: React.FC<{
                   Unpaid · bill at counter
                 </span>
               ))}
+            {!terminal && allFired && (
+              <span
+                className="rounded-full bg-[#2E7D32]/12 px-2 py-0.5 text-[10.5px] font-bold leading-4 text-[#2E7D32]"
+                title="Every line on this ticket is fired"
+              >
+                <Check size={10} className="mr-0.5 inline font-bold" aria-hidden strokeWidth={3} />
+                ALL FIRED
+              </span>
+            )}
           </div>
         </div>
         <span
-          className="shrink-0 rounded-lg px-1.5 py-1 font-mono text-[12.5px] font-bold tabular-nums"
-          style={{ color: waitTone(order.created_at, nowMs, terminal), background: 'rgba(0,0,0,0.035)' }}
-          title="Time since the order was placed"
+          className={`shrink-0 rounded-lg px-1.5 py-1 font-mono text-[12.5px] font-bold tabular-nums ${breathes ? 'animate-pulse' : ''}`}
+          style={{ color: tone, background: 'rgba(0,0,0,0.035)' }}
+          title={breathes ? 'Waiting over 20 minutes — oldest tickets first' : 'Time since the order was placed'}
         >
           <Clock size={11} className="mb-0.5 mr-0.5 inline" aria-hidden />
           {elapsed(order.created_at, nowMs)}
         </span>
       </header>
 
-      <ul className="mt-2.5 space-y-1.5">
-        {(order.items || []).map((it) => (
-          <li key={it.id} className="flex items-baseline gap-2 text-[13px] leading-5">
-            <span className="min-w-7 rounded-md bg-[#F6F5F2] px-1.5 text-center font-mono text-[11.5px] font-bold text-[#0F3D3E]">
-              {it.qty}×
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="font-medium text-[#1A1A1A]">{it.name}</span>
-              {it.variant_name && <span className="text-[#969696]"> · {it.variant_name}</span>}
-              {it.notes && <span className="block text-[11.5px] italic text-[#C2571B]">↳ {it.notes}</span>}
-            </span>
-          </li>
-        ))}
-        {(order.items || []).length === 0 && <li className="text-[12px] text-[#969696]">No items recorded</li>}
+      <ul className="mt-2.5 space-y-1">
+        {items.map((it) => {
+          const done = Boolean(it.checked_at);
+          const interactive = !terminal && Boolean(it.id);
+          const line = (
+            <>
+              <span
+                className={`inline-flex min-w-7 items-center justify-center rounded-md px-1.5 py-0.5 text-center font-mono text-[11.5px] font-bold transition ${
+                  done ? 'bg-[#2E7D32] text-white' : 'bg-[#F6F5F2] text-[#0F3D3E]'
+                }`}
+              >
+                {done ? <Check size={12} aria-hidden strokeWidth={3} /> : `${it.qty}×`}
+              </span>
+              <span className="min-w-0 flex-1">
+                <span
+                  className={`font-medium transition ${
+                    done ? 'text-[#969696] line-through decoration-[#C9CFC9]' : 'text-[#1A1A1A]'
+                  }`}
+                >
+                  {it.name}
+                </span>
+                {it.variant_name && <span className="text-[#969696]"> · {it.variant_name}</span>}
+                {it.notes && <span className="block text-[11.5px] italic text-[#C2571B]">↳ {it.notes}</span>}
+              </span>
+            </>
+          );
+          return (
+            <li key={it.id} className="text-[13px] leading-5">
+              {interactive ? (
+                <button
+                  type="button"
+                  role="checkbox"
+                  aria-checked={done}
+                  aria-label={`${done ? 'Un-mark' : 'Mark'} ${it.qty}× ${it.name}${it.variant_name ? ` (${it.variant_name})` : ''} as fired`}
+                  onClick={() => onToggleItem(order.id, it.id!, !done, it.checked_at)}
+                  title={done ? 'Tap to put back on the line' : 'Tap when it fires'}
+                  className={`flex w-full items-baseline gap-2 rounded-lg px-1 py-0.5 text-left transition hover:bg-[#F6F5F2] ${
+                    busy ? 'cursor-wait opacity-70' : ''
+                  }`}
+                >
+                  {line}
+                </button>
+              ) : (
+                <div className="flex items-baseline gap-2 px-1 py-0.5">{line}</div>
+              )}
+            </li>
+          );
+        })}
+        {items.length === 0 && <li className="text-[12px] text-[#969696]">No items recorded</li>}
       </ul>
+
+      {/* v5.39.0 — the fired-fraction bar: the ticket counts itself down */}
+      {!terminal && items.length > 0 && (
+        <div className="mt-2 flex items-center gap-2" aria-hidden={false}>
+          <div
+            className="h-1 flex-1 overflow-hidden rounded-full bg-[#EDEBE6]"
+            role="progressbar"
+            aria-valuemin={0}
+            aria-valuemax={items.length}
+            aria-valuenow={fired}
+            aria-label={`Fired ${fired} of ${items.length} lines`}
+          >
+            <div
+              className="h-full rounded-full transition-all duration-300"
+              style={{ width: `${(fired / items.length) * 100}%`, background: allFired ? '#2E7D32' : '#0F3D3E' }}
+            />
+          </div>
+          <span className="shrink-0 font-mono text-[10.5px] font-bold tabular-nums text-[#969696]">
+            fired {fired}/{items.length}
+          </span>
+        </div>
+      )}
 
       {order.notes && (
         <p className="mt-2 truncate rounded-lg bg-[#F6F5F2] px-2 py-1 text-[11.5px] text-[#5B6B63]" title={order.notes}>
@@ -336,10 +426,22 @@ export const KitchenScreen: React.FC = () => {
 
   /* data: initial load + debounced realtime pings + 30s safety poll */
   const pingRef = useRef<number | null>(null);
+  const pendingTicksRef = useRef<Map<string, boolean>>(new Map());
   const refetch = useCallback(async () => {
     if (!tenantId) return;
     try {
       const rows = await fetchOrders(tenantId, 100);
+      // overlay ticks still in flight (see toggleItem) — a refetch that
+      // started before a tick committed must never clobber the flip
+      if (pendingTicksRef.current.size > 0) {
+        for (const o of rows) {
+          for (const it of o.items || []) {
+            if (it.id && pendingTicksRef.current.has(it.id)) {
+              it.checked_at = pendingTicksRef.current.get(it.id) ? new Date().toISOString() : null;
+            }
+          }
+        }
+      }
       setOrders(rows);
       setError(null);
     } catch (e) {
@@ -419,6 +521,48 @@ export const KitchenScreen: React.FC = () => {
       }
     },
     [tenantId, refetch]
+  );
+
+  /* The kitchen's tick (v5.39.0): optimistic flip with an in-flight overlay
+     (pendingTicksRef) so racing refetches can't clobber it, revert + honest
+     banner on refusal (the 029 guard rejects ticks on terminal tickets
+     server-side). No full refetch — the realtime ping and the 30s poll
+     resync the board. */
+  const toggleItem = useCallback(
+    async (orderId: string, itemId: string, checked: boolean, prevCheckedAt: string | null | undefined) => {
+      const stamp = new Date().toISOString();
+      pendingTicksRef.current.set(itemId, checked);
+      setOrders((prev) =>
+        prev.map((o) =>
+          o.id === orderId
+            ? {
+                ...o,
+                items: (o.items || []).map((it) =>
+                  it.id === itemId ? { ...it, checked_at: checked ? stamp : null } : it
+                ),
+              }
+            : o
+        )
+      );
+      try {
+        await setOrderItemChecked(itemId, checked);
+        pendingTicksRef.current.delete(itemId); // truth now matches the flip
+      } catch (e) {
+        pendingTicksRef.current.delete(itemId);
+        setOrders((prev) =>
+          prev.map((o) =>
+            o.id === orderId
+              ? {
+                  ...o,
+                  items: (o.items || []).map((it) => (it.id === itemId ? { ...it, checked_at: prevCheckedAt ?? null } : it)),
+                }
+              : o
+          )
+        );
+        setError(e instanceof Error ? e.message : 'Could not update the line');
+      }
+    },
+    []
   );
 
   const toggleSound = useCallback(() => {
@@ -636,6 +780,7 @@ export const KitchenScreen: React.FC = () => {
                       busy={busyId === o.id}
                       onAdvance={(ord, to) => void advance(ord, to)}
                       onCancel={(ord) => void cancel(ord)}
+                      onToggleItem={(orderId, itemId, checked, prev) => void toggleItem(orderId, itemId, checked, prev)}
                     />
                   ))
                 )}
