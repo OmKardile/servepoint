@@ -21,6 +21,7 @@ import {
 } from '../../lib/api';
 import type { OrderStatusEvent, PaymentMethod, ReceiptPayment } from '../../lib/api';
 import { printReceipt } from './ReceiptPrint';
+import { preloadPrintImage } from '../../lib/printFrame';
 import { formatMoney, getPrefs } from '../../lib/prefs';
 import { downloadCsv } from '../../lib/csv';
 import { useTenant } from '../../lib/tenant';
@@ -1086,7 +1087,13 @@ const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRet
               {/* Customer receipt (Task 49) — thermal 80mm print for any live ticket */}
               {displayStatus(selected) !== 'cancelled' && (
                 <button
-                  onClick={() =>
+                  onClick={async () => {
+                    // v5.29.0 — the café's face rides the paper receipt too.
+                    // Warm the remote logo BEFORE the iframe prints (print()
+                    // won't wait for a cold image); dead/absent logo → the
+                    // pre-5.29 text-only header, never a hole.
+                    const logoUrl = tenant?.logo_url || null;
+                    if (logoUrl) await preloadPrintImage(logoUrl);
                     printReceipt({
                       storeName: tenant?.name || 'ServePoint store',
                       orderNumber: selected.order_number,
@@ -1121,8 +1128,9 @@ const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRet
                           : null),
                       isPaid: displayStatus(selected) === 'paid',
                       printedBy: null,
-                    })
-                  }
+                      logoUrl,
+                    });
+                  }}
                   className="mt-4 flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-[#B88E2F]/45 bg-[#FDF9F0] text-[12.5px] font-semibold text-[#8A6A20] transition hover:border-[#B88E2F] hover:bg-[#F8EFDB] active:scale-[0.99]"
                 >
                   <Receipt size={15} aria-hidden />

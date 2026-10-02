@@ -3,6 +3,19 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.29.0] — 2026-10-03 — The paper carries the face; the rhythm learns hindsight
+
+### Added — logo on the customer receipt (Bills → Print receipt)
+- The thermal 80mm receipt header now prints the owner-set logo (migration 024's `logo_url`) as a centered tile (max 44px tall, object-contain — any logo shape fits) above the store name. Absent/NULL logo renders the receipt **byte-identical to pre-5.29**: no tile, no placeholder. A dead URL hides its own tile at print time via `onerror` — never a broken-image glyph, never a hole.
+- **Print-timing honesty**, now a shared primitive: `preloadPrintImage()` moves into `lib/printFrame.ts` next to the print engine it serves (FloorScreen's local `preloadLogo` retired — one helper, one job). BillsScreen warms the remote logo BEFORE the hidden iframe prints (2.5s timeout, non-fatal), because `print()` does not wait for cold images. With this, the brand rides every artifact end to end: guest menu hero (5.27.0) → printed sticker sheet + guest ticket (5.28.0) → the paper receipt that closes the loop (5.29.0).
+
+### Added — Floor rhythm "vs prior wk" compare (the board learns hindsight)
+- The Floor rhythm card grows a two-mode segmented toggle: **This 7d** (the pre-5.29 view, byte-for-byte default) and **vs prior wk** — which aggregates the **prior 7 IST days** from the same in-memory orders ledger (no extra fetch) and lays them under this week's bars as a gray dashed `Line` with honest dots: same hour-of-day shape, same rules (non-cancelled, table-bound only). Tooltip labels both series (`Seated · this 7d` / `Seated · prior 7d`); the legend hint ("gray dashed = prior 7d") appears only when there's something to see.
+- The "Seated rounds · 7d" KPI gains a compare-mode delta chip: `+31 vs prior 7d (+1550%) · prior 2` — green when up, red when down, computed from stored facts only. **Honest guards**: zero prior-week tickets → no fake baseline line, the chip reads "no prior-week tickets in the loaded ledger yet", and the footer explains the comparison unlocks as the ledger ages (a young cafe sees truth, not a flat gray lie).
+
+### Verified
+- `tsc` 0 after every edit; E2E on real data (this ledger: 33 table tickets this 7d vs 2 in the prior window) — toggle renders the gray dashed overlay at the right hours, tooltip shows both series, delta chip arithmetic matches the SQL probe (`scripts/probe-026-day-spread.mjs`), default "This 7d" view visually identical to pre-5.29; receipt print click clean through the shared preloader. Zero page errors. sw `5.29.0-r1`.
+
 ## [5.28.0] — 2026-10-03 — The brand travels: logo on the printed sticker sheet and the guest's ticket
 
 ### Added — sticker sheet carries the café's face (Floor → Print stickers)

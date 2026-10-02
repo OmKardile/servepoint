@@ -41,6 +41,11 @@ export interface ReceiptOpts {
   paidAt?: string | null;
   isPaid: boolean;
   printedBy?: string | null;
+  /** v5.29.0 — the café's face (migration 024's logo_url) atop the receipt
+   *  header. NULL/absent → byte-identical pre-5.29 header: no tile, no
+   *  placeholder. A dead URL hides its own tile at print time (onerror), and
+   *  the caller preloads the image so a cold remote never prints a hole. */
+  logoUrl?: string | null;
 }
 
 const esc = (s: string): string =>
@@ -126,6 +131,7 @@ export function buildReceiptHtml(opts: ReceiptOpts): string {
   return `<!doctype html><html><head><meta charset="utf-8"><title>Receipt #${esc(String(opts.orderNumber))}</title></head>
 <body style="font-family:'Courier New',monospace;color:#000;margin:0;padding:16px 12px;width:302px;font-size:12px;">
   <div style="text-align:center;border-bottom:1px dashed #000;padding-bottom:8px;margin-bottom:8px;">
+    ${opts.logoUrl ? `<img src="${esc(opts.logoUrl)}" alt="" onerror="this.style.display='none'" style="display:block;margin:0 auto 6px;max-height:44px;max-width:120px;object-fit:contain;"/>` : ''}
     <div style="font-size:15px;font-weight:800;letter-spacing:1px;">${esc(opts.storeName)}</div>
     <div style="margin-top:2px;">CUSTOMER RECEIPT</div>
     <div>#${esc(String(opts.orderNumber))}${metaBits.length > 0 ? ` · ${metaBits.join(' · ')}` : ''}</div>
@@ -152,7 +158,9 @@ export function buildReceiptHtml(opts: ReceiptOpts): string {
 }
 
 /** Hidden-iframe print — same engine path as the EOD Z-report and the
- *  floor's QR sticker sheet (shared afterprint-safe lifecycle). */
+ *  floor's QR sticker sheet (shared afterprint-safe lifecycle).
+ *  v5.29.0: the caller preloads `logoUrl` first (preloadPrintImage) so a
+ *  cold remote image never prints as a hole in the header. */
 export function printReceipt(opts: ReceiptOpts): void {
   printHiddenFrame(buildReceiptHtml(opts));
 }

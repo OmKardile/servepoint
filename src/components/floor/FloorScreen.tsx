@@ -21,9 +21,10 @@ import {
 import QRCode from 'qrcode';
 import {
   Bar,
-  BarChart,
   CartesianGrid,
   Cell,
+  ComposedChart,
+  Line,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -43,7 +44,7 @@ import {
   type TableStatus,
 } from '../../lib/api';
 import { useTenant } from '../../lib/tenant';
-import { printHiddenFrame } from '../../lib/printFrame';
+import { printHiddenFrame, preloadPrintImage } from '../../lib/printFrame';
 import { formatMoney } from '../../lib/prefs';
 import { useUi } from '../../store/session';
 import { useCart } from '../../store/cart';
@@ -216,30 +217,10 @@ export function buildStickerSheetHtml(cafeName: string, stickers: StickerSpec[],
 </body></html>`;
 }
 
-/** v5.28.0 — warm the café logo in the HTTP cache BEFORE the print iframe
- *  renders: print() does not wait for remote images, so a cold logo can lose
- *  the race and print a blank tile. Resolves false on failure/timeout — the
- *  sheet then prints honestly without tiles (the img's own onerror also
- *  self-hides, so a half-warmed logo can never render broken). */
-function preloadLogo(url: string, timeoutMs = 2500): Promise<boolean> {
-  return new Promise((resolve) => {
-    const img = new Image();
-    const timer = window.setTimeout(() => resolve(false), timeoutMs);
-    img.onload = () => {
-      window.clearTimeout(timer);
-      resolve(true);
-    };
-    img.onerror = () => {
-      window.clearTimeout(timer);
-      resolve(false);
-    };
-    img.src = url;
-  });
-}
-
 /** Hidden-iframe print — rides the shared printFrame engine (v5.27.1's
  * afterprint-driven removal; the blind 1500ms removeChild could abort or
- * blank a job in engines whose print() doesn't block). */
+ * blank a job in engines whose print() doesn't block). v5.29.0: the logo
+ * prewarm moved to the shared preloadPrintImage in lib/printFrame. */
 function printQrStickers(cafeName: string, stickers: StickerSpec[], cafeLogo?: string | null): void {
   printHiddenFrame(buildStickerSheetHtml(cafeName, stickers, cafeLogo));
 }
@@ -847,6 +828,9 @@ export function FloorScreen(): React.ReactElement {
   const [drillId, setDrillId] = useState<string | null>(null);
   const [filter, setFilter] = useState<TableStatus | null>(null);
   const [stickerBusy, setStickerBusy] = useState(false);
+  /** v5.29.0 — floor rhythm compare: 'week' = this 7d alone (pre-5.29 view),
+   *  'compare' = lay the prior 7d's hour-of-day rhythm under this one. */
+  const [rhythmMode, setRhythmMode] = useState<'week' | 'compare'>('week');
   const pingRef = useRef<number | null>(null);
 
   const reload = useCallback(async () => {
@@ -976,7 +960,7 @@ export function FloorScreen(): React.ReactElement {
     setActionError(null);
     try {
       const logo = tenant?.logo_url || null;
-      if (logo) await preloadLogo(logo); // print() won't wait for a cold remote image
+      if (logo) await preloadPrintImage(logo); // print() won't wait for a cold remote image
       const specs = await Promise.all(
         list.map(async (t) => ({
           tableNumber: t.table_number,
@@ -1056,32 +1040,49 @@ export function FloorScreen(): React.ReactElement {
      Derives from the same orders array the board already fetched (rides
      reload()); counts every non-cancelled ticket that holds a table, so
      walk-in counter tickets stay out of the floor's rhythm. No chart at all
-     when the ledger has nothing table-bound in the window. */
+     when the ledger has nothing table-bound in the window.
+     v5.29.0: also aggregates the PRIOR 7 IST days (same hour-of-day shape)
+     so the compare toggle can lay this week's rhythm over last week's —
+     same ledger, no extra fetch. prevTotal === 0 is honest data (a young
+     cafe, or a ledger window that doesn't reach back); the compare mode
+     says so instead of drawing a fake baseline. */
   const rhythm = useMemo(() => {
     const endMs = istDayStartFloor(istTodayIsoFloor()) + 24 * 3600 * 1000; // end of today (IST)
     const startMs = endMs - 7 * 24 * 3600 * 1000; // last 7 IST calendar days
-    const rows = orders.filter(
-      (o) =>
-        o.table_id &&
+    const prevStartMs = startMs - 7 * 24 * 3600 * 1000; // the 7 days before that
+    const inWindow = (o: Order, from: number, to: number) => {
+      const t = new Date(o.created_at).getTime();
+      return (
+        o.table_id !== null &&
+        o.table_id !== undefined &&
         o.status !== 'cancelled' &&
-        new Date(o.created_at).getTime() >= startMs &&
-        new Date(o.created_at).getTime() < endMs,
-    );
+        t >= from &&
+        t < to
+      );
+    };
+    const rows = orders.filter((o) => inWindow(o, startMs, endMs));
+    const prevRows = orders.filter((o) => inWindow(o, prevStartMs, startMs));
     const buckets = new Array<number>(24).fill(0);
+    const prevBuckets = new Array<number>(24).fill(0);
     const byDay = new Map<string, number>();
     for (const o of rows) {
       buckets[istHour(o.created_at)] += 1;
       const d = istDateKey(o.created_at);
       byDay.set(d, (byDay.get(d) || 0) + 1);
     }
-    const data = buckets.map((n, hour) => ({ hour, n, label: hourLabel(hour) }));
+    for (const o of prevRows) {
+      prevBuckets[istHour(o.created_at)] += 1;
+    }
+    const data = buckets.map((n, hour) => ({ hour, n, pn: prevBuckets[hour], label: hourLabel(hour) }));
     const max = buckets.reduce((a, b) => Math.max(a, b), 0);
     const peakHour = max > 0 ? buckets.indexOf(max) : -1;
+    const prevTotal = prevRows.length;
+    const prevMax = prevBuckets.reduce((a, b) => Math.max(a, b), 0);
     let busiest: { label: string; n: number } | null = null;
     for (const [d, n] of byDay) {
       if (!busiest || n > busiest.n) busiest = { label: istDayPretty(d), n };
     }
-    return { data, max, peakHour, total: rows.length, busiest };
+    return { data, max, peakHour, total: rows.length, busiest, prevData: prevBuckets, prevTotal, prevMax };
   }, [orders]);
 
   if (loading) {
@@ -1186,19 +1187,53 @@ export function FloorScreen(): React.ReactElement {
         </div>
       )}
 
-      {/* floor rhythm (v5.22.0) — table tickets per IST hour, last 7 days */}
+      {/* floor rhythm (v5.22.0) — table tickets per IST hour, last 7 days.
+          v5.29.0: "vs prior wk" lays the prior 7d's hour-of-day rhythm over
+          this one (gray dashed) — the board learns hindsight from the same
+          ledger, no extra fetch. */}
       <section className="sp-card p-5" aria-label="Floor rhythm">
         <div className="mb-1 flex items-center justify-between gap-2">
           <h2 className="text-[15px] font-bold text-[#1A1A1A]">Floor rhythm</h2>
-          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#6B6B6B]">
-            <Clock size={11} aria-hidden /> IST hours · last 7 days
-          </span>
+          <div className="flex items-center gap-2">
+            <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#6B6B6B]">
+              <Clock size={11} aria-hidden /> IST hours · last 7 days
+            </span>
+            <div
+              className="inline-flex rounded-full border border-[#E3E7E0] bg-white p-0.5"
+              role="group"
+              aria-label="Rhythm comparison mode"
+            >
+              {([
+                ['week', 'This 7d'],
+                ['compare', 'vs prior wk'],
+              ] as const).map(([mode, label]) => (
+                <button
+                  key={mode}
+                  type="button"
+                  aria-pressed={rhythmMode === mode}
+                  onClick={() => setRhythmMode(mode)}
+                  className={`rounded-full px-2.5 py-1 text-[10.5px] font-bold transition-colors ${
+                    rhythmMode === mode
+                      ? 'bg-[#0F3D3E] text-white'
+                      : 'text-[#6B6B6B] hover:text-[#0F3D3E]'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
         <p className="mb-3 text-[11.5px] text-[#969696]">
           Table tickets seated per hour of day — when the floor actually fills.
           {rhythm.peakHour >= 0 && (
             <>
               {' '}Peak hour: <span className="font-bold text-[#8A5A00]">{hourLabel(rhythm.peakHour)} ({rhythm.max} tickets)</span>
+            </>
+          )}
+          {rhythmMode === 'compare' && rhythm.prevTotal > 0 && (
+            <>
+              {' '}· <span className="font-semibold text-[#6B6B6B]">gray dashed = prior 7d</span>
             </>
           )}
         </p>
@@ -1216,6 +1251,25 @@ export function FloorScreen(): React.ReactElement {
               <div className="rounded-2xl border border-[#E3E7E0] bg-white px-3 py-2">
                 <p className="text-[10.5px] font-semibold uppercase tracking-wide text-[#6B6B6B]">Seated rounds · 7d</p>
                 <p className="mt-0.5 text-[18px] font-bold tabular-nums text-[#1A1A1A]">{rhythm.total}</p>
+                {rhythmMode === 'compare' && (
+                  <p className="mt-0.5 text-[10.5px] font-semibold tabular-nums">
+                    {rhythm.prevTotal > 0 ? (
+                      (() => {
+                        const delta = rhythm.total - rhythm.prevTotal;
+                        const pct = rhythm.prevTotal > 0 ? Math.round((delta / rhythm.prevTotal) * 100) : null;
+                        return (
+                          <span className={delta >= 0 ? 'text-[#2E7D32]' : 'text-[#B4483C]'}>
+                            {delta >= 0 ? '+' : '-'}{Math.abs(delta)} vs prior 7d
+                            {pct !== null && Number.isFinite(pct) ? ` (${delta >= 0 ? '+' : '-'}${Math.abs(pct)}%)` : ''}
+                            <span className="ml-1 font-normal text-[#969696]">· prior {rhythm.prevTotal}</span>
+                          </span>
+                        );
+                      })()
+                    ) : (
+                      <span className="text-[#969696]">no prior-week tickets in the loaded ledger yet</span>
+                    )}
+                  </p>
+                )}
               </div>
               <div className="rounded-2xl border border-[#E3E7E0] bg-white px-3 py-2">
                 <p className="text-[10.5px] font-semibold uppercase tracking-wide text-[#6B6B6B]">Peak hour</p>
@@ -1233,7 +1287,7 @@ export function FloorScreen(): React.ReactElement {
             </div>
             <div className="h-48" aria-hidden>
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={rhythm.data} margin={{ top: 4, right: 8, bottom: 0, left: -30 }}>
+                <ComposedChart data={rhythm.data} margin={{ top: 4, right: 8, bottom: 0, left: -30 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#E3E7E0" vertical={false} />
                   <XAxis
                     dataKey="label"
@@ -1256,20 +1310,39 @@ export function FloorScreen(): React.ReactElement {
                       fontSize: 12,
                       boxShadow: '0 4px 14px rgba(15,61,62,0.10)',
                     }}
-                    formatter={(v: unknown) => [`${v} ticket${Number(v) === 1 ? '' : 's'}`, 'Seated']}
+                    formatter={(v: unknown, name: unknown) => [
+                      `${v} ticket${Number(v) === 1 ? '' : 's'}`,
+                      String(name ?? 'Seated'),
+                    ]}
                   />
-                  <Bar dataKey="n" radius={[4, 4, 0, 0]}>
+                  <Bar dataKey="n" name="Seated · this 7d" radius={[4, 4, 0, 0]}>
                     {rhythm.data.map((h) => (
                       <Cell key={h.hour} fill={h.n >= rhythm.max && h.n > 0 ? '#B88E2F' : '#0F3D3E'} />
                     ))}
                   </Bar>
-                </BarChart>
+                  {rhythmMode === 'compare' && rhythm.prevTotal > 0 && (
+                    <Line
+                      dataKey="pn"
+                      name="Seated · prior 7d"
+                      stroke="#969696"
+                      strokeWidth={1.5}
+                      strokeDasharray="5 3"
+                      dot={{ r: 2, fill: '#969696', strokeWidth: 0 }}
+                      activeDot={{ r: 3, fill: '#969696', strokeWidth: 0 }}
+                      isAnimationActive={false}
+                    />
+                  )}
+                </ComposedChart>
               </ResponsiveContainer>
             </div>
             <p className="mt-2 text-[11px] leading-relaxed text-[#969696]">
               Counts every non-cancelled ticket that holds a table, by its IST hour — the same ledger Reports reads.
               Walk-in counter tickets don't hold a table, so they stay out of the rhythm. A round is a ticket, not a headcount.
               Rides the floor's refresh.
+              {rhythmMode === 'compare' &&
+                (rhythm.prevTotal > 0
+                  ? ' The gray dashed line aggregates the PRIOR 7 IST days the same way — same hour-of-day, same rules.'
+                  : ' No prior-week table tickets in the loaded ledger yet — the comparison unlocks as the ledger ages.')}
             </p>
           </>
         )}

@@ -45,3 +45,28 @@ export function printHiddenFrame(html: string): void {
     remove();
   }
 }
+
+/**
+ * Warm a remote image (the café logo) BEFORE the hidden iframe prints —
+ * window.print() does not wait for a cold <img> to download, so a cold or
+ * dead URL would otherwise print a sheet with a hole (or nothing) where the
+ * logo should be. Resolves false on error/timeout (2.5s default) and the
+ * caller just prints — the frame's own onerror self-hide keeps the output
+ * honest either way. Shared by the sticker sheet and the receipt header.
+ * (v5.29.0)
+ */
+export function preloadPrintImage(url: string, timeoutMs = 2500): Promise<boolean> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    const timer = window.setTimeout(() => resolve(false), timeoutMs);
+    img.onload = () => {
+      window.clearTimeout(timer);
+      resolve(true);
+    };
+    img.onerror = () => {
+      window.clearTimeout(timer);
+      resolve(false);
+    };
+    img.src = url;
+  });
+}
