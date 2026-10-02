@@ -11,6 +11,7 @@ import {
   Globe2,
   ImagePlus,
   Info,
+  Loader2,
   Lock,
   LogOut,
   RefreshCw,
@@ -1079,6 +1080,10 @@ const StaffSection: React.FC = () => {
  * guest side (never a broken-image glyph), and an RLS refusal here says so
  * instead of pretending to save. NULL is the honest default: no logo means
  * the pre-5.27 text-only hero, exactly as shipped.
+ * v5.33.0 (migration 026): the owner can also UPLOAD a file from this
+ * device — the tenant-logos storage bucket hosts it (public read, 1 MiB,
+ * image mime only), the public URL lands in the same logo_url field and
+ * auto-saves. Paste stays for logos that already live on the web.
  */
 const CafeBrandSection: React.FC = () => {
   const session = useSession((s) => s.session);
@@ -1090,6 +1095,10 @@ const CafeBrandSection: React.FC = () => {
   const [err, setErr] = useState<string | null>(null);
   const [saved, fireSaved] = useTransientFlag(2400);
   const [previewBroken, setPreviewBroken] = useState(false);
+  /* v5.33.0 — device upload state (separate from the save busy: an upload
+   * runs storage→then persist, and the two failures read differently). */
+  const [uploadBusy, setUploadBusy] = useState(false);
+  const [uploadErr, setUploadErr] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -1141,6 +1150,47 @@ const CafeBrandSection: React.FC = () => {
     setSavedUrl(value === '' ? null : value);
     setDraft(value);
     fireSaved();
+  };
+
+  /* v5.33.0 — upload from this device: the bucket hosts the file (each
+   * operator writes only inside their own user-id folder — migration 026's
+   * RLS), the public URL auto-saves into the SAME logo_url field, and the
+   * previous UPLOADED logo is retired best-effort so the folder doesn't
+   * silt up. Paste-a-URL keeps working untouched beside it. */
+  const uploadLogo = async (file: File) => {
+    if (!tenantId || uploadBusy) return;
+    setUploadErr(null);
+    if (file.size > 1048576) {
+      setUploadErr(`That file is ${(file.size / 1048576).toFixed(1)} MB — logos stay under 1 MB.`);
+      return;
+    }
+    setUploadBusy(true);
+    try {
+      const { data: userData } = await supabase.auth.getUser();
+      const uid = userData?.user?.id;
+      if (!uid) throw new Error('not signed in — the upload needs your session');
+      const ext = (file.name.split('.').pop() || 'png').toLowerCase().replace(/[^a-z0-9]/g, '') || 'png';
+      const path = `${uid}/logo-${Date.now()}.${ext}`;
+      const up = await supabase.storage.from('tenant-logos').upload(path, file, {
+        cacheControl: '3600',
+        contentType: file.type || 'image/png',
+      });
+      if (up.error) throw up.error;
+      const pub = supabase.storage.from('tenant-logos').getPublicUrl(path).data.publicUrl;
+      await persist(pub);
+      if (savedUrl && savedUrl.includes('/storage/v1/object/public/tenant-logos/')) {
+        try {
+          const old = decodeURIComponent(savedUrl.split('/object/public/tenant-logos/')[1] || '');
+          if (old && old.startsWith(`${uid}/`)) void supabase.storage.from('tenant-logos').remove([old]);
+        } catch {
+          /* retirement is best-effort — the new logo is already live */
+        }
+      }
+    } catch (e) {
+      setUploadErr(`Upload failed — ${e instanceof Error ? e.message : 'unknown error'}`);
+    } finally {
+      setUploadBusy(false);
+    }
   };
 
   return (
@@ -1197,6 +1247,44 @@ const CafeBrandSection: React.FC = () => {
           </p>
         )}
         {err && <Note tone="error">{err}</Note>}
+      </div>
+
+      {/* v5.33.0 — upload from this device: the bucket hosts it, no URL
+          wrangling. The input is sr-only inside a real button-label; the
+          value resets on every change so re-choosing the same file after a
+          fix still fires. */}
+      <div className="mt-5 border-t border-[#E3E7E0] pt-5">
+        <label htmlFor="cafe-logo-upload" className="block text-[13px] font-semibold text-[#1A1A1A]">
+          Or upload from this device
+        </label>
+        <p className="mt-1 text-[12px] leading-snug text-[#6B6B6B]">
+          PNG, JPEG, WebP, AVIF or SVG up to 1 MB — hosted in your workspace's storage and saved as the logo the moment it lands.
+        </p>
+        <div className="mt-3 flex flex-wrap items-center gap-3">
+          <label
+            htmlFor="cafe-logo-upload"
+            className={`inline-flex min-h-[44px] cursor-pointer items-center justify-center gap-2 rounded-full border border-[#E3E7E0] bg-white px-5 text-[13px] font-semibold text-[#0F3D3E] transition hover:border-[#B88E2F]/50 hover:text-[#8A5A00] ${
+              uploadBusy ? 'pointer-events-none opacity-60' : ''
+            }`}
+          >
+            {uploadBusy ? <Loader2 size={15} className="animate-spin" aria-hidden /> : <ImagePlus size={15} aria-hidden />}
+            {uploadBusy ? 'Uploading…' : 'Choose image…'}
+          </label>
+          <input
+            id="cafe-logo-upload"
+            type="file"
+            accept="image/png,image/jpeg,image/webp,image/avif,image/svg+xml"
+            className="sr-only"
+            disabled={uploadBusy}
+            aria-label="Upload café logo image"
+            onChange={(e) => {
+              const f = e.target.files?.[0] || null;
+              e.target.value = '';
+              if (f) void uploadLogo(f);
+            }}
+          />
+          {uploadErr && <Note tone="error">{uploadErr}</Note>}
+        </div>
       </div>
 
       <div className="mt-5 flex flex-wrap items-center gap-3">

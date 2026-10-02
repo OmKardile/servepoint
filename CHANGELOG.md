@@ -3,6 +3,16 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.33.0] — 2026-10-03 — The logo comes from your own file: Storage-backed brand upload
+
+### Added — upload the café logo from this device (Settings → Café brand, migration 026)
+- Owners no longer need somewhere on the web to host a logo: the Café brand section grows **"Or upload from this device"** — pick a PNG/JPEG/WebP/AVIF/SVG up to 1 MB, and the file lands in the new `tenant-logos` storage bucket (migration 026: public read, `file_size_limit` 1 MiB, image-mime allowlist), its public URL **auto-saves into the same `logo_url` field**, and the preview/Saved chip confirm it. The previous *uploaded* logo is retired best-effort on replacement so the folder doesn't silt up. Paste-a-URL stays untouched beside it for logos that already live on the web.
+- **Security posture** (migration 026, four policies): the bucket is public-READ (guest phones render the logo with no session) but write-scoped per operator — each authenticated user may upload/update/delete ONLY inside their own `tenant-logos/<auth.uid()>/` folder; cross-folder writes are refused by RLS, non-image mimes by the bucket guard. The client walks the same path the browser does: anon key + the operator's own JWT.
+- Upload failures are honest and specific: an oversized file says its size, an RLS/mime/storage refusal surfaces the server's own message — never a fake success.
+
+### Verified
+- `tsc` 0 after every edit; zero page errors. Migration applied via `scripts/apply-026.mjs` with three proofs (bucket public + 1 MiB + 5 mime types; exactly the 4 policies; `tenants.logo_url` undrifted). **Browser E2E**: agent-browser drove a real file upload (`scripts/qa72-brand-upload.png`) — preview loaded, DB `logo_url` = the storage public URL, exactly one object in the owner's user-id folder, public fetch `200 image/png` with no session, and the KDS header tile (5.31) rendered the uploaded logo. **Policy tests as the owner's JWT** (`scripts/qa72-storage-policy.mjs`): cross-folder upload with an allowed mime → refused by RLS; text mime → refused by the bucket guard; own-folder delete → succeeded. Cleanup honest: the test object removed, the tenant logo restored to its original URL through the real UI (paste + Save re-exercised), 0 storage objects remain. sw `5.33.0-r1`.
+
 ## [5.32.0] — 2026-10-03 — The URL tells the truth: staff deep links + the honest tab title
 
 ### Added — every staff screen is deep-linkable (`/:slug/:screen`)
