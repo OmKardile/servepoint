@@ -20,8 +20,9 @@ export type Section =
   | 'dashboard'
   | 'food'
   | 'kitchen'
-  | 'messages'
   | 'bills'
+  | 'floor'
+  | 'menu'
   | 'settings'
   | 'notifications'
   | 'support';

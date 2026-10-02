@@ -10,13 +10,15 @@ import { DashboardScreen } from './components/dashboard/DashboardScreen';
 import { FoodDrinksScreen } from './components/food/FoodDrinksScreen';
 import { BillsScreen } from './components/bills/BillsScreen';
 import { KitchenScreen } from './components/kitchen/KitchenScreen';
-import { MessagesScreen } from './components/messages/MessagesScreen';
+import { FloorScreen } from './components/floor/FloorScreen';
+import { MenuScreen } from './components/menu/MenuScreen';
 import { NotificationsScreen } from './components/notifications/NotificationsScreen';
 import { SupportScreen } from './components/support/SupportScreen';
 import { SettingsScreen } from './components/settings/SettingsScreen';
 import { PlatformScreen } from './components/platform/PlatformScreen';
 import ShowcasePage from './components/pages/ShowcasePage';
 import IndexHelpPage from './components/pages/IndexHelpPage';
+import { GuestGatePage, GuestMenuPage, GuestTrackPage } from './components/guest/GuestPages';
 import brandLockup from './assets/brand/lockup-light.png';
 
 /**
@@ -24,9 +26,11 @@ import brandLockup from './assets/brand/lockup-light.png';
  *  - No session → ServePoint login (email + password only).
  *  - superadmin → Platform console ALWAYS (developer/operators; never the cafe app).
  *  - owner / staff → the ServePoint cafe app per the Figma (Dashboard, Food & Drinks,
- *    Messages, Bills, Settings + Notifications, Support).
+ *    Kitchen, Bills, Floor, Menu, Settings + Notifications, Support).
  *  - /showcase + /index-help → public, unauthenticated product surfaces (v5.2.1):
  *    plain-path routing on the SPA fallback — the POS stays king at "/".
+ *  - /t/:token, /menu/:token, /track/:orderId → guest QR ordering surfaces (v5.3.0):
+ *    no login — the table's permanent QR token + the order UUID are the capabilities.
  */
 
 /** Reads the browser path ONCE (these are standalone pages, not in-app tabs). */
@@ -76,8 +80,9 @@ const CafeApp: React.FC = () => {
       {section === 'dashboard' && <DashboardScreen />}
       {section === 'food' && <FoodDrinksScreen />}
       {section === 'kitchen' && <KitchenScreen />}
-      {section === 'messages' && <MessagesScreen />}
       {section === 'bills' && <BillsScreen />}
+      {section === 'floor' && <FloorScreen />}
+      {section === 'menu' && <MenuScreen />}
       {section === 'notifications' && <NotificationsScreen />}
       {section === 'support' && <SupportScreen />}
       {section === 'settings' && <SettingsScreen />}
@@ -114,6 +119,11 @@ const App: React.FC = () => {
   // Public product surfaces bypass auth entirely (no session restore flicker).
   if (pathname === '/showcase') return <ShowcasePage />;
   if (pathname === '/index-help' || pathname === '/help') return <IndexHelpPage />;
+  // Guest QR surfaces (v5.3.0) — public, no session, capabilities only:
+  // /t/:qr_token (table gate) · /menu/:qr_token (menu + cart) · /track/:orderId (pager).
+  if (pathname.startsWith('/t/')) return <GuestGatePage qrToken={decodeURIComponent(pathname.split('/')[2] || '')} />;
+  if (pathname.startsWith('/menu/')) return <GuestMenuPage qrToken={decodeURIComponent(pathname.split('/')[2] || '')} />;
+  if (pathname.startsWith('/track/')) return <GuestTrackPage orderId={decodeURIComponent(pathname.split('/')[2] || '')} />;
 
   if (!session) {
     return (

@@ -16,7 +16,7 @@ import {
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { Category, MenuItem, OrderType } from '../../types';
-import { createOrder, fetchCategories, fetchMenuItems } from '../../lib/api';
+import { createOrder, fetchCategories, fetchMenuItems, fetchTables, type DiningTable } from '../../lib/api';
 import { useTenant } from '../../lib/tenant';
 import { formatMoney } from '../../lib/prefs';
 import { useUi } from '../../store/session';
@@ -222,7 +222,25 @@ const OrderDrawer: React.FC<{
   const cart = useCart();
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [tables, setTables] = useState<DiningTable[] | null>(null);
   const panelRef = useRef<HTMLDivElement>(null);
+
+  // floor list for the table picker — loaded when the drawer opens
+  useEffect(() => {
+    if (!open || !tenantId) return;
+    let alive = true;
+    setTables(null);
+    fetchTables(tenantId)
+      .then((t) => {
+        if (alive) setTables(t);
+      })
+      .catch(() => {
+        if (alive) setTables([]);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [open, tenantId]);
 
   useEffect(() => {
     if (!open) return;
@@ -248,6 +266,7 @@ const OrderDrawer: React.FC<{
     try {
       const order = await createOrder(tenantId, {
         orderType: cart.orderType,
+        tableId: cart.orderType === 'dine_in' ? cart.tableId : null,
         tableLabel: cart.orderType === 'dine_in' ? cart.tableLabel || null : null,
         guestCount: cart.orderType === 'dine_in' ? cart.guestCount || null : null,
         customerName: cart.customerName || null,
@@ -328,14 +347,26 @@ const OrderDrawer: React.FC<{
                   <label htmlFor="od-table" className="mb-1 block text-[12px] font-medium text-[#6B6B6B]">
                     Table
                   </label>
-                  <input
+                  <select
                     id="od-table"
-                    type="text"
-                    value={cart.tableLabel}
-                    onChange={(e) => cart.setTableLabel(e.target.value)}
-                    placeholder="e.g. T-12"
+                    value={cart.tableId || ''}
+                    onChange={(e) => {
+                      const id = e.target.value || null;
+                      const t = (tables || []).find((x) => x.id === id);
+                      cart.setTableId(t ? t.id : null);
+                      cart.setTableLabel(t ? t.table_number : '');
+                    }}
                     className="sp-input h-11 w-full px-3 text-[13.5px]"
-                  />
+                  >
+                    <option value="">Walk-in / unassigned</option>
+                    {(tables || []).map((t) => (
+                      <option key={t.id} value={t.id} disabled={t.status === 'occupied' && t.id !== cart.tableId}>
+                        {t.table_number} · {t.section} · {t.capacity} seats{t.status === 'occupied' ? ' (seated)' : t.status === 'reserved' ? ' (reserved)' : ''}
+                      </option>
+                    ))}
+                  </select>
+                  {tables === null && <p className="mt-1 text-[11px] text-[#6B6B6B]">Loading floor…</p>}
+                  {tables !== null && tables.length === 0 && <p className="mt-1 text-[11px] text-[#6B6B6B]">No tables on the Floor yet — walk-ins are fine.</p>}
                 </div>
                 <div>
                   <label htmlFor="od-guests" className="mb-1 block text-[12px] font-medium text-[#6B6B6B]">

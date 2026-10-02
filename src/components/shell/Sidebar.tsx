@@ -1,11 +1,12 @@
 import React from 'react';
 import {
+  Armchair,
   Bell,
+  BookOpenText,
   ChefHat,
   CookingPot,
   Headphones,
   LayoutGrid,
-  MessageSquareText,
   Receipt,
   Settings as SettingsIcon,
   UserRound,
@@ -17,8 +18,9 @@ const NAV: { id: Section; label: string; icon: React.ElementType }[] = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutGrid },
   { id: 'food', label: 'Food & Drinks', icon: CookingPot },
   { id: 'kitchen', label: 'Kitchen', icon: ChefHat },
-  { id: 'messages', label: 'Messages', icon: MessageSquareText },
   { id: 'bills', label: 'Bills', icon: Receipt },
+  { id: 'floor', label: 'Floor', icon: Armchair },
+  { id: 'menu', label: 'Menu', icon: BookOpenText },
   { id: 'settings', label: 'Settings', icon: SettingsIcon },
 ];
 

@@ -134,6 +134,34 @@ try {
     return pub === 2 && trg === 1 && pol === 2;
   };
   await applyFile('011_floor_security_realtime', 'supabase/migrations/011_floor_security_realtime.sql', await floorReady());
+  // 012 sentinel: menu-depth tables + guest RPCs + idempotency column/index
+  const guestReady = async () => {
+    const tables = Number(
+      await scalar(
+        `SELECT count(*) FROM information_schema.tables
+          WHERE table_schema='public'
+            AND table_name IN ('menu_variants','addons','menu_item_addons','order_item_addons')`
+      )
+    );
+    const fns = Number(
+      await scalar(
+        `SELECT count(*) FROM pg_proc
+          WHERE pronamespace='public'::regnamespace
+            AND proname IN ('sp_resolve_table_qr','sp_get_public_menu','sp_create_public_order','sp_get_public_order')`
+      )
+    );
+    const col = Number(
+      await scalar(
+        `SELECT count(*) FROM information_schema.columns
+          WHERE table_schema='public' AND table_name='orders' AND column_name='client_operation_id'`
+      )
+    );
+    const idx = Number(
+      await scalar(`SELECT count(*) FROM pg_indexes WHERE schemaname='public' AND indexname='uq_orders_client_operation'`)
+    );
+    return tables === 4 && fns === 4 && col === 1 && idx === 1;
+  };
+  await applyFile('012_menu_variants_guest_qr', 'supabase/migrations/012_menu_variants_guest_qr.sql', await guestReady());
 
   // ── Verification ──────────────────────────────────────────────────────────
   const tables = await client.query(

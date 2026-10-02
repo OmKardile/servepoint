@@ -14,6 +14,7 @@ import type {
   Subscription,
   Tenant,
 } from '../types';
+export type { Category };
 
 /**
  * v5.0.0 Production data layer (ADR-0014).
@@ -444,6 +445,195 @@ export function subscribeTablesRealtime(
   return () => {
     void supabase.removeChannel(channel);
   };
+}
+
+/* ── Menu management (v5.3.0 — variants + add-ons, migration 012) ────────── */
+
+export interface MenuVariant {
+  id: string;
+  tenant_id: string;
+  menu_item_id: string;
+  name: string;
+  price_delta: number;
+  sort_order: number;
+}
+
+export interface Addon {
+  id: string;
+  tenant_id: string;
+  name: string;
+  price: number;
+}
+
+export async function fetchMenuVariants(tenantId: string): Promise<MenuVariant[]> {
+  requireCloud();
+  const { data, error } = await supabase
+    .from('menu_variants')
+    .select('*')
+    .eq('tenant_id', tenantId)
+    .order('sort_order', { ascending: true });
+  if (error) throw error;
+  return (data || []) as MenuVariant[];
+}
+
+export async function fetchAddons(tenantId: string): Promise<Addon[]> {
+  requireCloud();
+  const { data, error } = await supabase
+    .from('addons')
+    .select('*')
+    .eq('tenant_id', tenantId)
+    .order('name', { ascending: true });
+  if (error) throw error;
+  return (data || []) as Addon[];
+}
+
+export async function fetchMenuItemAddonIds(itemIds: string[]): Promise<{ menu_item_id: string; addon_id: string }[]> {
+  requireCloud();
+  if (itemIds.length === 0) return [];
+  const { data, error } = await supabase
+    .from('menu_item_addons')
+    .select('menu_item_id, addon_id')
+    .in('menu_item_id', itemIds);
+  if (error) throw error;
+  return (data || []) as { menu_item_id: string; addon_id: string }[];
+}
+
+export async function createCategory(tenantId: string, name: string): Promise<Category> {
+  requireCloud();
+  const locationId = await ensureLocation(tenantId);
+  const { data: maxRow } = await supabase
+    .from('categories')
+    .select('sort_order')
+    .eq('tenant_id', tenantId)
+    .order('sort_order', { ascending: false })
+    .limit(1);
+  const nextSort = ((maxRow?.[0] as { sort_order: number | null } | undefined)?.sort_order ?? 0) + 1;
+  const { data, error } = await supabase
+    .from('categories')
+    .insert({ tenant_id: tenantId, location_id: locationId, name: name.trim(), sort_order: nextSort })
+    .select('*')
+    .single();
+  if (error) throw error;
+  return data as Category;
+}
+
+export async function renameCategory(categoryId: string, tenantId: string, name: string): Promise<void> {
+  requireCloud();
+  const { error } = await supabase
+    .from('categories')
+    .update({ name: name.trim() })
+    .eq('id', categoryId)
+    .eq('tenant_id', tenantId);
+  if (error) throw error;
+}
+
+export interface MenuItemInput {
+  name: string;
+  description?: string | null;
+  price: number;
+  categoryId: string | null;
+  isVeg: boolean;
+  isAvailable: boolean;
+}
+
+export async function createMenuItem(tenantId: string, input: MenuItemInput): Promise<MenuItem> {
+  requireCloud();
+  const locationId = await ensureLocation(tenantId);
+  const { data, error } = await supabase
+    .from('menu_items')
+    .insert({
+      tenant_id: tenantId,
+      location_id: locationId,
+      category_id: input.categoryId,
+      name: input.name.trim(),
+      description: input.description?.trim() || null,
+      price: input.price,
+      is_veg: input.isVeg,
+      is_available: input.isAvailable,
+      tax_rate_pct: 5,
+    })
+    .select('*')
+    .single();
+  if (error) throw error;
+  return data as MenuItem;
+}
+
+export async function updateMenuItem(itemId: string, tenantId: string, patch: Partial<MenuItemInput>): Promise<void> {
+  requireCloud();
+  const row: Record<string, unknown> = {};
+  if (patch.name !== undefined) row.name = patch.name.trim();
+  if (patch.description !== undefined) row.description = patch.description?.trim() || null;
+  if (patch.price !== undefined) row.price = patch.price;
+  if (patch.categoryId !== undefined) row.category_id = patch.categoryId;
+  if (patch.isVeg !== undefined) row.is_veg = patch.isVeg;
+  if (patch.isAvailable !== undefined) row.is_available = patch.isAvailable;
+  const { error } = await supabase.from('menu_items').update(row).eq('id', itemId).eq('tenant_id', tenantId);
+  if (error) throw error;
+}
+
+export async function deleteMenuItem(itemId: string, tenantId: string): Promise<void> {
+  requireCloud();
+  const { error } = await supabase.from('menu_items').delete().eq('id', itemId).eq('tenant_id', tenantId);
+  if (error) throw error;
+}
+
+export async function createVariant(tenantId: string, itemId: string, name: string, priceDelta: number): Promise<void> {
+  requireCloud();
+  const { error } = await supabase
+    .from('menu_variants')
+    .insert({ tenant_id: tenantId, menu_item_id: itemId, name: name.trim(), price_delta: priceDelta });
+  if (error) throw error;
+}
+
+export async function deleteVariant(variantId: string, tenantId: string): Promise<void> {
+  requireCloud();
+  const { error } = await supabase.from('menu_variants').delete().eq('id', variantId).eq('tenant_id', tenantId);
+  if (error) throw error;
+}
+
+export async function createAddon(tenantId: string, name: string, price: number): Promise<Addon> {
+  requireCloud();
+  const { data, error } = await supabase
+    .from('addons')
+    .insert({ tenant_id: tenantId, name: name.trim(), price })
+    .select('*')
+    .single();
+  if (error) throw error;
+  return data as Addon;
+}
+
+export async function deleteAddon(addonId: string, tenantId: string): Promise<void> {
+  requireCloud();
+  const { error } = await supabase.from('addons').delete().eq('id', addonId).eq('tenant_id', tenantId);
+  if (error) throw error;
+}
+
+/** Replaces the whole allowed-add-on list of one item (small lists — fine as a diff-free rewrite). */
+export async function setItemAddons(tenantId: string, itemId: string, addonIds: string[]): Promise<void> {
+  requireCloud();
+  const { data: existing, error: readErr } = await supabase
+    .from('menu_item_addons')
+    .select('addon_id')
+    .eq('menu_item_id', itemId);
+  if (readErr) throw readErr;
+  const current = new Set(((existing || []) as { addon_id: string }[]).map((r) => r.addon_id));
+  const target = new Set(addonIds);
+  const toAdd = [...target].filter((id) => !current.has(id));
+  const toDrop = [...current].filter((id) => !target.has(id));
+  if (toAdd.length > 0) {
+    const { error } = await supabase
+      .from('menu_item_addons')
+      .insert(toAdd.map((addon_id) => ({ menu_item_id: itemId, addon_id })));
+    if (error) throw error;
+  }
+  if (toDrop.length > 0) {
+    const { error } = await supabase
+      .from('menu_item_addons')
+      .delete()
+      .eq('menu_item_id', itemId)
+      .in('addon_id', toDrop);
+    if (error) throw error;
+  }
 }
 
 /* ─────────────────────────── Dashboard ──────────────────────────── */
