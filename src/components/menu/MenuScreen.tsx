@@ -339,6 +339,7 @@ export function MenuScreen(): React.ReactElement {
   const [renameValue, setRenameValue] = useState('');
 
   const confirmTimer = useRef<number | null>(null);
+  const busyRef = useRef(false);
   const armConfirm = useCallback((id: string) => {
     setConfirmId(id);
     if (confirmTimer.current) window.clearTimeout(confirmTimer.current);
@@ -381,6 +382,8 @@ export function MenuScreen(): React.ReactElement {
   }, [tenantId, tick]);
 
   const runAction = useCallback(async (fn: () => Promise<unknown>, okMsg?: string) => {
+    if (busyRef.current) return; // double-dispatch guard (batch-proof, unlike state)
+    busyRef.current = true;
     setBusy(true);
     setActionError(null);
     try {
@@ -392,6 +395,7 @@ export function MenuScreen(): React.ReactElement {
       setActionError(err instanceof Error ? err.message : 'Something went wrong. Try again.');
       return false;
     } finally {
+      busyRef.current = false;
       setBusy(false);
     }
   }, [fireSaved]);

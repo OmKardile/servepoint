@@ -3,6 +3,33 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.3.0] — 2026-10-02 — The main flow is whole: menu depth, live floor, guest QR ordering (Messages removed)
+
+### Removed — Messages (owner directive: "remove the messages system; it's a point of sale app")
+- The Messages screen, its nav entry and the `messages` Section are gone. A POS's surface area now maps 1:1 to running a cafe: Dashboard, Food & Drinks (counter POS), Kitchen (KDS), Bills (money), Floor (tables), Menu (what you sell), Settings.
+
+### Added — menu with variants & add-ons (owner directive: "where's create menu item with variants or addons")
+- **Migration 012** (`012_menu_variants_guest_qr.sql`, applied to the live cloud from the CLI): `menu_variants` (per-item options with a price delta), `addons` (tenant-level library), `menu_item_addons` (which extras an item offers), `order_item_addons` (**name+price snapshots on tickets** so bills and KDS never depend on live menu rows), and `orders.client_operation_id` with a per-tenant partial unique index — **replaying a checkout can never double-order**.
+- **NEW `src/components/menu/MenuScreen.tsx`** (nav "Menu", BookOpenText): categories (add/rename, auto sort), items with name/price/description/veg/availability (live toggle), search, and a per-item **Options modal** — variants (name + ±₹ delta, one pick at order time) and the allowed add-on checklist (chips flip instantly, diff-free rewrite of the join rows). Add-on library strip on the page (add/delete with two-tap confirm). What lands here is exactly what the counter POS and the guest QR menu render — one menu, every surface.
+
+### Added — Floor: the live table board (migration 011)
+- **Migration 011** (`011_floor_security_realtime.sql`): **closes two anon-read RLS leaks** inherited from the early schema — `dining_tables` public policy was `USING (true)` (any anon client could read every tenant's tables *including permanent QR tokens*) and `table_sessions` ended with `OR status = 'active'` (every active session token readable cross-tenant). Both are now header-gated token matches; guests go through SECURITY DEFINER RPCs only. Also puts `dining_tables` + `table_sessions` on the `supabase_realtime` publication, and adds **`trg_orders_sync_table`**: an order with a `table_id` holds its table (`occupied` + `active_order_id`), completing/cancelling releases it — manual staff actions are never fought back.
+- **NEW `src/components/floor/FloorScreen.tsx`** (nav "Floor", Armchair): sections grid, status machine (Available / Occupied / Reserved / Billing), stat strip with seat counts, per-card guest link (`/t/<qr_token>`) + raw token copy, lifecycle actions (Seat / Reserve / Start billing / two-tap Free), add-table dialog (double-dispatch guarded), realtime Live chip + 30s safety poll.
+- **New Sale links real tables**: the order pad's free-text table input is now a live picker from `dining_tables` (occupied tables disabled; walk-ins still allowed) — orders carry the real `table_id`, notes still feed the KDS context line.
+
+### Added — the customer side: QR → menu → order → track (owner directive: "bring order from the customer side table link through QR")
+- **Guest surfaces** (public plain-path routes, zero login — capabilities only): **`/t/:qr_token`** gate (validates the printed token via `sp_resolve_table_qr`, opens the 10-minute ephemeral session through 002's `issue_ephemeral_table_session`, redirects to the menu) · **`/menu/:qr_token`** (`sp_get_public_menu` bundle: brand hero, table chip, live **session countdown ribbon**, search, per-item inline customizer — variant radios, add-on checkboxes, cook note, qty stepper with live line price — cart that survives refresh in sessionStorage (identity only), GST-transparent drawer, place order) · **`/track/:orderId`** (the pager: `sp_get_public_order` polled every 10s, status stepper, ready chime + vibration with persisted mute, live tab title, bill with PAID/DUE-AT-COUNTER, copy tracking link).
+- **`sp_create_public_order`** (SECURITY DEFINER): resolves the table by its **permanent token** (never trusts client table ids), validates tenant status, **recomputes every rupee server-side** (base + variant delta + add-ons, GST 5%), snapshots items + add-ons, inserts as status `new` (the counter is the gate — kitchen never sees a guest ticket until staff act), and is **idempotent per `client_operation_id`** (replays return the original order). **`sp_get_public_order`** exposes a scoped tracking projection; the anon key can still read zero rows directly.
+- **`src/lib/guest.ts`** — the guest data layer: RPC wrappers + sessionStorage identity cache (resolve result, session token, cart). Guests never pay online — the bill says what to settle at the counter.
+
+### Proven end-to-end on the live cloud (agent-browser, both sides)
+Menu: variant + add-on created and linked → rendered on the guest menu instantly. Floor: T1 created → guest link copied → **guest flow on a phone-sized viewport**: gate → 10:00 session ribbon → customize (Large +₹50, Extra shot +₹60, cook note) → live-priced cart ₹330 → **order #9 placed** → **T1 flipped Occupied with "Meera" on the Floor board** (011 trigger + realtime) → KDS New column received the ticket → Start preparing → Mark ready → **guest track page flipped to "Ready" live (tab title `#9 · Ready — ServePoint`)** → Complete → Bills charge UPI ₹346.50 → **track bill chip flipped PAID**. Server-side pricing verified in the DB (220 + 50 + 60 = 330, GST 16.50, total 346.50). Screenshots: guest menu 390px, track 390px, Floor 1440px.
+- Fixed en route: MenuScreen/FloorScreen double-dispatch guards (busyRef — a doubled variant row proved the need); FoodDrinksScreen table picker; `Order` type import.
+- Housekeeping: the leftover "QR Flow Cafe" QA tenant from an earlier round was reset to a clean demo (orders/sessions wiped, duplicate variant removed, T1 free) — its menu + table are kept as the owner's try-it-now demo: open `/t/2e65bd6858a063cf41614b1b1519b385` in the preview to walk the guest flow.
+
+### Verified
+- `tsc --noEmit` 0 errors; lint clean; migrations 001→012 sentinel-green from CLI (`db-setup.mjs` covers 010/011/012 with publication + trigger + policy + table sentinels); dev.log HMR-only. Login screen untouched (ADR-0016).
+
 ## [5.2.2] — 2026-10-02 — Render link rebranded: `servepoint-tsos.onrender.com`
 
 ### Changed — blueprint service name (owner request: the render link should say "servepoint")

@@ -1237,3 +1237,30 @@ Stage Summary:
 - Render deployment link is now **https://servepoint-tsos.onrender.com** once the owner clicks Apply (or blueprint sync runs on push). Old tsos-pos URL will 404 after re-provision — bookmarks/QR material must move to the new link; all other service properties re-create identically from the blueprint.
 - NOVA next-up unchanged: table floor / QR sessions UI (dining_tables + table_sessions in schema), then reports/EOD, inventory auto-deduction.
 - Crons: 15-min webDevReview ACTIVE (430321).
+
+---
+Task ID: 38
+Agent: glm-5.3
+Task: Owner directive — "remove the messages system... where's the main flow of create menu item with variants or addons, create order, manage orders, payments, bring order from the customer side table link through QR??? read the tsos nova text file, inspect github.com/OmKardile/tablesideordering, develop everything on our own, keep documentation like it"
+
+Work Log:
+- Read the full NOVA spec (upload/Pasted Content_1790883844082.txt — 549 lines): product A-Z, guest/counter/manager/superadmin surfaces, 41 tables, RPC surface, engineering rules (RLS-everywhere, SECURITY DEFINER writes only, idempotency keys on money paths, counter-is-the-gate, 44px touch).
+- Parallel agent inspected OmKardile/tablesideordering (cloned to /tmp, token auth): 99 docs, docs/APP-A-TO-Z.md structure, changelog voice (directive→behavior→gates), guest flow architecture (code+token gate → server session → jsonb menu bundle → identity-only cart + server pricing → op-id idempotency → 10s-polled tracking). Adopted the architecture, copied nothing.
+- REMOVED Messages: component dir deleted; Section/nav/render cleaned. Nav now: Dashboard, Food & Drinks, Kitchen, Bills, Floor, Menu, Settings.
+- MIGRATION 011 (live via CLI): fixed 2 anon-read RLS leaks (dining_tables USING(true) exposed all tables incl. qr_tokens; table_sessions "OR status='active'" exposed all active session tokens cross-tenant) → header-gated policies; dining_tables + table_sessions onto supabase_realtime; trg_orders_sync_table — orders hold/release tables (INSERT/UPDATE → occupied+active_order_id; completed/cancelled → release, only if still holding).
+- MIGRATION 012 (live via CLI): menu_variants / addons / menu_item_addons / order_item_addons (ticket snapshots) + orders.client_operation_id (partial unique per tenant) + 4 SECURITY DEFINER RPCs: sp_resolve_table_qr, sp_get_public_menu (jsonb bundle, available-only), sp_create_public_order (server-side pricing from live menu, GST 5%, idempotent replay, status 'new' gate), sp_get_public_order (tracking projection). db-setup.mjs sentinels extended (001→012).
+- api.ts: DiningTable/fetchTables/createTable/updateTable/subscribeTablesRealtime; menu CRUD (categories, items, variants, addons, join rewrites); NewOrderInput.tableId → real FK insert.
+- NEW FloorScreen (sections, status chips, seat counters, guest-link copy, lifecycle actions, add-table dialog, realtime+30s poll) + NEW MenuScreen (categories, items, Options modal for variants+allowed add-ons, add-on library, search, sold-out toggle) + order pad table picker (real tableId).
+- NEW guest surfaces (public plain-path, no login): /t/:token gate (resolve + issue_ephemeral_table_session + redirect), /menu/:token (brand hero, session countdown ribbon, search, inline customizer variants/addons/notes/qty, resilient cart, GST drawer, place), /track/:orderId (10s poll, stepper, ready chime+vibrate+mute, live tab title, PAID/DUE bill). lib/guest.ts = guest data layer.
+- Fixed en route: Order type import, clearTimeout null-overload, MenuScreen/FloorScreen double-dispatch (busyRef — a doubled "Large" variant row proved the need mid-E2E), CHANGELOG heading restoration after insert.
+- E2E golden path on live cloud (agent-browser, both sides): variant+addon linked in Menu → rendered on guest menu; T1 created → guest flow at 390px (gate → 10:00 ribbon → Large+₹50 + Extra shot +₹60 + "less sweet" → ₹330 live-priced) → order #9 → **T1 flipped Occupied "Meera" on Floor (trigger+realtime)** → KDS advanced both tickets → **track flipped "Ready" live (tab title #9 · Ready)** → Complete → UPI ₹346.50 → **track flipped PAID**. Server math verified in DB.
+- Investigated a phantom order #7 ("Riya") placed mid-round: concluded a previous cron round was still finishing its own E2E against the same cloud tenant (restored-tab session files, pre-seeded menu, timing evidence). No code defect. Reset the tenant to a clean demo: orders/sessions wiped, duplicate variant removed, T1 free; menu + table KEPT as the owner's try-it-now demo (/t/2e65bd6858a063cf41614b1b1519b385).
+- Screenshots: tool-results/guest-menu-390.png, track-390.png, floor-desktop-1440.png (gitignored).
+- Docs: CHANGELOG [5.3.0]; docs/CREDENTIALS.md range → 001→012.
+- Verified: tsc 0, lint clean, migrations sentinel-green, dev.log HMR-only. Login untouched (ADR-0016). Commit + push follow.
+
+Stage Summary:
+- The MAIN FLOW the owner demanded now exists and is proven on the production cloud: Menu (variants+addons) → Floor (tables + QR links) → counter POS (real table links) → guest QR (gate → menu → order → track) → KDS gate → Bills (money) → guest sees PAID. Messages is gone.
+- NOVA parity next: QR-orders inbox on New Sale (Ok-gate UX), Orders page (unpaid priority + CSV), inventory auto-deduction, EOD/z-report, customers/offers/reports, guest i18n, PWA.
+- Watch item: concurrent cron rounds can collide on shared QA tenants — prefer provisioning a fresh tenant per round for browser E2E.
+- Crons: 15-min webDevReview (this round's job 430321).
