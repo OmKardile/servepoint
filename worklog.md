@@ -1307,3 +1307,5 @@ Stage Summary:
 - ServePoint now CLOSES THE DAY: Close-out (stepper → right-now → summary → mix → ledger → z-report) is NOVA reconcile parity, ledger-truth enforced; the money loop (QR order → inbox Ok → kitchen → complete → charge → guest PAID → table release → z-report) is proven end-to-end on the production cloud.
 - Remaining NOVA parity: inventory auto-deduction (recipes), customers/offers, reports (sales/items/hours), guest i18n, PWA; consider orders.table_session_id migration only if session-scoped billing is wanted.
 - Crons: 15-min webDevReview (job 430321).
+
+Post-round note (Task 40, same session): GitHub's push response revealed the owner completed the repo rename — `OmKardile/servepoint` is live (ls-remote HEAD = 610944e). `git remote set-url origin` DONE per the Task 37 standing action; push worked through the old URL until now (GitHub redirect). Docs still referencing tsos-alt (README, render.yaml provenance comments, CHANGELOG) should be swept next round — cosmetic only, deploy unaffected.
