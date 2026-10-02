@@ -10,6 +10,7 @@ import {
   Loader2,
   Minus,
   Package,
+  PackageMinus,
   PackagePlus,
   Pencil,
   Plus,
@@ -21,11 +22,13 @@ import {
   X,
 } from 'lucide-react';
 import {
+  adjustStock,
   createInventoryItem,
   deleteInventoryItem,
   fetchDeductionWindow,
   fetchInventory,
   fetchMenuItems,
+  fetchRecentAdjustments,
   fetchRecentDeductions,
   fetchRecipeLines,
   restockInventoryItem,
@@ -35,6 +38,8 @@ import {
   type InventoryItem,
   type RealtimeState,
   type RecipeLine,
+  type StockAdjustment,
+  type StockAdjustmentReason,
   type StockDeduction,
 } from '../../lib/api';
 import { formatMoney } from '../../lib/prefs';
@@ -43,11 +48,14 @@ import { useTenant } from '../../lib/tenant';
 import type { MenuItem } from '../../types';
 
 /**
- * Inventory (v5.4.0 — NOVA stock parity, migration 015 engine).
+ * Inventory (v5.4.0 — NOVA stock parity, migration 015 engine; v5.36.0 — the
+ * 027 stock diary).
  *
  * The board answers four questions at a glance:
  *   1. STOCK — what's on the shelf (level bars vs reorder point), with
- *      restock / edit / delete and the recent-deduction audit feed.
+ *      restock / waste / edit / delete and the STOCK DIARY: one feed that
+ *      merges the engine's ticket deductions with the hand-made moves
+ *      (deliveries, spoilage, spills, damage, corrections — 027).
  *   2. RECIPES — what one serve of each menu item consumes. No recipe ⇒
  *      that item moves no stock (stated honestly in the UI).
  *   3. REORDER — what to buy this week: the stock_deductions ledger prices
@@ -57,8 +65,10 @@ import type { MenuItem } from '../../types';
  *      (single-engine rule: trg_orders_deduct_stock is THE deduction path);
  *      realtime keeps this board moving while tickets fire.
  *
- * Data truth: inventory_items / recipe_lines / stock_deductions on the cloud.
- * Stock going negative is allowed (real cafes oversell) — rendered red.
+ * Data truth: inventory_items / recipe_lines / stock_deductions /
+ * stock_adjustments on the cloud. Every hand-made move goes through the
+ * 027 RPC (atomic, row-locked — no client read-modify-write). Stock going
+ * negative is allowed (real cafes oversell) — rendered red.
  */
 
 type TabKey = 'stock' | 'recipes' | 'reorder';
@@ -89,6 +99,29 @@ function levelTone(stock: number, reorder: number): {
   return { bar: '#2E7D32', text: 'text-[#2E7D32]', label: 'Healthy' };
 }
 
+/** The diary merges two ledgers: the engine's ticket deductions (always
+ *  stock out) and the hand-made adjustments (027, already signed). Newest
+ *  first, capped like the old feed. */
+type DiaryRow =
+  | { kind: 'ticket'; id: string; itemId: string; qty: number; at: string }
+  | {
+      kind: 'adjust';
+      id: string;
+      itemId: string;
+      qty: number;
+      at: string;
+      reason: StockAdjustmentReason;
+      note: string;
+    };
+
+const REASON_META: Record<StockAdjustmentReason, { label: string; chip: string }> = {
+  delivery: { label: 'Delivery', chip: 'bg-[#E7F1E8] text-[#2E7D32]' },
+  spoilage: { label: 'Spoiled', chip: 'bg-[#FBF3E1] text-[#8A5A00]' },
+  spillage: { label: 'Spilled', chip: 'bg-[#FBF3E1] text-[#8A5A00]' },
+  damage: { label: 'Damaged', chip: 'bg-[#FBF3E1] text-[#8A5A00]' },
+  correction: { label: 'Correction', chip: 'bg-[#FBF3E1] text-[#8A5A00]' },
+};
+
 /* ─────────────────────────────── screen ────────────────────────────────── */
 
 export const InventoryScreen: React.FC = () => {
@@ -103,6 +136,7 @@ const InventoryInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [recipes, setRecipes] = useState<RecipeLine[]>([]);
   const [deductions, setDeductions] = useState<StockDeduction[]>([]);
+  const [adjustments, setAdjustments] = useState<StockAdjustment[]>([]);
   const [dedWindow, setDedWindow] = useState<StockDeduction[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -113,23 +147,26 @@ const InventoryInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
   const [editorOpen, setEditorOpen] = useState(false);
   const [editing, setEditing] = useState<InventoryItem | null>(null);
   const [restockFor, setRestockFor] = useState<{ item: InventoryItem; suggested: number | null } | null>(null);
+  const [wasteFor, setWasteFor] = useState<InventoryItem | null>(null);
   const [deleteArm, setDeleteArm] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!tenantId) return;
     setError(null);
     try {
-      const [inv, mi, rl, sd, sdw] = await Promise.all([
+      const [inv, mi, rl, sd, sa, sdw] = await Promise.all([
         fetchInventory(tenantId),
         fetchMenuItems(tenantId),
         fetchRecipeLines(tenantId),
         fetchRecentDeductions(tenantId, 12),
+        fetchRecentAdjustments(tenantId, 12),
         fetchDeductionWindow(tenantId, REORDER_WINDOW_DAYS),
       ]);
       setItems(inv);
       setMenuItems(mi);
       setRecipes(rl);
       setDeductions(sd);
+      setAdjustments(sa);
       setDedWindow(sdw);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not load inventory from the cloud.');
@@ -160,6 +197,33 @@ const InventoryInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
     return { low, out, value };
   }, [items]);
 
+  /** one feed, two ledgers: engine deductions + hand-made moves, newest first */
+  const diary = useMemo<DiaryRow[]>(() => {
+    const rows: DiaryRow[] = [
+      ...deductions.map(
+        (d): DiaryRow => ({
+          kind: 'ticket',
+          id: `t-${d.id}`,
+          itemId: d.inventory_item_id,
+          qty: -Number(d.qty),
+          at: d.created_at,
+        })
+      ),
+      ...adjustments.map(
+        (a): DiaryRow => ({
+          kind: 'adjust',
+          id: `a-${a.id}`,
+          itemId: a.inventory_item_id,
+          qty: Number(a.qty),
+          at: a.created_at,
+          reason: a.reason,
+          note: a.note,
+        })
+      ),
+    ];
+    return rows.sort((x, y) => (x.at < y.at ? 1 : x.at > y.at ? -1 : 0)).slice(0, 12);
+  }, [deductions, adjustments]);
+
   /* mutations ─────────────────────────────────────────────────────────── */
   const doRestock = useCallback(
     async (item: InventoryItem, qty: number) => {
@@ -171,6 +235,22 @@ const InventoryInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
         await load();
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Could not restock.');
+      } finally {
+        setBusyId(null);
+      }
+    },
+    [load]
+  );
+
+  const doWaste = useCallback(
+    async (item: InventoryItem, qty: number, reason: StockAdjustmentReason, note: string) => {
+      // Errors are surfaced inside the dialog (it stays open, the line is
+      // specific) — so no screen-level setError here; rethrow as-is.
+      setBusyId(item.id);
+      try {
+        await adjustStock(item.id, -qty, reason, note);
+        setWasteFor(null);
+        await load();
       } finally {
         setBusyId(null);
       }
@@ -479,6 +559,16 @@ const InventoryInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
                         Restock
                       </button>
                       <button
+                        onClick={() => setWasteFor(it)}
+                        disabled={busy}
+                        aria-label={`Log waste for ${it.name}`}
+                        title="Spoilage, spills, breakage — stock that left without a sale"
+                        className="flex h-9 items-center gap-1 rounded-lg border border-[#E3E7E0] bg-white px-2.5 text-[11.5px] font-bold text-[#0F3D3E] transition hover:border-[#B88E2F] hover:text-[#8A5A00] disabled:opacity-50"
+                      >
+                        <PackageMinus size={12} aria-hidden />
+                        Waste
+                      </button>
+                      <button
                         onClick={() => {
                           setEditing(it);
                           setEditorOpen(true);
@@ -510,35 +600,75 @@ const InventoryInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
             </ul>
           )}
 
-          {/* ── recent deductions — the audit feed ── */}
-          {deductions.length > 0 && (
-            <section className="sp-card p-5" aria-label="Recent stock deductions">
-              <div className="mb-3 flex items-center gap-2">
+          {/* ── stock diary — every move, on the record ── */}
+          {items.length > 0 && (
+            <section className="sp-card p-5" aria-label="Stock diary">
+              <div className="mb-3 flex flex-wrap items-center gap-2">
                 <ClipboardList size={15} className="text-[#0F3D3E]" aria-hidden />
-                <h2 className="text-[14px] font-bold text-[#1A1A1A]">Recent deductions</h2>
-                <span className="text-[11px] text-[#969696]">auto — when tickets fire to the pan</span>
+                <h2 className="text-[14px] font-bold text-[#1A1A1A]">Stock diary</h2>
+                <span className="text-[11px] text-[#969696]">
+                  every move, on the record — deliveries, waste, fired tickets
+                </span>
               </div>
-              <ul className="flex flex-col divide-y divide-[#E3E7E0]">
-                {deductions.map((d) => {
-                  const ing = items.find((i) => i.id === d.inventory_item_id);
-                  const ord = menuItems.length; // order numbers live on orders; ledger keeps ids
-                  void ord;
-                  return (
-                    <li key={d.id} className="flex items-center justify-between gap-3 py-2">
-                      <span className="flex min-w-0 items-center gap-2">
-                        <Minus size={12} className="shrink-0 text-[#B3261E]" aria-hidden />
-                        <span className="truncate text-[12.5px] font-semibold text-[#1A1A1A]">
-                          {ing ? ing.name : 'Ingredient'}
+              {diary.length === 0 ? (
+                <p className="py-2 text-[12px] italic text-[#969696]">
+                  Nothing has moved yet — deliveries, waste and fired tickets will land here.
+                </p>
+              ) : (
+                <ul className="flex flex-col divide-y divide-[#E3E7E0]">
+                  {diary.map((row) => {
+                    const ing = items.find((i) => i.id === row.itemId);
+                    const unit = ing?.unit ?? '';
+                    return (
+                      <li key={row.id} className="flex items-center justify-between gap-3 py-2">
+                        <span className="flex min-w-0 items-center gap-2">
+                          {row.kind === 'ticket' ? (
+                            <Minus size={12} className="shrink-0 text-[#B3261E]" aria-hidden />
+                          ) : row.qty > 0 ? (
+                            <Plus size={12} className="shrink-0 text-[#2E7D32]" aria-hidden />
+                          ) : (
+                            <PackageMinus size={12} className="shrink-0 text-[#B88E2F]" aria-hidden />
+                          )}
+                          <span className="truncate text-[12.5px] font-semibold text-[#1A1A1A]">
+                            {ing ? ing.name : 'Ingredient'}
+                          </span>
+                          {row.kind === 'ticket' ? (
+                            <span className="shrink-0 rounded-full bg-[#EAF0EC] px-2 py-0.5 text-[10px] font-bold text-[#0F3D3E]">
+                              Ticket
+                            </span>
+                          ) : (
+                            <span
+                              className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold ${REASON_META[row.reason].chip}`}
+                            >
+                              {REASON_META[row.reason].label}
+                            </span>
+                          )}
+                          {row.kind === 'adjust' && row.note && (
+                            <span className="hidden min-w-0 truncate text-[11px] italic text-[#969696] md:block">
+                              “{row.note}”
+                            </span>
+                          )}
                         </span>
-                      </span>
-                      <span className="shrink-0 text-[11.5px] tabular-nums text-[#6B6B6B]">
-                        −{fmtQty(Number(d.qty))} {ing?.unit ?? ''} ·{' '}
-                        {new Date(d.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                      </span>
-                    </li>
-                  );
-                })}
-              </ul>
+                        <span className="flex shrink-0 items-center gap-2 text-[11.5px] tabular-nums text-[#6B6B6B]">
+                          <span
+                            className={
+                              row.qty > 0
+                                ? 'font-bold text-[#2E7D32]'
+                                : row.kind === 'ticket'
+                                  ? 'font-bold text-[#B3261E]'
+                                  : 'font-bold text-[#8A5A00]'
+                            }
+                          >
+                            {row.qty > 0 ? '+' : '−'}
+                            {fmtQty(Math.abs(row.qty))} {unit}
+                          </span>
+                          {new Date(row.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
             </section>
           )}
         </>
@@ -575,6 +705,14 @@ const InventoryInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
           busy={busyId === restockFor.item.id}
           onClose={() => setRestockFor(null)}
           onConfirm={(qty) => void doRestock(restockFor.item, qty)}
+        />
+      )}
+      {wasteFor && (
+        <WasteDialog
+          item={wasteFor}
+          busy={busyId === wasteFor.id}
+          onClose={() => setWasteFor(null)}
+          onConfirm={(qty, reason, note) => doWaste(wasteFor, qty, reason, note)}
         />
       )}
     </div>
@@ -1047,6 +1185,159 @@ const RestockDialog: React.FC<{
           >
             {busy ? <Loader2 size={14} aria-hidden className="animate-spin" /> : <PackagePlus size={14} aria-hidden />}
             Add to shelf
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const WASTE_REASONS: { value: StockAdjustmentReason; label: string }[] = [
+  { value: 'spoilage', label: 'Spoiled' },
+  { value: 'spillage', label: 'Spilled' },
+  { value: 'damage', label: 'Damaged' },
+  { value: 'correction', label: 'Correction' },
+];
+
+/** Server refusals become honest human lines — the raw PG code names the rule. */
+function wasteErrText(e: unknown): string {
+  const raw = e instanceof Error ? e.message : String(e);
+  if (raw.includes('WASTE_MUST_BE_NEGATIVE'))
+    return 'The server refused a positive waste quantity — waste leaves the shelf.';
+  if (raw.includes('NOT_FOUND')) return 'This ingredient is gone from the shelf — refresh and try again.';
+  if (raw.includes('TOO_LONG')) return 'The note is too long — 280 characters at most.';
+  if (raw.includes('BAD_QTY')) return 'The amount must be more than zero.';
+  return raw || 'Could not record the waste.';
+}
+
+/** Records stock leaving the shelf for reasons other than a sale — spoilage,
+ *  spills, breakage, or an honest count correction. The amount typed is what
+ *  LEFT; the server receives it signed negative and writes the diary row
+ *  (027 RPC — atomic, row-locked, sign-guarded). */
+const WasteDialog: React.FC<{
+  item: InventoryItem;
+  busy: boolean;
+  onClose: () => void;
+  onConfirm: (qty: number, reason: StockAdjustmentReason, note: string) => Promise<void>;
+}> = ({ item, busy, onClose, onConfirm }) => {
+  const [qty, setQty] = useState('');
+  const [reason, setReason] = useState<StockAdjustmentReason>('spoilage');
+  const [note, setNote] = useState('');
+  const [err, setErr] = useState<string | null>(null);
+  const [sending, setSending] = useState(false);
+  const valid = Number(qty) > 0 && note.length <= 280;
+
+  const submit = async () => {
+    if (!valid) return;
+    setSending(true);
+    setErr(null);
+    try {
+      await onConfirm(Number(qty), reason, note.trim());
+    } catch (e) {
+      setErr(wasteErrText(e));
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const newLevel = item.current_stock - Number(qty || 0);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-[#0F3D3E]/45 p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-label={`Log waste for ${item.name}`}
+    >
+      <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-2xl">
+        <h2 className="text-[16px] font-bold text-[#1A1A1A]">Log waste — {item.name}</h2>
+        <p className="mt-0.5 text-[11.5px] text-[#6B6B6B]">
+          On the shelf now:{' '}
+          <span className="font-bold tabular-nums text-[#0F3D3E]">
+            {fmtQty(item.current_stock)} {item.unit}
+          </span>{' '}
+          — waste leaves it, on the record.
+        </p>
+
+        <label className="mt-4 block">
+          <span className="mb-1 block text-[11px] font-bold uppercase tracking-[0.08em] text-[#969696]">
+            Amount wasted ({item.unit})
+          </span>
+          <input
+            value={qty}
+            onChange={(e) => setQty(e.target.value)}
+            type="number"
+            min="0"
+            step="any"
+            autoFocus
+            placeholder="200"
+            className="h-11 w-full rounded-xl border border-[#E3E7E0] bg-white px-3.5 text-right text-[13px] tabular-nums text-[#1A1A1A] placeholder:text-[#B9C4BE] focus:border-[#B88E2F] focus:outline-none focus:ring-2 focus:ring-[#B88E2F]/25"
+          />
+        </label>
+
+        <div className="mt-3">
+          <span className="mb-1 block text-[11px] font-bold uppercase tracking-[0.08em] text-[#969696]">
+            Why it left
+          </span>
+          <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Waste reason">
+            {WASTE_REASONS.map((r) => {
+              const on = reason === r.value;
+              return (
+                <button
+                  key={r.value}
+                  type="button"
+                  role="radio"
+                  aria-checked={on}
+                  onClick={() => setReason(r.value)}
+                  className={`h-10 rounded-xl border text-[12px] font-bold transition ${
+                    on
+                      ? 'border-[#B88E2F] bg-[#FBF3E1] text-[#8A5A00]'
+                      : 'border-[#E3E7E0] bg-white text-[#6B6B6B] hover:border-[#B88E2F] hover:text-[#8A5A00]'
+                  }`}
+                >
+                  {r.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <label className="mt-3 block">
+          <span className="mb-1 block text-[11px] font-bold uppercase tracking-[0.08em] text-[#969696]">
+            Note (optional)
+          </span>
+          <input
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            maxLength={280}
+            placeholder="e.g. bar fridge leaked overnight"
+            className="h-11 w-full rounded-xl border border-[#E3E7E0] bg-white px-3.5 text-[13px] text-[#1A1A1A] placeholder:text-[#B9C4BE] focus:border-[#B88E2F] focus:outline-none focus:ring-2 focus:ring-[#B88E2F]/25"
+          />
+        </label>
+
+        {Number(qty) > 0 && (
+          <p className={`mt-2 text-[11.5px] font-semibold ${newLevel < 0 ? 'text-[#B3261E]' : 'text-[#8A5A00]'}`}>
+            New level: {fmtQty(newLevel)} {item.unit}
+            {newLevel < 0 ? ' — below zero; the shelf shows it red (real cafes oversell).' : ''}
+          </p>
+        )}
+
+        {err && <p className="mt-3 text-[12px] font-semibold text-[#B42318]">{err}</p>}
+
+        <div className="mt-5 flex justify-end gap-2.5">
+          <button
+            onClick={onClose}
+            className="h-11 rounded-full border border-[#E3E7E0] bg-white px-4 text-[12.5px] font-semibold text-[#1A1A1A] transition hover:border-[#B88E2F]"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={() => void submit()}
+            disabled={!valid || busy || sending}
+            className="flex h-11 items-center gap-1.5 rounded-xl bg-[#B88E2F] px-5 text-[12.5px] font-bold text-white transition hover:bg-[#967221] disabled:opacity-40"
+          >
+            {busy || sending ? <Loader2 size={14} aria-hidden className="animate-spin" /> : <PackageMinus size={14} aria-hidden />}
+            Record waste
           </button>
         </div>
       </div>

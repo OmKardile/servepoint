@@ -1144,6 +1144,22 @@ export interface StockDeduction {
   created_at: string;
 }
 
+/** One hand-made shelf move (027) — delivery in, waste out, or a correction.
+ *  Signed: + is stock in, − is stock out. Sales never appear here — the 015
+ *  trigger's stock_deductions ledger is the sole record of kitchen consumption. */
+export type StockAdjustmentReason = 'delivery' | 'spoilage' | 'spillage' | 'damage' | 'correction';
+
+export interface StockAdjustment {
+  id: string;
+  tenant_id: string;
+  inventory_item_id: string;
+  qty: number;
+  reason: StockAdjustmentReason;
+  note: string;
+  created_by_email: string;
+  created_at: string;
+}
+
 export async function fetchInventory(tenantId: string): Promise<InventoryItem[]> {
   requireCloud();
   const { data, error } = await supabase
@@ -1203,24 +1219,38 @@ export async function updateInventoryItem(
   if (error) throw error;
 }
 
-/** Adds delivery stock to the shelf (restock = stock IN, always positive). */
+/** One hand-made stock move through the 027 RPC — atomic, row-locked, on the
+ *  diary. Positive qty adds to the shelf, negative removes it; the server
+ *  enforces honest sign-per-reason (delivery in, waste out, correction free)
+ *  and refuses strangers. Negative stock stays possible (015's precedent —
+ *  real cafes oversell; the UI shows it red). */
+export async function adjustStock(
+  id: string,
+  qty: number,
+  reason: StockAdjustmentReason,
+  note = ''
+): Promise<{ newStock: number }> {
+  requireCloud();
+  if (qty === 0) throw new Error('Adjustment quantity cannot be zero.');
+  const { data, error } = await supabase.rpc('sp_adjust_stock', {
+    p_inventory_item_id: id,
+    p_qty: qty,
+    p_reason: reason,
+    p_note: note,
+  });
+  if (error) throw error;
+  const row = (Array.isArray(data) ? data[0] : data) as { new_stock?: number } | null;
+  return { newStock: Number(row?.new_stock ?? NaN) };
+}
+
+/** Adds delivery stock to the shelf (restock = stock IN, always positive).
+ *  5.36.0: moved off the old client read-modify-write onto the 027 RPC —
+ *  two terminals can no longer lost-update the shelf, and every delivery
+ *  lands in the stock_adjustments diary. */
 export async function restockInventoryItem(id: string, qty: number): Promise<void> {
   requireCloud();
   if (!(qty > 0)) throw new Error('Restock quantity must be greater than zero.');
-  // Read-modify-write within one RPC-less call — acceptable for single-terminal
-  // edits; the engine's money paths remain RPC/trigger-guarded.
-  const { data, error } = await supabase
-    .from('inventory_items')
-    .select('current_stock')
-    .eq('id', id)
-    .single();
-  if (error) throw error;
-  const next = Number(data.current_stock) + qty;
-  const { error: upErr } = await supabase
-    .from('inventory_items')
-    .update({ current_stock: next })
-    .eq('id', id);
-  if (upErr) throw upErr;
+  await adjustStock(id, qty, 'delivery');
 }
 
 export async function deleteInventoryItem(id: string): Promise<void> {
@@ -1275,7 +1305,23 @@ export async function fetchRecentDeductions(
   return (data || []) as StockDeduction[];
 }
 
-/** Live stock board: inventory movements + deduction ledger, realtime + RLS. */
+/** Recent hand-made shelf moves — the diary beside the deduction feed. */
+export async function fetchRecentAdjustments(
+  tenantId: string,
+  limit = 12
+): Promise<StockAdjustment[]> {
+  requireCloud();
+  const { data, error } = await supabase
+    .from('stock_adjustments')
+    .select('*')
+    .eq('tenant_id', tenantId)
+    .order('created_at', { ascending: false })
+    .limit(limit);
+  if (error) throw error;
+  return (data || []) as StockAdjustment[];
+}
+
+/** Live stock board: shelf + deduction ledger + hand-made diary, realtime + RLS. */
 export function subscribeInventoryRealtime(
   tenantId: string,
   onPing: () => void,
@@ -1292,6 +1338,11 @@ export function subscribeInventoryRealtime(
     .on(
       'postgres_changes',
       { event: '*', schema: 'public', table: 'stock_deductions', filter: `tenant_id=eq.${tenantId}` },
+      () => onPing()
+    )
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'stock_adjustments', filter: `tenant_id=eq.${tenantId}` },
       () => onPing()
     )
     .subscribe((status) => {
