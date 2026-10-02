@@ -141,7 +141,7 @@ The application will launch at `http://localhost:3000`.
 - `/superadmin`: Platform SuperAdmin dashboard.
 
 ### 3. Production Cloud Deployment
-- **Render (Static Site — `tsos-pos`, Zero Sleep Delay)**: Deploy via Render Blueprints using [`render.yaml`](render.yaml) — Dashboard → New + → Blueprint → pick this repo → Create. The blueprint pins the service name `tsos-pos`, SPA rewrite `/* -> /index.html`, immutable asset caching, security headers, Node 22, and ships the live `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` **hardcoded in the blueprint** (public anon key, RLS-protected — zero manual prompts, zero-touch apply). **Static Site, not Web Service** — the app is a pure client-side SPA with Supabase as backend; Render free Web Services sleep after 15 min while static sites never sleep.
+- **Render (Static Site — `servepoint-tsos`, Zero Sleep Delay)**: Deploy via Render Blueprints using [`render.yaml`](render.yaml) — Dashboard → New + → Blueprint → pick this repo → Create. The blueprint pins the service name `servepoint-tsos` (deployment URL: `https://servepoint-tsos.onrender.com`), SPA rewrite `/* -> /index.html`, immutable asset caching, security headers, Node 22, and ships the live `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` **hardcoded in the blueprint** (public anon key, RLS-protected — zero manual prompts, zero-touch apply). **Static Site, not Web Service** — the app is a pure client-side SPA with Supabase as backend; Render free Web Services sleep after 15 min while static sites never sleep.
 - **Vercel (Edge CDN)**: Deploy via `npx vercel` or GitHub import using [`vercel.json`](vercel.json).
 - See **[help.md](help.md)** for complete credentials, environment variables, and 1-minute deployment walkthroughs.
 

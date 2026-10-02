@@ -1,9 +1,19 @@
 # ─────────────────────────────────────────────────────────────────────────────
-# ServePoint — The Cafe Operating System · Render Blueprint (Infrastructure-as-Code)
+# ServePoint — smartPOS · Render Blueprint (Infrastructure-as-Code)
 # ADR-0008: Multi-Platform Cloud Deployment (Render Static + Vercel Edge)
 #
 # Apply: Render Dashboard → New + → Blueprint → select this repository.
 # Render reads this file and provisions the service below.
+#
+# SERVICE NAME — `servepoint-tsos` (v5.2.2, owner request: the render link should
+# read "servepoint"). The default URL follows the service name, so the deployment
+# lives at https://servepoint-tsos.onrender.com. Chosen over the bare `servepoint`
+# by live probe, not guesswork: `servepoint-tsos` returned Render's clean
+# "service not found" (unclaimed → we get the exact name), while
+# `servepoint.onrender.com` connected but never responded (claimed/limbo record —
+# applying under it would append a random suffix, defeating the purpose).
+# ⚠️ Renaming an already-applied service re-provisions it on the next blueprint
+# sync: the old URL (tsos-pos.onrender.com) is retired, NOT redirected.
 #
 # WHY A STATIC SITE AND NOT A WEB SERVICE?
 #   ServePoint is a pure client-side Vite SPA. Every backend concern — PostgreSQL,
@@ -16,7 +26,7 @@
 
 services:
   - type: web
-    name: tsos-pos
+    name: servepoint-tsos
     runtime: static
     autoDeploy: true                    # deploy on every push to the branch
     pullRequestPreviewsEnabled: true    # free preview URLs for PRs

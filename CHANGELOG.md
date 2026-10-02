@@ -3,6 +3,16 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.2.2] — 2026-10-02 — Render link rebranded: `servepoint-tsos.onrender.com`
+
+### Changed — blueprint service name (owner request: the render link should say "servepoint")
+- **`render.yaml`**: service renamed **`tsos-pos` → `servepoint-tsos`** — Render derives the default URL from the service name, so the deployment now lives at **https://servepoint-tsos.onrender.com**. The subdomain was chosen by live probe, not guesswork: `servepoint-tsos.onrender.com` answered with Render's clean "service not found" (unclaimed → we get the exact name), while bare `servepoint.onrender.com` connected but never responded (a claimed/limbo record — applying under it would have appended a random suffix, defeating the whole purpose). The blueprint header documents the rename and its one operational consequence; the legacy "The Cafe Operating System" title line is updated to **ServePoint — smartPOS**.
+- **Re-provision caveat (expected behavior, not a regression)**: the old service was already applied and live (`tsos-pos.onrender.com` returned 200). Renaming a service re-provisions it on the next blueprint sync — the old URL is **retired, not redirected**. Bookmarks and any printed QR material must move to the new link; every other service property (build command, routes, headers, env vars) is re-created identically because the blueprint is the source of truth. Owner to-do once this lands: click **Apply** on the Render blueprint (or let blueprint sync run on push), confirm the new `servepoint-tsos` service goes green, and delete the old `tsos-pos` service if Render doesn't remove it automatically.
+- **Docs**: README deployment section + ADR-0008 update note aligned. Historical records (older CHANGELOG bodies, compacts, worklogs) intentionally still say `tsos-pos` — they describe the past, and rewriting history is not the job of a changelog.
+
+### Verified
+- Blueprint YAML structure intact (runtime/build/routes/headers/env blocks untouched apart from the name + provenance comment); no app code changed; login screen untouched (ADR-0016).
+
 ## [5.2.1] — 2026-10-02 — Public surfaces: /showcase + /index-help
 
 ### Added — two standalone public pages (owner request: "check /showcase /index-help and develop them")
