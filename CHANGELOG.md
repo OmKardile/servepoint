@@ -3,6 +3,19 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.25.0] — 2026-10-03 — Legibility passes: the runner sees WHERE, the owner sees the shape
+
+### Fixed — the table was invisible everywhere it mattered (latent bug, found by audit)
+- **The bug**: the `orders` table has NO `table_label` column — only the `table_id` FK — yet Bills read `order.table_label` for its "Table" detail row and search hay. Result: the Table detail showed **'—' for every order, ever**, and Bills search could never match a table. Meanwhile the KDS showed table identity only when it happened to leak into free-text notes ("via QR · Table T1") — a runner staring at the rail had no idea where food goes.
+- **The fix (derived, never stored)**: `fetchOrders` now embeds `dining_tables(table_number)` in the SAME PostgREST read (orders.table_id → dining_tables FK) and maps it to `table_label` in memory — one fetch, no second roundtrip, the ledger stays the only truth. Bills' existing code wakes up as-is; the KDS grows a solid teal **TABLE chip** (Armchair icon) on every table-bound card, honestly absent for takeaway/unbound tickets (#48 stays chip-less because #48 is genuinely unbound — verified in SQL).
+
+### Added — Reports: the day-shape behind every headline chip
+- Hover (or keyboard-focus) any of the six headline KPI chips and a **per-day sparkline** fades in — this metric's own IST-day series for the range, drawn as a pure-SVG polyline (92×24, no chart dependency) with an end-dot and a dotted zero baseline. Colors follow each chip's tone; the series reuses the Day-by-day bucketing extended with gst/net/items (same semantics as `aggregateTickets` — gross = Σ total, gst = Σ tax, net = Σ subtotal − discounts, items = Σ qty, avg = gross/tickets).
+- **Honest guards**: one point draws nothing (Today's chip says it elsewhere: "one day can't show a shape"); an all-zero series draws the dotted flat line AS a flat line, never a fake trend; the reveal is React-state driven (mouse + focus) after CSS `group-hover` variants proved unreliable in this build — deterministic on every browser.
+
+### Verified
+- E2E, zero page errors: KDS #66 renders the **T1 chip** (and #48 correctly none); Bills list cards read "Table T2"/"Table T1" and #96's detail drawer shows Table **T2** where '—' lived since the beginning; Reports 7d hover reveals the Gross sparkline (shape mirrors the Day-by-day bars, spike at 2 Oct), keyboard focus reveals Avg ticket's, Today renders NO sparkline (single-point guard); the `table_label` embed broke nothing downstream — Floor (rhythm + scan chips), Dashboard, Bills all render clean; `tsc` 0; sw `5.25.0-r1`.
+
 ## [5.24.0] — 2026-10-03 — The staff cut: a session you can end, and a guest's phone that listens
 
 ### Added — Migration 023: the ephemeral session finally gates something

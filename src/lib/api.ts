@@ -64,6 +64,10 @@ interface OrderRow {
   order_type: string;
   status: string;
   table_id: string | null;
+  /** v5.25.0: resolved from the PostgREST embed in fetchOrders — the DB has
+   *  no table_label column, so the label is derived, never stored. */
+  table_label?: string | null;
+  dining_tables?: { table_number: string } | null;
   customer_name: string | null;
   guest_count?: number | null;
   subtotal: number;
@@ -126,14 +130,23 @@ async function attachItems(orders: OrderRow[], tenantId: string): Promise<Order[
 
 export async function fetchOrders(tenantId: string, limit = 100): Promise<Order[]> {
   requireCloud();
+  // v5.25.0: the table embed resolves table_id → table_number in the SAME
+  // read (orders.table_id → dining_tables FK). Bills' Table detail and the
+  // KDS table chip read order.table_label; until now the DB had no such
+  // column and every surface showed '—' or buried the table in free-text
+  // notes. Derived, never stored — the ledger stays the only truth.
   const { data, error } = await supabase
     .from('orders')
-    .select('*')
+    .select('*, dining_tables(table_number)')
     .eq('tenant_id', tenantId)
     .order('created_at', { ascending: false })
     .limit(limit);
   if (error) throw error;
-  return attachItems((data || []) as OrderRow[], tenantId);
+  const rows = (data || []).map((r: unknown) => {
+    const { dining_tables, ...rest } = r as OrderRow & { dining_tables?: { table_number: string } | null };
+    return { ...rest, table_label: dining_tables?.table_number ?? null } as OrderRow;
+  });
+  return attachItems(rows, tenantId);
 }
 
 export interface NewOrderInput {

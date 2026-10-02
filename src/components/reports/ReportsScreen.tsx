@@ -578,13 +578,18 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
 
   const daily = useMemo(() => {
     // Bucket orders into IST days — cancelled excluded, same as every money figure.
-    const byDay = new Map<string, { gross: number; tickets: number }>();
+    // v5.25.0: gst/net/items ride along (same semantics as aggregateTickets) so
+    // the headline chips can draw the day-shape behind their delta.
+    const byDay = new Map<string, { gross: number; tickets: number; gst: number; net: number; items: number }>();
     for (const o of inRange) {
       if (String(o.status || '').toLowerCase() === 'cancelled') continue;
       const key = istDayKey(o.created_at);
-      const cur = byDay.get(key) || { gross: 0, tickets: 0 };
+      const cur = byDay.get(key) || { gross: 0, tickets: 0, gst: 0, net: 0, items: 0 };
       cur.gross += Number(o.total ?? 0);
       cur.tickets += 1;
+      cur.gst += Number(o.tax_amount ?? 0);
+      cur.net += Number(o.subtotal ?? 0) - Number(o.discount_amount ?? 0);
+      cur.items += (o.items || []).reduce((n, it) => n + Number(it.qty ?? 0), 0);
       byDay.set(key, cur);
     }
     // The window: filled calendar days for 7d/30d (gaps read as slow days),
@@ -605,12 +610,15 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
     }
     return dayMs.map((ms) => {
       const key = IST_DAY_KEY.format(new Date(ms));
-      const cur = byDay.get(key) || { gross: 0, tickets: 0 };
+      const cur = byDay.get(key) || { gross: 0, tickets: 0, gst: 0, net: 0, items: 0 };
       return {
         key,
         label: IST_DAY_LABEL.format(new Date(ms)),
         gross: cur.gross,
         tickets: cur.tickets,
+        gst: cur.gst,
+        net: cur.net,
+        items: cur.items,
         avg: cur.tickets > 0 ? cur.gross / cur.tickets : 0,
       };
     });
@@ -787,18 +795,21 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
           label="Gross sales"
           value={formatMoney(agg.gross)}
           tone="#0F3D3E"
+          spark={daily.map((d) => d.gross)}
           {...deltaProps(agg.gross, priorAgg?.gross ?? 0, formatMoney)}
         />
         <StatCard
           label="GST collected"
           value={formatMoney(agg.gst)}
           tone="#8A5A00"
+          spark={daily.map((d) => d.gst)}
           {...deltaProps(agg.gst, priorAgg?.gst ?? 0, formatMoney)}
         />
         <StatCard
           label="Net (ex-GST)"
           value={formatMoney(agg.net)}
           tone="#0F3D3E"
+          spark={daily.map((d) => d.net)}
           {...deltaProps(agg.net, priorAgg?.net ?? 0, formatMoney)}
         />
         <StatCard
@@ -806,18 +817,21 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
           value={String(agg.placed)}
           sub={agg.cancelled > 0 ? `${agg.cancelled} cancelled excluded` : 'live in range'}
           tone="#0F3D3E"
+          spark={daily.map((d) => d.tickets)}
           {...deltaProps(agg.placed, priorAgg?.placed ?? 0, (n) => String(Math.round(n)))}
         />
         <StatCard
           label="Avg ticket"
           value={formatMoney(agg.avgTicket)}
           tone="#B88E2F"
+          spark={daily.map((d) => d.avg)}
           {...deltaProps(agg.avgTicket, priorAgg?.avgTicket ?? 0, formatMoney)}
         />
         <StatCard
           label="Items sold"
           value={String(agg.items)}
           tone="#0F3D3E"
+          spark={daily.map((d) => d.items)}
           {...deltaProps(agg.items, priorAgg?.items ?? 0, (n) => String(Math.round(n)))}
         />
       </div>
@@ -1789,29 +1803,100 @@ const StatCard: React.FC<{
   tone: string;
   delta?: React.ReactNode;
   deltaBaseline?: string;
-}> = ({ label, value, sub, tone, delta, deltaBaseline }) => (
-  <section
-    className="sp-card p-4 transition duration-200 hover:-translate-y-0.5 hover:shadow-[0_8px_22px_rgba(15,61,62,0.10)]"
-    aria-label={label}
-  >
-    <p className="text-[10.5px] font-bold uppercase tracking-[0.08em] text-[#969696]">{label}</p>
-    <p
-      className="mt-1.5 truncate text-[19px] font-extrabold tabular-nums leading-tight"
-      style={{ color: tone }}
+  /** v5.25.0 — the day-shape behind the number (per-IST-day series of THIS
+   *  metric). Revealed on hover/focus via React state (not CSS variants —
+   *  deterministic everywhere); one point draws nothing because one day
+   *  can't show a shape. */
+  spark?: number[];
+}> = ({ label, value, sub, tone, delta, deltaBaseline, spark }) => {
+  const [sparkOn, setSparkOn] = useState(false);
+  const sparkable = !!spark && spark.length >= 2;
+  return (
+    <section
+      className="sp-card p-4 transition duration-200 hover:-translate-y-0.5 hover:shadow-[0_8px_22px_rgba(15,61,62,0.10)] focus-within:-translate-y-0.5 focus-within:shadow-[0_8px_22px_rgba(15,61,62,0.10)]"
+      aria-label={label}
+      tabIndex={0}
+      onMouseEnter={() => setSparkOn(true)}
+      onMouseLeave={() => setSparkOn(false)}
+      onFocus={() => setSparkOn(true)}
+      onBlur={() => setSparkOn(false)}
     >
-      {value}
-    </p>
-    {delta ? (
-      <div className="mt-1.5 flex items-center gap-1">
-        {delta}
-        {deltaBaseline ? (
-          <span className="truncate text-[10px] font-medium text-[#969696]">vs {deltaBaseline}</span>
-        ) : null}
-      </div>
-    ) : null}
-    {sub ? <p className="mt-0.5 truncate text-[10.5px] text-[#969696]">{sub}</p> : null}
-  </section>
-);
+      <p className="text-[10.5px] font-bold uppercase tracking-[0.08em] text-[#969696]">{label}</p>
+      <p
+        className="mt-1.5 truncate text-[19px] font-extrabold tabular-nums leading-tight"
+        style={{ color: tone }}
+      >
+        {value}
+      </p>
+      {delta ? (
+        <div className="mt-1.5 flex items-center gap-1">
+          {delta}
+          {deltaBaseline ? (
+            <span className="truncate text-[10px] font-medium text-[#969696]">vs {deltaBaseline}</span>
+          ) : null}
+        </div>
+      ) : null}
+      {sub ? <p className="mt-0.5 truncate text-[10.5px] text-[#969696]">{sub}</p> : null}
+      {sparkable ? (
+        <div
+          className={`mt-2 flex items-center gap-2 overflow-hidden transition-opacity duration-200 ${
+            sparkOn ? 'opacity-100' : 'hidden'
+          }`}
+        >
+          <Sparkline values={spark!} stroke={tone} />
+          <span className="shrink-0 text-[9.5px] font-semibold uppercase tracking-wide text-[#969696]">
+            per day
+          </span>
+        </div>
+      ) : null}
+    </section>
+  );
+};
+
+/** v5.25.0 — a tiny honest polyline: normalized to the series max, dotted
+ *  baseline when the whole series is zero (a flat nothing is drawn AS a flat
+ *  nothing, never as a trend). Pure SVG, no chart dependency. */
+const SPARK_W = 92;
+const SPARK_H = 24;
+const Sparkline: React.FC<{ values: number[]; stroke: string }> = ({ values, stroke }) => {
+  const max = Math.max(...values, 0);
+  const min = Math.min(...values, 0);
+  const span = max - min;
+  const pts =
+    span === 0
+      ? null // all-zero (or all-equal) — no shape to draw
+      : values
+          .map((v, i) => {
+            const x = values.length === 1 ? SPARK_W / 2 : (i / (values.length - 1)) * (SPARK_W - 2) + 1;
+            const y = SPARK_H - 2 - ((v - min) / span) * (SPARK_H - 4);
+            return `${x.toFixed(1)},${y.toFixed(1)}`;
+          })
+          .join(' ');
+  const zeroY = span === 0 ? SPARK_H - 2 : SPARK_H - 2 - ((0 - min) / span) * (SPARK_H - 4);
+  return (
+    <svg
+      width={SPARK_W}
+      height={SPARK_H}
+      viewBox={`0 0 ${SPARK_W} ${SPARK_H}`}
+      role="img"
+      aria-label={`Daily trend: ${values.map((v) => Math.round(v)).join(', ')}`}
+      className="shrink-0"
+    >
+      <line x1="0" x2={SPARK_W} y1={zeroY} y2={zeroY} stroke="#E3E7E0" strokeWidth="1" strokeDasharray="2 2" />
+      {pts ? (
+        <>
+          <polyline points={pts} fill="none" stroke={stroke} strokeWidth="1.8" strokeLinejoin="round" strokeLinecap="round" />
+          <circle
+            cx={SPARK_W - 1}
+            cy={SPARK_H - 2 - ((values[values.length - 1] - min) / span) * (SPARK_H - 4)}
+            r="2.2"
+            fill={stroke}
+          />
+        </>
+      ) : null}
+    </svg>
+  );
+};
 
 const ReportsSkeleton: React.FC = () => (
   <div className="flex flex-col gap-4 p-4" aria-busy="true" aria-label="Loading reports">

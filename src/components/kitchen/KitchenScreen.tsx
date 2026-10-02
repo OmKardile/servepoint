@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Armchair,
   BellRing,
   CheckCheck,
   ChefHat,
@@ -23,6 +24,8 @@ import type { Order } from '../../types';
  * (sp_advance_order), and the board refreshes in realtime from
  * postgres_changes on orders/order_items (migration 010).
  * The counter is still the money gate — charging lives in Bills.
+ * v5.25.0: table-bound tickets grow a solid TABLE chip (resolved from the
+ * table_id FK in fetchOrders) — the runner sees WHERE without reading notes.
  */
 
 /* ───────────────────────────── board model ────────────────────────────── */
@@ -127,6 +130,24 @@ const TypeChip: React.FC<{ type: string }> = ({ type }) => {
   );
 };
 
+/** v5.25.0 — where the food goes. The runner's answer at a glance: a solid
+ *  teal chip with the table number, resolved from order.table_id (the FK),
+ *  never from free-text notes. Absent for takeaway/delivery/unbound — no
+ *  fake placeholders. */
+const TableChip: React.FC<{ label?: string | null }> = ({ label }) => {
+  if (!label) return null;
+  return (
+    <span
+      className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10.5px] font-bold leading-4 text-white"
+      style={{ background: '#0F3D3E' }}
+      title={`Deliver to table ${label}`}
+    >
+      <Armchair size={10} aria-hidden strokeWidth={2.5} />
+      {label}
+    </span>
+  );
+};
+
 const KdsCard: React.FC<{
   order: Order;
   nowMs: number;
@@ -166,6 +187,7 @@ const KdsCard: React.FC<{
           </p>
           <div className="mt-1 flex flex-wrap items-center gap-1.5">
             <TypeChip type={String(order.order_type)} />
+            <TableChip label={order.table_label} />
             {terminal &&
               (paid ? (
                 <span className="rounded-full bg-[#2E7D32]/10 px-2 py-0.5 text-[10.5px] font-semibold leading-4 text-[#2E7D32]">

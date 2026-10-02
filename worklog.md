@@ -1869,3 +1869,28 @@ Stage Summary:
 - The revoked ('cut') row skin is now production-verified; 'consumed' (renew path) remains the only never-seen session skin — it needs renewal flows to run.
 - Ideas parked: session trail on the guest track page, "vs same hour last week" toggle for floor rhythm, chip sparkline on hover, reserved-seat CTA live test (needs a free table), bulk-cut (close ALL live windows on a table at once).
 - Crons: 15-min webDevReview (job 430321).
+
+---
+Task ID: 63 (CLAIM — in progress)
+Agent: glm-5.3 (cron webDevReview round)
+Task: Health sweep + agent-browser QA first (done: tsc 0 / dev 200 / remote eea8082 synced, tree clean; Inventory engine already ships auto-deduction — 015's preparing-trigger + ledger + Stock/Recipes/Reorder tabs + Recent deductions region, so the cron's stale roadmap item is DONE; zero page errors). Stable → this round: LEGIBILITY PASSES on two surfaces staff actually stare at. (a) KDS cards grow a real TABLE chip — table-bound tickets currently bury "Table T1" inside the notes line (or show nothing, #48), so a runner can't see where food goes; (b) Reports KPI chips grow a hover/focus SPARKLINE — the 7-day shape behind each delta, drawn from the day rows the range already computes. Pure-frontend, zero data risk, ADR-0016 untouched.
+
+---
+Task ID: 63
+Agent: glm-5.3 (cron webDevReview round)
+Task: LEGIBILITY PASSES ship as 5.25.0 — the table was invisible everywhere it mattered (latent Bills bug + KDS runner gap), and Reports' headline chips learn the day-shape behind their deltas.
+
+Work Log:
+- Read worklog tail: Task 62 closed at eea8082, remote synced. Health clean (tsc 0 / dev 200 / tree clean / IST still Oct 2). Checked the cron's "next roadmap item" inventory auto-deduction → ALREADY SHIPPED (migration 015: recipe_lines + stock_deductions ledger + sp_deduct_stock_on_preparing trigger + Inventory's Stock/Recipes/Reorder tabs with a Recent deductions region) — the stale roadmap context again; zero page errors across the sweep → stable.
+- THE LATENT BUG (found while auditing table legibility): the orders table has NO table_label column — only the table_id FK — but Bills reads order.table_label for its "Table" detail row AND its search hay → the detail showed '—' for EVERY order ever, and table search could never match. The KDS showed table identity only when free-text notes leaked it. #48 (dine-in, unbound) showed nothing at all.
+- THE FIX (derived, never stored): fetchOrders embeds dining_tables(table_number) in the SAME PostgREST read (orders.table_id FK) and maps it to table_label in memory, stripping the embed key before attachItems — one fetch, no roundtrip added, ledger stays the only truth. OrderRow documents the derivation.
+- KDS: TableChip component — solid teal chip with Armchair icon, title "Deliver to table N", rendered next to TypeChip on cards, honestly absent for takeaway/unbound (#48 verified UNBOUND in SQL → no chip is correct). KDS header doc v5.25.0.
+- Reports: the daily memo extended with gst/net/items per IST day (semantics identical to aggregateTickets: gst=Σ tax_amount, net=Σ subtotal−discount, items=Σ qty, avg=gross/tickets); Sparkline — pure-SVG 92×24 polyline, end-dot, dotted zero baseline, all-zero series draws the flat line AS a flat line (never a fake trend); StatCard grows spark?: number[] revealed on hover AND keyboard focus.
+- CSS LESSON BANKED: the group-hover CSS-variant reveal silently failed in this build (row matched .group-hover\:visible:is(:where(.group):hover *) per matches(), section :hover true, rule present in served CSS — yet computed visibility stayed hidden; root cause not worth more archaeology) → replaced with React state (onMouseEnter/Leave + onFocus/Blur) — deterministic everywhere. Also learned: opacity-0 elements still sit in the a11y tree; the old approach would have exposed hidden sparklines to screen readers.
+- E2E, zero page errors: KDS #66 shows the T1 chip, #48 none (honest); Bills list cards read "Table T2"/"Table T1" and #96's detail Table row shows T2 where '—' lived since the beginning; Reports 7d hover reveals Gross's sparkline (shape mirrors Day-by-day, spike 2 Oct; screenshot scripts/qa63-spark-hover.png), keyboard focus reveals Avg ticket's, Today renders NO sparkline (single-point guard); downstream regressions clean — Floor (rhythm + scan chips), Dashboard, Bills; tsc 0.
+- sw.js 5.25.0-r1; CHANGELOG [5.25.0] written; tsc 0 after every edit.
+
+Stage Summary:
+- The two surfaces staff actually stare at — the kitchen rail and the reports strip — now answer their questions at a glance: WHERE does this go, and WHAT shape is behind this number. 5.25.0, sw servepoint-v5.25.0-r1. Surfaces: src/lib/api.ts (fetchOrders embed) + src/components/kitchen/KitchenScreen.tsx + src/components/reports/ReportsScreen.tsx + public/sw.js + CHANGELOG.md + worklog.md. No migration (the embed uses the existing FK). ADR-0016 untouched.
+- Ideas parked: bulk-cut (end ALL live windows on a table — one tap for a leaked QR), floor rhythm "vs same hour last week" toggle (needs prior-week table-bound seeds; would honestly shift Reports' prior-7d baselines), session trail on the guest track page, reserved-seat CTA live test (needs a free table — could add T3 via the real Add dialog), Bills search-by-table now actually works (worth an eyeball).
+- Crons: 15-min webDevReview (job 430321).
