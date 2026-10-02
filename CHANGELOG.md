@@ -3,6 +3,22 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.3.2] — 2026-10-02 — EOD Close-out: the day closes with a z-report (NOVA reconcile parity)
+
+### Added — Close-out screen (new nav item between Bills and Floor)
+- **Day stepper** (`EodScreen`): ‹ › steps calendar days in **Asia/Kolkata** (NOVA TZ discipline — day windows are `[00:00, next 00:00)` IST, not UTC), future days disabled, quick **Today** jump, last-refreshed stamp, manual refresh.
+- **"Right now" strip** (today only, 20s auto-refresh): tickets in the kitchen (pending+preparing), unpaid tickets · ₹, **late prep** (preparing ≥10 min — the KDS amber SLA mirrored at close-out).
+- **Day summary cards**: Orders (with cancelled count), Gross (with GST collected), **Paid** (payments-ledger take — the drawer's number), Unpaid (tickets · ₹), Avg ticket.
+- **Payment mix**: cash / UPI / card rows with proportional bars and share %, straight from the `payments` ledger.
+- **Order ledger**: one line per ticket — IST time, #, source chip (**QR** via `client_operation_id` vs counter), guest, status, pay state, total.
+- **Printable z-report**: receipt-style strip (store name, day, orders/cancelled, gross, GST, PAID/UNPAID, method split, printed-at + operator) rendered through a **hidden iframe** — popup blockers can't eat it; button disabled on empty days. Screenshot-verified states, desktop + 390px.
+- **Honesty probe**: tickets marked paid with **no payments-ledger row** surface a warning ("recorded outside the payment engine; not counted in PAID") — the ledger is truth, order flags are not (verified live with a probe order, then removed).
+- Zero-migration round: reads only existing tables (`orders`, `payments`); RLS-gated; no new RPCs.
+
+### Verified — counter-gate ladder + money loop, end-to-end on the live cloud
+- Guest QR order #14 (Flat White Large + Extra shot, ₹346.50): landed `new` → **KDS blind** ("Queue is clear") → counter inbox showed the ticket (found the Walk-in-badge bug here; fix already in 5.3.1) → **Ok** → `pending` → KDS **Queued** → Start preparing → Mark ready → Complete → **T1 auto-released** (`available`, `active_order_id` cleared — closes the prior round's truncated verification) → UPI charge → **guest track flips PAID** with the itemized bill.
+- Test residue cleaned (#14 + its payment row); the demo tenant stays pristine for the owner's try-it-now link.
+
 ## [5.3.1] — 2026-10-02 — Counter-gate proven live; Bills get unpaid-priority + CSV (NOVA Orders-page parity)
 
 ### Added — Bills: the counter's money view gets teeth

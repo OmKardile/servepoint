@@ -1287,3 +1287,23 @@ Stage Summary:
 - Tenant hygiene maintained: zero leftover test orders/tables; demo QR link intact.
 - Next-up NOVA parity: EOD/z-report (parallel agent's Close-out section appears in-progress), inventory auto-deduction, customers/offers, guest i18n, PWA; consider orders.table_session_id properly (migration) if session-scoped billing is wanted later.
 - Crons: 15-min webDevReview (job 430321).
+
+---
+Task ID: 40
+Agent: glm-5.3 (cron webDevReview round)
+Task: Assess + QA via agent-browser, close carry-over verification points, then advance NOVA parity (EOD/z-report)
+
+Work Log:
+- Health sweep first: tsc 0 / dev server 200 / dev.log HMR-only; live-DB QA via scripts/qa-013-verify.mjs — 013 engine LIVE (new→pending ladder + money-in-hand auto-advance), 011 publication+trigger intact, census clean (orders 0 after the parallel round's cleanup, duplicate variant gone, T1 available).
+- LIVE E2E of the counter-gate ladder on the real cloud (browser + pooler cross-checks): guest QR order #14 (Flat White Large + Extra shot ₹346.50) → landed `new` → KDS BLIND ("Queue is clear") → counter inbox showed the ticket → "Ok" → `pending` (DB-verified) → KDS **Queued** → preparing → ready → Complete → **T1 AUTO-RELEASED** (available, active_order_id null — closes last round's truncated verification) → UPI charge at Bills → #14 flipped Paid → guest /track shows all-steps-Done + **PAID** bill with GST breakdown. The full NOVA loop now browser-proven by BOTH agents independently.
+- QA bug found in my own E2E: the inbox badged a QR table ticket "Walk-in" — `orders.table_session_id` exists in types.ts but in NO migration, so the heuristic never fired. Fixed in CounterInbox.tsx (key on `order.table_id`, which sp_create_public_order always sets); the parallel round independently found + verified the same fix and shipped it in 5.3.1 — credited in their changelog.
+- Observed the parallel agent LIVE mid-round (their #15-#19 SortTest orders, TRG-DIAG/INBOX-DIAG tables appearing/removing while I worked) — followed the established protocol: never touched their fixtures, quick-in/quick-out browser moves, adopted their commit as canonical.
+- NEW FEATURE — EOD Close-out (NOVA §4.3 reconcile parity): src/components/eod/EodScreen.tsx (640 lines, zero migrations). Day stepper in Asia/Kolkata calendar days (future disabled, Today jump, refreshed-at stamp) → "Right now" strip (today only, 20s poll: in-kitchen / unpaid · ₹ / late-prep ≥10min SLA mirror) → day summary (Orders+cancelled, Gross+GST, Paid from the payments LEDGER, Unpaid tickets·₹, Avg ticket) → payment mix bars (cash/UPI/card + share %) → one-line-per-ticket ledger (IST time, #, QR-vs-counter source chip, guest, status, pay, total) → **printable z-report** (receipt-style strip via hidden iframe — popup-blocker-proof; disabled on empty days).
+- Honesty probe (NOVA truth-over-flags): EOD PAID counts payments-ledger rows only; tickets marked paid WITHOUT a ledger row surface a warning ("recorded outside the payment engine; not counted in PAID"). Verified live by inserting a probe order (#20, paid-flag no payment row) → warning rendered → probe deleted. This catches exactly the bypass their SortTest fixture demonstrated.
+- Wiring: Section union +'eod', Sidebar "Close-out" MoonStar between Bills and Floor, App.tsx render. Verified in-browser: nav renders, today view with live aggregates (₹693 gross / ₹33 GST / unpaid ₹346.50 from their fixture), ledger chips, yesterday empty state, Next/Today stepper logic, print button gating. Screenshots: tool-results/eod-today-1440.png, eod-today-390.png.
+- Docs: CHANGELOG [5.3.2] (badge fix credited to 5.3.1 to avoid duplication). Commit follows; push includes the parallel round's 2aec774 (5.3.1) + the cron auto-commit 0e7e74f carrying my EOD files.
+
+Stage Summary:
+- ServePoint now CLOSES THE DAY: Close-out (stepper → right-now → summary → mix → ledger → z-report) is NOVA reconcile parity, ledger-truth enforced; the money loop (QR order → inbox Ok → kitchen → complete → charge → guest PAID → table release → z-report) is proven end-to-end on the production cloud.
+- Remaining NOVA parity: inventory auto-deduction (recipes), customers/offers, reports (sales/items/hours), guest i18n, PWA; consider orders.table_session_id migration only if session-scoped billing is wanted.
+- Crons: 15-min webDevReview (job 430321).
