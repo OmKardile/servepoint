@@ -3,6 +3,28 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.44.0] — 2026-10-03 — The report walks you there: every live count earns its door
+
+### Added — the EOD "Right now" strip opens doors; a door can carry CONTEXT (no migration — pure UI truth)
+- Deep-read of the EOD screen found 5.42.0's exact asymmetry living one screen over: the "Right now" strip honestly reported "2 tickets in the kitchen / ₹420 unpaid / 2 late preps" — and then left you to walk yourself. Numbers that announce a room should open it. All three live pills now earn a door **only when their count is real** (>0 — zero means zero, the same honest-hiding rule as the notification filter chips):
+  - **In the kitchen** → "Open Kitchen" walks to the KDS.
+  - **Unpaid right now** → "Open Bills" walks to Bills **carrying its context**: the new one-shot `sectionHint` channel (zustand, consumed once on arrival, never persisted, never on the URL) lands Bills **pre-filtered to money still out** (statusFilter 'active'). The arrival IS the context.
+  - **Late prep** → "Open Kitchen" with the SLA restated in the door's aria-label ("past the 10-minute SLA; oldest waits first" — the KDS's amber/red escalation is the late language, no fake filter invented).
+- **Reports "How money arrived"**: the Unpaid row (red dot, ₹ still out, × count) now ends in its own "Open Bills" door — same hint, same landing. The report no longer just measures the hole; it walks you to it.
+- **Honest origin breadcrumbs**: a door writes its true origin ('Close-out › Bills' / 'Reports › Bills') via goSection's breadcrumb; Bills' mount-time breadcrumb default ('Bills › Payment History') now stands down when a door brought you. E2E caught the first version clobbering the Reports door's origin with a hardcoded 'Close-out' — fixed to "never clobber what the door wrote".
+- Door pill aria-labels carry the honest numbers ("Open Bills — 2 unpaid tickets, ₹420.00 still out"), so the door tells you what waits before you tap.
+
+### Fixed — stale push-tracking lesson (bookkeeping, not code)
+- `git status -sb` reported "[ahead 13]" for five rounds: pushes had succeeded all along, but pushing to a URL (not the remote name) never updates the local `origin/main` tracking ref. `git fetch origin` snapped it back to truth (origin/main = 5.43.0). Push verification now goes through fetch, not the tracking ref.
+
+### Styling — the door grammar extends to the counter
+- Doors reuse 5.42.0's notification-door grammar exactly: deep-teal `#0F3D3E` on a 5% teal wash, ArrowRight glyph, hover 10%, gold `#B88E2F` focus ring — plus a 0.96 active-press scale, so the pill physically yields under the tap.
+- **A filter that is DOING something wears it**: Bills' status/date selects switch from the white pill to an amber-wash, gold-border active pill (`#FDF6E3` on `#B88E2F`, amber-ink text) the moment they're not 'all' — the gold family is this app's one grammar for "needs attention", and a door-landed filter is exactly that. A round gold ✕ button appears beside the filters to clear them in one tap, and retires itself when everything is 'all' again.
+
+### Verified
+- E2E (real UI): fixture staged ONE today ticket (preparing + unpaid + created 12 min ago) that lights all three doors at once — zero side effects proven at stage time (INSERT fires none of the orders triggers that matter: deduction is UPDATE-only, table_id NULL skips the table-sync, no phone skips the customer-touch). All three doors rendered with honest counts (1 ticket / 1 · ₹210.00 / 1 over 10 min) → "Open Bills" landed on Bills, select value 'active', gold active pill, breadcrumb 'Close-out › Bills' → "Open Kitchen" landed on the KDS with the probe on the board → Reports' Unpaid row door landed with breadcrumb 'Reports › Bills' → the ✕ cleared filters back to white pills and retired itself. 13/13 screens, 0 console errors, tsc 0.
+- DB truth: probe deleted (idempotent truth script — first pass deleted it before crashing on a wrong table name), zero ledger/customer/status-history/payments residue, the 3 true bells untouched (all read, all doored), chat lines unchanged at 4, orders back to the pre-round operator history. Cloud state honest.
+
 ## [5.43.0] — 2026-10-03 — The unread line: the staff line learns who's behind
 
 ### Added — per-user read watermarks, room badges, the "Unread messages" divider (migration 033)

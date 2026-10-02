@@ -95,6 +95,12 @@ const METHOD_LABEL: Record<MethodKey, string> = {
 const WHITE_PILL =
   'h-11 w-full appearance-none rounded-full border border-[#E3E7E0] bg-white pl-4 pr-9 text-[13px] font-medium text-[#1A1A1A] transition hover:border-[#C9CFC9] focus:border-[#B88E2F] focus:outline-none focus:ring-2 focus:ring-[#B88E2F]/25';
 
+/** A filter that is DOING something wears it (v5.44.0) — the gold family is
+ *  this app's one grammar for "needs attention": amber wash, gold border,
+ *  amber-ink text. Landed from a door, you can see the filter landed too. */
+const FILTER_PILL_ACTIVE =
+  'h-11 w-full appearance-none rounded-full border border-[#B88E2F] bg-[#FDF6E3] pl-4 pr-9 text-[13px] font-bold text-[#8A5A00] transition hover:border-[#967221] focus:border-[#B88E2F] focus:outline-none focus:ring-2 focus:ring-[#B88E2F]/25';
+
 function hhmm(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '—';
@@ -246,6 +252,7 @@ const ErrorCard: React.FC<{ message: string; onRetry: () => void }> = ({ message
 
 const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }) => {
   const { loading: tenantLoading, error: tenantError, tenantId, tenant } = useTenant();
+  const consumeSectionHint = useUi((s) => s.consumeSectionHint);
 
   const [orders, setOrders] = useState<Order[]>([]);
   const [ordersLoading, setOrdersLoading] = useState(true);
@@ -276,6 +283,18 @@ const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRet
   useEffect(() => {
     ordersRef.current = orders;
   }, [orders]);
+
+  /** v5.44.0: a door that arrived with context consumes its hint ONCE —
+   *  'unpaid' → land on the money still out (statusFilter 'active'), not
+   *  the every-thing list. Consumed on mount, never persists. The hint is
+   *  snapshotted once (useState lazy init) so the breadcrumb effect below
+   *  can honor the door's origin too. */
+  const [doorHint] = useState(() => useUi.getState().sectionHint);
+  useEffect(() => {
+    const hint = consumeSectionHint();
+    if (hint === 'unpaid') setStatusFilter('active');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   /** Receipt metadata (Task 49) — lazy per-order lookups, both fail soft. */
   const [receiptMeta, setReceiptMeta] = useState<{
@@ -335,9 +354,13 @@ const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRet
     };
   }, [selectedId, tenantId, orders]);
 
-  /* Breadcrumbs: Bills › Payment History */
+  /* Breadcrumbs: Bills › Payment History — unless a door brought you here
+     (v5.44.0): the door already wrote its honest origin breadcrumb into the
+     store ('Close-out › Bills' / 'Reports › Bills'); never clobber it. */
   useEffect(() => {
-    useUi.getState().setBreadcrumb(['Bills', 'Payment History']);
+    if (doorHint === null) {
+      useUi.getState().setBreadcrumb(['Bills', 'Payment History']);
+    }
   }, []);
 
   /* ── Load orders (live Supabase; mount = section visible again) ── */
@@ -610,7 +633,7 @@ const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRet
               aria-label="Filter bills by status"
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
-              className={WHITE_PILL}
+              className={statusFilter !== 'all' ? FILTER_PILL_ACTIVE : WHITE_PILL}
             >
               <option value="all">All Orders</option>
               <option value="active">Active</option>
@@ -628,7 +651,7 @@ const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRet
               aria-label="Filter bills by date"
               value={dateFilter}
               onChange={(e) => setDateFilter(e.target.value as DateFilter)}
-              className={WHITE_PILL}
+              className={dateFilter !== 'all' ? FILTER_PILL_ACTIVE : WHITE_PILL}
             >
               <option value="today">Today</option>
               <option value="7d">Last 7 days</option>
@@ -640,6 +663,20 @@ const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRet
               className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-[#6B6B6B]"
             />
           </div>
+          {statusFilter !== 'all' || dateFilter !== 'all' ? (
+            <button
+              type="button"
+              onClick={() => {
+                setStatusFilter('all');
+                setDateFilter('all');
+              }}
+              aria-label="Clear filters — show every bill"
+              title="Clear filters"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#F3E8CF] text-[#8A5A00] transition hover:bg-[#EBDDB0] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#B88E2F]"
+            >
+              <X size={15} aria-hidden />
+            </button>
+          ) : null}
         </div>
 
         {ordersError && orders.length > 0 && (

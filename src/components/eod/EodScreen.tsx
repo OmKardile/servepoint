@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle,
+  ArrowRight,
   CalendarDays,
   ChevronDown,
   ChevronLeft,
@@ -36,7 +37,7 @@ import { formatMoney } from '../../lib/prefs';
 import { printHiddenFrame } from '../../lib/printFrame';
 import { downloadCsv } from '../../lib/csv';
 import { useTenant } from '../../lib/tenant';
-import { useSession } from '../../store/session';
+import { useSession, useUi } from '../../store/session';
 
 /**
  * EOD Close-out (NOVA §4.3 — EOD reconciliation, /reconcile in the spec).
@@ -350,6 +351,29 @@ const drawerErrText = (e: unknown): string => {
   const code = DRAWER_ERR[msg] ? msg : Object.keys(DRAWER_ERR).find((k) => msg.includes(k));
   return (code && DRAWER_ERR[code]) || 'Could not reach the drawer ledger — try again.';
 };
+
+/**
+ * The door a live pill earns when its count is real (v5.44.0) — same grammar
+ * as the notification door (5.42.0): deep-teal on a 5% wash, ArrowRight glyph,
+ * gold focus ring. The door tells you WHERE the number opens before you tap.
+ * Rendered only when the count > 0 — a door to an empty room is noise, and
+ * zero means zero (honest hiding, same rule as the notification filter chips).
+ */
+const LiveDoorChip: React.FC<{ label: string; aria: string; onOpen: () => void }> = ({
+  label,
+  aria,
+  onOpen,
+}) => (
+  <button
+    type="button"
+    onClick={onOpen}
+    aria-label={aria}
+    className="inline-flex shrink-0 items-center gap-1 rounded-full bg-[#0F3D3E]/5 px-2.5 py-1 text-[10.5px] font-bold text-[#0F3D3E] transition-[background-color,transform] duration-150 hover:bg-[#0F3D3E]/10 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B88E2F]"
+  >
+    Open {label}
+    <ArrowRight size={11} aria-hidden />
+  </button>
+);
 
 /** Open (float) / count-and-close (recount + note) dialog — one body, two modes. */
 const DrawerDialog: React.FC<{
@@ -795,6 +819,7 @@ const DrawerCard: React.FC<{
 const EodScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }) => {
   const { loading: tenantLoading, error: tenantError, tenantId, tenant } = useTenant();
   const session = useSession((s) => s.session);
+  const goSection = useUi((s) => s.goSection);
   const [dateIso, setDateIso] = useState<string>(() => istTodayIso());
   const [orders, setOrders] = useState<DayOrder[]>([]);
   const [payments, setPayments] = useState<DayPayment[]>([]);
@@ -1259,7 +1284,10 @@ const EodScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
         </div>
       </div>
 
-      {/* ── right now (today only) ── */}
+      {/* ── right now (today only) — v5.44.0: a real count earns its door.
+           The mirror walks you to the room: kitchen counts open the KDS,
+           unpaid opens Bills PRE-FILTERED to money still out (sectionHint
+           'unpaid' — the arrival is the context). Zero means zero: no door. ── */}
       {isToday ? (
         <section
           aria-label="Right now"
@@ -1269,23 +1297,37 @@ const EodScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
             <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#EAF2F7] text-[#1D5D7E]">
               <Flame size={18} aria-hidden />
             </span>
-            <div>
+            <div className="min-w-0 flex-1">
               <p className="text-[10.5px] font-bold uppercase tracking-[0.08em] text-[#8A938C]">In the kitchen</p>
               <p className="text-[16px] font-extrabold leading-tight tabular-nums text-[#0F3D3E]">
                 {now.inKitchen} {now.inKitchen === 1 ? 'ticket' : 'tickets'}
               </p>
             </div>
+            {now.inKitchen > 0 && (
+              <LiveDoorChip
+                label="Kitchen"
+                aria={`Open Kitchen — ${now.inKitchen} ${now.inKitchen === 1 ? 'ticket is' : 'tickets are'} on the board right now`}
+                onOpen={() => goSection('kitchen', ['Close-out', 'Kitchen'])}
+              />
+            )}
           </div>
           <div className="flex min-w-[150px] flex-1 items-center gap-3">
             <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#FFF4DB] text-[#8A5A00]">
               <Wallet size={18} aria-hidden />
             </span>
-            <div>
+            <div className="min-w-0 flex-1">
               <p className="text-[10.5px] font-bold uppercase tracking-[0.08em] text-[#8A938C]">Unpaid right now</p>
               <p className="text-[16px] font-extrabold leading-tight tabular-nums text-[#8A5A00]">
                 {now.unpaid} · {formatMoney(now.unpaidAmt)}
               </p>
             </div>
+            {now.unpaid > 0 && (
+              <LiveDoorChip
+                label="Bills"
+                aria={`Open Bills — ${now.unpaid} unpaid ${now.unpaid === 1 ? 'ticket' : 'tickets'}, ${formatMoney(now.unpaidAmt)} still out`}
+                onOpen={() => goSection('bills', ['Close-out', 'Bills'], 'unpaid')}
+              />
+            )}
           </div>
           <div className="flex min-w-[150px] flex-1 items-center gap-3">
             <span
@@ -1293,7 +1335,7 @@ const EodScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
             >
               <Clock size={18} aria-hidden />
             </span>
-            <div>
+            <div className="min-w-0 flex-1">
               <p className="text-[10.5px] font-bold uppercase tracking-[0.08em] text-[#8A938C]">Late prep</p>
               <p
                 className={`text-[16px] font-extrabold leading-tight tabular-nums ${now.latePrep > 0 ? 'text-[#B3261E]' : 'text-[#2E7D32]'}`}
@@ -1301,6 +1343,13 @@ const EodScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
                 {now.latePrep} <span className="text-[11px] font-bold text-[#8A938C]">over {LATE_PREP_MIN} min</span>
               </p>
             </div>
+            {now.latePrep > 0 && (
+              <LiveDoorChip
+                label="Kitchen"
+                aria={`Open Kitchen — ${now.latePrep} ${now.latePrep === 1 ? 'ticket is' : 'tickets are'} past the ${LATE_PREP_MIN}-minute SLA; oldest waits first`}
+                onOpen={() => goSection('kitchen', ['Close-out', 'Kitchen'])}
+              />
+            )}
           </div>
         </section>
       ) : null}

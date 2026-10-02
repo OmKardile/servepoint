@@ -16,6 +16,7 @@ import {
   YAxis,
 } from 'recharts';
 import {
+  ArrowRight,
   CalendarRange,
   Clock,
   Coins,
@@ -43,6 +44,7 @@ import type { DrawerSession, FeedbackRow } from '../../lib/api';
 import { formatMoney } from '../../lib/prefs';
 import { downloadCsv } from '../../lib/csv';
 import { useTenant } from '../../lib/tenant';
+import { useUi } from '../../store/session';
 import type { Order } from '../../types';
 
 /**
@@ -342,6 +344,7 @@ export const ReportsScreen: React.FC = () => {
 
 const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }) => {
   const { tenantId, loading: tenantLoading, error: tenantError } = useTenant();
+  const goSection = useUi((s) => s.goSection);
   const [range, setRange] = useState<RangeKey>('7d');
   const [orders, setOrders] = useState<Order[]>([]);
   const [cogsMap, setCogsMap] = useState<Map<string, number>>(new Map());
@@ -1192,6 +1195,17 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
                         <span className="shrink-0 text-[10.5px] tabular-nums text-[#969696]">
                           ×{payMix.unpaid}
                         </span>
+                        {/* v5.44.0: the row walks you there — Bills lands
+                            pre-filtered to money still out (sectionHint). */}
+                        <button
+                          type="button"
+                          onClick={() => goSection('bills', ['Reports', 'Bills'], 'unpaid')}
+                          aria-label={`Open Bills — collect ${formatMoney(payMix.unpaidAmt)} across ${payMix.unpaid} unpaid tickets`}
+                          className="inline-flex shrink-0 items-center gap-1 rounded-full bg-[#0F3D3E]/5 px-2 py-0.5 text-[10px] font-bold text-[#0F3D3E] transition-[background-color,transform] duration-150 hover:bg-[#0F3D3E]/10 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B88E2F]"
+                        >
+                          Open Bills
+                          <ArrowRight size={10} aria-hidden />
+                        </button>
                       </li>
                     )}
                   </ul>
