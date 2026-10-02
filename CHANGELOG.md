@@ -3,6 +3,19 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.21.0] — 2026-10-03 — The Z-report learns its sections (per-category subtotals + a real menu to sell)
+
+### Added — Close-out: SECTION MIX, on screen and on the printed z-report
+- **The gap**: the Z-report reconciled by payment method but never by what actually sold — an owner closing the day asks "how much of today was Coffee vs Bakery vs Food?" and had no answer. Parked since Task 56, the oldest idea on the board finally ships: a **Section mix** block on Close-out (per-menu-category item totals with units, share bars in the payment-mix visual language, and the ex-GST base stated) mirrored byte-for-byte as a **SECTIONS · EX-GST ITEM BASE** block on the printed z-report, right after PAYMENTS.
+- **Data path**: `fetchDaySections()` (api.ts) reads the day's `order_items` nested-joined through `menu_items → categories`, bounded to the day's ticket ids. Lines whose menu row vanished (or guest-added lines with no menu item) bucket honestly under **"Unlisted"** instead of silently vanishing; cancelled tickets are excluded; the load is FAIL-SOFT — a join hiccup can never take the day's money view down.
+- **Honest base**: sections sum the ex-GST item base (₹2,750 today) — the block's caption says exactly what sits on top: GST (₹130.30) and order-level discounts (₹144 across #48/#55/#67) are not re-apportioned per item. No fake reconciliation to the gross.
+
+### Added — the live cafe sells more than one thing (marked demo config + day orders)
+- **The provisioning gap**: the live menu was exactly ONE item (Flat White) under ONE category — every "mix" would have been a trivial 100%. `scripts/seed-menu-mix.mjs` (idempotent, 5/5 self-verifying) adds the **Bakery** and **Food** categories, three ingredients (Flour ₹0.30/g, Butter ₹0.50/g, Cheese ₹1.20/g), two recipe-priced menu items (**Blueberry Muffin** ₹180 — 80g flour + 20g butter = ₹34 COGS; **Veg Grilled Sandwich** ₹260 — 60g cheese + 10g butter = ₹77 COGS), and two completed day tickets (#73 08:40 UPI, #74 13:15 cash) so COGS & margin keep reconciling everywhere.
+
+### Verified
+- E2E on real data: screen shows Coffee 9u ₹2,310 (84%) / Food 1u ₹260 (9%) / Bakery 1u ₹180 (7%); the printed z-report (captured from the live print iframe) carries the identical SECTIONS block; base math reconciles (2,750 item base = 2,736.30 gross − 130.30 GST + 144 discounts); seed verify 5/5 (incl. v_order_cogs ₹34/₹77); Menu + Food & Drinks screens show the new categories/items with zero page errors; `tsc` 0; sw `5.21.0-r1`.
+
 ## [5.20.0] — 2026-10-03 — The report learns what "better" means (vs-prior-range delta chips on every headline KPI)
 
 ### Added — Reports: comparison chips that answer "better than when?"

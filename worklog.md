@@ -1769,3 +1769,25 @@ Stage Summary:
 - Reports now answers "better than when?" on every headline figure. 5.20.0, sw servepoint-v5.20.0-r1, CHANGELOG written. Surfaces: src/components/reports/ReportsScreen.tsx + scripts/seed-prior-demo.mjs + public/sw.js + CHANGELOG.md + worklog.md. No migration. ADR-0016 untouched.
 - Ideas parked: per-section Z-report subtotals, floor capacity heatmap by hour, table sessions per card, reserved-seat CTA live test, chip sparkline on hover (micro-trend behind the %).
 - Crons: 15-min webDevReview (job 430321).
+---
+Task ID: 59 (CLAIM — in progress)
+Agent: glm-5.3 (cron webDevReview round)
+Task: Health sweep + agent-browser QA first; then the oldest parked idea becomes this round's build: per-section (category) subtotals on the Close-out day summary / Z-report (parked since Task 56). Surfaces: Close-out screen (+ whatever Z-report block lives there), possibly a small API read. Login screen stays frozen (ADR-0016).
+
+---
+Task ID: 59
+Agent: glm-5.3 (cron webDevReview round)
+Task: Per-section (category) subtotals on the Close-out day summary / printed Z-report — the oldest parked idea (since Task 56) ships as 5.21.0, plus the provisioning fix that makes it meaningful: the live menu was ONE item in ONE category.
+
+Work Log:
+- Health sweep clean (tsc 0 / dev 200 / tree at d04ca56). QA sweep: Close-out renders, zero page errors. Claimed Task 59 for the parked Z-report section subtotals.
+- Data reality check: live menu = exactly 1 item (Flat White, "Coffee") → every section mix would be a trivial 100%. Root cause is a provisioning gap, not product truth → fixed it with scripts/seed-menu-mix.mjs (idempotent, gate = Bakery category existence + orders marker demo:menu-mix): Bakery + Food categories (sort 2/3), inventory Flour/Butter/Cheese (g, like Coffee beans), recipe-priced Blueberry Muffin ₹180 (80g flour + 20g butter → ₹34 COGS) + Veg Grilled Sandwich ₹260 (60g cheese + 10g butter → ₹77 COGS), and two completed day tickets (#73 08:40 takeaway UPI ₹189, #74 13:15 dine-in cash ₹273). Self-verify 5/5 — after fixing my own expectation bug (sections read ex-GST item base ₹2,310/₹180/₹260, NOT the GST-inclusive gross).
+- src/lib/api.ts: fetchDaySections(tenantId, orderIds) + DaySectionRow — order_items nested-joined menu_items(category_id, categories(name)) (nested REST path proven live BEFORE coding), .in(order_id) bounded to the day's tickets; missing menu rows → category:null so the UI buckets "Unlisted" honestly.
+- EodScreen.tsx (only code surface besides api.ts): sectionRows state (FAIL-SOFT load riding load(), drawer-style); sectionMix memo (live tickets only, null→'Unlisted', base=Σitem_total, sorted desc, pct rounded); SECTION_TONES palette (teal/blue/gold/green/amber, cycles); SECTION MIX block after Payment mix in the payment-mix visual language (bar + units + ₹ + %, caption stating the ex-GST base and that GST/discounts sit on top); ZReportOpts.sections + sectionsHtml printed block "SECTIONS · EX-GST ITEM BASE" after PAYMENTS; printReport wired. Header doc updated.
+- E2E: screen shows Coffee 9u ₹2,310 84% / Food 1u ₹260 9% / Bakery 1u ₹180 7%; base ₹2,750 = Σ item_total, and the gap to the GST math (₹2,606 = 2,736.30 − 130.30) is EXACTLY the order-level discounts ₹144 (#48 ₹50 + #55 ₹50 + #67 ₹44) — verified row-by-row in SQL, caption states it honestly. Printed z-report captured live via an iframe-polling eval (first interceptor attempt failed — printZReport calls the IFRAME's contentWindow.print(), not window.print(); lesson banked): SECTIONS block byte-exact. Menu + Food & Drinks show Bakery/Food + new items; zero page errors; tsc 0.
+- Regression note: today's headline stats moved (gross ₹2,274.30→₹2,736.30, paid ₹703.50→₹1,165.50, avg ₹379.05→₹342.04, payment mix gained CASH 23%) — expected: the two new day tickets are real ledger rows. Reports chips recompute live.
+
+Stage Summary:
+- The Z-report reconciles by section now, on a menu that finally resembles a cafe. 5.21.0, sw servepoint-v5.21.0-r1, CHANGELOG written. Surfaces: src/components/eod/EodScreen.tsx + src/lib/api.ts + scripts/seed-menu-mix.mjs + public/sw.js + CHANGELOG.md + worklog.md. No migration. ADR-0016 untouched.
+- Ideas parked: floor capacity heatmap by hour, table sessions per card (who scanned, expiry), reserved-seat CTA live test, chip sparkline on hover, red "down" chip eyeball when a 7d dips under its prior window.
+- Crons: 15-min webDevReview (job 430321).

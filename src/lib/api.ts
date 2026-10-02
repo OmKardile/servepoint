@@ -1401,6 +1401,41 @@ export async function fetchOrderCogs(tenantId: string): Promise<Map<string, numb
 }
 
 /**
+ * Per-section (category) sales rows for ONE day's tickets (v5.21.0) — the
+ * Z-report / Close-out "section mix". Reads order_items joined through
+ * menu_items → categories, filtered to the given order ids (the caller has
+ * already bounded them to the IST day). Items whose menu row vanished (or
+ * guest-added lines with no menu_item) come back with `category: null` so
+ * the UI can bucket them honestly under "Unlisted" instead of dropping them.
+ */
+export interface DaySectionRow {
+  order_id: string;
+  qty: number;
+  item_total: number;
+  category: string | null;
+}
+
+export async function fetchDaySections(tenantId: string, orderIds: string[]): Promise<DaySectionRow[]> {
+  requireCloud();
+  if (orderIds.length === 0) return [];
+  const { data, error } = await supabase
+    .from('order_items')
+    .select('order_id, qty, item_total, menu_items(category_id, categories(name))')
+    .eq('tenant_id', tenantId)
+    .in('order_id', orderIds);
+  if (error) throw error;
+  return ((data || []) as Record<string, unknown>[]).map((r) => {
+    const mi = r.menu_items as { categories?: { name?: string } } | null;
+    return {
+      order_id: String(r.order_id),
+      qty: Number(r.qty ?? 0),
+      item_total: Number(r.item_total ?? 0),
+      category: mi?.categories?.name ?? null,
+    };
+  });
+}
+
+/**
  * Ingredient cost of ONE serve per menu item, from `v_item_unit_cost` (018).
  * Map key = menu item id; items without recipes are absent (treated as 0).
  */

@@ -21,11 +21,13 @@ import {
   closeDrawerSession,
   fetchActiveDrawerSession,
   fetchCashInSince,
+  fetchDaySections,
   fetchDrawerHistory,
   fetchDrawerMovements,
   fetchOrderCogs,
   openDrawerSession,
   recordDrawerMovement,
+  type DaySectionRow,
   type DrawerMovement,
   type DrawerSession,
 } from '../../lib/api';
@@ -40,8 +42,11 @@ import { useSession } from '../../store/session';
  * paid, unpaid, average ticket) → cost & margin (ingredient cost the shelf
  * burned for the day's tickets, v_order_cogs view from migration 018; gross
  * margin on PAID tickets) → payment mix (cash / UPI / card from the payments
- * ledger) → a compact one-line-per-ticket ledger → and a printable z-report
- * (receipt-style strip, hidden-iframe print — popup blockers can't eat it).
+ * ledger) → section mix (v5.21.0: per-category item totals — Coffee / Bakery /
+ * Food — mirrored as a SECTIONS block on the printed z-report; unlisted lines
+ * bucket honestly) → a compact one-line-per-ticket ledger → and a printable
+ * z-report (receipt-style strip, hidden-iframe print — popup blockers can't
+ * eat it).
  *
  * The "Right now" strip (today only) mirrors the counter's live money view:
  * tickets in the kitchen, unpaid tickets · ₹, late prep (≥10 min — the KDS
@@ -135,6 +140,10 @@ interface DayCogs {
 
 const LATE_PREP_MIN = 10; // KDS amber SLA — the EOD strip mirrors it
 
+/** Section-mix bar tones — same family as the payment-mix palette (teal/blue/
+ *  gold/green/amber), cycling if a cafe ever runs more sections than colors. */
+const SECTION_TONES = ['#0F3D3E', '#1D5D7E', '#B88E2F', '#2E7D32', '#8A5A00'];
+
 /* ─────────────────────────── small view atoms ──────────────────────────── */
 
 const StatCard: React.FC<{
@@ -204,6 +213,7 @@ interface ZReportOpts {
   cogs: number;
   margin: number;
   mix: { method: string; amount: number }[];
+  sections?: { name: string; amount: number; units: number; pct: number }[] | null;
   cancelled: number;
   printedBy: string;
   drawer?: { title: string; rows: [string, string][]; strongLast?: boolean } | null;
@@ -216,6 +226,13 @@ function printZReport(opts: ZReportOpts): void {
     opts.mix.length > 0
       ? opts.mix.map((m) => row(m.method.toUpperCase(), formatMoney(m.amount))).join('')
       : row('—', 'no payments');
+  const sectionsHtml =
+    opts.sections && opts.sections.length > 0
+      ? `<div style="border-top:1px dashed #000;margin-top:8px;padding-top:6px;">
+    <div style="font-weight:800;padding-bottom:3px;">SECTIONS · EX-GST ITEM BASE</div>
+    ${opts.sections.map((s) => row(`${s.name} · ${s.units}u`, `${formatMoney(s.amount)} (${s.pct}%)`)).join('')}
+  </div>`
+      : '';
   const drawerHtml = opts.drawer
     ? `<div style="border-top:1px dashed #000;margin-top:8px;padding-top:6px;">
     <div style="font-weight:800;padding-bottom:3px;">${opts.drawer.title}</div>
@@ -250,6 +267,7 @@ function printZReport(opts: ZReportOpts): void {
     <div style="font-weight:800;padding-bottom:3px;">PAYMENTS</div>
     ${methodRows}
   </div>
+  ${sectionsHtml}
   ${drawerHtml}
   <div style="border-top:1px dashed #000;margin-top:8px;padding-top:6px;text-align:center;color:#333;">
     <div>Printed ${new Intl.DateTimeFormat('en-IN', { timeZone: IST_TZ, hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date())} IST${opts.printedBy ? ` · ${opts.printedBy}` : ''}</div>
@@ -778,6 +796,7 @@ const EodScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
   const [orders, setOrders] = useState<DayOrder[]>([]);
   const [payments, setPayments] = useState<DayPayment[]>([]);
   const [cogsRows, setCogsRows] = useState<DayCogs[]>([]);
+  const [sectionRows, setSectionRows] = useState<DaySectionRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshedAt, setRefreshedAt] = useState<Date | null>(null);
@@ -832,6 +851,13 @@ const EodScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
       setCogsRows(
         (cRes as unknown as DayCogs[]).filter((r) => ids.has(r.order_id)),
       );
+      // Section mix (021-era feature, FAIL-SOFT like the drawer): a hiccup in
+      // the item join can never take the day's money view down.
+      try {
+        setSectionRows(await fetchDaySections(tenantId, [...ids]));
+      } catch {
+        setSectionRows([]);
+      }
       setRefreshedAt(new Date());
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Could not load the day.');
@@ -1007,6 +1033,29 @@ const EodScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
     return { inKitchen, latePrep, unpaid: agg.unpaidOrders.length, unpaidAmt: agg.unpaidAmt };
   }, [orders, agg]);
 
+  /* ── section mix (v5.21.0): per-category item totals over LIVE tickets ──
+   *  The Z-report's oldest parked ask — an owner reconciles by section
+   *  (Coffee / Bakery / Food), not just by payment method. Guest-added or
+   *  de-listed lines bucket honestly under "Unlisted" instead of vanishing. */
+  const sectionMix = useMemo(() => {
+    const liveIds = new Set(agg.live.map((o) => o.id));
+    const map = new Map<string, { amount: number; units: number }>();
+    let base = 0;
+    for (const r of sectionRows) {
+      if (!liveIds.has(r.order_id)) continue;
+      const key = r.category ?? 'Unlisted';
+      const cur = map.get(key) || { amount: 0, units: 0 };
+      cur.amount += r.item_total;
+      cur.units += r.qty;
+      map.set(key, cur);
+      base += r.item_total;
+    }
+    const rows = [...map.entries()]
+      .map(([name, v]) => ({ name, ...v, pct: base > 0 ? Math.round((v.amount / base) * 100) : 0 }))
+      .sort((a, b) => b.amount - a.amount);
+    return { rows, base };
+  }, [sectionRows, agg]);
+
   const printReport = () => {
     /* CASH DRAWER block — only when a shift actually touches this day.
        Open shift: float + ledger cash-in → expected (marked as such, never
@@ -1058,6 +1107,7 @@ const EodScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
       cogs: agg.paidCogs,
       margin: agg.margin,
       mix: agg.mix,
+      sections: sectionMix.rows.length > 0 ? sectionMix.rows : null,
       cancelled: agg.cancelled,
       printedBy: session?.email || '',
       drawer,
@@ -1370,6 +1420,54 @@ const EodScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
               </p>
             ) : null}
           </section>
+
+          {/* ── section mix (v5.21.0) — per-category item totals ── */}
+          {sectionMix.rows.length > 0 && (
+            <section aria-label="Section mix" className="rounded-2xl border border-[#E3E7E0] bg-white p-4">
+              <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                <h2 className="text-[13px] font-extrabold uppercase tracking-[0.06em] text-[#0F3D3E]">
+                  Section mix
+                  <span className="ml-1.5 font-bold normal-case text-[#8A938C]">· what sold, by menu section</span>
+                </h2>
+                <span className="text-[10.5px] font-semibold text-[#8A938C]">ex-GST · live tickets</span>
+              </div>
+              <div className="mt-3 flex flex-col gap-2.5">
+                {sectionMix.rows.map((s, i) => (
+                  <div key={s.name} className="flex items-center gap-3">
+                    <span
+                      className="w-16 shrink-0 truncate text-[11px] font-extrabold uppercase tracking-wide text-[#5F6B63]"
+                      title={s.name}
+                    >
+                      {s.name}
+                    </span>
+                    <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-[#F0F2EF]">
+                      <div
+                        className="h-full rounded-full transition-all duration-700"
+                        style={{
+                          width: `${Math.max(s.pct, 4)}%`,
+                          backgroundColor: SECTION_TONES[i % SECTION_TONES.length],
+                        }}
+                      />
+                    </div>
+                    <span className="w-9 text-right text-[10.5px] font-bold tabular-nums text-[#8A938C]">
+                      {s.units}u
+                    </span>
+                    <span className="w-24 text-right text-[13px] font-extrabold tabular-nums text-[#0F3D3E]">
+                      {formatMoney(s.amount)}
+                    </span>
+                    <span className="w-10 text-right text-[11px] font-bold tabular-nums text-[#8A938C]">
+                      {s.pct}%
+                    </span>
+                  </div>
+                ))}
+              </div>
+              <p className="mt-2.5 text-[10px] text-[#969696]">
+                Sections sum to the ex-GST item base {formatMoney(sectionMix.base)}; GST and any
+                order-level discounts sit on top and are not re-apportioned per item. Printed on
+                the z-report as SECTIONS.
+              </p>
+            </section>
+          )}
 
           {/* ── ledger ── */}
           <section aria-label="Order ledger" className="rounded-2xl border border-[#E3E7E0] bg-white p-4">
