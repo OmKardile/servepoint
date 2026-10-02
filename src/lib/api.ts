@@ -1073,7 +1073,13 @@ export function subscribeNotificationsRealtime(
  * conversations joined the realtime publication in migration 031, so a
  * sent line pings instantly (the thread refetches, the list preview
  * moves). Own scoped channel — the Task 79 lesson (badge/list collision)
- * applies to every chat consumer too. */
+ * applies to every chat consumer too.
+ * v5.45.0 — conversation_typing joins the SAME channel (migration 034 put
+ * it on the publication): a heartbeat/arrival/departure pings the socket
+ * and the thread refetches who-is-typing. One channel, three tables —
+ * the callbacks all just refetch; supabase-js multiplexes cleanly on one
+ * subscription (the Task 79 rule is about ADDING callbacks after
+ * subscribe(), not about adding tables before it). */
 export function subscribeMessagesRealtime(
   tenantId: string,
   onPing: () => void,
@@ -1090,6 +1096,11 @@ export function subscribeMessagesRealtime(
     .on(
       'postgres_changes',
       { event: '*', schema: 'public', table: 'conversations', filter: `tenant_id=eq.${tenantId}` },
+      () => onPing()
+    )
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'conversation_typing', filter: `tenant_id=eq.${tenantId}` },
       () => onPing()
     )
     .subscribe((status) => {
@@ -1183,6 +1194,60 @@ export async function markConversationRead(
     { onConflict: 'conversation_id,user_email' }
   );
   if (error) throw error;
+}
+
+/** v5.45.0 — the typing line: announce that I'm typing (heartbeat upsert on
+ * the composite PK; the ~2.5s heartbeat keeps the row alive, a stopped
+ * heartbeat just goes stale and falls out of the 6s display window). */
+export async function setTyping(
+  conversationId: string,
+  tenantId: string,
+  userEmail: string,
+  senderName: string
+): Promise<void> {
+  requireCloud();
+  const { error } = await supabase.from('conversation_typing').upsert(
+    {
+      conversation_id: conversationId,
+      tenant_id: tenantId,
+      user_email: userEmail,
+      sender_name: senderName,
+      typing_at: new Date().toISOString(),
+    },
+    { onConflict: 'conversation_id,user_email' }
+  );
+  if (error) throw error;
+}
+
+/** v5.45.0 — retract my typing row: the line was sent (or the room left),
+ * so "typing" is no longer true. Best-effort — callers fire-and-forget. */
+export async function clearTyping(conversationId: string, userEmail: string): Promise<void> {
+  requireCloud();
+  const { error } = await supabase
+    .from('conversation_typing')
+    .delete()
+    .eq('conversation_id', conversationId)
+    .eq('user_email', userEmail);
+  if (error) throw error;
+}
+
+/** v5.45.0 — who is typing in this room RIGHT NOW: rows inside the 6s
+ * display window, excluding me. Display names only (sender_name is 004's
+ * display label — the identity never crosses the wire back to the UI). */
+export async function fetchTypingNames(
+  conversationId: string,
+  myEmail: string
+): Promise<string[]> {
+  requireCloud();
+  const since = new Date(Date.now() - 6_000).toISOString();
+  const { data, error } = await supabase
+    .from('conversation_typing')
+    .select('user_email, sender_name')
+    .eq('conversation_id', conversationId)
+    .neq('user_email', myEmail)
+    .gt('typing_at', since);
+  if (error) throw error;
+  return (data || []).map((r) => r.sender_name || 'Someone');
 }
 
 /** v5.43.0 — MY watermark per room (the client keeps the snapshot taken at

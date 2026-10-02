@@ -14,8 +14,11 @@ import {
   fetchConversations,
   fetchMessages,
   fetchMyWatermarks,
+  fetchTypingNames,
   markConversationRead,
   sendMessage,
+  setTyping,
+  clearTyping,
   subscribeMessagesRealtime,
   type RealtimeState,
 } from '../../lib/api';
@@ -149,6 +152,38 @@ const Bubble: React.FC<{ m: ChatMessage; mine: boolean }> = ({ m, mine }) => (
   </div>
 );
 
+/* ── Typing line (v5.45.0) ───────────────────────────────────────────── */
+
+/* The round's namesake: three bouncing dots and a name — the room
+ * answering back before the answer exists. Sits above the composer in a
+ * fixed-height slot so its arrival never shifts the input. */
+const TypingRow: React.FC<{ names: string[] }> = ({ names }) => {
+  const label =
+    names.length === 1
+      ? `${names[0]} is typing…`
+      : names.length === 2
+        ? `${names[0]} and ${names[1]} are typing…`
+        : `${names.length} teammates are typing…`;
+  return (
+    <div
+      className="flex h-6 items-center gap-2 px-1 text-[12px] italic text-[#6B6B6B]"
+      aria-live="polite"
+      aria-label={label}
+    >
+      <span className="flex items-center gap-0.5" aria-hidden>
+        {[0, 1, 2].map((i) => (
+          <span
+            key={i}
+            className="h-1 w-1 animate-bounce rounded-full bg-[#0F3D3E]/50"
+            style={{ animationDelay: `${i * 150}ms` }}
+          />
+        ))}
+      </span>
+      <span className="truncate">{label}</span>
+    </div>
+  );
+};
+
 /* ── Screen content (tenant-scoped) ──────────────────────────────────── */
 
 const MessagesContent: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }) => {
@@ -173,6 +208,12 @@ const MessagesContent: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetr
   const [wmLoaded, setWmLoaded] = useState(false);
   const [boundary, setBoundary] = useState<{ id: string; iso: string } | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  /* v5.45.0 — the typing line: who is answering RIGHT NOW (6s display
+   * window, never me). The heartbeat ref throttles my own announces to
+   * one upsert per 2.5s of continuous typing; a stale row simply falls
+   * out of the window — no cron, the display IS the truth. */
+  const [typingNames, setTypingNames] = useState<string[]>([]);
+  const lastPingRef = useRef<number>(0);
 
   const active = useMemo(
     () => conversations.find((cv) => cv.id === activeId) || null,
@@ -293,6 +334,52 @@ const MessagesContent: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetr
     return thread.find((m) => m.sender_name !== myName && m.created_at > boundary.iso)?.id ?? null;
   }, [boundary, activeId, thread, myName]);
 
+  /* v5.45.0 — refetch who-is-typing for the open room. Rides the same
+   * realtime ping as everything else (034 published the table), plus a
+   * 5s interval as the poll-mode fallback — a window this short needs a
+   * heartbeat-shaped refresh, not the 30s list poll. */
+  const loadTyping = useCallback(async () => {
+    if (!activeId || !myEmail) return;
+    try {
+      setTypingNames(await fetchTypingNames(activeId, myEmail));
+    } catch {
+      /* a failed glance shows nobody typing — the next ping retells it */
+    }
+  }, [activeId, myEmail]);
+
+  useEffect(() => {
+    setTypingNames([]);
+    if (!activeId) return;
+    void loadTyping();
+    const t = window.setInterval(() => void loadTyping(), 5_000);
+    return () => window.clearInterval(t);
+  }, [activeId, loadTyping]);
+
+  /* announce/heartbeat: first keypress pings at once, then at most one
+   * upsert per 2.5s; clearing the draft retracts the row ("typing" is no
+   * longer true). Best-effort throughout. */
+  const pingTyping = () => {
+    if (!activeId || !tenant.tenantId || !myEmail) return;
+    const now = Date.now();
+    if (now - lastPingRef.current < 2_500) return;
+    lastPingRef.current = now;
+    void setTyping(activeId, tenant.tenantId, myEmail, myName).catch(() => {});
+  };
+  const retractTyping = () => {
+    lastPingRef.current = 0;
+    if (!activeId || !myEmail) return;
+    void clearTyping(activeId, myEmail).catch(() => {});
+  };
+
+  /* leaving the room (or the screen) retracts the announce — an echo of
+   * "typing" with nobody at the keyboard is a lie the next occupant pays
+   * for. The stale-6s window already bounds the damage; this closes it. */
+  useEffect(() => {
+    return () => {
+      if (activeId && myEmail) void clearTyping(activeId, myEmail).catch(() => {});
+    };
+  }, [activeId, myEmail]);
+
   const onSend = async () => {
     const body = draft.trim();
     if (!tenant.tenantId || !activeId || !body || sending) return;
@@ -301,6 +388,7 @@ const MessagesContent: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetr
     try {
       await sendMessage(activeId, tenant.tenantId, myName, body);
       setDraft('');
+      retractTyping();
       await loadThread();
       void loadList();
     } catch (err) {
@@ -527,17 +615,27 @@ const MessagesContent: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetr
                   )}
                 </div>
 
-                {/* Composer */}
+                {/* Composer — with the typing slot above the input (fixed
+                    h-6: the announce never shifts the input under you). */}
                 <div className="border-t border-[#E3E7E0] bg-white px-4 py-3">
                   {sendError && (
                     <p className="mb-2 break-words rounded-xl border border-[#F5C6C0] bg-[#FEF2F2] px-3 py-2 text-[12px] text-[#B42318]" role="alert">
                       Couldn't send: {sendError}
                     </p>
                   )}
+                  <div className="min-h-[24px]">
+                    {typingNames.length > 0 && <TypingRow names={typingNames} />}
+                  </div>
                   <div className="flex items-end gap-2">
                     <textarea
                       value={draft}
-                      onChange={(e) => setDraft(e.target.value)}
+                      onChange={(e) => {
+                        setDraft(e.target.value);
+                        if (e.target.value.trim()) pingTyping();
+                      }}
+                      onBlur={() => {
+                        if (!draft.trim()) retractTyping();
+                      }}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter' && !e.shiftKey) {
                           e.preventDefault();

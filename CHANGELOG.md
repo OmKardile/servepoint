@@ -3,6 +3,20 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.45.0] — 2026-10-03 — The typing line: the room answers before the answer exists
+
+### Added — who is typing RIGHT NOW (migration 034)
+- 033 taught the staff line WHO it talks to; you could send "refilling the pitcher?" into Kitchen and still stare at silence — not the absence of a teammate, just the absence of a signal. Migration `034_conversation_typing.sql` adds the signal:
+  - `conversation_typing (conversation_id, user_email) → sender_name, typing_at`, composite PK (one row per typist per room). Identity keyed on **user_email** (the 033 split: sender_name rides along as a DISPLAY copy only).
+  - **Truth model — the display window IS the truth**: a row is shown while `typing_at > now() - 6s`; a heartbeat that stops simply goes stale and disappears. No cron, no vacuum choreography — the client's 6s window is the whole lifecycle. Applied via `scripts/apply-034.mjs`, five proofs green incl. a rollback probe (upsert twice keeps ONE row — heartbeat semantics; ROLLBACK, zero residue).
+  - **DELIBERATE (vs 033's opposite call)**: typing JOINS the realtime publication — presence is ANNOUNCED, not derived. The entire value is the live ping; a 30s poll would make the signal a lie. 033 kept read-watermarks off the socket because reading habits need no announcement; "who is typing in this room" is exactly what the room is for.
+- **UI (MessagesScreen)**: composer keystrokes announce at once, then heartbeat at most one upsert per 2.5s of continuous typing; sending retracts the row (the line exists — "typing" is no longer true), as does leaving the room or the screen (an echo of typing with nobody at the keyboard is a lie the next occupant pays for). Who-is-typing refetches on the same realtime ping as everything else (one channel now carries three tables), plus a 5s interval for poll-mode. Best-effort throughout — a failed glance shows nobody typing; the next ping retells it.
+- **The typing row**: sits above the composer in a fixed-height slot so its arrival never shifts the input under you; single name ("Front of House is typing…"), two names, or an honest count ("3 teammates are typing…"); `aria-live="polite"` with the full label.
+
+### Verified
+- E2E (real UI): a DB probe + heartbeat script played the teammate — "Front of House is typing…" appeared over the socket while the heartbeat ran, and disappeared when the heart stopped (the stale row proved `fresh: false` in the DB — the 6s window doing exactly its job). The owner's own keystrokes upserted a fresh row (DB-verified), and pressing Enter sent the line AND retracted the typing row in the same breath (zero rows remain for the typist). 13/13 screens, 0 console errors, tsc 0.
+- DB truth: probe deleted, zero typing rows remain, 034 intact (shape + publication + policy), chat at the honest 5 lines (4 prior + this round's QA-tagged UI-sent line), 3 true bells untouched, watermarks unchanged at 2.
+
 ## [5.44.0] — 2026-10-03 — The report walks you there: every live count earns its door
 
 ### Added — the EOD "Right now" strip opens doors; a door can carry CONTEXT (no migration — pure UI truth)
