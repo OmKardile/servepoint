@@ -15,6 +15,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Verified
 - Browser E2E: sidebar renders the new mark on the cream chip (orange pops against the teal rail), /showcase header + hero show the mark and the dual-tone lockup, /index-help header clean, all seven icon/og assets serve `200` with correct content types, `tsc` 0, sw `5.19.0-r1`. Guest QR + Dashboard regression-clean. One transient cloud hiccup observed during QA (a single PostgREST "None of these media types are available" on tenant resolve) — auto-recovered on remount, not reproducible, unrelated to asset-only changes; logged for the next round to watch.
+- **Reconciliation note (second pass)**: a parallel extraction ran concurrently and briefly overwrote the committed binaries; the d12a982 set was restored wholesale (`git checkout d12a982 -- <assets>`) — the treatment above is canonical and unchanged. The "transient" PostgREST error was root-caused: a custom `Accept` header set on the shared agent-browser session during the Figma capture poisoned subsequent Supabase REST calls (406) — a QA-harness artifact, NOT a product bug; session headers were reset.
 
 ## [5.18.0] — 2026-10-02 — The counter seats and starts in one tap (Floor → POS tap-through + the silent-table-carryover fix)
 
