@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle,
-  ArrowRight,
   CalendarDays,
   ChevronDown,
   ChevronLeft,
@@ -38,6 +37,7 @@ import { printHiddenFrame } from '../../lib/printFrame';
 import { downloadCsv } from '../../lib/csv';
 import { useTenant } from '../../lib/tenant';
 import { useSession, useUi } from '../../store/session';
+import { DoorChip as LiveDoorChip } from '../shell/DoorChip';
 
 /**
  * EOD Close-out (NOVA §4.3 — EOD reconciliation, /reconcile in the spec).
@@ -351,29 +351,6 @@ const drawerErrText = (e: unknown): string => {
   const code = DRAWER_ERR[msg] ? msg : Object.keys(DRAWER_ERR).find((k) => msg.includes(k));
   return (code && DRAWER_ERR[code]) || 'Could not reach the drawer ledger — try again.';
 };
-
-/**
- * The door a live pill earns when its count is real (v5.44.0) — same grammar
- * as the notification door (5.42.0): deep-teal on a 5% wash, ArrowRight glyph,
- * gold focus ring. The door tells you WHERE the number opens before you tap.
- * Rendered only when the count > 0 — a door to an empty room is noise, and
- * zero means zero (honest hiding, same rule as the notification filter chips).
- */
-const LiveDoorChip: React.FC<{ label: string; aria: string; onOpen: () => void }> = ({
-  label,
-  aria,
-  onOpen,
-}) => (
-  <button
-    type="button"
-    onClick={onOpen}
-    aria-label={aria}
-    className="inline-flex shrink-0 items-center gap-1 rounded-full bg-[#0F3D3E]/5 px-2.5 py-1 text-[10.5px] font-bold text-[#0F3D3E] transition-[background-color,transform] duration-150 hover:bg-[#0F3D3E]/10 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B88E2F]"
-  >
-    Open {label}
-    <ArrowRight size={11} aria-hidden />
-  </button>
-);
 
 /** Open (float) / count-and-close (recount + note) dialog — one body, two modes. */
 const DrawerDialog: React.FC<{

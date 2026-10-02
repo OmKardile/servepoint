@@ -3,6 +3,28 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.47.0] — 2026-10-03 — Needs you now: the morning mirror earns its doors
+
+### Added — the landing screen's honest "what needs me" (no migration)
+- The Dashboard answered "how is the business?" (Daily Sales, Total Revenue, margin, guest love) but not the question you actually open the app with at 7 am: **what needs me before the first pour?** Every surface had its own waiting number — the CounterInbox queue, the KDS board, Bills' money-out, Inventory's shelf, Menu's 86 list — and none of them met you at the door. `NeedsNow` is the strip that unions them, each count earning its door exactly the way the counter taught it (5.44.0):
+  - **New tickets** — the CounterInbox queue (`new`): money waiting to cook. Door: Open Counter (the inbox band sits at the top of Food & Drinks' default view).
+  - **In the kitchen** — `pending`/`preparing` on the board right now. Door: Open Kitchen.
+  - **Late prep** — `preparing` past the 10-minute SLA (the KDS's own clock, red). Door: Open Kitchen, aria restating the SLA.
+  - **Unpaid** — money still out with the ₹ total. Door: Open Bills **carrying its context** (sectionHint `'unpaid'` — the same pre-filtered arrival Close-out and Reports use).
+  - **Stock low & out** — items at/below the reorder point or at zero (Inventory's own `levelTone` math, verbatim). Door: Open Inventory (lands on the Stock tab's low-stock alert strip).
+  - **Sold out** — menu items 86'd (`is_available = false`). Door: Open Menu (the SOLD OUT chips are right there to un-86).
+- **Truth rules**: counts are computed client-side from the same ledgers the rooms read (orders + inventory + menu), refreshed on mount and every 30s. A slot renders ONLY when its count is real (>0 — zero means zero, honest hiding); when NOTHING waits, the strip says so calmly ("Nothing waits on you — the floor is yours.") instead of pretending. **DELIBERATE day-agnostic scope**: unlike Close-out's Right-now (which mirrors the IST Z-day and honestly shows zeros for a fresh day), the mirror counts everything still waiting REGARDLESS of day — an unpaid ticket from yesterday still needs you; that's exactly how yesterday's known leftovers should surface on the landing screen. Fail-soft: a failed read keeps the last honest strip; a first failed read hides the strip entirely, and the analytics below still load.
+- **Shared door grammar (refactor)**: EodScreen's `LiveDoorChip` moved to `src/components/shell/DoorChip.tsx` as `DoorChip` — one file now owns the deep-teal-on-5%-wash, ArrowRight, gold focus ring and 0.96 press scale; Close-out aliases it back in unchanged, so 5.42/5.44's grammar cannot drift between screens.
+
+### Styling — attention has a chrome, calm has a quieter one
+- **Waiting**: the amber-wash gradient card (`#FDF6E3 → white`, the EOD attention chrome) with a "NEEDS YOU NOW" micro-label over a 2×3 grid (3 columns on large screens) — each slot reads icon tile → uppercase label → big tabular count → door chip, in one line, never squeezed.
+- **All clear**: the strip drops to a plain white card with a sage circle and the health-green check — "Nothing waits on you — the floor is yours." Silence should look like silence (the same rule as 5.46.0's still gray dot).
+- Layout lesson from the E2E screenshot: six `min-w-[150px] flex-1` slots in one flex row squeezed labels into three-line wraps — replaced with a real grid so every slot owns its column.
+
+### Verified
+- E2E (real UI, every door walked): the mirror lit with the house's honest waiting queue — New tickets 4 / In the kitchen 2 / Late prep 1 (yesterday's 12h-old preparing ticket) / Unpaid 5 · ₹1,801.80 (the known owner-decision leftovers) — plus two staged flips (Coffee beans 4880→400 g, Veg Grilled Sandwich 86'd) lighting Stock low & out 1 and Sold out 1. All six doors walked: Open Counter → inbox "4 awaiting Ok"; Open Kitchen → the board; Open Bills → landed pre-filtered Active with the honest "Dashboard › Bills" crumb; Open Inventory → the Stock tab's "1 at or below reorder point" alert; Open Menu → the SOLD OUT chip. After the flips were restored, the strip re-derived and the two staged slots vanished — honest hiding proven live. Screenshot `scripts/qa86-needsnow.png`. 14/14 screens land, 0 console errors, tsc 0 after every edit.
+- DB truth (`scripts/qa86-truth.mjs`): TRUTH OK — both flips restored (beans 4880, sandwich available), orders unchanged at 36 (zero probe tickets this round), bells back to the honest 3 (the staged 400 g flip fired the 030 low-stock watcher — the QA echo bell was deleted; its watcher works, which is rather the point), chat at 5, presence owner-only, 035 intact.
+
 ## [5.46.0] — 2026-10-03 — The line's people: who is even here right now
 
 ### Added — presence under the typing signal (migration 035)

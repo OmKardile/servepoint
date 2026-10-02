@@ -3,14 +3,21 @@ import {
   AlertTriangle,
   CalendarClock,
   ChevronDown,
+  CircleSlash,
+  CheckCircle2,
+  Clock,
   Coins,
+  Flame,
   Heart,
+  Inbox,
+  PackageMinus,
   ReceiptText,
   ShoppingBag,
   Star,
   TrendingDown,
   TrendingUp,
   UserPlus,
+  Wallet,
 } from 'lucide-react';
 import {
   CartesianGrid,
@@ -24,11 +31,12 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { fetchDashboard, fetchFeedbackStats, fetchTodayCostMargin, type FeedbackStats, type TodayCostMargin } from '../../lib/api';
+import { fetchDashboard, fetchFeedbackStats, fetchInventory, fetchMenuItems, fetchOrders, fetchTodayCostMargin, type FeedbackStats, type InventoryItem, type TodayCostMargin } from '../../lib/api';
 import { formatMoney } from '../../lib/prefs';
 import { useTenant } from '../../lib/tenant';
 import { useUi } from '../../store/session';
-import type { DashboardData } from '../../types';
+import { DoorChip } from '../shell/DoorChip';
+import type { DashboardData, MenuItem, Order } from '../../types';
 
 /**
  * Dashboard (ServePoint v5.0.0, ADR-0014) — rebuilt from the Figma frames:
@@ -722,6 +730,227 @@ const DashboardInner: React.FC<{ onRetry: () => void }> = ({ onRetry }) => {
 
 /* ───────────────────────────── Screen export ───────────────────────────── */
 
+/**
+ * NeedsNow (v5.47.0 — "the morning mirror").
+ *
+ * The landing screen's honest answer to "what needs me before the first
+ * pour?" — the union of every surface's WAITING number, each earning its
+ * door exactly the way the counter taught it (5.44.0):
+ *   • New tickets — the CounterInbox queue (`new`): money waiting to cook.
+ *   • In the kitchen — `pending`/`preparing` on the board right now.
+ *   • Late prep — `preparing` past the 10-minute SLA (the KDS's own clock).
+ *   • Unpaid — money still out (opens Bills pre-filtered via sectionHint,
+ *     the same context-carrying door Close-out and Reports use).
+ *   • Stock low & out — items at/below the reorder point or at zero
+ *     (Inventory's own levelTone math, verbatim).
+ *   • Sold out — menu items 86'd (`is_available = false`).
+ *
+ * Truth rules: counts are computed client-side from the same ledgers the
+ * rooms read (orders + inventory + menu), refreshed on mount and every 30s.
+ * A slot renders ONLY when its count is real (>0 — zero means zero, honest
+ * hiding); when NOTHING waits, the strip says so calmly instead of
+ * pretending. Fail-soft: a failed read keeps the last honest strip; a first
+ * failed read hides the strip entirely — the analytics below still load.
+ */
+const LATE_PREP_MIN = 10;
+const NOW_REFRESH_MS = 30_000;
+
+interface NeedsState {
+  ready: boolean;
+  orders: Order[];
+  inventory: InventoryItem[];
+  menu: MenuItem[];
+}
+
+const NeedsNow: React.FC = () => {
+  const { tenantId } = useTenant();
+  const [now, setNow] = useState<NeedsState>({ ready: false, orders: [], inventory: [], menu: [] });
+
+  useEffect(() => {
+    if (!tenantId) return;
+    let alive = true;
+    const load = async () => {
+      try {
+        const [orders, inventory, menu] = await Promise.all([
+          fetchOrders(tenantId, 200),
+          fetchInventory(tenantId),
+          fetchMenuItems(tenantId),
+        ]);
+        if (alive) setNow({ ready: true, orders, inventory, menu });
+      } catch {
+        /* the mirror is a courtesy — a first failed read simply stays quiet */
+      }
+    };
+    void load();
+    const t = window.setInterval(() => void load(), NOW_REFRESH_MS);
+    return () => {
+      alive = false;
+      window.clearInterval(t);
+    };
+  }, [tenantId]);
+
+  if (!now.ready) return null;
+
+  const live = now.orders.filter((o) => o.status !== 'cancelled');
+  const newTickets = live.filter((o) => o.status === 'new');
+  const inKitchen = live.filter((o) => ['pending', 'preparing'].includes(o.status));
+  const latePrep = live.filter(
+    (o) => o.status === 'preparing' && Date.now() - new Date(o.created_at).getTime() >= LATE_PREP_MIN * 60000
+  );
+  const unpaid = live.filter((o) => o.payment_status !== 'completed');
+  const unpaidAmt = unpaid.reduce((s, o) => s + Number(o.total || 0), 0);
+  const stockAlerts = now.inventory.filter((i) => i.current_stock <= i.reorder_point);
+  const soldOut = now.menu.filter((m) => m.is_available === false);
+
+  const slots: {
+    key: string;
+    label: string;
+    value: string;
+    valueTone: string;
+    icon: React.ReactNode;
+    iconTone: string;
+    aria: string;
+    door: { label: string; aria: string; onOpen: () => void } | null;
+  }[] = [];
+
+  const go = useUi.getState().goSection;
+  if (newTickets.length > 0)
+    slots.push({
+      key: 'new',
+      label: 'New tickets',
+      value: `${newTickets.length} ${newTickets.length === 1 ? 'ticket' : 'tickets'} waiting`,
+      valueTone: 'text-[#0F3D3E]',
+      icon: <Inbox size={18} aria-hidden />,
+      iconTone: 'bg-[#EAF2F7] text-[#1D5D7E]',
+      aria: `${newTickets.length} new ${newTickets.length === 1 ? 'ticket' : 'tickets'} in the counter inbox, waiting for an Ok`,
+      door: {
+        label: 'Counter',
+        aria: `Open the counter — ${newTickets.length} new ${newTickets.length === 1 ? 'ticket waits' : 'tickets wait'} for an Ok`,
+        onOpen: () => go('food', ['Dashboard', 'Food & Drinks']),
+      },
+    });
+  if (inKitchen.length > 0)
+    slots.push({
+      key: 'kitchen',
+      label: 'In the kitchen',
+      value: `${inKitchen.length} ${inKitchen.length === 1 ? 'ticket' : 'tickets'}`,
+      valueTone: 'text-[#0F3D3E]',
+      icon: <Flame size={18} aria-hidden />,
+      iconTone: 'bg-[#EAF2F7] text-[#1D5D7E]',
+      aria: `${inKitchen.length} ${inKitchen.length === 1 ? 'ticket is' : 'tickets are'} on the board right now`,
+      door: {
+        label: 'Kitchen',
+        aria: `Open Kitchen — ${inKitchen.length} ${inKitchen.length === 1 ? 'ticket is' : 'tickets are'} on the board right now`,
+        onOpen: () => go('kitchen', ['Dashboard', 'Kitchen']),
+      },
+    });
+  if (latePrep.length > 0)
+    slots.push({
+      key: 'late',
+      label: 'Late prep',
+      value: `${latePrep.length}`,
+      valueTone: 'text-[#B3261E]',
+      icon: <Clock size={18} aria-hidden />,
+      iconTone: 'bg-[#FCEBEA] text-[#B3261E]',
+      aria: `${latePrep.length} ${latePrep.length === 1 ? 'ticket is' : 'tickets are'} past the ${LATE_PREP_MIN}-minute SLA; oldest waits first`,
+      door: {
+        label: 'Kitchen',
+        aria: `Open Kitchen — ${latePrep.length} ${latePrep.length === 1 ? 'ticket is' : 'tickets are'} past the ${LATE_PREP_MIN}-minute SLA; oldest waits first`,
+        onOpen: () => go('kitchen', ['Dashboard', 'Kitchen']),
+      },
+    });
+  if (unpaid.length > 0)
+    slots.push({
+      key: 'unpaid',
+      label: 'Unpaid',
+      value: `${unpaid.length} · ${formatMoney(unpaidAmt)}`,
+      valueTone: 'text-[#8A5A00]',
+      icon: <Wallet size={18} aria-hidden />,
+      iconTone: 'bg-[#FFF4DB] text-[#8A5A00]',
+      aria: `${unpaid.length} unpaid ${unpaid.length === 1 ? 'ticket' : 'tickets'}, ${formatMoney(unpaidAmt)} still out`,
+      door: {
+        label: 'Bills',
+        aria: `Open Bills — ${unpaid.length} unpaid ${unpaid.length === 1 ? 'ticket' : 'tickets'}, ${formatMoney(unpaidAmt)} still out`,
+        onOpen: () => go('bills', ['Dashboard', 'Bills'], 'unpaid'),
+      },
+    });
+  if (stockAlerts.length > 0)
+    slots.push({
+      key: 'stock',
+      label: 'Stock low & out',
+      value: `${stockAlerts.length} ${stockAlerts.length === 1 ? 'item' : 'items'}`,
+      valueTone: 'text-[#8A5A00]',
+      icon: <PackageMinus size={18} aria-hidden />,
+      iconTone: 'bg-[#FFF4DB] text-[#8A5A00]',
+      aria: `${stockAlerts.length} inventory ${stockAlerts.length === 1 ? 'item is' : 'items are'} at or below the reorder point`,
+      door: {
+        label: 'Inventory',
+        aria: `Open Inventory — ${stockAlerts.length} ${stockAlerts.length === 1 ? 'item needs' : 'items need'} restocking`,
+        onOpen: () => go('inventory', ['Dashboard', 'Inventory']),
+      },
+    });
+  if (soldOut.length > 0)
+    slots.push({
+      key: 'soldout',
+      label: 'Sold out',
+      value: `${soldOut.length} on the menu`,
+      valueTone: 'text-[#0F3D3E]',
+      icon: <CircleSlash size={18} aria-hidden />,
+      iconTone: 'bg-[#F6F5F2] text-[#5F6B63]',
+      aria: `${soldOut.length} menu ${soldOut.length === 1 ? 'item is' : 'items are'} marked sold out`,
+      door: {
+        label: 'Menu',
+        aria: `Open Menu — ${soldOut.length} ${soldOut.length === 1 ? 'item is' : 'items are'} 86'd`,
+        onOpen: () => go('menu', ['Dashboard', 'Menu']),
+      },
+    });
+
+  return (
+    <section
+      aria-label="Needs you now"
+      className={`mt-5 rounded-2xl border p-4 ${
+        slots.length > 0
+          ? 'border-[#F0E4C3] bg-gradient-to-r from-[#FDF6E3] to-white'
+          : 'border-[#E3E7E0] bg-white'
+      }`}
+    >
+      {slots.length > 0 ? (
+        <>
+          <p className="mb-3 text-[10.5px] font-bold uppercase tracking-[0.08em] text-[#8A938C]">
+            Needs you now
+          </p>
+          <div className="grid grid-cols-2 gap-x-6 gap-y-4 lg:grid-cols-3">
+            {slots.map((s) => (
+              <div key={s.key} className="flex min-w-0 items-center gap-3">
+                <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${s.iconTone}`}>
+                  {s.icon}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-[10.5px] font-bold uppercase tracking-[0.08em] text-[#8A938C]">{s.label}</p>
+                  <p className={`text-[16px] font-extrabold leading-tight tabular-nums ${s.valueTone}`}>{s.value}</p>
+                </div>
+                {s.door && <DoorChip label={s.door.label} aria={s.door.aria} onOpen={s.door.onOpen} />}
+              </div>
+            ))}
+          </div>
+        </>
+      ) : (
+        <div className="flex items-center gap-3">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#EAF0EC] text-[#2E7D32]">
+            <CheckCircle2 size={18} aria-hidden />
+          </span>
+          <div>
+            <p className="text-[10.5px] font-bold uppercase tracking-[0.08em] text-[#8A938C]">Needs you now</p>
+            <p className="text-[13.5px] font-semibold text-[#5F6B63]">
+              Nothing waits on you — the floor is yours.
+            </p>
+          </div>
+        </div>
+      )}
+    </section>
+  );
+};
+
 export const DashboardScreen: React.FC = () => {
   const [reload, setReload] = useState(0);
 
@@ -732,6 +961,7 @@ export const DashboardScreen: React.FC = () => {
   return (
     <section aria-label="Dashboard" className="p-5 md:p-6">
       <h1 className="text-[20px] font-bold text-[#1A1A1A]">Dashboard</h1>
+      <NeedsNow />
       <DashboardInner key={reload} onRetry={() => setReload((n) => n + 1)} />
     </section>
   );
