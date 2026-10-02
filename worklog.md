@@ -1217,3 +1217,23 @@ Stage Summary:
 - Pending owner action unchanged: GitHub rename tsos-alt → servepoint, then flip the remote + doc references.
 - Next rounds (NOVA): table floor/QR sessions UI (schema ready), reports/EOD, inventory auto-deduction.
 - Crons: 15-min webDevReview ACTIVE (job 430073).
+
+---
+Task ID: 38
+Agent: glm-5.3
+Task: "change name of render blueprint so the render link changes to 'servepoint' or 'servepoint-tsos'"
+
+Work Log:
+- Located the blueprint: render.yaml at repo root, service `tsos-pos` (URL derives from the name → tsos-pos.onrender.com). CHANGELOG [5.2.x-era rebrand] had explicitly frozen the name to avoid re-provisioning — the owner's explicit request overrides that decision.
+- Live probes settled the subdomain choice: `tsos-pos.onrender.com` returns HTTP 200 (the owner DID apply the blueprint — the service is live), `servepoint-tsos.onrender.com` returns Render's clean "service not found" 404 (unclaimed → we get the exact name), while bare `servepoint.onrender.com` connect-OK but zero bytes/timeouts (claimed/limbo record — applying under it would get a random suffix appended). → picked **servepoint-tsos**.
+- render.yaml: `name: servepoint-tsos`; header provenance comment documents the rename, probe rationale and the re-provision caveat (old URL retired, NOT redirected); legacy "The Cafe Operating System" title line → "ServePoint — smartPOS". README deployment section + ADR-0008 update note (v5.2.2) aligned; CHANGELOG [5.2.2] entry added with owner to-do (click Apply / let sync run → confirm new service green → delete old tsos-pos if Render doesn't auto-remove).
+- Caught my own near-miss: first edit round updated the header comment but left `name: tsos-pos` on line 29 — the follow-up grep for residual references caught it before commit. Lesson: grep-verify every rename.
+- YAML validated by parse (python yaml.safe_load): name/type/routes=1/headers=5/envVars=4 — structure byte-equivalent apart from name + comments.
+- Housekeeping: 7 files showed mode-only churn (sandbox exec-bit artifact, 0 content diff) → set `git config core.fileMode false` to silence it permanently instead of polluting history.
+- Commit f2925ff pushed to main (owner identity); origin/main tracking ref re-synced via fetch + update-ref.
+- Cron store was EMPTY again on session start (list=0) → recreated the 15-min webDevReview as job **430321** (fixed_rate 900s, priority 10, payload updated with 5.2.2 context + NOVA pointer).
+
+Stage Summary:
+- Render deployment link is now **https://servepoint-tsos.onrender.com** once the owner clicks Apply (or blueprint sync runs on push). Old tsos-pos URL will 404 after re-provision — bookmarks/QR material must move to the new link; all other service properties re-create identically from the blueprint.
+- NOVA next-up unchanged: table floor / QR sessions UI (dining_tables + table_sessions in schema), then reports/EOD, inventory auto-deduction.
+- Crons: 15-min webDevReview ACTIVE (430321).
