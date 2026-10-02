@@ -194,6 +194,7 @@ const lineUnit = (l: CartLine) =>
   round2(l.item.price + (l.variant?.price_delta || 0) + l.addons.reduce((s, a) => s + a.price, 0));
 
 const CART_KEY = (token: string) => `sp.guest.cart.${token}`;
+const OFFER_KEY = (token: string) => `sp.guest.offer.${token}`;
 
 /** Session countdown ribbon — the ONLY 1s-ticking component on the page. */
 function SessionRibbon({ session }: { session: TableSession }): React.ReactElement {
@@ -395,6 +396,13 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
   const [placing, setPlacing] = useState(false);
   const [placeError, setPlaceError] = useState<string | null>(null);
   const [offers, setOffers] = useState<PublicOffer[]>([]);
+  const [selectedOfferId, setSelectedOfferId] = useState<string | null>(() => {
+    try {
+      return sessionStorage.getItem(OFFER_KEY(qrToken)) || null;
+    } catch {
+      return null;
+    }
+  });
 
   useEffect(() => {
     let alive = true;
@@ -444,6 +452,16 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
     }
   }, [lines, qrToken]);
 
+  // the applied offer rides with the cart — identity only, re-validated by the server
+  useEffect(() => {
+    try {
+      if (selectedOfferId) sessionStorage.setItem(OFFER_KEY(qrToken), selectedOfferId);
+      else sessionStorage.removeItem(OFFER_KEY(qrToken));
+    } catch {
+      /* quota — ignore */
+    }
+  }, [selectedOfferId, qrToken]);
+
   const addLine = useCallback((l: Omit<CartLine, 'key'>) => {
     setLines((prev) => {
       const key = lineKey(l.item.id, l.variant?.id || null, l.addons.map((a) => a.id), l.notes);
@@ -468,8 +486,31 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
 
   const cartCount = lines.reduce((s, l) => s + l.qty, 0);
   const cartSubtotal = round2(lines.reduce((s, l) => s + lineUnit(l) * l.qty, 0));
-  const cartTax = round2(cartSubtotal * 0.05);
-  const cartTotal = round2(cartSubtotal + cartTax);
+
+  // offer math — mirrors the server (migration 017) EXACTLY: percent capped at
+  // 100, flat clamped to the subtotal, GST on the discounted base, never below
+  // zero. The device's numbers are only a preview; sp_create_public_order
+  // re-validates the offer against the recomputed subtotal before it counts.
+  const selectedOffer = offers.find((o) => o.id === selectedOfferId) ?? null;
+  const offerReady = !!selectedOffer && cartSubtotal >= Number(selectedOffer.min_order_amount);
+  const cartDiscount = selectedOffer && offerReady
+    ? round2(
+        selectedOffer.discount_type === 'percent'
+          ? (cartSubtotal * Math.min(Number(selectedOffer.discount_value), 100)) / 100
+          : Math.min(Number(selectedOffer.discount_value), cartSubtotal),
+      )
+    : 0;
+  const cartTax = round2((cartSubtotal - cartDiscount) * 0.05);
+  const cartTotal = round2(cartSubtotal - cartDiscount + cartTax);
+
+  // a paused/removed offer must not ride along silently — drop it once offers load
+  useEffect(() => {
+    if (selectedOfferId && offers.length > 0 && !offers.some((o) => o.id === selectedOfferId)) {
+      setSelectedOfferId(null);
+    }
+  }, [offers, selectedOfferId]);
+
+  const toggleOffer = (id: string) => setSelectedOfferId((prev) => (prev === id ? null : id));
 
   // sticky category rail — scroll-spy highlights the section under the reader's thumb
   const [activeCat, setActiveCat] = useState<string | null>(null);
@@ -511,9 +552,12 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
       })),
       customerName: customerName || null,
       clientOperationId: crypto.randomUUID(),
+      offerId: selectedOffer && offerReady ? selectedOffer.id : null,
     });
     if (!res.is_valid || !res.order) {
       setPlaceError(res.message || t('orderFail'));
+      // a stale offer (paused mid-session) drops off so the retry is clean
+      if (res.error === 'OFFER_INVALID') setSelectedOfferId(null);
       setPlacing(false);
       if (res.error === 'INVALID_TOKEN') {
         sessionStorage.removeItem(CART_KEY(qrToken));
@@ -616,28 +660,58 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
           </nav>
         )}
 
-        {/* today's offers — read-only, active only, straight from the owner's CRM */}
+        {/* today's offers — tap to apply, straight from the owner's CRM */}
         {phase === 'ready' && offers.length > 0 && (
           <section aria-label={t('offersAria')} className="mb-4">
             <div className="flex gap-2.5 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-              {offers.map((o) => (
-                <div
-                  key={o.id}
-                  className="flex min-w-[240px] max-w-[300px] flex-1 items-center gap-3 rounded-2xl border border-[#EED9B8] bg-gradient-to-br from-[#FBF3E4] to-[#F6EAD8] px-3.5 py-3 shadow-sm"
-                >
-                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#B88E2F] text-[11px] font-bold leading-none text-white">
-                    {o.discount_type === 'percent' ? `${Number(o.discount_value)}%` : '₹' + (Number(o.discount_value) % 1 === 0 ? Number(o.discount_value) : Number(o.discount_value).toFixed(0))}
-                  </span>
-                  <div className="min-w-0">
-                    <p className="truncate text-[12.5px] font-bold text-[#5B4300]">{o.title}</p>
-                    <p className="truncate text-[11px] text-[#8A5A00]">
-                      {o.discount_type === 'percent' ? `${Number(o.discount_value)}% off` : `₹${Number(o.discount_value)} off`}
-                      {Number(o.min_order_amount) > 0 && ` · min ₹${Number(o.min_order_amount)}`}
-                      {o.description ? ` — ${o.description}` : ''}
-                    </p>
-                  </div>
-                </div>
-              ))}
+              {offers.map((o) => {
+                const min = Number(o.min_order_amount);
+                const selected = selectedOfferId === o.id;
+                const unlockable = cartSubtotal >= min;
+                return (
+                  <button
+                    key={o.id}
+                    type="button"
+                    onClick={() => toggleOffer(o.id)}
+                    aria-pressed={selected}
+                    aria-label={`${o.title}${selected && unlockable ? ` — ${t('offerApplied')}` : ''}`}
+                    className={`relative flex min-w-[240px] max-w-[300px] flex-1 items-center gap-3 rounded-2xl border px-3.5 py-3 text-left shadow-sm transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#B88E2F] ${
+                      selected
+                        ? 'border-[#B88E2F] bg-white ring-2 ring-[#B88E2F]'
+                        : 'border-[#EED9B8] bg-gradient-to-br from-[#FBF3E4] to-[#F6EAD8] hover:border-[#B88E2F]'
+                    }`}
+                  >
+                    <span
+                      className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-[11px] font-bold leading-none text-white"
+                      style={{ background: selected ? brand.teal : '#B88E2F' }}
+                    >
+                      {o.discount_type === 'percent'
+                        ? `${Number(o.discount_value)}%`
+                        : `₹${Number(o.discount_value) % 1 === 0 ? Number(o.discount_value) : Number(o.discount_value).toFixed(0)}`}
+                      {selected && (
+                        <span className="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full border-2 border-white bg-[#2E7D32]">
+                          <Check size={9} className="text-white" aria-hidden />
+                        </span>
+                      )}
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block truncate text-[12.5px] font-bold text-[#5B4300]">{o.title}</span>
+                      <span className="block truncate text-[11px] text-[#8A5A00]">
+                        {o.discount_type === 'percent' ? `${Number(o.discount_value)}% off` : `₹${Number(o.discount_value)} off`}
+                        {min > 0 && ` · min ₹${min}`}
+                        {o.description ? ` — ${o.description}` : ''}
+                      </span>
+                      <span
+                        className={`mt-0.5 block text-[10.5px] font-semibold ${
+                          selected && unlockable ? 'text-[#2E7D32]' : unlockable ? 'text-[#967221]' : 'text-[#B4483C]'
+                        }`}
+                      >
+                        {selected && unlockable ? `✓ ${t('offerApplied')}` : unlockable ? t('offerTap') : t('offerAddMore', { amt: money(Math.max(min - cartSubtotal, 0)) })}
+                      </span>
+                    </span>
+                  </button>
+                );
+              })}
             </div>
           </section>
         )}
@@ -801,6 +875,46 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
                   />
                 </div>
               )}
+
+              {/* offer picker — the same toggles as the menu chips, compacted for the drawer */}
+              {lines.length > 0 && offers.length > 0 && (
+                <div className="mt-4" aria-label={t('offersAria')}>
+                  <p className="mb-1.5 text-[12px] font-medium text-[#6B6B6B]">{t('offersAria')}</p>
+                  <div className="flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                    {offers.map((o) => {
+                      const selected = selectedOfferId === o.id;
+                      const unlockable = cartSubtotal >= Number(o.min_order_amount);
+                      return (
+                        <button
+                          key={o.id}
+                          type="button"
+                          onClick={() => toggleOffer(o.id)}
+                          aria-pressed={selected}
+                          title={unlockable ? o.title : t('offerAddMore', { amt: money(Math.max(Number(o.min_order_amount) - cartSubtotal, 0)) })}
+                          className={`flex h-9 shrink-0 items-center gap-2 rounded-full border px-2.5 text-[12px] font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#B88E2F] ${
+                            selected
+                              ? 'border-[#B88E2F] bg-[#FBF3E4] text-[#5B4300]'
+                              : unlockable
+                                ? 'border-[#EED9B8] bg-white text-[#1A1A1A] hover:border-[#B88E2F]'
+                                : 'border-dashed border-[#EED9B8] bg-white text-[#9A9A9A]'
+                          }`}
+                        >
+                          <span
+                            className="flex h-5 min-w-5 items-center justify-center rounded-md px-1 text-[9.5px] font-bold text-white"
+                            style={{ background: selected ? brand.teal : '#B88E2F' }}
+                          >
+                            {o.discount_type === 'percent'
+                              ? `${Number(o.discount_value)}%`
+                              : `₹${Number(o.discount_value) % 1 === 0 ? Number(o.discount_value) : Number(o.discount_value).toFixed(0)}`}
+                          </span>
+                          <span className="max-w-[150px] truncate">{o.title}</span>
+                          {selected && <Check size={12} className="text-[#2E7D32]" aria-hidden />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
 
             {lines.length > 0 && (
@@ -810,6 +924,23 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
                     <span>{t('subtotal')}</span>
                     <span className="tabular-nums">{money(cartSubtotal)}</span>
                   </div>
+                  {cartDiscount > 0 && selectedOffer && (
+                    <div className="flex items-center justify-between font-medium text-[#2E7D32]" style={{ animation: 'spFadeIn 200ms ease-out' }}>
+                      <span className="flex min-w-0 items-center gap-1.5">
+                        <span className="shrink-0 rounded bg-[#EAF4EC] px-1.5 py-0.5 text-[10px] font-bold">{t('offer')}</span>
+                        <span className="truncate">{selectedOffer.title}</span>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedOfferId(null)}
+                          aria-label={t('offerRemove')}
+                          className="shrink-0 text-[#6B6B6B] hover:text-[#B4483C] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#B4483C]"
+                        >
+                          <X size={12} aria-hidden />
+                        </button>
+                      </span>
+                      <span className="shrink-0 tabular-nums">−{money(cartDiscount)}</span>
+                    </div>
+                  )}
                   <div className="flex justify-between">
                     <span>{t('gst')}</span>
                     <span className="tabular-nums">{money(cartTax)}</span>
@@ -1048,6 +1179,12 @@ export function GuestTrackPage({ orderId }: { orderId: string }): React.ReactEle
                     <span>{t('subtotal')}</span>
                     <span className="tabular-nums">{money(order.subtotal)}</span>
                   </div>
+                  {Number(order.discount_amount) > 0 && (
+                    <div className="flex justify-between font-medium text-[#2E7D32]">
+                      <span className="truncate pr-2">{order.offer_title || t('offer')}</span>
+                      <span className="shrink-0 tabular-nums">−{money(Number(order.discount_amount))}</span>
+                    </div>
+                  )}
                   <div className="flex justify-between">
                     <span>{t('gst')}</span>
                     <span className="tabular-nums">{money(order.tax_amount)}</span>

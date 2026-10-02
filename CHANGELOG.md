@@ -3,6 +3,35 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.8.0] — 2026-10-02 — Guests redeem the offer (QR checkout joins the CRM loop) + shared csv lib
+
+### Added — guest offer checkout (migration `017_guest_offer_checkout.sql`)
+- **`sp_create_public_order` gains `p_offer_id`** — the QR menu's offers banner was read-only since 5.5.0; now a guest can actually USE an offer. The server re-validates EVERYTHING against the recomputed subtotal: offer belongs to this tenant, `is_active`, min-order floor holds, discount clamped to the subtotal (percent capped at 100, flat never exceeds the basket — an offer can never pay the guest). Validate-before-insert: a rejected offer (`OFFER_MIN`, `OFFER_INVALID`) leaves zero residue, exactly like a rejected item line.
+- **Ledger-honest money**: GST is recomputed on the discounted base (`(subtotal − discount) × 5%`), the order writes `discount_amount`, and the `offer_redemptions` row (UNIQUE per order — replay-proof since 016) rides with the ticket; `trg_offer_redemptions_usage` recomputes `usage_count` from the ledger automatically. No customer row is created for phone-less guests — by design.
+- **Signature discipline**: the new param changed the RPC signature, so Postgres would have OVERLOAD-ed (not replaced) it — the 7-arg shadow is explicitly `DROP`ped first, and the migration's verification DO-block asserts exactly ONE overload exists, `p_offer_id` landed, and anon EXECUTE grants survived.
+- **`sp_get_public_order`** now exposes `discount_amount` + the offer title, so the guest's track-page bill shows the same −discount row the counter sees.
+
+### Added — the guest offer UX (`/menu/:token`)
+- **Offer chips are now tap-to-apply buttons** (`aria-pressed`): tap to apply, tap again to remove; the applied chip flips to a white card with a gold ring, the medallion swaps to teal, and a green check-badge docks onto it. Selecting one offer deselects the other (one per order — the ledger's UNIQUE guard).
+- **Honest states**: below the floor the chip shows "Add ₹X more to unlock" in red (and keeps showing it if a selected offer's floor is no longer met — "Applied" is only claimed when it counts); after applying, the label flips to "✓ Applied". A paused/removed offer is dropped automatically once the offers list refreshes — it never rides along silently.
+- **Cart drawer**: a compact offer-picker row (same toggles, pill-sized, dashed border for below-floor ones with the unlock hint as tooltip) plus a green discount row — `OFFER` badge + offer title + −₹, with an ✕ to remove, fading in on the discounted base. GST and total update live; the cart bar's total matches the drawer's matches the server's.
+- **Track bill**: paid or due, the bill now prints the discount line in green with the offer title.
+- **i18n**: the offer keys (`offer`, `offerTap`, `offerApplied`, `offerAddMore`, `offerRemove`) ship in all three guest languages — a Kannada reader sees "ಅನ್ಲಾಕ್ ಮಾಡಲು ₹300.00 ಸೇರಿಸಿ", a Hindi reader "अनलॉक करने के लिए {amt} और जोड़ें".
+- The offer selection persists with the cart in `sessionStorage` (identity only — the offer ID, never prices).
+
+### Changed — shared `src/lib/csv.ts` (last NOVA-parity leftover)
+- Bills (5.3.1) and Reports (5.3.3) carried byte-identical copies of the injection-safe CSV escaping + BOM-blob download; both now import the consolidated `csvCell`/`downloadCsv`. Bills' exporter was rebuilt on `downloadCsv` (same file name, same columns, same OWASP neutralization of leading `= + - @`). Behavior verified by actual downloads from both screens.
+
+### Verified (engine + browser E2E on the live cloud)
+- `scripts/qa-guest-offer-e2e.mjs` **11/11 PASS** calling the RPCs AS `anon` (the real guest privilege path): flat offer money (330 → −50 → GST 14 → **294**), percent money (220 → −22 → GST 9.90 → **207.90**), redemption row + usage recompute, track projection shows discount + title, below-floor rejected with zero residue, paused offer rejected, no-offer path byte-identical (GST 11, total 231), idempotent replay returns the SAME discounted ticket, cleanup cascade-heals `usage_count`.
+- Browser, end to end as a guest: chip tap → cart bar ₹346.50 → **₹294.00** instantly; drawer discount row + compact picker; order **#55 (Ira Menon)** placed with the ₹50 offer → track bill shows Subtotal ₹330 / **₹50 off over ₹300 −₹50.00** / GST ₹14 / Total ₹294 → counter inbox shows "for Ira Menon · ₹294.00" → Ok → Bills → UPI charged → DB truth: `discount_amount=50`, redemption row, `usage_count` flipped, payment auto-advanced the ticket.
+- Kannada + English chip states verified on a live reload; Reports + Bills CSV downloads verified through the shared lib; `tsc` 0.
+- **Kept as the owner's try-it-now demo** (Task 42/43 precedent): paid ticket #55 (Ira Menon, Flat White Large + Extra shot, ₹50 offer, ₹294 UPI) alongside #48 (Maya Iyer, ₹409.50). QA fixture orders (#50/#53) were deleted and the offers' `usage_count` self-healed.
+
+### Notes
+- NOVA parity remaining: COGS wiring (inventory cost → Close-out/Reports), staff-side i18n (deliberately out of scope — guests first).
+- `sw.js` VERSION bumped to `5.8.0-r1` per the shell-deploy discipline.
+
 ## [5.7.0] — 2026-10-02 — Guests speak Hindi & Kannada (NOVA guest-i18n parity) + SW update toast
 
 ### Added — guest i18n (EN / हिंदी / ಕನ್ನಡ)

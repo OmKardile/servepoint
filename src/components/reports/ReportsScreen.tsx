@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { fetchOrders } from '../../lib/api';
 import { formatMoney } from '../../lib/prefs';
+import { downloadCsv } from '../../lib/csv';
 import { useTenant } from '../../lib/tenant';
 import type { Order } from '../../types';
 
@@ -97,32 +98,8 @@ const RANGE_LABEL: Record<RangeKey, string> = {
   all: 'All time',
 };
 
-/* ── CSV (same injection-safe escaping as Bills — shared lib can come later) */
-
-function csvCell(value: unknown): string {
-  let s =
-    value === null || value === undefined
-      ? ''
-      : String(value).replace(/\r/g, '').replace(/\n/g, ' ');
-  if (/^[=+\-@]/.test(s)) s = `'${s}`;
-  return `"${s.replace(/"/g, '""')}"`;
-}
-
-function downloadCsv(filename: string, rows: (string | number)[][]): void {
-  if (rows.length === 0) return;
-  const lines = rows.map((r) => r.map(csvCell).join(','));
-  const blob = new Blob(['\ufeff' + lines.join('\n')], {
-    type: 'text/csv;charset=utf-8;',
-  });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
-}
+/* ── CSV — shared lib/csv.ts (injection-safe escaping + UTF-8 BOM, since 5.8.0;
+ *    byte-identical to the Bills export it replaces) */
 
 /* ── aggregation shapes ─────────────────────────────────────────────────── */
 

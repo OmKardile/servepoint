@@ -18,6 +18,7 @@ import {
 } from '../../lib/api';
 import type { OrderStatusEvent, PaymentMethod } from '../../lib/api';
 import { formatMoney, getPrefs } from '../../lib/prefs';
+import { downloadCsv } from '../../lib/csv';
 import { useTenant } from '../../lib/tenant';
 import { useUi } from '../../store/session';
 import type { Order } from '../../types';
@@ -103,19 +104,10 @@ function isSameLocalDay(iso: string): boolean {
   return new Date(iso).toDateString() === new Date().toDateString();
 }
 
-/* ── CSV export (NOVA "Orders page — CSV", v5.3.1) ──────────────────────────
+/* ── CSV export (NOVA "Orders page — CSV", v5.3.1; shared lib/csv.ts since 5.8.0)
  * Exports the CURRENTLY FILTERED list — the counter exports exactly what they
- * see. Numbers are bare decimals (₹-free) so Excel/Sheets can format them;
- * cells that could be read as formulas are neutralized (OWASP CSV injection).
+ * see. Injection-safe escaping + UTF-8 BOM live in the shared lib.
  */
-function csvCell(value: unknown): string {
-  let s =
-    value === null || value === undefined
-      ? ''
-      : String(value).replace(/\r/g, '').replace(/\n/g, ' ');
-  if (/^[=+\-@]/.test(s)) s = `'${s}`; // never let a cell become a formula
-  return `"${s.replace(/"/g, '""')}"`;
-}
 
 function itemsSummary(o: Order): string {
   return (o.items || [])
@@ -147,42 +139,28 @@ function exportBillsCsv(rows: Order[]): void {
     'Total (INR)',
     'Notes',
   ];
-  const lines = [header.map(csvCell).join(',')];
+  const lines: unknown[][] = [header];
   for (const o of rows) {
     const st = STATUS_LABEL[displayStatus(o)] || displayStatus(o);
     const method = o.payment_method ? METHOD_LABEL[o.payment_method as MethodKey] || o.payment_method : '';
-    lines.push(
-      [
-        o.order_number,
-        new Date(o.created_at).toLocaleString(),
-        st,
-        o.payment_status || 'pending',
-        method,
-        TYPE_LABEL[String(o.order_type)] || String(o.order_type),
-        o.customer_name || '',
-        o.table_label || '',
-        itemsSummary(o),
-        Number(o.subtotal ?? 0).toFixed(2),
-        Number(o.tax_amount ?? 0).toFixed(2),
-        Number(o.discount_amount ?? 0).toFixed(2),
-        Number(o.total ?? 0).toFixed(2),
-        o.notes || '',
-      ]
-        .map(csvCell)
-        .join(',')
-    );
+    lines.push([
+      o.order_number,
+      new Date(o.created_at).toLocaleString(),
+      st,
+      o.payment_status || 'pending',
+      method,
+      TYPE_LABEL[String(o.order_type)] || String(o.order_type),
+      o.customer_name || '',
+      o.table_label || '',
+      itemsSummary(o),
+      Number(o.subtotal ?? 0).toFixed(2),
+      Number(o.tax_amount ?? 0).toFixed(2),
+      Number(o.discount_amount ?? 0).toFixed(2),
+      Number(o.total ?? 0).toFixed(2),
+      o.notes || '',
+    ]);
   }
-  const blob = new Blob(['\ufeff' + lines.join('\n')], {
-    type: 'text/csv;charset=utf-8;',
-  });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `servepoint-bills-${new Date().toISOString().slice(0, 10)}.csv`;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
+  downloadCsv(`servepoint-bills-${new Date().toISOString().slice(0, 10)}.csv`, lines);
 }
 
 /** Secondary line on a row card: "Table 12 · 2 guests" or type + customer. */

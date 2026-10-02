@@ -108,6 +108,8 @@ export interface GuestOrderSummary {
   payment_status: string;
   payment_method: string | null;
   subtotal: number;
+  discount_amount: number;
+  offer_title: string | null;
   tax_amount: number;
   total: number;
   customer_name: string | null;
@@ -236,12 +238,13 @@ export async function createPublicOrder(input: {
   customerName?: string | null;
   notes?: string | null;
   clientOperationId: string;
+  offerId?: string | null;
 }): Promise<{
   is_valid: boolean;
   duplicate?: boolean;
   error?: string;
   message?: string;
-  order?: { id: string; order_number: number; total: number; status: string; payment_status: string; table_number?: string };
+  order?: { id: string; order_number: number; total: number; discount_amount?: number; offer_title?: string | null; status: string; payment_status: string; table_number?: string };
 }> {
   const { data, error } = await supabase.rpc('sp_create_public_order', {
     p_qr_token: input.qrToken,
@@ -251,6 +254,7 @@ export async function createPublicOrder(input: {
     p_customer_name: input.customerName ?? null,
     p_notes: input.notes ?? null,
     p_client_operation_id: input.clientOperationId,
+    p_offer_id: input.offerId ?? null,
   });
   if (error) {
     return { is_valid: false, error: 'NETWORK', message: 'The order did not go through. Check your connection and try again.' };
