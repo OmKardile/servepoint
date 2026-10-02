@@ -3,6 +3,24 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.3.3] — 2026-10-02 — Reports: sales, items and hours over real ranges (NOVA manager-reports parity)
+
+### Added — Reports screen (`src/components/reports/ReportsScreen.tsx`, nav "Reports", BarChart3 between Close-out and Floor)
+- **Range pills** — Today / Last 7 days / Last 30 days / All time, computed in **IST calendar days** (same day math as Close-out; today's window ends at IST midnight). The Dashboard answers "right now"; Reports answers "where does the business stand".
+- **Headline strip (6 cards)** — gross sales, GST collected, net (ex-GST, discounts respected), orders (with a "N cancelled excluded" sub-line — cancelled tickets never touch money figures), average ticket, items sold (units).
+- **Sales by hour** — 24-hour recharts bar chart (gross ₹ per IST hour across the whole range), **peak hour auto-highlighted in gold** both on the chart and in the subtitle; the "when does the cafe actually earn" view.
+- **How money arrived** — donut + legend of paid tickets by method (UPI / Cash / Card) with per-method totals and ticket counts, plus an **Unpaid sink line** (₹ and ×count) when money is still out.
+- **Top items** — best sellers by revenue with units, **gold share bars**, flame badge for #1, top 8 inline (+N more noted), and **CSV export** of the full ranking (rank / item / units / revenue / share %, UTF-8 BOM, injection-safe escaping).
+- **Service mix** — dine-in / takeaway / delivery split with count · ₹ and share meters.
+- Honest data footer: aggregated client-side from the most recent 500 tickets (a cafe month) — the cap is stated, never silent. Empty state + skeleton + tenant-error retry (attempt-remount pattern).
+
+### QA — proven live with a 12-ticket, 3-day fixture spread (then cleaned)
+- Staged orders #33–#44 across 3 IST days, 5 items, 3 payment methods, 1 cancelled, 1 unpaid, 3 service types; cross-checked every aggregate against hand math (gross ₹10,888.50 = 11 valid tickets; GST ₹518.50 = 5% of net; peak 9a = ₹2,562 = three morning tickets; mixes match staging). Range switch (7d → today), CSV download inspected, zero console errors. Fixture orders/items deleted after; tenant back to zero.
+- One fixture-side lesson recorded: the first staging run dated "past" tickets into the future — the screen correctly excluded them, proving the IST window math from the other side.
+
+### Housekeeping
+- Repo-rename sweep (owner renamed the GitHub repo to `servepoint`): README clone instructions + compact.md run-it block now use `OmKardile/servepoint.git`; historical docs left untouched (history is history). `origin` already points at the new URL since Task 39.
+
 ## [5.3.2] — 2026-10-02 — EOD Close-out: the day closes with a z-report (NOVA reconcile parity)
 
 ### Added — Close-out screen (new nav item between Bills and Floor)

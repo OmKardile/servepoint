@@ -4,7 +4,7 @@
 
 - **Project**: ServePoint — The Cafe Operating System
 - **Version**: 5.0.0 (production rebuild — app equals the Figma, ADR-0014)
-- **Repo**: https://github.com/OmKardile/tsos-alt
+- **Repo**: https://github.com/OmKardile/servepoint
 - **Author**: Omkar Kardile <omkardile84@gmail.com>
 - **Last Updated**: 2026-10-01
 - **Default Theme**: **ServePoint** (owner Figma, EXACT tokens since v2.6.7/ADR-0012: ivory `#F6F5F2` canvas, deep-teal `#0F3D3E` primary, gold `#B88E2F` accent (pressed `#967221`), signature sage `#D9E2DD` surfaces, text `#1A1A1A`/`#6B6B6B`, **Poppins**) for the authenticated app since v2.6.6; unauthenticated routes (frozen login, storefront) stay force-pinned Tessera — see [`CHANGELOG.md`](CHANGELOG.md) v2.6.0–v2.8.1 and ADR-0010/0011/0012
@@ -71,8 +71,8 @@ Enterprise-grade multi-tenant B2B SaaS cloud POS & restaurant management platfor
 
 ## Run it
 ```bash
-git clone https://github.com/OmKardile/tsos-alt.git
-cd tsos-alt
+git clone https://github.com/OmKardile/servepoint.git
+cd servepoint
 npm install   # or bun install / pnpm install
 npm run dev   # or bun run dev
 # App at http://localhost:3000

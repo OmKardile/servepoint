@@ -120,8 +120,8 @@ mega-tsos/
 ### 1. Installation & Setup
 ```bash
 # Clone the repository
-git clone https://github.com/OmKardile/tsos-alt.git
-cd tsos-alt
+git clone https://github.com/OmKardile/servepoint.git
+cd servepoint
 
 # Install dependencies
 npm install   # or: bun install / pnpm install

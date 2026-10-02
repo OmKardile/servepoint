@@ -1309,3 +1309,29 @@ Stage Summary:
 - Crons: 15-min webDevReview (job 430321).
 
 Post-round note (Task 40, same session): GitHub's push response revealed the owner completed the repo rename — `OmKardile/servepoint` is live (ls-remote HEAD = 610944e). `git remote set-url origin` DONE per the Task 37 standing action; push worked through the old URL until now (GitHub redirect). Docs still referencing tsos-alt (README, render.yaml provenance comments, CHANGELOG) should be swept next round — cosmetic only, deploy unaffected.
+
+---
+Task ID: 41 (CLAIM — in progress)
+Agent: glm-5.3 (cron webDevReview round)
+Task: Claiming the "Reports (sales/items/hours)" NOVA parity item this round — building src/components/reports/ReportsScreen.tsx + Section/Sidebar/App wiring. Parallel agents: please avoid session.ts/Sidebar.tsx/App.tsx for ~30 min and do NOT take the reports item; inventory auto-deduction / customers / PWA remain free.
+
+---
+Task ID: 41
+Agent: glm-5.3 (cron webDevReview round)
+Task: QA sweep + NOVA reports parity (sales/items/hours) + repo-rename docs sweep
+
+Work Log:
+- Health sweep: tsc 0 / dev 200 / dev.log HMR-only; browser pass over the parallel round's fresh EOD Close-out (5.3.2) — day stepper, right-now strip, 6 stat cards, payment mix, ledger empty state, print gating all render clean; one console error was stale session history (FloorScreen HMR transient), dev.log + tsc confirmed clean.
+- Claimed "Reports (sales/items/hours)" in worklog BEFORE building (collision protocol); built it in a fresh directory (src/components/reports/) with zero overlap to the parallel agent's EOD zone.
+- NEW ReportsScreen (~700 lines): IST-calendar-day range pills (Today/7d/30d/All), 6 headline cards (gross / GST / net / orders+cancelled-excluded / avg ticket / items), recharts 24-hour sales bar chart with peak-hour gold highlight, payment-mix donut + legend + unpaid sink line, top-items ranking (gold share bars, flame #1, CSV export), service mix meters, honest 500-ticket-cap footer, empty state + skeleton + tenant-retry (attempt-remount, since useTenant has no retry — Bills pattern).
+- Fixed en route: recharts v3 Tooltip Formatter types (formatter (v: unknown)), `??`-chain TS2869 in item revenue fallback, my initial useTenant misuse (no `retry` field).
+- E2E with fixtures: staged 12 tickets / 3 IST days / 5 items / 3 methods / 1 cancelled / 1 unpaid (scripts/qa-reports-fixtures.mjs, tagged notes='rpt-fixture'). First run had MY fixture bug — dayOffset went FORWARD, so "yesterday" tickets landed tomorrow and the screen correctly excluded them (inverted proof the IST windows are right). Fixed to days-ago, re-staged as #33–#44: every aggregate hand-verified (gross ₹10,888.50, GST ₹518.50, peak 9a ₹2,562, mixes + unpaid ₹1,207.50 ×1, "1 cancelled excluded" sub-line). Range switch to Today, CSV ranking export inspected (BOM + ranks + share %), zero console errors. Copy fix: "N distinct items · N units".
+- Cleanup: all fixtures deleted (orders + 0 orphan items — cascade verified); tenant back to 0 orders; demo QR link intact.
+- Docs sweep for the owner's GitHub rename: README clone block + compact.md repo URL/run-it → OmKardile/servepoint.git (origin flipped in Task 39); historical docs untouched.
+- tsc 0, lint clean. Commit + push (owner identity) follow. My files only: ReportsScreen (+reports dir), App.tsx, Sidebar.tsx, session.ts, README, compact.md, CHANGELOG, worklog, qa-reports-fixtures.mjs.
+
+Stage Summary:
+- NOVA manager-reports parity SHIPPED: Reports = ranges × hours × items × money-mix, cross-checked against hand math on the live cloud. The app now covers: sell (counter+QR) → cook (KDS gate) → collect (Bills) → close the day (Close-out) → read the business (Reports).
+- Remaining NOVA parity for next rounds: inventory auto-deduction (recipes + migration 014), customers/offers, guest i18n, PWA (manifest + SW for the counter tablet), shared lib/csv.ts refactor (Bills + Reports duplicate csvCell).
+- Watch: I hit the CHANGELOG heading-swallow trap a THIRD time (my insert ate the `## [5.3.2]` marker; restored). Protocol: after any CHANGELOG insert, grep `^## \[` for consecutive-version integrity BEFORE committing.
+- Crons: 15-min webDevReview (job 430321).
