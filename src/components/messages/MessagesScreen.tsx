@@ -14,13 +14,17 @@ import {
   fetchConversations,
   fetchMessages,
   fetchMyWatermarks,
+  fetchPresence,
+  fetchTeam,
   fetchTypingNames,
   markConversationRead,
   sendMessage,
   setTyping,
   clearTyping,
   subscribeMessagesRealtime,
+  type PresenceRow,
   type RealtimeState,
+  type TeamMemberRow,
 } from '../../lib/api';
 import { dbErrorHint } from '../../lib/dbErrors';
 import { timeAgo } from '../../lib/prefs';
@@ -184,6 +188,80 @@ const TypingRow: React.FC<{ names: string[] }> = ({ names }) => {
   );
 };
 
+/* ── The line's people (v5.46.0) ─────────────────────────────────────── */
+
+/* The round's namesake: the roster strip above the rooms — who is even AT
+ * the app right now. Freshness is derived client-side from the 120s
+ * window (migration 035's truth model — the display IS the truth): a
+ * fresh row breathes green, a stale row tells you honestly when it was
+ * last seen, and a member who never opened the app since 035 has no row
+ * at all — "not seen yet", never fabricated. */
+const ONLINE_WINDOW_MS = 120_000;
+
+const ROLE_LABEL: Record<string, string> = {
+  owner: 'Owner',
+  staff: 'Staff',
+  superadmin: 'Platform',
+};
+
+const LineStrip: React.FC<{
+  team: TeamMemberRow[];
+  presence: Record<string, PresenceRow>;
+  myEmail: string;
+  myName: string;
+}> = ({ team, presence, myEmail, myName }) => {
+  const entries = team
+    .filter((m) => m.is_active !== false)
+    .map((m) => {
+      const p = presence[m.email];
+      const fresh = !!p && Date.now() - new Date(p.last_seen_at).getTime() < ONLINE_WINDOW_MS;
+      const label = p?.sender_name || (m.email === myEmail ? myName : m.email.split('@')[0]);
+      return { email: m.email, role: m.role, label, seen: p?.last_seen_at ?? null, fresh };
+    });
+  const online = entries.filter((e) => e.fresh).length;
+  return (
+    <div className="mb-3 border-b border-[#E3E7E0] pb-3">
+      <p className="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wide text-[#969696]">
+        {online} of {entries.length} on the line now
+      </p>
+      <ul className="flex flex-wrap gap-x-1 gap-y-2" aria-label="Who is on the line">
+        {entries.map((e) => {
+          const detail = e.fresh
+            ? 'online now'
+            : e.seen
+              ? `last seen ${timeAgo(e.seen)}`
+              : 'not seen yet';
+          return (
+            <li
+              key={e.email}
+              className="flex w-14 flex-col items-center gap-1"
+              aria-label={`${e.label} (${ROLE_LABEL[e.role] || e.role}), ${detail}`}
+            >
+              <span className="relative">
+                <span
+                  className={`flex h-9 w-9 items-center justify-center rounded-full text-[13px] font-bold ${avatarTone(e.label)}`}
+                  aria-hidden
+                >
+                  {e.label.charAt(0).toUpperCase()}
+                </span>
+                <span
+                  aria-hidden
+                  className={`absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-white ${
+                    e.fresh ? 'animate-pulse bg-[#2E7D32]' : 'bg-[#969696]'
+                  }`}
+                />
+              </span>
+              <span className="max-w-full truncate text-[10.5px] font-medium leading-none text-[#6B6B6B]">
+                {e.label}
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+};
+
 /* ── Screen content (tenant-scoped) ──────────────────────────────────── */
 
 const MessagesContent: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }) => {
@@ -214,6 +292,12 @@ const MessagesContent: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetr
    * out of the window — no cron, the display IS the truth. */
   const [typingNames, setTypingNames] = useState<string[]>([]);
   const lastPingRef = useRef<number>(0);
+  /* v5.46.0 — the line's people: the roster (tenant_users) + the presence
+   * ledger (035), re-derived on every realtime ping and a 30s tick so a dot
+   * decays to gray within a window's width of the truth. Fail-soft: a
+   * failed read hides the strip, never the rooms list. */
+  const [team, setTeam] = useState<TeamMemberRow[] | null>(null);
+  const [presence, setPresence] = useState<Record<string, PresenceRow> | null>(null);
 
   const active = useMemo(
     () => conversations.find((cv) => cv.id === activeId) || null,
@@ -239,6 +323,26 @@ const MessagesContent: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetr
       /* badge is a courtesy — silence here is the honest best-effort */
     }
   }, [tenant.tenantId, myEmail, myName]);
+
+  const loadPeople = useCallback(async () => {
+    if (!tenant.tenantId) return;
+    try {
+      const [roster, rows] = await Promise.all([
+        fetchTeam(tenant.tenantId),
+        fetchPresence(tenant.tenantId),
+      ]);
+      const map: Record<string, PresenceRow> = {};
+      for (const r of rows) map[r.user_email] = r;
+      setTeam(roster);
+      setPresence(map);
+    } catch {
+      /* the strip is a courtesy — hide it, never break the list */
+    }
+  }, [tenant.tenantId]);
+
+  useEffect(() => {
+    void loadPeople();
+  }, [loadPeople]);
 
   /* rooms — silent refetch on ring, skeleton only on first mount */
   const loadList = useCallback(async () => {
@@ -289,22 +393,28 @@ const MessagesContent: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetr
     void loadThread();
   }, [loadThread]);
 
-  /* realtime + poll fallback (the Task 79 pattern: silent refetches) */
+  /* realtime + poll fallback (the Task 79 pattern: silent refetches).
+   * v5.46.0 — the presence strip rides the same ping (035 published
+   * staff_presence: a teammate's first open or heartbeat flips their dot
+   * live) plus the 30s poll tick, which is also what decays a stopped
+   * heartbeat to honest gray without any socket at all. */
   useEffect(() => {
     if (!tenant.tenantId) return;
     const unsub = subscribeMessagesRealtime(tenant.tenantId, () => {
       void loadList();
       void loadThread();
+      void loadPeople();
     }, setRt);
     const poll = window.setInterval(() => {
       void loadList();
       void loadThread();
+      void loadPeople();
     }, 30_000);
     return () => {
       unsub();
       window.clearInterval(poll);
     };
-  }, [tenant.tenantId, loadList, loadThread]);
+  }, [tenant.tenantId, loadList, loadThread, loadPeople]);
 
   /* keep the newest line in view */
   useEffect(() => {
@@ -467,6 +577,9 @@ const MessagesContent: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetr
             className={`${mobileThreadOpen ? 'hidden' : 'block'} min-h-0 md:block`}
           >
             <div className="flex h-full min-h-0 flex-col rounded-2xl border border-[#E3E7E0] bg-white p-3">
+            {team && presence && (
+              <LineStrip team={team} presence={presence} myEmail={myEmail} myName={myName} />
+            )}
             {listLoading ? (
               <ListSkeleton />
             ) : conversations.length === 0 ? (

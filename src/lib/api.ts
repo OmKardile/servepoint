@@ -14,10 +14,12 @@ import type {
   Order,
   OrderItem,
   OrderType,
+  PresenceRow,
   Subscription,
+  TeamMemberRow,
   Tenant,
 } from '../types';
-export type { Category };
+export type { Category, PresenceRow, TeamMemberRow };
 
 /**
  * v5.0.0 Production data layer (ADR-0014).
@@ -1079,7 +1081,10 @@ export function subscribeNotificationsRealtime(
  * and the thread refetches who-is-typing. One channel, three tables —
  * the callbacks all just refetch; supabase-js multiplexes cleanly on one
  * subscription (the Task 79 rule is about ADDING callbacks after
- * subscribe(), not about adding tables before it). */
+ * subscribe(), not about adding tables before it).
+ * v5.46.0 — staff_presence joins the SAME channel (migration 035): a
+ * heartbeat/first-open pings the socket and the strip re-derives who is
+ * here. One channel, four tables — same multiplexing, same refetch. */
 export function subscribeMessagesRealtime(
   tenantId: string,
   onPing: () => void,
@@ -1101,6 +1106,11 @@ export function subscribeMessagesRealtime(
     .on(
       'postgres_changes',
       { event: '*', schema: 'public', table: 'conversation_typing', filter: `tenant_id=eq.${tenantId}` },
+      () => onPing()
+    )
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'staff_presence', filter: `tenant_id=eq.${tenantId}` },
       () => onPing()
     )
     .subscribe((status) => {
@@ -1248,6 +1258,54 @@ export async function fetchTypingNames(
     .gt('typing_at', since);
   if (error) throw error;
   return (data || []).map((r) => r.sender_name || 'Someone');
+}
+
+/** v5.46.0 — presence (migration 035): "I am at the app". Heartbeat upsert on
+ * the composite PK; the ~45s heartbeat keeps the row alive, a closed tab just
+ * goes stale and falls out of the 120s display window — same truth model as
+ * typing (034), stretched to presence scale. */
+export async function pingPresence(
+  tenantId: string,
+  userEmail: string,
+  senderName: string
+): Promise<void> {
+  requireCloud();
+  const { error } = await supabase.from('staff_presence').upsert(
+    {
+      user_email: userEmail,
+      tenant_id: tenantId,
+      sender_name: senderName,
+      last_seen_at: new Date().toISOString(),
+    },
+    { onConflict: 'user_email,tenant_id' }
+  );
+  if (error) throw error;
+}
+
+/** v5.46.0 — the whole tenant's presence ledger (names + last seen). The UI
+ * derives freshness from the 120s window — the display IS the truth. */
+export async function fetchPresence(tenantId: string): Promise<PresenceRow[]> {
+  requireCloud();
+  const { data, error } = await supabase
+    .from('staff_presence')
+    .select('user_email, sender_name, last_seen_at')
+    .eq('tenant_id', tenantId);
+  if (error) throw error;
+  return (data || []) as PresenceRow[];
+}
+
+/** v5.46.0 — the roster behind the presence strip: tenant_users is 001 §15's
+ * member model, already member-readable FOR SELECT. Only active members ride
+ * the strip (inactive logins can't open the app). */
+export async function fetchTeam(tenantId: string): Promise<TeamMemberRow[]> {
+  requireCloud();
+  const { data, error } = await supabase
+    .from('tenant_users')
+    .select('email, role, is_active')
+    .eq('tenant_id', tenantId)
+    .order('created_at', { ascending: true });
+  if (error) throw error;
+  return (data || []) as TeamMemberRow[];
 }
 
 /** v5.43.0 — MY watermark per room (the client keeps the snapshot taken at

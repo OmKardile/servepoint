@@ -128,6 +128,23 @@ export interface ChatMessage {
   is_mine?: boolean;
 }
 
+/* v5.46.0 — presence (migration 035): who is at the app right now. One row
+ * per (member, tenant); the 120s display window is the truth — freshness is
+ * derived client-side, never stored as a boolean. */
+export interface PresenceRow {
+  user_email: string;
+  sender_name: string;
+  last_seen_at: string;
+}
+
+/** The roster behind the presence strip — 001 §15's tenant_users, projected
+ * to what the strip needs (identity + role + liveness). */
+export interface TeamMemberRow {
+  email: string;
+  role: string;
+  is_active: boolean | null;
+}
+
 export interface Tenant {
   id: string;
   name: string;

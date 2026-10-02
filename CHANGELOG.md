@@ -3,6 +3,25 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.46.0] — 2026-10-03 — The line's people: who is even here right now
+
+### Added — presence under the typing signal (migration 035)
+- The typing line (034) answers "who is answering THIS room right now"; it can't answer the quieter question the rooms pane starts with — is anyone even AT the app? You open Messages at 7 am, the thread reads silence, and you can't tell "nobody has seen this" from "nobody is here". Migration `035_staff_presence.sql` adds the signal under the signal:
+  - `staff_presence (user_email, tenant_id) → sender_name, last_seen_at`, composite PK (one row per member per tenant), upserted on a ~45s heartbeat for as long as the member has the app open. **Presence is APP-level, not room-level** — "on the line" means "at the counter", and the shell (App.tsx) owns the heartbeat because someone standing on Floor is just as "on the line" as someone in chat. Platform accounts (no tenant) skip.
+  - **Truth model — the same window-is-the-truth contract as 034, stretched to presence scale**: a member counts as online while `last_seen_at > now() - 120s`; a 45s heartbeat tolerates two missed beats before the dot honestly goes gray; a closed tab simply goes stale — no sign-out retract choreography, no cron, no vacuum. Stale rows cost one row per (member, tenant) and are corrected by the next heartbeat.
+  - **DELIBERATE (034's rule holds)**: staff_presence JOINS the realtime publication — being here is ANNOUNCED, not derived; a teammate's first open flips their dot live. The guarded idempotent add keeps re-applies safe. Applied via `scripts/apply-035.mjs`, five proofs green incl. a rollback probe (upsert twice keeps ONE row — heartbeat semantics; ROLLBACK, zero residue).
+  - **The roster behind the strip**: `tenant_users` (001 §15, already member-readable FOR SELECT) LEFT JOINed to the presence ledger by email — a member who has never opened the app since 035 has no row and renders "not seen yet", never fabricated. API: `pingPresence` / `fetchPresence` / `fetchTeam`; the messages realtime channel now multiplexes FOUR tables (messages, conversations, typing, presence — same pre-subscribe pattern Task 84 proved).
+- **The strip (MessagesScreen)**: "the line's people" sits at the top of the rooms pane — an honest count ("2 of 2 on the line now") above one chip per active member: tone avatar + name + presence dot. Freshness is derived client-side from the 120s window; the strip re-derives on every realtime ping and the 30s poll tick (which is also what decays a stopped heartbeat to gray without any socket at all). Fail-soft by design: a failed read hides the strip, never the rooms list.
+
+### Styling — the dot language
+- **Online breathes**: a green (`#2E7D32`, the app's health green) bottom-right dot with a soft `animate-pulse`, white-ringed against the tone avatar — the only breathing element on an otherwise still pane, so the eye reads "alive" without a banner.
+- **Away is still**: honest gray (`#969696`), same ring, no motion — silence should look like silence.
+- **The caption speaks the count** in the pane's quiet uppercase gray language ("2 OF 2 ON THE LINE NOW"); each chip's full story ("Front of House (Staff), online now / last seen 10 minutes ago / not seen yet") lives in its accessible label and hover title, never fabricated, reusing the app's `timeAgo` voice.
+
+### Verified
+- E2E (real UI, both directions): the owner's own heartbeat landed before the screen did — "1 of 1 on the line now, QR Owner (Owner), online now". A staged probe member (real `tenant_users` row, no presence) appeared at the next poll tick as honest "1 of 2 … qa-probe (Staff), not seen yet"; the probe's first presence INSERT flipped the strip LIVE over the socket in ~4s ("2 of 2", display name "Front of House", green); backdating the row 10 minutes flipped it gray with the honest "last seen 10 minutes ago" label — the window doing exactly its job, no poll wait needed for either flip. Screenshot `scripts/qa85-presence.png`. 14/14 screens land, 0 console errors, tsc 0 after every edit.
+- DB truth (`scripts/qa85-truth.mjs`): probe member + probe presence deleted (0 residue), presence holds ONLY the owner's honest live heartbeat row, typing table still empty, chat at the honest 5 lines, 3 true bells untouched (all read), 035 intact (4 cols + member_all policy + published).
+
 ## [5.45.0] — 2026-10-03 — The typing line: the room answers before the answer exists
 
 ### Added — who is typing RIGHT NOW (migration 034)

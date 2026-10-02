@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { authService } from './lib/authService';
+import { pingPresence } from './lib/api';
 import { normalizeRole } from './lib/rbac';
 import { useTenant } from './lib/tenant';
 import { useSession, useUi, type Section } from './store/session';
@@ -91,6 +92,26 @@ const CafeApp: React.FC = () => {
   // business tenant in the cloud, show one actionable state instead of letting
   // every screen render its own "Workspace not found" error card.
   const tenant = useTenant(retryKey);
+
+  /* v5.46.0 — the presence heartbeat (migration 035): "I am at the app",
+   *  upserted the moment a workspace is open and every 45s after — the
+   *  shell is the right owner because presence is APP-level, not a
+   *  Messages-screen state (someone standing on Floor is just as "on the
+   *  line" as someone in chat). Best-effort throughout: a failed ping is
+   *  silent, the next one retells it; a closed tab simply goes stale and
+   *  falls out of the 120s display window — no retract choreography, the
+   *  window IS the truth. Platform accounts (no tenant) skip. */
+  const heartbeatEmail = session?.email || '';
+  const heartbeatName = session?.name || 'Staff';
+  useEffect(() => {
+    const tenantId = tenant.tenantId;
+    if (!tenantId || !heartbeatEmail) return;
+    const ping = () =>
+      void pingPresence(tenantId, heartbeatEmail, heartbeatName).catch(() => {});
+    ping();
+    const t = window.setInterval(ping, 45_000);
+    return () => window.clearInterval(t);
+  }, [tenant.tenantId, heartbeatEmail, heartbeatName]);
 
   if (tenant.loading) return <Splash />;
 
