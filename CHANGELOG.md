@@ -3,6 +3,29 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.43.0] — 2026-10-03 — The unread line: the staff line learns who's behind
+
+### Added — per-user read watermarks, room badges, the "Unread messages" divider (migration 033)
+- 5.41.0's staff line talked, but nothing told you WHO it talked to: a room with fresh chatter read exactly like one you'd caught up on, because 004 shipped **no per-user read state at all** — no members table, no watermark — so "unread" was unknowable. Migration `033_conversation_reads.sql`:
+  - `conversation_reads (conversation_id, user_email) → last_read_at`, composite PK (one row per reader per room, upserted on open and on every live refresh while the room stays open). Keys on **user_email** (the auth identity), never sender_name (a display label two teammates could share). `tenant_id` denormalized for the 004-shaped RLS policy (tenant member + active role, USING + WITH CHECK).
+  - `fn_conversation_unread(p_tenant, p_email, p_sender_name)` — SECURITY INVOKER RPC (the caller's own RLS guards both tables): messages newer than my watermark AND not mine, per room. Rooms with zero unread return no row.
+  - Deliberate: conversation_reads stays OFF the realtime publication — the badge is DERIVED, not announced. A new line already pings 031's publication; the rooms list recomputes counts from this table on that ping. Publishing read-watermarks would leak every teammate's reading habits onto the socket for zero UI need.
+  - Applied via `scripts/apply-033.mjs` — five proofs green incl. a rollback probe (fresh watermark inserts, a second upsert ON CONFLICT updates the SAME row — PK holds; ROLLBACK, zero residue).
+- **Rooms list**: gold badge pill on each fresh room's avatar (border-2 white ring, tabular-nums, 99+ cap), room name and preview bolden while unread, honest `aria-label` ("Front of House, 1 unread"). Counts ride every rooms refresh — realtime ping, 30s poll, tenant retry — best-effort by design: a failed count shows no badge, never a broken list.
+- **The room you open is, by definition, read**: a successful thread load upserts the watermark; the badge recount rides along. Proven live — badge appeared the instant a teammate's line landed (realtime), vanished the moment the room opened.
+- **The round's namesake — the "Unread messages" divider**: a gold rule in the thread marking where caught-up ended. Its boundary is MY WATERMARK AS IT STOOD at room-open (never read → epoch, so the whole backlog is the fresh side); captured once per open, never moved by watermark refreshes, recaptured on room switch. Lines arriving while you watch the room stay below it — you're there.
+
+### Fixed — E2E self-race (honesty of the choreography, not the code)
+- The first divider E2E consumed itself: the probe line landed 0.5s before the freshly-loaded page's initial markRead, so the badge was wiped before it could be seen. Server truth (RPC = 0, watermark 0.5s ahead of the probe) proved the system was RIGHT and the choreography wrong. Fix: open the OTHER room first, then let the probe land, then walk over. The two raced probe lines were deleted (superseded mid-E2E, plain DELETE of my own QA chatter — no fiction left behind).
+
+### Styling — the unread language
+- Badge pill: gold `#B88E2F` with a 2px white ring floating on the avatar's top-right corner — the same gold the notifications badge speaks, one visual grammar for "fresh".
+- Unread room rows: name `font-bold`, preview `font-medium` deep-ink (vs. the caught-up gray), so the whole row reads heavier before you enter it.
+- UnreadDivider: hairline rules in `#B88E2F/40` framing an amber-wash pill (`#F3E8CF` on `#8A5A00`, uppercase tracking-wide) — louder than a day divider, quieter than a banner.
+
+### Verified
+- `tsc` 0 after every edit. **E2E through the real UI** (`scripts/qa82-unread.png`): probe line inserted server-side while Kitchen was open → FOH badge "1 unread" appeared LIVE over realtime → click FOH → the gold divider sat exactly above the probe line (Today → my round-80 line 10:16 pm → UNREAD MESSAGES → probe 10:49 pm) → badge aria back to plain "Front of House" → UI reply via Enter landed below. **DB truth** (`scripts/qa82-unread.mjs`): exactly 4 chat lines (2 from round 80 + tagged probe + UI reply), owner watermarks on both rooms, RPC says zero unread, FOH watermark advanced past the probe, raced probes deleted. 13/13 screens land, 0 page errors. sw `5.43.0-r1`.
+
 ## [5.42.0] — 2026-10-03 — The bell's door opens: every ring walks to its source
 
 ### Added — notification tap-through, mark-one-read, honest category filters (migration 032)

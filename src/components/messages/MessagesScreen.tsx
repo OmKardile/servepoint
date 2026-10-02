@@ -10,8 +10,11 @@ import {
   WifiOff,
 } from 'lucide-react';
 import {
+  fetchConversationUnreadCounts,
   fetchConversations,
   fetchMessages,
+  fetchMyWatermarks,
+  markConversationRead,
   sendMessage,
   subscribeMessagesRealtime,
   type RealtimeState,
@@ -31,9 +34,20 @@ import type { ChatMessage, Conversation } from '../../types';
  * visible half: a two-pane chat — rooms on the left, the line on the right —
  * that moves live on every signed-in terminal.
  *
- * Honesty rules the small things: no unread counts (the schema has none —
- * nothing is invented), a room with no lines says "No messages yet", and the
- * sender's name rides every bubble because 004 is name-based by design.
+ * Honesty rules the small things: a room with no lines says "No messages
+ * yet", and the sender's name rides every bubble because 004 is name-based
+ * by design.
+ *
+ * v5.43.0 — the unread line (migration 033): 004 shipped no per-user read
+ * state, so "unread" was unknowable and every room read as caught-up
+ * forever. 033 adds conversation_reads — one watermark row per reader per
+ * room — and a SECURITY INVOKER RPC that counts messages newer than MY
+ * watermark AND not mine. The rooms list wears gold badge pills on fresh
+ * rooms (name + preview bolden), the room you open upserts its watermark on
+ * every refresh while it stays open (the room you are looking at is, by
+ * definition, read), and the thread renders the round's namesake: a gold
+ * "Unread messages" rule at the boundary captured when the room opened —
+ * where caught-up ended and the fresh chatter began.
  */
 
 const AVATAR_TONES = [
@@ -101,8 +115,22 @@ const ErrorCard: React.FC<{ message: string; onRetry: () => void }> = ({ message
   </div>
 );
 
-/* ── Message bubble ──────────────────────────────────────────────────── */
+/* ── Unread divider (v5.43.0) ────────────────────────────────────────── */
 
+/* The round's namesake: a gold rule that marks where "caught up" ended
+ * and the fresh chatter began when this room was opened. Sits above the
+ * first not-from-me line newer than the boundary. */
+const UnreadDivider: React.FC = () => (
+  <div className="flex items-center gap-3" role="separator" aria-label="Unread messages">
+    <span className="h-px flex-1 bg-[#B88E2F]/40" aria-hidden />
+    <span className="rounded-full bg-[#F3E8CF] px-2.5 py-0.5 text-[10.5px] font-bold uppercase tracking-wide text-[#8A5A00]">
+      Unread messages
+    </span>
+    <span className="h-px flex-1 bg-[#B88E2F]/40" aria-hidden />
+  </div>
+);
+
+/* ── Message bubble ──────────────────────────────────────────────────── */
 const Bubble: React.FC<{ m: ChatMessage; mine: boolean }> = ({ m, mine }) => (
   <div className={`flex flex-col ${mine ? 'items-end' : 'items-start'}`}>
     {!mine && <span className="mb-0.5 px-1 text-[11px] font-semibold text-[#0F3D3E]/70">{m.sender_name}</span>}
@@ -127,6 +155,7 @@ const MessagesContent: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetr
   const tenant = useTenant();
   const session = useSession((s) => s.session);
   const myName = session?.name || 'Staff';
+  const myEmail = session?.email || '';
 
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -139,12 +168,36 @@ const MessagesContent: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetr
   const [sendError, setSendError] = useState<string | null>(null);
   const [rt, setRt] = useState<RealtimeState>('connecting');
   const [mobileThreadOpen, setMobileThreadOpen] = useState(false);
+  const [unread, setUnread] = useState<Record<string, number>>({});
+  const [watermarks, setWatermarks] = useState<Record<string, string>>({});
+  const [wmLoaded, setWmLoaded] = useState(false);
+  const [boundary, setBoundary] = useState<{ id: string; iso: string } | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
   const active = useMemo(
     () => conversations.find((cv) => cv.id === activeId) || null,
     [conversations, activeId]
   );
+
+  /* v5.43.0 — the unread counts ride every rooms refresh (realtime ping,
+   * poll, tenant retry): one SECURITY INVOKER RPC — server truth. The same
+   * refresh carries MY watermarks, which the divider boundary snapshots at
+   * room-open. Best-effort by design: a failed count shows no badge, never
+   * a broken list; the next ping/poll retells it. */
+  const loadUnreads = useCallback(async () => {
+    if (!tenant.tenantId || !myEmail) return;
+    try {
+      const [counts, mine] = await Promise.all([
+        fetchConversationUnreadCounts(tenant.tenantId, myEmail, myName),
+        fetchMyWatermarks(tenant.tenantId, myEmail),
+      ]);
+      setUnread(counts);
+      setWatermarks(mine);
+      setWmLoaded(true);
+    } catch {
+      /* badge is a courtesy — silence here is the honest best-effort */
+    }
+  }, [tenant.tenantId, myEmail, myName]);
 
   /* rooms — silent refetch on ring, skeleton only on first mount */
   const loadList = useCallback(async () => {
@@ -154,26 +207,37 @@ const MessagesContent: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetr
       const rows = await fetchConversations(tenant.tenantId);
       setConversations(rows);
       setActiveId((cur) => (cur && rows.some((r) => r.id === cur) ? cur : rows[0]?.id ?? null));
+      void loadUnreads();
     } catch (err) {
       setError((err as Error).message);
     } finally {
       setListLoading(false);
     }
-  }, [tenant.tenantId]);
+  }, [tenant.tenantId, loadUnreads]);
 
-  /* the open thread — silent refetch, never a skeleton flash over live lines */
+  /* the open thread — silent refetch, never a skeleton flash over live lines.
+   * v5.43.0: a successful load upserts MY watermark — the room you are
+   * looking at is, by definition, read — and the badge recount rides along. */
   const loadThread = useCallback(async () => {
     if (!activeId) return;
     setThreadLoading(true);
     try {
       const rows = await fetchMessages(activeId);
       setThread(rows);
+      if (myEmail && tenant.tenantId) {
+        try {
+          await markConversationRead(activeId, tenant.tenantId, myEmail);
+        } catch {
+          /* watermark is a courtesy — the next refresh retells it */
+        }
+        void loadUnreads();
+      }
     } catch (err) {
       setSendError((err as Error).message);
     } finally {
       setThreadLoading(false);
     }
-  }, [activeId]);
+  }, [activeId, myEmail, tenant.tenantId, loadUnreads]);
 
   useEffect(() => {
     setListLoading(true);
@@ -206,6 +270,28 @@ const MessagesContent: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetr
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
   }, [thread]);
+
+  /* v5.43.0 — the unread line's boundary: MY WATERMARK AS IT STOOD when the
+   * room opened (never read → epoch, so the whole backlog reads as the
+   * fresh side). The divider marks the backlog you are about to catch up
+   * on — not lines that arrive while you watch. Captured once per open;
+   * watermark refreshes never move it; switching rooms recaptures. */
+  useEffect(() => {
+    if (!activeId) {
+      setBoundary(null);
+      return;
+    }
+    if (!wmLoaded) return;
+    setBoundary((cur) => {
+      if (cur?.id === activeId) return cur;
+      return { id: activeId, iso: watermarks[activeId] || new Date(0).toISOString() };
+    });
+  }, [activeId, wmLoaded, watermarks]);
+
+  const boundaryId = useMemo(() => {
+    if (!boundary || boundary.id !== activeId) return null;
+    return thread.find((m) => m.sender_name !== myName && m.created_at > boundary.iso)?.id ?? null;
+  }, [boundary, activeId, thread, myName]);
 
   const onSend = async () => {
     const body = draft.trim();
@@ -308,6 +394,7 @@ const MessagesContent: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetr
               <ul className="min-h-0 flex-1 space-y-1.5 overflow-y-auto">
                 {conversations.map((cv) => {
                   const isActive = cv.id === activeId;
+                  const nUnread = unread[cv.id] || 0;
                   return (
                     <li key={cv.id}>
                       <button
@@ -316,6 +403,7 @@ const MessagesContent: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetr
                           setMobileThreadOpen(true);
                         }}
                         aria-current={isActive ? 'true' : undefined}
+                        aria-label={`${cv.name}${nUnread ? `, ${nUnread} unread` : ''}`}
                         className={`w-full rounded-xl border p-3 text-left transition ${
                           isActive
                             ? 'border-[#B88E2F] bg-[#FBF7EE]'
@@ -323,22 +411,38 @@ const MessagesContent: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetr
                         }`}
                       >
                         <div className="flex items-center gap-2.5">
-                          <span
-                            className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-[14px] font-bold ${avatarTone(cv.name)}`}
-                            aria-hidden
-                          >
-                            {cv.name.charAt(0).toUpperCase()}
+                          <span className="relative shrink-0">
+                            <span
+                              className={`flex h-9 w-9 items-center justify-center rounded-xl text-[14px] font-bold ${avatarTone(cv.name)}`}
+                              aria-hidden
+                            >
+                              {cv.name.charAt(0).toUpperCase()}
+                            </span>
+                            {nUnread > 0 && (
+                              <span
+                                className="absolute -right-1.5 -top-1.5 flex h-5 min-w-[1.25rem] items-center justify-center rounded-full border-2 border-white bg-[#B88E2F] px-1 text-[10.5px] font-bold tabular-nums text-white"
+                                aria-hidden
+                              >
+                                {nUnread > 99 ? '99+' : nUnread}
+                              </span>
+                            )}
                           </span>
                           <span className="min-w-0 flex-1">
                             <span className="flex items-baseline justify-between gap-2">
-                              <span className="truncate text-[13.5px] font-semibold text-[#1A1A1A]">{cv.name}</span>
+                              <span className={`truncate text-[13.5px] text-[#1A1A1A] ${nUnread ? 'font-bold' : 'font-semibold'}`}>
+                                {cv.name}
+                              </span>
                               {cv.last_message_at && (
                                 <span className="shrink-0 text-[10.5px] tabular-nums text-[#969696]">
                                   {timeAgo(cv.last_message_at)}
                                 </span>
                               )}
                             </span>
-                            <span className="mt-0.5 block truncate text-[12px] text-[#6B6B6B]">
+                            <span
+                              className={`mt-0.5 block truncate text-[12px] ${
+                                nUnread ? 'font-medium text-[#1A1A1A]' : 'text-[#6B6B6B]'
+                              }`}
+                            >
                               {cv.last_message ? cv.last_message : 'No messages yet'}
                             </span>
                           </span>
@@ -412,7 +516,10 @@ const MessagesContent: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetr
                             <span className="h-px flex-1 bg-[#E3E7E0]" aria-hidden />
                           </div>
                           {g.items.map((m) => (
-                            <Bubble key={m.id} m={m} mine={m.sender_name === myName} />
+                            <React.Fragment key={m.id}>
+                              {m.id === boundaryId && <UnreadDivider />}
+                              <Bubble m={m} mine={m.sender_name === myName} />
+                            </React.Fragment>
                           ))}
                         </div>
                       ))}

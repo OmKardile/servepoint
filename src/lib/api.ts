@@ -1141,6 +1141,71 @@ export async function sendMessage(
   if (error) throw error;
 }
 
+/** v5.43.0 — the unread arithmetic, server truth (migration 033): messages
+ * newer than MY watermark AND not sent by me, per room. SECURITY INVOKER
+ * RPC — the caller's own RLS guards both tables. Rooms with zero unread
+ * simply return no row. */
+export async function fetchConversationUnreadCounts(
+  tenantId: string,
+  userEmail: string,
+  myName: string
+): Promise<Record<string, number>> {
+  requireCloud();
+  const { data, error } = await supabase.rpc('fn_conversation_unread', {
+    p_tenant_id: tenantId,
+    p_user_email: userEmail,
+    p_sender_name: myName,
+  });
+  if (error) throw error;
+  const out: Record<string, number> = {};
+  for (const row of (data || []) as { conv_id: string; unread: number }[]) {
+    out[row.conv_id] = Number(row.unread);
+  }
+  return out;
+}
+
+/** v5.43.0 — advance MY read watermark for a room (upsert on the composite
+ * PK). Called when a thread is opened and again on every live refresh while
+ * it stays open — the room you are looking at is, by definition, read. */
+export async function markConversationRead(
+  conversationId: string,
+  tenantId: string,
+  userEmail: string
+): Promise<void> {
+  requireCloud();
+  const { error } = await supabase.from('conversation_reads').upsert(
+    {
+      conversation_id: conversationId,
+      tenant_id: tenantId,
+      user_email: userEmail,
+      last_read_at: new Date().toISOString(),
+    },
+    { onConflict: 'conversation_id,user_email' }
+  );
+  if (error) throw error;
+}
+
+/** v5.43.0 — MY watermark per room (the client keeps the snapshot taken at
+ * room-open as the "Unread messages" divider boundary; watermarks that were
+ * never set simply return no row). */
+export async function fetchMyWatermarks(
+  tenantId: string,
+  userEmail: string
+): Promise<Record<string, string>> {
+  requireCloud();
+  const { data, error } = await supabase
+    .from('conversation_reads')
+    .select('conversation_id, last_read_at')
+    .eq('tenant_id', tenantId)
+    .eq('user_email', userEmail);
+  if (error) throw error;
+  const out: Record<string, string> = {};
+  for (const row of (data || []) as { conversation_id: string; last_read_at: string }[]) {
+    out[row.conversation_id] = row.last_read_at;
+  }
+  return out;
+}
+
 /* ──────────────────────────── Platform ──────────────────────────── */
 
 export async function fetchTenants(): Promise<Tenant[]> {
