@@ -3,6 +3,22 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.38.0] — 2026-10-03 — The book: the phone promises, on the record
+
+### Added — reservations (migration 028 + the Floor's booking ledger)
+- The floor knew how to hold a table (011's trigger) and how to mark one reserved by hand (5.35.0) — but the PHONE had no ledger. "Saturday 7 pm, party of four, window seat" lived on paper scraps and staff memory. The Floor grows **The book**: one row per promised table, grouped by IST day ("Today · Sat 3 Oct", "Tomorrow", then weekday dates), each row carrying the arrival hour chip, a **×N party chip**, the table chip (or an honest dashed **"table open"** when the host picks at the door), the guest's name, a tappable `tel:` phone link, the note in quotes, and a status chip — gold **Booked**, green **Seated**, red **No-show**, gray struck-through **Cancelled**.
+- **Take a booking** (header button + section button) opens a dialog: guest name, optional phone, party size 1–40, IST day + arrival time (slot composed as wall-clock **+05:30** — IST has no DST, so the instant is exact), an optional table picker, and a 280-char note with live count. Picking a table too small for the party shows an amber nudge (*"Party of 7 at T1 (4 seats) — pull chairs over, or split across two tables."*) — honest information, not a block. Past slots are allowed; the book tolerates backfill.
+- **The lifecycle is calm and reversible**: one-tap **Seat** (claims a free table as `reserved` — best-effort, the 011 trigger owns everything once an order lands), **No-show**, **Cancel**; every non-booked row offers **Undo seat / Restore**, so a mis-tap is one tap from fixed instead of guarded by confirm arms. Cancelled rows stay on the books, grayed and strikethrough — the ledger remembers. A past-week toggle opens the archive ("Show past week (N)") instead of hiding it.
+- **Migration `028_reservations.sql`**: `reservations` table (party 1–40 CHECK, status whitelist, 280-char note CHECK, `table_id ON DELETE SET NULL` so retiring a table never shreds the book), two-policy RLS (016/027 shape), realtime publication, and **two server-truth triggers**: `updated_at` stamped with `clock_timestamp()` (now() freezes at transaction start — the book wants the real wall-clock instant of the write) and `created_by_email` filled from `auth.jwt()` on INSERT (027's RPC lesson, carried into plain CRUD). Applied with five proofs: columns exact, 2 policies, both triggers on duty (probe rolled back, zero residue), realtime published, status CHECK present.
+
+### Changed — the Floor's first paint
+- The cold-load spinner is gone. **SkeletonBoard**: the floor's own shape — header, stat tiles, rhythm card, table cards — shimmers into place (`animate-pulse`, `aria-busy`), so the host stand never stares at a blank centred dot.
+
+### Verified
+- `tsc` 0 after every edit. **E2E through the real UI** (`scripts/qa77-book.png`): "Take a booking" → Maya Iyer ×4, phone, 7:30 pm today, note "QA round 77 — window seat" → row under "Today · Sat 3 Oct" with Booked chip and "1 still expected today" → **Seat** → Seated chip + Undo seat → **Undo seat** → Booked → **No-show** → No-show chip + Restore → **Restore** → Booked → **Cancel** → Cancelled, grayed, restorable. Party-of-7-at-T1 amber nudge rendered. Console: zero page errors.
+- **DB truth** (`scripts/qa77-book.mjs`): exactly 1 reservation — Maya Iyer ×4, phone, 19:30 IST slot, `cancelled`, note and owner email stamped, `updated_at` ahead of `created_at` after the five flips. **Creator-stamp probe with the owner's own JWT** (the browser's exact PostgREST path): insert → `created_by_email` stamped server-side → delete → zero residue. The one pre-fix row (created before the trigger existed) was repaired by backfilling its truthfully-known actor email.
+- Realtime: the book rides the floor's ping (own subscription on the 028 publication) + the 30s safety poll. sw `5.38.0-r1`.
+
 ## [5.37.0] — 2026-10-03 — Count the shelf: the stocktake closes the loop on the diary
 
 ### Added — stocktake (variance → Correction, on the 027 rails)

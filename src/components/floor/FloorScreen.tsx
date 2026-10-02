@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Armchair,
   BadgeCheck,
+  CalendarClock,
   CircleAlert,
   Clock,
   Copy,
@@ -10,6 +11,7 @@ import {
   Link2,
   Loader2,
   Pencil,
+  Phone,
   Plus,
   Printer,
   QrCode,
@@ -34,15 +36,22 @@ import {
 } from 'recharts';
 import {
   createTable,
+  createReservation,
   deleteTable,
   fetchOrders,
+  fetchReservations,
   fetchTableSessions,
   fetchTables,
   revokeTableSession,
+  subscribeReservationsRealtime,
   subscribeTablesRealtime,
+  updateReservationStatus,
   updateTable,
   type DiningTable,
   type RealtimeState,
+  type Reservation,
+  type ReservationInput,
+  type ReservationStatus,
   type TableSession,
   type TableStatus,
 } from '../../lib/api';
@@ -271,6 +280,41 @@ const STATUS_META: Record<TableStatus, { label: string; bg: string; fg: string; 
   billing: { label: 'Billing', bg: '#FDECEA', fg: '#B4483C', dot: '#B4483C' },
 };
 
+/* ── The book (v5.38.0) — reservation status tones + IST slot labels. ── */
+
+const RES_META: Record<ReservationStatus, { label: string; bg: string; fg: string }> = {
+  booked: { label: 'Booked', bg: '#FBF3E1', fg: '#8A5A00' },
+  seated: { label: 'Seated', bg: '#E7F1E8', fg: '#2E7D32' },
+  no_show: { label: 'No-show', bg: '#FCEBEA', fg: '#B3261E' },
+  cancelled: { label: 'Cancelled', bg: '#EAF0EC', fg: '#6B6B6B' },
+};
+
+/** "7:30 pm" IST 12-hour label for a booking slot. */
+function istSlotLabel(iso: string): string {
+  return new Intl.DateTimeFormat('en-IN', {
+    timeZone: IST_TZ,
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  })
+    .format(new Date(iso))
+    .toLowerCase();
+}
+
+/** "Today · 3 Oct" / "Tomorrow · 4 Oct" / "Mon · 6 Oct" for book day groups. */
+function istDayHeading(dateKey: string): string {
+  const today = istTodayIsoFloor();
+  const tomorrow = istDateKey(new Date(istDayStartFloor(today) + 24 * 3600 * 1000).toISOString());
+  const weekday = new Intl.DateTimeFormat('en-IN', {
+    timeZone: 'UTC',
+    weekday: 'short',
+  }).format(new Date(`${dateKey}T00:00:00Z`));
+  const pretty = istDayPretty(dateKey);
+  if (dateKey === today) return `Today · ${weekday} ${pretty}`;
+  if (dateKey === tomorrow) return `Tomorrow · ${weekday} ${pretty}`;
+  return `${weekday} · ${pretty}`;
+}
+
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
 function LiveChip({ state }: { state: RealtimeState }): React.ReactElement {
@@ -426,6 +470,193 @@ function AddTableDialog({
             </button>
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── BookingDialog (v5.38.0) — take a phone promise: who, how many, when,
+      (which table), and any note. slot_at is composed as IST wall-clock
+      with an explicit +05:30 offset — IST has no DST, so the instant is
+      exact. Past slots are allowed (the book tolerates backfill); the
+      party>capacity nudge is honest information, not a block. ── */
+
+function BookingDialog({
+  tables,
+  busy,
+  error,
+  onTake,
+  onClose,
+}: {
+  tables: DiningTable[];
+  busy: boolean;
+  error: string | null;
+  onTake: (input: ReservationInput) => void;
+  onClose: () => void;
+}) {
+  const [name, setName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [party, setParty] = useState('2');
+  const [date, setDate] = useState(istTodayIsoFloor());
+  const [time, setTime] = useState('19:30');
+  const [tableId, setTableId] = useState('');
+  const [note, setNote] = useState('');
+  const partyNum = Number.parseInt(party, 10);
+  const picked = tables.find((t) => t.id === tableId) || null;
+
+  const slotMs = useMemo(() => {
+    if (!date || !time) return NaN;
+    return new Date(`${date}T${time}:00+05:30`).getTime();
+  }, [date, time]);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  return (
+    <div className="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label="Take a booking">
+      <button type="button" aria-label="Close dialog" onClick={onClose} className="absolute inset-0 h-full w-full cursor-default bg-[#0F3D3E]/45" />
+      <div className="absolute inset-x-2 top-1/2 mx-auto max-h-[92vh] max-w-[460px] -translate-y-1/2 overflow-y-auto rounded-3xl bg-white p-5 shadow-2xl sm:inset-x-0">
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="flex items-center gap-2 text-[15px] font-bold text-[#1A1A1A]">
+            <CalendarClock size={16} style={{ color: '#B88E2F' }} aria-hidden /> Take a booking
+          </h2>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="flex h-10 w-10 items-center justify-center rounded-full text-[#6B6B6B] hover:bg-[#F6F5F2] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#967221]"
+          >
+            <X size={17} aria-hidden />
+          </button>
+        </div>
+        <div className="space-y-3">
+          <div>
+            <label htmlFor="bk-name" className="mb-1 block text-[12px] font-medium text-[#6B6B6B]">Guest name *</label>
+            <input
+              id="bk-name"
+              type="text"
+              value={name}
+              maxLength={40}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Who promised to come"
+              className="sp-input h-11 w-full px-3 text-[13.5px]"
+              autoFocus
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label htmlFor="bk-phone" className="mb-1 block text-[12px] font-medium text-[#6B6B6B]">Phone</label>
+              <input id="bk-phone" type="tel" value={phone} maxLength={20} onChange={(e) => setPhone(e.target.value)} placeholder="Optional" className="sp-input h-11 w-full px-3 text-[13.5px]" />
+            </div>
+            <div>
+              <label htmlFor="bk-party" className="mb-1 block text-[12px] font-medium text-[#6B6B6B]">Party size</label>
+              <input id="bk-party" type="number" min={1} max={40} value={party} onChange={(e) => setParty(e.target.value)} className="sp-input h-11 w-full px-3 text-[13.5px]" />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label htmlFor="bk-date" className="mb-1 block text-[12px] font-medium text-[#6B6B6B]">Day (IST)</label>
+              <input id="bk-date" type="date" value={date} onChange={(e) => setDate(e.target.value)} className="sp-input h-11 w-full px-3 text-[13.5px]" />
+            </div>
+            <div>
+              <label htmlFor="bk-time" className="mb-1 block text-[12px] font-medium text-[#6B6B6B]">Arrives (IST)</label>
+              <input id="bk-time" type="time" value={time} onChange={(e) => setTime(e.target.value)} className="sp-input h-11 w-full px-3 text-[13.5px]" />
+            </div>
+          </div>
+          <div>
+            <label htmlFor="bk-table" className="mb-1 block text-[12px] font-medium text-[#6B6B6B]">Table</label>
+            <select id="bk-table" value={tableId} onChange={(e) => setTableId(e.target.value)} className="sp-input h-11 w-full px-3 text-[13.5px]">
+              <option value="">Decide when they arrive</option>
+              {tables.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.table_number} · {t.section || 'Main Floor'} · {t.capacity} seats
+                </option>
+              ))}
+            </select>
+          </div>
+          {picked && Number.isFinite(partyNum) && partyNum > picked.capacity && (
+            <p className="rounded-xl bg-[#FBF3E1] px-3 py-2 text-[12px] font-medium text-[#8A5A00]" role="note">
+              Party of {partyNum} at {picked.table_number} ({picked.capacity} seats) — pull chairs over, or split across two tables.
+            </p>
+          )}
+          <div>
+            <label htmlFor="bk-note" className="mb-1 block text-[12px] font-medium text-[#6B6B6B]">Note</label>
+            <textarea
+              id="bk-note"
+              value={note}
+              maxLength={280}
+              rows={2}
+              onChange={(e) => setNote(e.target.value)}
+              placeholder="Window seat · birthday · arriving late…"
+              className="sp-input w-full resize-none px-3 py-2 text-[13.5px]"
+            />
+            <p className="mt-1 text-right text-[10.5px] tabular-nums text-[#6B6B6B]">{note.length}/280</p>
+          </div>
+          {error && <p className="rounded-xl bg-[#FDF3F2] px-3 py-2 text-[12.5px] text-[#B4483C]" role="alert">{error}</p>}
+          <div className="flex justify-end gap-2 pt-1">
+            <button type="button" onClick={onClose} className="h-11 rounded-full border border-[#E3E7E0] px-4 text-[13px] font-semibold text-[#6B6B6B] hover:bg-[#F6F5F2]">
+              Cancel
+            </button>
+            <button
+              type="button"
+              disabled={!name.trim() || !Number.isFinite(partyNum) || partyNum < 1 || partyNum > 40 || Number.isNaN(slotMs) || busy}
+              onClick={() =>
+                onTake({
+                  guestName: name.trim(),
+                  phone: phone.trim(),
+                  partySize: partyNum,
+                  tableId: tableId || null,
+                  slotAt: new Date(slotMs).toISOString(),
+                  note: note.trim(),
+                })
+              }
+              className="flex h-11 items-center gap-2 rounded-full px-5 text-[13px] font-semibold text-white disabled:opacity-50"
+              style={{ background: '#0F3D3E' }}
+            >
+              {busy && <Loader2 size={14} className="animate-spin" aria-hidden />}
+              Write it in the book
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── SkeletonBoard (v5.38.0) — the floor's first paint. The old cold-load
+      was a bare spinner; now the board's own shape (header, stat tiles,
+      rhythm card, table cards) shimmers into place, so the host stand never
+      stares at a blank centred dot. ── */
+
+function SkeletonBoard(): React.ReactElement {
+  return (
+    <div className="flex h-full flex-col gap-4 overflow-y-auto p-4 lg:p-5" aria-busy="true" aria-label="Loading the floor">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div className="space-y-2">
+          <div className="h-7 w-36 animate-pulse rounded-lg bg-[#EAECE8]" />
+          <div className="h-4 w-64 animate-pulse rounded bg-[#EAECE8]" />
+        </div>
+        <div className="flex gap-2">
+          <div className="h-11 w-36 animate-pulse rounded-full bg-[#EAECE8]" />
+          <div className="h-11 w-28 animate-pulse rounded-full bg-[#EAECE8]" />
+          <div className="h-11 w-32 animate-pulse rounded-full bg-[#EAECE8]" />
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        {[0, 1, 2, 3].map((i) => (
+          <div key={i} className="h-[74px] animate-pulse rounded-2xl border border-[#E3E7E0] bg-white" />
+        ))}
+      </div>
+      <div className="h-[280px] animate-pulse rounded-3xl bg-[#EAECE8]/70" />
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+        {[0, 1, 2, 3].map((i) => (
+          <div key={i} className="h-[186px] animate-pulse rounded-3xl border border-[#E3E7E0] bg-white" />
+        ))}
       </div>
     </div>
   );
@@ -933,6 +1164,12 @@ export function FloorScreen(): React.ReactElement {
   /** v5.29.0 — floor rhythm compare: 'week' = this 7d alone (pre-5.29 view),
    *  'compare' = lay the prior 7d's hour-of-day rhythm under this one. */
   const [rhythmMode, setRhythmMode] = useState<'week' | 'compare'>('week');
+  /** v5.38.0 — the book: reservations, their fail-soft load error, the
+   *  booking dialog, and the past-week toggle for the archive rows. */
+  const [reservations, setReservations] = useState<Reservation[] | null>(null);
+  const [bookError, setBookError] = useState<string | null>(null);
+  const [bookOpen, setBookOpen] = useState(false);
+  const [showPast, setShowPast] = useState(false);
   const pingRef = useRef<number | null>(null);
 
   const reload = useCallback(async () => {
@@ -950,6 +1187,14 @@ export function FloorScreen(): React.ReactElement {
     fetchTableSessions(tenantId)
       .then((ss) => setSessions(ss))
       .catch(() => undefined);
+    // The book (v5.38.0) rides along too — but it fails HONESTLY: a failed
+    // read shows its own error line with a retry, never a fake empty book.
+    fetchReservations(tenantId)
+      .then((rs) => {
+        setReservations(rs);
+        setBookError(null);
+      })
+      .catch(() => setBookError('Could not load the book.'));
   }, [tenantId]);
 
   useEffect(() => {
@@ -957,7 +1202,8 @@ export function FloorScreen(): React.ReactElement {
     void reload();
   }, [tenantId, reload]);
 
-  // realtime (migration 011) + 30s safety poll
+  // realtime (migration 011) + 30s safety poll — the book rides the same
+  // ping (its own subscription, migration 028's publication)
   useEffect(() => {
     if (!tenantId) return;
     const ping = () => {
@@ -965,11 +1211,13 @@ export function FloorScreen(): React.ReactElement {
       pingRef.current = window.setTimeout(() => void reload(), 250);
     };
     const unsub = subscribeTablesRealtime(tenantId, ping, setRtState);
+    const unsubBook = subscribeReservationsRealtime(tenantId, ping, setRtState);
     const poll = window.setInterval(() => void reload(), 30000);
     return () => {
       window.clearInterval(poll);
       if (pingRef.current) window.clearTimeout(pingRef.current);
       unsub();
+      unsubBook();
     };
   }, [tenantId, reload]);
 
@@ -1187,12 +1435,67 @@ export function FloorScreen(): React.ReactElement {
     return { data, max, peakHour, total: rows.length, busiest, prevData: prevBuckets, prevTotal, prevMax };
   }, [orders]);
 
+  /* The book (v5.38.0) — lifecycle flips are one honest UPDATE each; the
+     board syncs best-effort around them: seating a party claims a FREE
+     table (status 'reserved'), any undo releases a table that is still
+     reserved and orderless. The 011 trigger owns everything else — an
+     occupied/billing table is never touched from here. */
+  const flipReservation = useCallback(
+    async (r: Reservation, status: ReservationStatus) => {
+      if (!tenantId) return;
+      setActionError(null);
+      setBusyId(`res-${r.id}`);
+      try {
+        await updateReservationStatus(r.id, status);
+        if (r.table_id) {
+          const t = (tables ?? []).find((x) => x.id === r.table_id);
+          if (t && !t.active_order_id) {
+            if (status === 'seated' && t.status === 'available') {
+              await updateTable(t.id, tenantId, { status: 'reserved' }).catch(() => undefined);
+            } else if (status !== 'seated' && t.status === 'reserved') {
+              await updateTable(t.id, tenantId, { status: 'available' }).catch(() => undefined);
+            }
+          }
+        }
+      } catch (err) {
+        setActionError(err instanceof Error ? err.message : 'Could not update the booking.');
+      } finally {
+        setBusyId(null);
+        void reload();
+      }
+    },
+    [tables, tenantId, reload],
+  );
+
+  /* The book's day groups: from today IST forward (or the past week when
+     the archive toggle is on), grouped by IST day, rows ascending within a
+     day. Days without bookings render nothing — honest silence, not a wall
+     of empty headers. */
+  const book = useMemo(() => {
+    const rows = reservations ?? [];
+    const today = istTodayIsoFloor();
+    const startMs = istDayStartFloor(today);
+    const weekMs = startMs - 7 * 24 * 3600 * 1000;
+    const inScope = rows
+      .filter((r) => {
+        const t = new Date(r.slot_at).getTime();
+        return showPast ? t >= weekMs : t >= startMs;
+      })
+      .sort((a, b) => new Date(a.slot_at).getTime() - new Date(b.slot_at).getTime());
+    const map = new Map<string, Reservation[]>();
+    for (const r of inScope) {
+      const k = istDateKey(r.slot_at);
+      const list = map.get(k);
+      if (list) list.push(r);
+      else map.set(k, [r]);
+    }
+    const pastCount = rows.filter((r) => new Date(r.slot_at).getTime() < startMs).length;
+    const bookedToday = rows.filter((r) => istDateKey(r.slot_at) === today && r.status === 'booked').length;
+    return { groups: [...map.entries()], pastCount, bookedToday, total: rows.length };
+  }, [reservations, showPast]);
+
   if (loading) {
-    return (
-      <div className="flex h-full items-center justify-center p-4 lg:p-5">
-        <Loader2 size={26} className="animate-spin text-[#6B6B6B]" aria-hidden />
-      </div>
-    );
+    return <SkeletonBoard />;
   }
   if (tenantError || !tenantId) {
     return (
@@ -1214,6 +1517,17 @@ export function FloorScreen(): React.ReactElement {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <LiveChip state={rtState} />
+          <button
+            type="button"
+            onClick={() => {
+              setActionError(null);
+              setBookOpen(true);
+            }}
+            aria-label="Take a booking"
+            className="flex h-11 items-center gap-1.5 rounded-full border border-[#E3E7E0] bg-white px-4 text-[13px] font-semibold text-[#0F3D3E] hover:border-[#B88E2F]"
+          >
+            <CalendarClock size={15} aria-hidden /> Take a booking
+          </button>
           <button
             type="button"
             onClick={() => void printStickers()}
@@ -1263,6 +1577,156 @@ export function FloorScreen(): React.ReactElement {
           );
         })}
       </div>
+
+      {/* the book (v5.38.0) — the phone promises, on the record */}
+      <section className="sp-card p-5" aria-label="The book">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h2 className="text-[15px] font-bold text-[#1A1A1A]">The book</h2>
+            <p className="mt-0.5 text-[12.5px] text-[#6B6B6B]">
+              Reservations · every phone promise and what became of it
+              {book.bookedToday > 0 && <> · <span className="font-bold text-[#8A5A00]">{book.bookedToday} still expected today</span></>}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setActionError(null);
+              setBookOpen(true);
+            }}
+            aria-label="Take a booking"
+            className="flex h-9 items-center gap-1.5 rounded-full border border-[#E3E7E0] bg-white px-3.5 text-[12.5px] font-semibold text-[#0F3D3E] hover:border-[#B88E2F]"
+          >
+            <CalendarClock size={13} aria-hidden /> Take a booking
+          </button>
+        </div>
+
+        {bookError && (
+          <p className="mt-3 flex items-center gap-2 rounded-xl bg-[#FDF3F2] px-3 py-2 text-[12.5px] text-[#B4483C]" role="alert">
+            <CircleAlert size={14} aria-hidden /> {bookError}
+            <button type="button" onClick={() => void reload()} className="ml-auto rounded-full border border-[#F0D9D5] px-2.5 py-1 text-[11.5px] font-semibold hover:bg-white">
+              Retry
+            </button>
+          </p>
+        )}
+
+        {reservations === null && !bookError && (
+          <p className="mt-3 text-[12.5px] text-[#6B6B6B]">Opening the book…</p>
+        )}
+
+        {reservations !== null && !bookError && book.groups.length === 0 && (
+          <div className="mt-4 rounded-2xl border border-dashed border-[#C9D4CC] bg-white/60 p-6 text-center">
+            <CalendarClock size={24} className="mx-auto text-[#6B6B6B]" aria-hidden />
+            <p className="mt-2 text-[13px] font-semibold text-[#0F3D3E]">
+              {showPast ? 'Nothing on the books this week' : 'No bookings ahead'}
+            </p>
+            <p className="mx-auto mt-1 max-w-sm text-[12.5px] text-[#6B6B6B]">
+              When the phone rings, take the promise here — the book remembers the name, the hour and the table.
+            </p>
+          </div>
+        )}
+
+        {book.groups.map(([dayKey, rows]) => (
+          <div key={dayKey} className="mt-4">
+            <h3 className="flex items-center gap-2 text-[12px] font-bold uppercase tracking-wide text-[#6B6B6B]">
+              {istDayHeading(dayKey)}
+              <span className="rounded-full bg-[#F1F4F1] px-2 py-0.5 text-[10.5px] font-bold normal-case tabular-nums text-[#0F3D3E]">{rows.length}</span>
+            </h3>
+            <div className="mt-2 space-y-2">
+              {rows.map((r) => {
+                const busy = busyId === `res-${r.id}`;
+                const res = RES_META[r.status];
+                const table = r.table_id ? (tables ?? []).find((t) => t.id === r.table_id) : null;
+                return (
+                  <div
+                    key={r.id}
+                    data-res-status={r.status}
+                    className={`flex flex-wrap items-center gap-x-2.5 gap-y-1.5 rounded-2xl border border-[#E3E7E0] bg-white px-3.5 py-2.5 ${r.status === 'cancelled' ? 'opacity-70' : ''}`}
+                  >
+                    <span className="rounded-xl bg-[#F6F5F2] px-2.5 py-1 text-[12.5px] font-bold tabular-nums text-[#0F3D3E]">{istSlotLabel(r.slot_at)}</span>
+                    <span className="flex items-center gap-1 rounded-full bg-[#F1F4F1] px-2 py-0.5 text-[11.5px] font-bold tabular-nums text-[#0F3D3E]" title="Party size">
+                      <Users size={11} aria-hidden /> ×{r.party_size}
+                    </span>
+                    {table ? (
+                      <span className="rounded-full bg-[#FBF3E1] px-2 py-0.5 text-[11.5px] font-bold text-[#8A5A00]" title={table.section || 'Main Floor'}>
+                        {table.table_number}
+                      </span>
+                    ) : (
+                      <span className="rounded-full border border-dashed border-[#C9D4CC] px-2 py-0.5 text-[11px] font-medium text-[#6B6B6B]">table open</span>
+                    )}
+                    <span className={`text-[13.5px] font-semibold text-[#1A1A1A] ${r.status === 'cancelled' ? 'line-through' : ''}`}>{r.guest_name}</span>
+                    {r.phone && (
+                      <a href={`tel:${r.phone}`} className="flex items-center gap-1 text-[12px] tabular-nums text-[#6B6B6B] hover:text-[#0F3D3E]">
+                        <Phone size={11} aria-hidden /> {r.phone}
+                      </a>
+                    )}
+                    {r.note && <span className="basis-full text-[12px] italic text-[#6B6B6B]">“{r.note}”</span>}
+                    <span className="ml-auto rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide" style={{ background: res.bg, color: res.fg }}>
+                      {res.label}
+                    </span>
+                    <span className="flex items-center gap-1.5">
+                      {r.status === 'booked' && (
+                        <>
+                          <button
+                            type="button"
+                            disabled={busy}
+                            onClick={() => void flipReservation(r, 'seated')}
+                            aria-label={`Seat ${r.guest_name}`}
+                            className="flex h-8 items-center gap-1 rounded-full px-3 text-[12px] font-semibold text-white disabled:opacity-50"
+                            style={{ background: '#0F3D3E' }}
+                          >
+                            <Users size={12} aria-hidden /> Seat
+                          </button>
+                          <button
+                            type="button"
+                            disabled={busy}
+                            onClick={() => void flipReservation(r, 'no_show')}
+                            aria-label={`Mark ${r.guest_name} no-show`}
+                            className="h-8 rounded-full border border-[#E3E7E0] px-2.5 text-[12px] font-semibold text-[#6B6B6B] hover:bg-[#F6F5F2] disabled:opacity-50"
+                          >
+                            No-show
+                          </button>
+                          <button
+                            type="button"
+                            disabled={busy}
+                            onClick={() => void flipReservation(r, 'cancelled')}
+                            aria-label={`Cancel the booking for ${r.guest_name}`}
+                            className="h-8 rounded-full border border-[#F0D9D5] px-2.5 text-[12px] font-semibold text-[#B4483C] hover:bg-[#F6E8E6] disabled:opacity-50"
+                          >
+                            Cancel
+                          </button>
+                        </>
+                      )}
+                      {r.status !== 'booked' && (
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() => void flipReservation(r, 'booked')}
+                          aria-label={r.status === 'seated' ? `Undo seat for ${r.guest_name}` : `Put ${r.guest_name} back in the book`}
+                          className="h-8 rounded-full border border-[#E3E7E0] px-2.5 text-[12px] font-semibold text-[#0F3D3E] hover:border-[#B88E2F] disabled:opacity-50"
+                        >
+                          {r.status === 'seated' ? 'Undo seat' : 'Restore'}
+                        </button>
+                      )}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+
+        {reservations !== null && !bookError && book.pastCount > 0 && (
+          <button
+            type="button"
+            onClick={() => setShowPast((p) => !p)}
+            aria-pressed={showPast}
+            className="mt-3 rounded-full border border-[#E3E7E0] px-3 py-1.5 text-[11.5px] font-semibold text-[#6B6B6B] hover:border-[#B88E2F] hover:text-[#0F3D3E]"
+          >
+            {showPast ? 'Hide past week' : `Show past week (${book.pastCount})`}
+          </button>
+        )}
+      </section>
 
       {filter && (
         <div className="flex flex-wrap items-center gap-2 text-[12px] text-[#6B6B6B]">
@@ -1762,6 +2226,32 @@ export function FloorScreen(): React.ReactElement {
               })
               .catch((err) => {
                 setActionError(err instanceof Error ? err.message : 'Could not update the table.');
+              })
+              .finally(() => setBusyId(null));
+          }}
+        />
+      )}
+
+      {bookOpen && (
+        <BookingDialog
+          tables={tables ?? []}
+          busy={busyId === 'booking'}
+          error={actionError}
+          onClose={() => {
+            setBookOpen(false);
+            setActionError(null);
+          }}
+          onTake={(input) => {
+            if (busyId === 'booking') return; // double-dispatch guard
+            setBusyId('booking');
+            setActionError(null);
+            createReservation(tenantId, input)
+              .then(() => {
+                setBookOpen(false);
+                return reload();
+              })
+              .catch((err) => {
+                setActionError(err instanceof Error ? err.message : 'Could not write the booking.');
               })
               .finally(() => setBusyId(null));
           }}

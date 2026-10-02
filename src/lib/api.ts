@@ -566,6 +566,102 @@ export function subscribeTablesRealtime(
   };
 }
 
+/* ── The book (reservations — migration 028: the phone promises, on the
+      record). Writes are plain RLS-scoped CRUD (016 shape); the updated_at
+      stamp is the table's own BEFORE UPDATE trigger, never the client. ── */
+
+export type ReservationStatus = 'booked' | 'seated' | 'no_show' | 'cancelled';
+
+export interface Reservation {
+  id: string;
+  tenant_id: string;
+  location_id: string | null;
+  guest_name: string;
+  phone: string;
+  party_size: number;
+  table_id: string | null;
+  slot_at: string;
+  status: ReservationStatus;
+  note: string;
+  created_by_email: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ReservationInput {
+  guestName: string;
+  phone?: string;
+  partySize: number;
+  /** Optional — the host may pick the table when the party walks in. */
+  tableId?: string | null;
+  /** ISO instant of the promised arrival. IST has no DST, so the client
+   *  composes it as wall-clock +05:30 and the math is exact. */
+  slotAt: string;
+  note?: string;
+}
+
+export async function fetchReservations(tenantId: string, limit = 200): Promise<Reservation[]> {
+  requireCloud();
+  const { data, error } = await supabase
+    .from('reservations')
+    .select('*')
+    .eq('tenant_id', tenantId)
+    .order('slot_at', { ascending: false })
+    .limit(limit);
+  if (error) throw error;
+  return (data || []) as Reservation[];
+}
+
+export async function createReservation(tenantId: string, input: ReservationInput): Promise<Reservation> {
+  requireCloud();
+  const { data, error } = await supabase
+    .from('reservations')
+    .insert({
+      tenant_id: tenantId,
+      guest_name: input.guestName,
+      phone: input.phone ?? '',
+      party_size: input.partySize,
+      table_id: input.tableId ?? null,
+      slot_at: input.slotAt,
+      note: input.note ?? '',
+    })
+    .select('*')
+    .single();
+  if (error) throw error;
+  return data as Reservation;
+}
+
+/** Lifecycle flip (booked → seated / no_show / cancelled, and every undo).
+ *  All flips are restorable by design — the book forgives a mis-tap. */
+export async function updateReservationStatus(id: string, status: ReservationStatus): Promise<void> {
+  requireCloud();
+  const { error } = await supabase.from('reservations').update({ status }).eq('id', id);
+  if (error) throw error;
+}
+
+export function subscribeReservationsRealtime(
+  tenantId: string,
+  onPing: () => void,
+  onState: (s: RealtimeState) => void
+): () => void {
+  requireCloud();
+  const channel = supabase
+    .channel(`book-${tenantId}`)
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'reservations', filter: `tenant_id=eq.${tenantId}` },
+      () => onPing()
+    )
+    .subscribe((status) => {
+      if (status === 'SUBSCRIBED') onState('live');
+      else if (status === 'TIMED_OUT' || status === 'CHANNEL_ERROR' || status === 'CLOSED') onState('offline');
+      else onState('connecting');
+    });
+  return () => {
+    void supabase.removeChannel(channel);
+  };
+}
+
 /* ── Menu management (v5.3.0 — variants + add-ons, migration 012) ────────── */
 
 export interface MenuVariant {
