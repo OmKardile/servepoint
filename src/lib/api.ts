@@ -1008,6 +1008,54 @@ export async function markNotificationsRead(tenantId: string): Promise<void> {
   if (error) throw error;
 }
 
+/** v5.40.0 — the header badge counts the truth: one cheap head-count of
+ * unread rows. Best-effort by design (the badge is a courtesy — a failed
+ * count just means no badge, never a broken screen). */
+export async function fetchUnreadNotificationCount(tenantId: string): Promise<number> {
+  requireCloud();
+  const { count, error } = await supabase
+    .from('notifications')
+    .select('id', { count: 'exact', head: true })
+    .eq('tenant_id', tenantId)
+    .eq('is_read', false);
+  if (error) throw error;
+  return count ?? 0;
+}
+
+/** v5.40.0 — the bell rings live: notifications joined the realtime
+ * publication in migration 030, so an INSERT (stock crossed its line, a
+ * guest rang in a low rating, a booking landed for today) or an UPDATE
+ * (marked read) pings the subscriber instantly — no waiting on the poll.
+ *
+ * `scope` keeps every consumer on its OWN channel: supabase-js dedupes
+ * channels by name, and adding postgres_changes callbacks to a channel
+ * that already subscribed throws ("cannot add … after subscribe()") —
+ * exactly what happened when the header badge and the notifications list
+ * both tried to ride one channel. Badge → 'badge', screen → 'list'. */
+export function subscribeNotificationsRealtime(
+  tenantId: string,
+  onPing: () => void,
+  onState: (s: RealtimeState) => void,
+  scope: string = 'main'
+): () => void {
+  requireCloud();
+  const channel = supabase
+    .channel(`notifications-${scope}-${tenantId}`)
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'notifications', filter: `tenant_id=eq.${tenantId}` },
+      () => onPing()
+    )
+    .subscribe((status) => {
+      if (status === 'SUBSCRIBED') onState('live');
+      else if (status === 'TIMED_OUT' || status === 'CHANNEL_ERROR' || status === 'CLOSED') onState('offline');
+      else onState('connecting');
+    });
+  return () => {
+    void supabase.removeChannel(channel);
+  };
+}
+
 export async function fetchConversations(tenantId: string): Promise<Conversation[]> {
   requireCloud();
   const { data, error } = await supabase

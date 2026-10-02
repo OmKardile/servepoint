@@ -9,8 +9,15 @@ import {
   RefreshCw,
   Star,
   Tag,
+  Wifi,
+  WifiOff,
 } from 'lucide-react';
-import { fetchNotifications, markNotificationsRead } from '../../lib/api';
+import {
+  fetchNotifications,
+  markNotificationsRead,
+  subscribeNotificationsRealtime,
+  type RealtimeState,
+} from '../../lib/api';
 import { dbErrorHint } from '../../lib/dbErrors';
 import { timeAgo } from '../../lib/prefs';
 import { useTenant } from '../../lib/tenant';
@@ -22,6 +29,14 @@ import type { AppNotification, NotificationCategory } from '../../types';
  * Sage-tint cards, gold border when unread, category icon chip, bold title,
  * body, clock icon + relative time. Production data only (notifications —
  * migration 004). "Mark all read" persists to Supabase then re-fetches.
+ *
+ * v5.40.0 — the bell actually rings (migration 030): three server-truth
+ * triggers write real events (low stock, low rating, today's booking), the
+ * table joined the realtime publication, and this screen subscribes — a
+ * ring re-fetches instantly, with a 30s poll as the honest fallback. The
+ * category chips now carry category colors (amber system, red feedback,
+ * sage reminder, gold promotion) so the eye triages a stack of cards at a
+ * glance instead of reading every title.
  */
 
 const CATEGORY_ICON: Record<NotificationCategory, React.ComponentType<{ size?: number; className?: string }>> = {
@@ -38,6 +53,18 @@ const CATEGORY_LABEL: Record<NotificationCategory, string> = {
   reminder: 'Reminder',
   promotion: 'Promotion',
   feedback: 'Feedback',
+};
+
+/* v5.40.0 — category-tinted chips: the icon chip's surface speaks the
+ * category's language (amber = something needs ordering, red = a guest is
+ * unhappy, sage = the house clock, gold = noise of the nice kind). Read
+ * cards soften to the calm sage-white; unread keeps the saturated tone. */
+const CATEGORY_CHIP: Record<NotificationCategory, { unread: string; read: string }> = {
+  system: { unread: 'bg-[#FBF3E1] text-[#8A5A00]', read: 'bg-[#F6F5F2] text-[#8A5A00]' },
+  feedback: { unread: 'bg-[#FCEBEA] text-[#B3261E]', read: 'bg-[#F6F5F2] text-[#B3261E]' },
+  reminder: { unread: 'bg-[#E8F3E9] text-[#2E7D32]', read: 'bg-[#F6F5F2] text-[#2E7D32]' },
+  promotion: { unread: 'bg-[#F3E8CF] text-[#967221]', read: 'bg-[#F6F5F2] text-[#967221]' },
+  message: { unread: 'bg-white text-[#0F3D3E]', read: 'bg-[#F6F5F2] text-[#0F3D3E]' },
 };
 
 /* ── Skeletons ───────────────────────────────────────────────────────── */
@@ -74,6 +101,7 @@ const ErrorCard: React.FC<{ message: string; onRetry: () => void }> = ({ message
 const NotificationCard: React.FC<{ n: AppNotification }> = ({ n }) => {
   const Icon = CATEGORY_ICON[n.category] || Bell;
   const unread = !n.is_read;
+  const chip = CATEGORY_CHIP[n.category] || CATEGORY_CHIP.message;
   return (
     <article
       aria-label={`${CATEGORY_LABEL[n.category] || 'Notification'}: ${n.title}${unread ? ' (unread)' : ''}`}
@@ -84,7 +112,7 @@ const NotificationCard: React.FC<{ n: AppNotification }> = ({ n }) => {
       <div className="flex items-start gap-3">
         <span
           className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${
-            unread ? 'bg-white text-[#B88E2F]' : 'bg-white text-[#0F3D3E]'
+            unread ? chip.unread : chip.read
           }`}
         >
           <Icon size={18} aria-hidden />
@@ -119,10 +147,10 @@ const NotificationsContent: React.FC<{ onTenantRetry: () => void }> = ({ onTenan
   const [error, setError] = useState<string | null>(null);
   const [marking, setMarking] = useState(false);
   const [markError, setMarkError] = useState<string | null>(null);
+  const [rt, setRt] = useState<RealtimeState>('connecting');
 
   const load = useCallback(async () => {
     if (!tenant.tenantId) return;
-    setLoading(true);
     setError(null);
     try {
       const rows = await fetchNotifications(tenant.tenantId);
@@ -135,8 +163,29 @@ const NotificationsContent: React.FC<{ onTenantRetry: () => void }> = ({ onTenan
   }, [tenant.tenantId]);
 
   useEffect(() => {
+    setLoading(true);
     void load();
   }, [load]);
+
+  /* v5.40.0 — the ring is heard live: migration 030 put notifications on the
+   * realtime publication, so a trigger-fired event re-fetches the list
+   * instantly. The 30s poll stays as the honest fallback when the channel
+   * is down (the chip says which one is running). */
+  useEffect(() => {
+    if (!tenant.tenantId) return;
+    const unsub = subscribeNotificationsRealtime(
+      tenant.tenantId,
+      () => void load(),
+      setRt,
+      'list' // own channel — the header badge rides 'badge'; shared names throw after subscribe
+    );
+    const poll = window.setInterval(() => void load(), 30_000);
+    return () => {
+      unsub();
+      window.clearInterval(poll);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tenant.tenantId]);
 
   const unreadCount = useMemo(() => items.filter((n) => !n.is_read).length, [items]);
 
@@ -181,7 +230,19 @@ const NotificationsContent: React.FC<{ onTenantRetry: () => void }> = ({ onTenan
     <div className="mx-auto w-full max-w-3xl p-4 lg:p-5">
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3 pb-5">
-        <h1 className="text-[22px] font-bold text-[#1A1A1A]">Notifications</h1>
+        <div className="flex items-center gap-3">
+          <h1 className="text-[22px] font-bold text-[#1A1A1A]">Notifications</h1>
+          <span
+            title={rt === 'live' ? 'Realtime connected' : 'Polling every 30s'}
+            aria-label={rt === 'live' ? 'Realtime connected' : 'Polling every 30 seconds'}
+            className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+              rt === 'live' ? 'bg-[#E8F3E9] text-[#2E7D32]' : 'bg-[#F6F5F2] text-[#6B6B6B]'
+            }`}
+          >
+            {rt === 'live' ? <Wifi size={12} aria-hidden /> : <WifiOff size={12} aria-hidden />}
+            {rt === 'live' ? 'Live' : 'Poll'}
+          </span>
+        </div>
         <button
           onClick={() => void onMarkAllRead()}
           disabled={unreadCount === 0 || marking}
@@ -211,7 +272,9 @@ const NotificationsContent: React.FC<{ onTenantRetry: () => void }> = ({ onTenan
           </span>
           <h2 className="mt-4 text-[16px] font-semibold text-[#1A1A1A]">No notifications yet</h2>
           <p className="mt-1 max-w-sm text-[13px] leading-relaxed text-[#6B6B6B]">
-            Order updates, staff messages, reminders and system alerts will appear here as they happen in your workspace.
+            The bell rings on real events: a shelf crossing its reorder line, a
+            guest leaving a low rating, a booking landing for today. They will
+            appear here the moment they happen in your workspace.
           </p>
         </div>
       ) : (

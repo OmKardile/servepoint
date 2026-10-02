@@ -3,6 +3,26 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.40.0] — 2026-10-03 — The bell actually rings
+
+### Added — notification generators (migration 030)
+- The notifications screen (004) has stood ready since the first build — cards, categories, mark-all-read — but **nothing ever wrote to it**: no trigger, no app-side insert. "Reminders and system alerts will appear here as they happen" was an eternal empty state, and the header's gold dot was a static decoration claiming unread state the DB never backed. Migration `030_notification_bells.sql` wires the bell to three events the ledger already records, each **best-effort** (a bell failure can never break the ledger write it announces):
+  - **Low stock** (`system`) — fires on the *crossing*: `inventory_items` moving from above its reorder line to at-or-under it (AFTER UPDATE, OLD > line, NEW <= line). Staying below never re-fires (no nagging), restocks stay silent, and a shelf that runs dry with no line set still crosses at zero — a stockout is news with or without a policy.
+  - **Low rating** (`feedback`) — a guest's `order_feedback` INSERT at ≤ 2★ rings immediately (service recovery only works the same hour); the ticket number and the guest's own words ride along.
+  - **Today's booking** (`reminder`) — a `reservations` INSERT whose slot falls on *today, IST* (the house timezone, no DST, exact math) pings the floor: hour, table (or "table open"), phone, note. Future dates stay on the book; only the ones that matter before lunch ring.
+- Realtime: `notifications` joined `supabase_realtime`, so the ring is heard live on every terminal. Applied with six proofs — three triggers on duty, publication updated, and **rollback probes** for each wire (crossing rang / 2★ rang / today-booking rang / tomorrow-booking stayed silent) plus a zero-residue check: no probe committed a single row, so no guest fiction exists.
+
+### Fixed — the channel collision found live
+- The first E2E hit the error boundary on `/notifications`: the header badge and the screen both subscribed to the **same channel name**, and supabase-js dedupes channels by name — adding `postgres_changes` callbacks after `subscribe()` throws. Every consumer now rides its own scoped channel (`badge` / `list`).
+
+### Changed — the badge tells the truth
+- The header bell's static gold dot is gone. The badge now counts **real unread notifications** — fetched on mount, refreshed on every realtime ring and a 30s safety poll, capped at "99+", and **quiet when zero** (a badge that never sleeps is a badge nobody reads). aria-label reads the count honestly ("Notifications, 2 unread" / "no unread").
+- The notifications screen subscribes to its own realtime channel (silent refetches — no skeleton flash on poll) with a **Live/Poll** chip saying which transport is running, and the empty state now describes what actually rings the bell.
+- **[Styling] category-tinted chips**: icon chips now speak the category's language — amber for system (something needs ordering), red for feedback (a guest is unhappy), sage for reminder (the house clock), gold for promotion — saturated on unread, calm gray-tinted on read, so the eye triages a stack of cards before reading a single title.
+
+### Verified
+- `tsc` 0 after every edit. **E2E through the real UI** (`scripts/qa79-bell.png`): temporarily raised Coffee beans' reorder line to 4,875 g (config, restored after) → WasteDialog 10 g → card honest at 4,870 g, diary row on record, badge 1 unread; Floor "Take a booking" (Dev Patil ×2, T1, 7:30 pm today) → badge 2 unread, reminder card "7:30 pm — T1 — 97660 11223" — both rings **live over realtime, no reload**. Restock +10 g rang nothing (upward moves don't cross). Mark all read → badge honestly "no unread", button disabled. **DB truth** (`scripts/qa79-bell.mjs`): exactly 2 notification rows with true bodies, both read; shelf netted to 4,880 g with the line restored to 500; diary −10/+10 net zero; booking cancelled (reminder stays as history); `order_feedback` still 3 — the 2★ wire was proven by rollback probe, zero fiction. 12/12 screens land, 0 page errors. sw `5.40.0-r1`.
+
 ## [5.39.0] — 2026-10-03 — Fire as you go: the pass learns to tick
 
 ### Added — KDS item check-off (migration 029)

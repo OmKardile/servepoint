@@ -1,11 +1,54 @@
-import React from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { ArrowLeft, Bell, Clock3, Search } from 'lucide-react';
+import { fetchUnreadNotificationCount, subscribeNotificationsRealtime } from '../../lib/api';
+import { useTenant } from '../../lib/tenant';
 import { useSession, useUi } from '../../store/session';
 
-/** ServePoint header — back + breadcrumbs, bell with gold dot, history clock, search (Figma shell). */
+/**
+ * ServePoint header — back + breadcrumbs, bell with an HONEST unread badge,
+ * history clock, search (Figma shell).
+ *
+ * v5.40.0 — the bell stops pretending: the old static gold dot was always
+ * on, claiming unread state the DB never backed. The badge now counts real
+ * unread notifications (migration 030 gave the table its first writers),
+ * refreshed on mount, on every realtime ring, and on a 30s safety poll —
+ * and it stays QUIET when the count is zero. A badge that never sleeps is
+ * a badge nobody reads.
+ */
 export const Header: React.FC = () => {
   const { breadcrumb, setBreadcrumb, goSection, search, setSearch } = useUi();
   const session = useSession((s) => s.session);
+  const { tenantId } = useTenant();
+
+  const [unread, setUnread] = useState<number | null>(null);
+
+  const refreshUnread = useCallback(async () => {
+    if (!tenantId) return;
+    try {
+      setUnread(await fetchUnreadNotificationCount(tenantId));
+    } catch {
+      /* best-effort: a failed count just means no badge, never a broken header */
+    }
+  }, [tenantId]);
+
+  useEffect(() => {
+    if (!tenantId) {
+      setUnread(null);
+      return;
+    }
+    void refreshUnread();
+    const unsub = subscribeNotificationsRealtime(
+      tenantId,
+      () => void refreshUnread(),
+      () => {}, // the badge doesn't care about the channel chip; only the ring
+      'badge' // own channel — sharing names with other consumers throws after subscribe
+    );
+    const poll = window.setInterval(() => void refreshUnread(), 30_000);
+    return () => {
+      unsub();
+      window.clearInterval(poll);
+    };
+  }, [tenantId, refreshUnread]);
 
   const canGoBack = breadcrumb.length > 1;
 
@@ -53,11 +96,22 @@ export const Header: React.FC = () => {
 
       <button
         onClick={() => goSection('notifications', ['Notifications'])}
-        aria-label={`Notifications${session ? '' : ''}`}
+        aria-label={
+          unread && unread > 0
+            ? `Notifications, ${unread} unread`
+            : 'Notifications, no unread'
+        }
         className="relative flex h-9 w-9 items-center justify-center rounded-full text-[#1A1A1A] hover:bg-[#F6F5F2]"
       >
         <Bell size={18} aria-hidden />
-        <span aria-hidden className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-[#B88E2F]" />
+        {unread !== null && unread > 0 && (
+          <span
+            aria-hidden
+            className="absolute -right-0.5 -top-0.5 flex h-[17px] min-w-[17px] items-center justify-center rounded-full border-2 border-white bg-[#B88E2F] px-[3px] text-[9.5px] font-bold leading-none tabular-nums text-white"
+          >
+            {unread > 99 ? '99+' : unread}
+          </span>
+        )}
         <span className="sr-only">Unread notifications</span>
       </button>
 
