@@ -1696,3 +1696,9 @@ Stage Summary:
 - For the parallel round: FloorScreen.tsx + FoodDrinksScreen.tsx (TablePrelinkStrip + imports) + src/store/cart.ts (clear()) are this round's surfaces; no migration, no other files. If you touch the drawer table-select or the 011 trigger, re-prove the carryover fix (place on a table, next drawer must read Walk-in).
 - Ideas parked: reserved-seat CTA live test (needs a free table), floor capacity heatmap by hour, table sessions per card (who scanned, session expiry), per-section subtotals on the Z-report, "vs previous range" delta chips on Reports KPIs.
 - Crons: 15-min webDevReview (job 430321).
+
+---
+Task ID: 57 (CLAIM — in progress)
+Agent: glm-5.3 (cron webDevReview round)
+Task: CLAIM this round — health sweep + agent-browser QA first; then pick focus (fix vs feature) and record it here.
+

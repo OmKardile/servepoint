@@ -22,11 +22,13 @@ import {
   Download,
   Flame,
   HandCoins,
+  Minus,
   QrCode,
   Quote,
   RefreshCw,
   ShoppingBag,
   Star,
+  TrendingDown,
   TrendingUp,
   Wallet,
 } from 'lucide-react';
@@ -111,6 +113,24 @@ function rangeWindow(range: RangeKey): { startMs: number | null; endMs: number }
   if (range === 'all') return { startMs: null, endMs };
   const days = range === 'today' ? 1 : range === '7d' ? 7 : 30;
   return { startMs: endMs - days * 24 * 3600 * 1000, endMs };
+}
+
+/** The EQUAL-LENGTH window immediately before the current one (v5.19.0) —
+ *  the honest baseline for the KPI delta chips. 'all' has no earlier
+ *  boundary in the ledger, so it gets NO chips rather than a fake baseline. */
+function priorWindow(range: RangeKey): { startMs: number; endMs: number } | null {
+  if (range === 'all') return null;
+  const { startMs, endMs } = rangeWindow(range);
+  const days = range === 'today' ? 1 : range === '7d' ? 7 : 30;
+  const span = days * 24 * 3600 * 1000;
+  const start = startMs ?? endMs - span;
+  return { startMs: start - span, endMs: start };
+}
+
+/** Spoken/written name of the comparison baseline. */
+function priorRangeLabel(range: RangeKey): string | null {
+  if (range === 'all') return null;
+  return range === 'today' ? 'prior day' : range === '7d' ? 'prior 7 days' : 'prior 30 days';
 }
 
 /** Hour-of-day (0–23) in IST for an ISO timestamp. */
