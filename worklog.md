@@ -2019,3 +2019,25 @@ Stage Summary:
 - The design system exists as a first-class repo artifact: research → audit → tokens → docs → showcase → governance, everything traceable to production evidence. Surfaces: design-system/** (12 files) + CHANGELOG.md + worklog.md. App runtime: zero changes.
 - Next candidates: wire design-system tokens into a docs link from the app's /showcase public page (needs owner's OK); dark-theme token tier if the product ever asks (governance lists it as v1 non-goal).
 - Crons: 15-min webDevReview (job 430321) + DAILY deep pass (job 431587, 09:00 IST).
+
+---
+Task ID: 70 (completion — 15-min webDevReview round, trace 202610030324)
+Agent: glm-5.3 (cron webDevReview round)
+Task: Post-5.30.0 (design system) orientation + QA sweep, then the feature/styling round: the pass wears the crest (KDS brand tile) + READY cards read from across the kitchen (green wash) + the rhythm speaks hour by hour (per-hour compare-tooltip delta — parked idea shipped).
+
+Work Log:
+- Orientation clean (HEAD d360c1e = 5.30.0 + DS v1.0.0 already pushed — Task 69 confirmed landed; origin/main..HEAD empty; tree clean; tsc 0; dev 200). agent-browser sweep: Floor/Kitchen/Bills/Reports/Dashboard all zero page errors.
+- KDS BRAND TILE (feature): KitchenScreen header grows the café's logo tile (40px rounded-xl, hairline #E3E7E0, white backing, object-contain p-1) beside "Kitchen Display" — mirrors the guest-ticket brand row (5.28) and completes brand presence on the last major screen. Honest guards: no logo → header exactly pre-5.31; dead URL → onError self-hide; logo change → guard resets on tenant.logo_url. Justified by multi-tenant reality (two tabs, two cafés, told apart at a glance). Deliberately NOT per-card (noise on churning tickets — recorded in CHANGELOG).
+- READY GREEN WASH (styling detail): ready-stage cards tint bg-[#2E7D32]/[0.05] (DS green, 5%) — the run-the-food moment reads from across the kitchen; all other stages stay white; timer escalation untouched (honest food-under-the-lamp aging). DS-conformant (semantic green + sp-card geometry kept).
+- RHYTHM PER-HOUR DELTA (parked from 5.28/5.29, shipped): new SpHourDeltaTooltip in FloorScreen — in compare mode (+prevTotal>0) the Tooltip swaps to a custom DS-styled content (rounded-xl, hairline border, teal square + gray-dashed swatch, mono tabular-nums) that does the subtraction itself: "12a · this 7d 2 · prior 7d 1 · +1 vs prior week · same hour" — green ahead / red behind / neutral even. Default This-7d mode keeps the stock tooltip (content=undefined). Footer hint added.
+- E2E (stage→verify→clean): scripts/qa70-kds-fixture.mjs staged THREE table-bound dine_in tickets tagged kds-fixture — #101 ready-today 00:15 IST (ready tint + Unpaid chip + T1 chip), #102 completed-today 00:40, #103 prior-week 2026-09-26 00:15 (gray-line + delta window). Verified: KDS header img loaded (naturalWidth 180, tenant logo = apple-touch-icon), #101 green wash vs white neighbors (screenshot scripts/qa70-kds-brand-ready.png); compare chip "+28 vs prior 7d (+2800%) · prior 1" (29−1 exact); tooltip DOM-verified ".recharts-tooltip-wrapper" = "12a / this 7d 2 / prior 7d 1 / +1 vs prior week · same hour" (a11y snapshot doesn't surface recharts tooltips — DOM eval is the verifier; screenshot scripts/qa70-rhythm-hour-delta.png); default mode → 0 line paths + no delta tooltip. Note: element-hover on the bar was blocked by the line's dot circle overlay — raw `mouse move` onto bar coords + DOM eval did it.
+- CLEAN + GUARD RESTORE: fixture clean removed #101–#103; probe-026b orphan check 0; kds-fixture tag re-probe 0; after the 30s safety poll the compare mode honestly fell back to "no prior-week tickets in the loaded ledger yet" (no stale +28 chip — the ledger truth wins).
+- One fixture-script fix mid-run: order_items column is item_total (not total_price) — caught by PG 42703, cleaned the partial row, re-staged.
+- sw servepoint-v5.31.0-r1; CHANGELOG [5.31.0] (soft-hyphen typo scrubbed); tsc 0 after every edit.
+
+Stage Summary:
+- 5.31.0 — the pass wears the crest; the rhythm speaks hour by hour. Surfaces: src/components/kitchen/KitchenScreen.tsx + src/components/floor/FloorScreen.tsx + public/sw.js + CHANGELOG.md + scripts/qa70-kds-fixture.mjs + worklog.md (+2 QA screenshots under scripts/). No migration, no schema change; fixture fully cleaned (0 tagged rows, 0 orphans).
+- Brand presence map after this round: guest menu hero (5.27) → sticker sheet + guest ticket (5.28) → paper receipt (5.29) → KDS header (5.31). Remaining brand-less: EOD Z-report (deliberate — internal doc), KDS per-card (deliberate — noise).
+- Ideas parked: Supabase Storage logo upload vs URL-paste; EOD Z-report logo; reserved-seat CTA live test (T3 via real Add dialog); DS showcase link from the app's /showcase page (needs owner OK); serve the DS showcase under public/ (duplication concern — needs owner OK).
+- Watch items carried: DB password ROTATION (owner decision); /coolkafe/floor direct URL falls to Dashboard (pre-existing fallback).
+- Crons: 15-min webDevReview (job 430321) + DAILY deep pass (job 431587, 09:00 IST).

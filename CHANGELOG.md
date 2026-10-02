@@ -3,6 +3,20 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.31.0] — 2026-10-03 — The pass wears the crest; the rhythm speaks hour by hour
+
+### Added — brand tile on the Kitchen Display header
+- The KDS header now carries the café's logo tile (40px, hairline `#E3E7E0` border, white backing, object-contain) beside "Kitchen Display" — the same honest brand row the guest ticket has worn since 5.28, and the last major screen to get it. The real justification is multi-tenant reality: an owner running two cafés in two tabs tells them apart at a glance. **Honest guards**: no logo set → the header is exactly pre-5.31 (no tile, no placeholder); a dead URL hides its own tile via `onerror`; a logo change in Settings un-hides it (guard resets on `logo_url`). Deliberately NOT per-card — a logo on every churning ticket would be noise; one tile in the header is identity.
+
+### Added — READY cards read from across the kitchen (styling detail)
+- A quiet green wash (DS green `#2E7D32` at 5%) now tints the whole card in the **Ready to serve** column — the one stage where the food waits on the runner, not the cook. Every other stage keeps the white card; the elapsed timer and its amber/red escalation stay honest and untouched (food under the lamp ages too).
+
+### Added — per-hour delta in the rhythm compare tooltip (parked idea, now shipped)
+- In **vs prior wk** mode the Floor rhythm tooltip stops being a bare pair of numbers: a custom DS-styled tooltip (rounded-xl, hairline border, teal square + gray dashed swatch, mono tabular figures) does the subtraction itself — `12a · this 7d 2 · prior 7d 1 · +1 vs prior week · same hour` — green when ahead, red when behind, neutral gray when even. Default **This 7d** mode keeps the stock tooltip byte-for-byte. Footer now hints "Hover a bar for that hour's delta."
+
+### Verified
+- `tsc` 0 after every edit; zero page errors across Floor/Kitchen/Bills/Reports/Dashboard. E2E via the stage→verify→clean convention (`scripts/qa70-kds-fixture.mjs`, three tickets tagged `kds-fixture`: #101 ready-today + #102 completed-today + #103 prior-week, all table-bound at hour 00 IST): KDS header tile rendered with the live logo (`naturalWidth 180`), #101 showed the green wash + Unpaid chip honestly; compare mode chip `+28 vs prior 7d (+2800%) · prior 1` (29−1, exact); hovered tooltip DOM-verified with the exact delta line `+1 vs prior week · same hour` (screenshot `scripts/qa70-rhythm-hour-delta.png`, KDS record `scripts/qa70-kds-brand-ready.png`); default mode → 0 line paths, no delta tooltip; fixtures cleaned → 0 `kds-fixture`, 0 `rhy-fixture`, 0 orphan `order_items`; after the 30s safety poll the guard state honestly restored ("no prior-week tickets in the loaded ledger yet"). sw `5.31.0-r1`.
+
 ## [5.30.0] — 2026-10-03 — The ServePoint Design System (owner-commissioned)
 
 ### Added — a whole design system around the web app (`design-system/`, DS v1.0.0)

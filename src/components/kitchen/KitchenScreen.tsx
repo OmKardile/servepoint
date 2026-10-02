@@ -26,6 +26,10 @@ import type { Order } from '../../types';
  * The counter is still the money gate — charging lives in Bills.
  * v5.25.0: table-bound tickets grow a solid TABLE chip (resolved from the
  * table_id FK in fetchOrders) — the runner sees WHERE without reading notes.
+ * v5.31.0: the pass wears the crest — the header carries the café's logo
+ * tile (same brand row the guest ticket has worn since 5.28), and READY
+ * cards get a quiet green wash so the run-the-food moment reads from
+ * across the kitchen. No logo set → the header is exactly pre-5.31.
  */
 
 /* ───────────────────────────── board model ────────────────────────────── */
@@ -171,7 +175,12 @@ const KdsCard: React.FC<{
 
   return (
     <article
-      className={`rounded-2xl border border-[#EDEBE6] bg-white p-3.5 shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition ${
+      className={`rounded-2xl border border-[#EDEBE6] p-3.5 shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition ${
+        /* v5.31.0 — READY reads from across the kitchen: a quiet green wash
+         * (DS green at 5%) on the stage where the food is waiting on the
+         * runner, not on the cook. Every other stage keeps the white card. */
+        stage === 'ready' ? 'bg-[#2E7D32]/[0.05]' : 'bg-white'
+      } ${
         busy ? 'opacity-60' : 'hover:shadow-[0_4px_14px_rgba(15,23,42,0.08)]'
       }`}
       style={{ borderLeft: `3px solid ${terminal ? '#D9E2DD' : waitTone(order.created_at, nowMs, false)}` }}
@@ -313,6 +322,11 @@ export const KitchenScreen: React.FC = () => {
   });
   const soundRef = useRef(soundOn);
   soundRef.current = soundOn;
+
+  /* v5.31.0 — header brand tile: same honest guard as the guest ticket's
+   * brand row (5.28). A dead URL hides its own tile; a logo change un-hides. */
+  const [logoBroken, setLogoBroken] = useState(false);
+  useEffect(() => setLogoBroken(false), [tenant?.logo_url]);
 
   /* one ticking clock for every elapsed timer */
   useEffect(() => {
@@ -483,11 +497,22 @@ export const KitchenScreen: React.FC = () => {
     <div className="flex h-full flex-col gap-4 overflow-hidden p-4 lg:p-5">
       {/* header strip */}
       <header className="flex flex-wrap items-center gap-3">
-        <div className="min-w-0">
-          <h1 className="text-[19px] font-bold text-[#1A1A1A]">Kitchen Display</h1>
-          <p className="text-[12.5px] text-[#969696]">
-            {tenant.name} · live rail for the pass — statuses move through the guarded engine
-          </p>
+        <div className="flex min-w-0 items-center gap-2.5">
+          {tenant.logo_url && !logoBroken && (
+            <img
+              src={tenant.logo_url}
+              alt=""
+              onError={() => setLogoBroken(true)}
+              className="h-10 w-10 shrink-0 rounded-xl border border-[#E3E7E0] bg-white object-contain p-1 shadow-sm"
+              title="Café logo — set it in Settings"
+            />
+          )}
+          <div className="min-w-0">
+            <h1 className="text-[19px] font-bold text-[#1A1A1A]">Kitchen Display</h1>
+            <p className="text-[12.5px] text-[#969696]">
+              {tenant.name} · live rail for the pass — statuses move through the guarded engine
+            </p>
+          </div>
         </div>
         <div className="ml-auto flex flex-wrap items-center gap-2">
           <span

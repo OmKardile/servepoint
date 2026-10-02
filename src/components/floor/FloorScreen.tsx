@@ -225,6 +225,42 @@ function printQrStickers(cafeName: string, stickers: StickerSpec[], cafeLogo?: s
   printHiddenFrame(buildStickerSheetHtml(cafeName, stickers, cafeLogo));
 }
 
+/* v5.31.0 — per-hour honesty in compare mode: when the gray prior-week line
+ * is on the chart, the tooltip stops being a bare pair of numbers and does
+ * the subtraction itself — this hour vs the same hour last week, signed and
+ * colored per the DS (green ahead, red behind, neutral even). The default
+ * mode keeps the stock tooltip untouched. */
+const SpHourDeltaTooltip: React.FC<{
+  active?: boolean;
+  payload?: { payload?: { label?: string; n?: number; pn?: number } }[];
+}> = ({ active, payload }) => {
+  const p = payload && payload[0] ? payload[0].payload : undefined;
+  if (!active || !p) return null;
+  const n = Number(p.n ?? 0);
+  const pn = Number(p.pn ?? 0);
+  const d = n - pn;
+  const dColor = d > 0 ? '#2E7D32' : d < 0 ? '#B42318' : '#6B6B6B';
+  return (
+    <div className="rounded-xl border border-[#E3E7E0] bg-white px-3 py-2 text-[12px] shadow-[0_4px_14px_rgba(15,61,62,0.10)]">
+      <p className="font-semibold text-[#1A1A1A]">{p.label}</p>
+      <p className="mt-1 flex items-center gap-1.5 text-[#1A1A1A]">
+        <span className="inline-block h-2 w-2 rounded-sm" style={{ background: '#0F3D3E' }} aria-hidden />
+        this 7d <span className="ml-auto pl-3 font-mono font-bold tabular-nums">{n}</span>
+      </p>
+      <p className="mt-0.5 flex items-center gap-1.5 text-[#6B6B6B]">
+        <span className="inline-block h-0 w-2.5 border-t-2 border-dashed" style={{ borderColor: '#969696' }} aria-hidden />
+        prior 7d <span className="ml-auto pl-3 font-mono font-bold tabular-nums">{pn}</span>
+      </p>
+      <p
+        className="mt-1 border-t border-[#E3E7E0] pt-1 font-mono text-[11.5px] font-bold tabular-nums"
+        style={{ color: dColor }}
+      >
+        {d > 0 ? `+${d}` : `${d}`} vs prior week · same hour
+      </p>
+    </div>
+  );
+};
+
 const STATUS_META: Record<TableStatus, { label: string; bg: string; fg: string; dot: string }> = {
   available: { label: 'Available', bg: '#EAF4EC', fg: '#2E7D32', dot: '#2E7D32' },
   occupied: { label: 'Occupied', bg: '#FDF3E4', fg: '#8A5A16', dot: '#C2571B' },
@@ -1314,6 +1350,7 @@ export function FloorScreen(): React.ReactElement {
                       `${v} ticket${Number(v) === 1 ? '' : 's'}`,
                       String(name ?? 'Seated'),
                     ]}
+                    content={rhythmMode === 'compare' && rhythm.prevTotal > 0 ? <SpHourDeltaTooltip /> : undefined}
                   />
                   <Bar dataKey="n" name="Seated · this 7d" radius={[4, 4, 0, 0]}>
                     {rhythm.data.map((h) => (
@@ -1341,7 +1378,7 @@ export function FloorScreen(): React.ReactElement {
               Rides the floor's refresh.
               {rhythmMode === 'compare' &&
                 (rhythm.prevTotal > 0
-                  ? ' The gray dashed line aggregates the PRIOR 7 IST days the same way — same hour-of-day, same rules.'
+                  ? ' The gray dashed line aggregates the PRIOR 7 IST days the same way — same hour-of-day, same rules. Hover a bar for that hour\'s delta.'
                   : ' No prior-week table tickets in the loaded ledger yet — the comparison unlocks as the ledger ages.')}
             </p>
           </>
