@@ -3,6 +3,26 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.42.0] — 2026-10-03 — The bell's door opens: every ring walks to its source
+
+### Added — notification tap-through, mark-one-read, honest category filters (migration 032)
+- 5.40.0 made the bell ring; 5.42.0 gives every ring a **door**. A bell announcing "Coffee beans is under its line" that leaves the owner to find Inventory by hand was half the courtesy. Migration `032_notification_links.sql`:
+  - `notifications.link_to TEXT` (nullable, no CHECK whitelist — the client admits a slug only if it names a real section via `Object.hasOwn(SECTION_LABELS, …)` and renders no button otherwise; an unknown door is no door, honestly hidden).
+  - The three 030 generators recreated to stamp their doors: low stock `system` → **inventory** (the shelf that crossed), low rating `feedback` → **bills** (the ticket that took the stars), today's booking `reminder` → **floor** (the book that holds the promise). `promotion`/`message` stay doorless by design (no writer rings them; the staff line has its own surface).
+  - Honest backfill: the bells already on record (round 79's true system + reminder rows) got their true doors — the triggers that wrote them are known, the doors are not a guess.
+  - Deliberate: no RLS change (plain column, 004's member_all covers it), no realtime change (notifications already published — and an `is_read` UPDATE rides the same channels, which is how the header badge recounts for free).
+  - Applied via `scripts/apply-032.mjs` — six proofs green incl. a live rollback probe (a real crossing rang **with** `link_to='inventory'`, a real today-booking rang **with** `link_to='floor'`, then ROLLBACK left zero residue). One probe lesson en route: composing the booking slot as a naive timestamp got interpreted in the session timezone (UTC) and landed **tomorrow in IST** — the trigger stayed silent by design; fixed by composing with `AT TIME ZONE 'Asia/Kolkata'`.
+- **Mark one read**: `markNotificationRead(id)` (row-scoped UPDATE under 004 RLS). Each unread card carries its own "Mark read" chip — optimistic flip, silent refetch, revert + honest banner on refusal. The realtime UPDATE ping recounts the header badge for free (proven live: "1 unread" → "no unread" with no reload).
+- **Honest category filters**: a chip row (All / System / Reminder…) where a chip exists **only** if at least one bell of that category is on record, with the true count (tabular-nums). No chip is ever a dead end; a filter that somehow empties renders an honest dashed "Nothing under this filter right now."
+
+### Styling — the door affordances
+- "Open Inventory / Open Floor / Open Bills" pill on every doored card (`#0F3D3E` on a 5% teal wash, `ArrowRight` glyph, hover deepens to 10%, gold focus ring) — the bell tells you **where** it opens before you tap.
+- "Mark read" ghost chip on unread cards only (white surface, gray text; hover turns gold `#B88E2F` border + amber text — the unread color family calling back).
+- Filter chips: active = deep-teal fill with white text + translucent count; inactive = white surface, gray border, hover wash; `transition-colors` throughout; `aria-pressed` truth on every chip.
+
+### Verified
+- `tsc` 0 after every edit. **E2E through the real UI** (`scripts/qa81-door.png`): fresh unread bell rung live by a config-only line crossing (stock 4,880 g, line raised to 4,885 g — no stock moves, no diary rows; the 5.40.0 round already proved the waste path) → card landed over realtime with gold border + both chips → Mark read flipped the card and recounted the badge live ("1 unread" → "no unread") → "Open Inventory" walked straight to the shelves → back, Reminder chip filtered to exactly the booking card, All restored all three. **DB truth** (`scripts/qa81-door.mjs`): exactly 3 bells, all read, all doors point at their true sources, zero blind bells anywhere, line restored to 500 with zero stock drift, zero probe residue. 13/13 screens land, 0 page errors. sw `5.42.0-r1`.
+
 ## [5.41.0] — 2026-10-03 — The staff line: 004's other half, finally built
 
 ### Added — team messages (the Messages surface, migration 031)

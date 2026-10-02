@@ -100,6 +100,9 @@ export interface AppNotification {
   title: string;
   body: string;
   is_read: boolean | null;
+  /** v5.42.0 — the bell's door: the in-app section slug this card opens
+   * (migration 032 — trigger generators stamp it; NULL means doorless). */
+  link_to?: string | null;
   created_at: string;
 }
 

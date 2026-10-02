@@ -1,7 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle,
+  ArrowRight,
   Bell,
+  Check,
   CheckCheck,
   Clock,
   Loader2,
@@ -14,6 +16,7 @@ import {
 } from 'lucide-react';
 import {
   fetchNotifications,
+  markNotificationRead,
   markNotificationsRead,
   subscribeNotificationsRealtime,
   type RealtimeState,
@@ -21,7 +24,8 @@ import {
 import { dbErrorHint } from '../../lib/dbErrors';
 import { timeAgo } from '../../lib/prefs';
 import { useTenant } from '../../lib/tenant';
-import { useUi } from '../../store/session';
+import { useUi, type Section } from '../../store/session';
+import { SECTION_LABELS } from '../shell/Sidebar';
 import type { AppNotification, NotificationCategory } from '../../types';
 
 /**
@@ -37,6 +41,14 @@ import type { AppNotification, NotificationCategory } from '../../types';
  * category chips now carry category colors (amber system, red feedback,
  * sage reminder, gold promotion) so the eye triages a stack of cards at a
  * glance instead of reading every title.
+ *
+ * v5.42.0 — the bell's door opens (migration 032): the generators stamp
+ * `link_to` (the in-app section slug), and each card renders its own door —
+ * "Open" walks straight to the shelf / the ticket / the book the bell is
+ * about. Also: mark ONE bell read (row-scoped UPDATE; the realtime UPDATE
+ * ping recounts the header badge for free) and honest category filters —
+ * chips exist only for categories that actually have bells, with true
+ * counts, so no chip is a dead end.
  */
 
 const CATEGORY_ICON: Record<NotificationCategory, React.ComponentType<{ size?: number; className?: string }>> = {
@@ -53,6 +65,14 @@ const CATEGORY_LABEL: Record<NotificationCategory, string> = {
   reminder: 'Reminder',
   promotion: 'Promotion',
   feedback: 'Feedback',
+};
+
+/* The bell's door — a link_to slug only counts if it names a real section;
+ * anything else (or nothing) renders no door. Honest unknown = no button. */
+const doorOf = (n: AppNotification): Section | null => {
+  const slug = n.link_to;
+  if (!slug) return null;
+  return Object.hasOwn(SECTION_LABELS, slug) ? (slug as Section) : null;
 };
 
 /* v5.40.0 — category-tinted chips: the icon chip's surface speaks the
@@ -98,10 +118,16 @@ const ErrorCard: React.FC<{ message: string; onRetry: () => void }> = ({ message
 
 /* ── Notification card ───────────────────────────────────────────────── */
 
-const NotificationCard: React.FC<{ n: AppNotification }> = ({ n }) => {
+const NotificationCard: React.FC<{
+  n: AppNotification;
+  marking: boolean;
+  onMarkOne: (n: AppNotification) => void;
+  onOpen: (n: AppNotification) => void;
+}> = ({ n, marking, onMarkOne, onOpen }) => {
   const Icon = CATEGORY_ICON[n.category] || Bell;
   const unread = !n.is_read;
   const chip = CATEGORY_CHIP[n.category] || CATEGORY_CHIP.message;
+  const door = doorOf(n);
   return (
     <article
       aria-label={`${CATEGORY_LABEL[n.category] || 'Notification'}: ${n.title}${unread ? ' (unread)' : ''}`}
@@ -128,10 +154,37 @@ const NotificationCard: React.FC<{ n: AppNotification }> = ({ n }) => {
             <span className="sr-only">{CATEGORY_LABEL[n.category] || 'Notification'}</span>
           </div>
           <p className="mt-1 break-words text-[13px] leading-relaxed text-[#6B6B6B]">{n.body}</p>
-          <p className="mt-2.5 flex items-center gap-1.5 text-[12px] text-[#969696]">
-            <Clock size={13} aria-hidden />
-            {timeAgo(n.created_at)}
-          </p>
+          <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2">
+            <p className="flex items-center gap-1.5 text-[12px] text-[#969696]">
+              <Clock size={13} aria-hidden />
+              {timeAgo(n.created_at)}
+            </p>
+            {(unread || door) && (
+              <div className="flex items-center gap-2">
+                {unread && (
+                  <button
+                    onClick={() => onMarkOne(n)}
+                    disabled={marking}
+                    aria-label={`Mark "${n.title}" as read`}
+                    className="flex items-center gap-1 rounded-lg border border-[#E3E7E0] bg-white px-2.5 py-1 text-[12px] font-semibold text-[#6B6B6B] transition hover:border-[#B88E2F] hover:text-[#8A5A00] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#967221] disabled:cursor-not-allowed disabled:opacity-55"
+                  >
+                    {marking ? <Loader2 size={12} className="animate-spin" aria-hidden /> : <Check size={12} aria-hidden />}
+                    Mark read
+                  </button>
+                )}
+                {door && (
+                  <button
+                    onClick={() => onOpen(n)}
+                    aria-label={`Open ${SECTION_LABELS[door]} — ${n.title}`}
+                    className="flex items-center gap-1 rounded-lg bg-[#0F3D3E]/5 px-2.5 py-1 text-[12px] font-semibold text-[#0F3D3E] transition hover:bg-[#0F3D3E]/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#967221]"
+                  >
+                    Open {SECTION_LABELS[door]}
+                    <ArrowRight size={12} aria-hidden />
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </article>
@@ -142,12 +195,15 @@ const NotificationCard: React.FC<{ n: AppNotification }> = ({ n }) => {
 
 const NotificationsContent: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }) => {
   const tenant = useTenant();
+  const goSection = useUi((s) => s.goSection);
   const [items, setItems] = useState<AppNotification[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [marking, setMarking] = useState(false);
+  const [markingId, setMarkingId] = useState<string | null>(null);
   const [markError, setMarkError] = useState<string | null>(null);
   const [rt, setRt] = useState<RealtimeState>('connecting');
+  const [filter, setFilter] = useState<NotificationCategory | 'all'>('all');
 
   const load = useCallback(async () => {
     if (!tenant.tenantId) return;
@@ -189,6 +245,20 @@ const NotificationsContent: React.FC<{ onTenantRetry: () => void }> = ({ onTenan
 
   const unreadCount = useMemo(() => items.filter((n) => !n.is_read).length, [items]);
 
+  /* v5.42.0 — honest filters: a chip exists only when at least one bell of
+   * that category is on record, and its count is the true count. No chip is
+   * ever a dead end, and "All" always leads. */
+  const chips = useMemo(() => {
+    const counts = new Map<NotificationCategory, number>();
+    for (const n of items) counts.set(n.category, (counts.get(n.category) || 0) + 1);
+    return [...counts.entries()].sort((a, b) => b[1] - a[1]);
+  }, [items]);
+
+  const visible = useMemo(
+    () => (filter === 'all' ? items : items.filter((n) => n.category === filter)),
+    [items, filter]
+  );
+
   const onMarkAllRead = async () => {
     if (!tenant.tenantId || marking) return;
     setMarking(true);
@@ -201,6 +271,31 @@ const NotificationsContent: React.FC<{ onTenantRetry: () => void }> = ({ onTenan
     } finally {
       setMarking(false);
     }
+  };
+
+  /* v5.42.0 — one bell at a time: optimistic flip, row-scoped write, silent
+   * refetch; a refusal reverts the flip and says so. The header badge recounts
+   * itself over realtime (the UPDATE rides the same publication). */
+  const onMarkOne = async (n: AppNotification) => {
+    if (markingId) return;
+    setMarkingId(n.id);
+    setMarkError(null);
+    setItems((prev) => prev.map((x) => (x.id === n.id ? { ...x, is_read: true } : x)));
+    try {
+      await markNotificationRead(n.id);
+      await load();
+    } catch (err) {
+      setItems((prev) => prev.map((x) => (x.id === n.id ? { ...x, is_read: n.is_read } : x)));
+      setMarkError((err as Error).message);
+    } finally {
+      setMarkingId(null);
+    }
+  };
+
+  /* The door: walk from the bell straight to the screen it is about. */
+  const onOpen = (n: AppNotification) => {
+    const door = doorOf(n);
+    if (door) goSection(door, [SECTION_LABELS[door]]);
   };
 
   if (tenant.loading) {
@@ -260,6 +355,43 @@ const NotificationsContent: React.FC<{ onTenantRetry: () => void }> = ({ onTenan
         </p>
       )}
 
+      {/* v5.42.0 — honest category filters (adaptive: only what exists) */}
+      {!loading && !error && items.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 pb-4" role="group" aria-label="Filter by category">
+          <button
+            onClick={() => setFilter('all')}
+            aria-pressed={filter === 'all'}
+            className={`rounded-full border px-3.5 py-1.5 text-[12.5px] font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#967221] ${
+              filter === 'all'
+                ? 'border-[#0F3D3E] bg-[#0F3D3E] text-white'
+                : 'border-[#E3E7E0] bg-white text-[#0F3D3E] hover:bg-[#F6F5F2]'
+            }`}
+          >
+            All
+            <span className={`ml-1.5 tabular-nums ${filter === 'all' ? 'text-white/70' : 'text-[#969696]'}`}>
+              {items.length}
+            </span>
+          </button>
+          {chips.map(([cat, count]) => (
+            <button
+              key={cat}
+              onClick={() => setFilter(cat)}
+              aria-pressed={filter === cat}
+              className={`rounded-full border px-3.5 py-1.5 text-[12.5px] font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#967221] ${
+                filter === cat
+                  ? 'border-[#0F3D3E] bg-[#0F3D3E] text-white'
+                  : 'border-[#E3E7E0] bg-white text-[#0F3D3E] hover:bg-[#F6F5F2]'
+              }`}
+            >
+              {CATEGORY_LABEL[cat] || cat}
+              <span className={`ml-1.5 tabular-nums ${filter === cat ? 'text-white/70' : 'text-[#969696]'}`}>
+                {count}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Body */}
       {loading ? (
         <NotificationsSkeleton />
@@ -277,10 +409,20 @@ const NotificationsContent: React.FC<{ onTenantRetry: () => void }> = ({ onTenan
             appear here the moment they happen in your workspace.
           </p>
         </div>
+      ) : visible.length === 0 ? (
+        <p className="rounded-2xl border border-dashed border-[#E3E7E0] bg-white px-4 py-8 text-center text-[13px] text-[#6B6B6B]">
+          Nothing under this filter right now.
+        </p>
       ) : (
         <div className="space-y-3">
-          {items.map((n) => (
-            <NotificationCard key={n.id} n={n} />
+          {visible.map((n) => (
+            <NotificationCard
+              key={n.id}
+              n={n}
+              marking={markingId === n.id}
+              onMarkOne={(x) => void onMarkOne(x)}
+              onOpen={onOpen}
+            />
           ))}
         </div>
       )}

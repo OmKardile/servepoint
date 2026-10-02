@@ -1008,6 +1008,19 @@ export async function markNotificationsRead(tenantId: string): Promise<void> {
   if (error) throw error;
 }
 
+/** v5.42.0 — mark ONE bell read (the card's own "Mark read" chip). Row-scoped
+ * UPDATE under 004's member_all RLS. The realtime publication carries the
+ * UPDATE to the header badge's channel (event '*'), so the badge recount is
+ * free — no extra wiring. */
+export async function markNotificationRead(id: string): Promise<void> {
+  requireCloud();
+  const { error } = await supabase
+    .from('notifications')
+    .update({ is_read: true })
+    .eq('id', id);
+  if (error) throw error;
+}
+
 /** v5.40.0 — the header badge counts the truth: one cheap head-count of
  * unread rows. Best-effort by design (the badge is a courtesy — a failed
  * count just means no badge, never a broken screen). */
