@@ -1770,3 +1770,39 @@ export async function recordDrawerMovement(
   });
   if (error) throw error;
 }
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * Guest feedback rows for Reports (Task 53 — "the report learns to listen").
+ * The 019 ledger read raw: Reports filters to the selected range client-side
+ * (same 500-row cap convention as fetchOrders — a cafe month of ratings).
+ * RLS on order_feedback scopes every row to this tenant; guests write through
+ * the SECURITY DEFINER RPC only, staff read here.
+ * ────────────────────────────────────────────────────────────────────────── */
+
+export interface FeedbackRow {
+  rating: number;
+  comment: string | null;
+  created_at: string;
+  order_number: number;
+}
+
+export async function fetchFeedbackRows(tenantId: string, limit = 500): Promise<FeedbackRow[]> {
+  const { data, error } = await supabase
+    .from('order_feedback')
+    .select('rating, comment, created_at, orders(order_number)')
+    .eq('tenant_id', tenantId)
+    .order('created_at', { ascending: false })
+    .limit(limit);
+  if (error) throw error;
+  return ((data || []) as {
+    rating: number;
+    comment: string | null;
+    created_at: string;
+    orders?: { order_number?: number } | null;
+  }[]).map((r) => ({
+    rating: r.rating,
+    comment: r.comment,
+    created_at: r.created_at,
+    order_number: r.orders?.order_number ?? 0,
+  }));
+}

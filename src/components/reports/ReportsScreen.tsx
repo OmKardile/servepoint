@@ -17,13 +17,23 @@ import {
   Coins,
   Download,
   Flame,
+  HandCoins,
   QrCode,
+  Quote,
   RefreshCw,
   ShoppingBag,
+  Star,
   TrendingUp,
   Wallet,
 } from 'lucide-react';
-import { fetchItemUnitCosts, fetchOrderCogs, fetchOrders } from '../../lib/api';
+import {
+  fetchDrawerHistory,
+  fetchFeedbackRows,
+  fetchItemUnitCosts,
+  fetchOrderCogs,
+  fetchOrders,
+} from '../../lib/api';
+import type { DrawerSession, FeedbackRow } from '../../lib/api';
 import { formatMoney } from '../../lib/prefs';
 import { downloadCsv } from '../../lib/csv';
 import { useTenant } from '../../lib/tenant';
@@ -47,6 +57,17 @@ import type { Order } from '../../types';
  *   5. Top items — best sellers by revenue with unit counts, share bars and
  *      per-item margin chips, exportable as CSV.
  *   6. Service mix — dine-in / takeaway / delivery split.
+ *   7. Guest satisfaction — the 019 order_feedback ledger read over the
+ *      range: average rating with a health verdict, a spoken star histogram,
+ *      the newest guest comments as quotes, exportable as CSV.
+ *   8. Drawer honesty — the 020 cash_drawer_sessions ledger read over the
+ *      range: sealed shifts, net variance (server-stored, never re-derived),
+ *      per-shift expected-vs-counted rows with the same health tones the
+ *      Close-out dialog speaks.
+ *
+ * The two ledger sections load FAIL-SOFT (Task 53): a hiccup in feedback or
+ * drawer reads can never take the sales view down — their sections fall back
+ * to honest empty states.
  *
  * Data truth: the orders + order_items tables, aggregated client-side; COGS
  * comes from v_order_cogs / v_item_unit_cost (recipe_lines × current
@@ -135,6 +156,60 @@ const METHOD_COLOR: Record<string, string> = {
   card: '#B88E2F',
 };
 
+/* ── guest satisfaction health (same thresholds as the Dashboard card) ──── */
+
+function ratingTone(avg: number | null): string {
+  if (avg === null) return '#969696';
+  if (avg >= 4.5) return '#2E7D32';
+  if (avg >= 3.5) return '#8A5A00';
+  return '#B3261E';
+}
+
+function ratingWord(avg: number | null): string {
+  if (avg === null) return 'no ratings in range yet';
+  if (avg >= 4.5) return 'guests love it';
+  if (avg >= 3.5) return 'good — keep going';
+  return 'listen up';
+}
+
+/* ── drawer variance health (mirrors the Close-out dialog's exact voice) ── */
+
+function varianceTone(v: number): { cls: string; chip: string; label: string } {
+  const abs = Math.abs(v);
+  if (abs < 0.005)
+    return {
+      cls: 'text-[#2E7D32]',
+      chip: 'bg-[#EAF0EC] text-[#2E7D32]',
+      label: 'matches the ledger',
+    };
+  if (abs <= 20)
+    return {
+      cls: 'text-[#8A5A00]',
+      chip: 'bg-[#FFF4DB] text-[#8A5A00]',
+      label: 'small slip — noted on the shift',
+    };
+  return {
+    cls: 'text-[#B3261E]',
+    chip: 'bg-[#FCEBEA] text-[#B3261E]',
+    label: v > 0 ? 'over — investigate' : 'short — investigate',
+  };
+}
+
+function signedMoney(v: number): string {
+  if (v > 0) return `+${formatMoney(v)}`;
+  if (v < 0) return `−${formatMoney(Math.abs(v))}`;
+  return formatMoney(0);
+}
+
+const IST_DT = new Intl.DateTimeFormat('en-IN', {
+  timeZone: IST_TZ,
+  day: 'numeric',
+  month: 'short',
+  hour: 'numeric',
+  minute: '2-digit',
+  hour12: true,
+});
+
 /* ─────────────────────────────── screen ────────────────────────────────── */
 
 export const ReportsScreen: React.FC = () => {
@@ -148,6 +223,8 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
   const [orders, setOrders] = useState<Order[]>([]);
   const [cogsMap, setCogsMap] = useState<Map<string, number>>(new Map());
   const [unitCosts, setUnitCosts] = useState<Map<string, number>>(new Map());
+  const [feedback, setFeedback] = useState<FeedbackRow[]>([]);
+  const [shifts, setShifts] = useState<DrawerSession[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshedAt, setRefreshedAt] = useState<Date | null>(null);
@@ -167,6 +244,20 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
       setCogsMap(cogs);
       setUnitCosts(unitCosts);
       setRefreshedAt(new Date());
+      // Ledger sections (019 satisfaction + 020 drawer) ride along FAIL-SOFT:
+      // the sales view never dies for them — their sections fall back to
+      // their own honest empty states.
+      try {
+        const [fb, sh] = await Promise.all([
+          fetchFeedbackRows(tenantId),
+          fetchDrawerHistory(tenantId, 200),
+        ]);
+        setFeedback(fb);
+        setShifts(sh);
+      } catch {
+        setFeedback([]);
+        setShifts([]);
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not load sales data from the cloud.');
     } finally {
@@ -306,6 +397,67 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
     });
     downloadCsv(`servepoint-top-items-${istTodayIso()}.csv`, rows);
   }, [topItems]);
+
+  /* ── guest satisfaction (019) — range-scoped reads, fail-soft data ── */
+
+  const fbInRange = useMemo(() => {
+    const { startMs, endMs } = rangeWindow(range);
+    return feedback.filter((f) => {
+      const t = new Date(f.created_at).getTime();
+      if (Number.isNaN(t)) return false;
+      if (startMs !== null && (t < startMs || t >= endMs)) return false;
+      return true;
+    });
+  }, [feedback, range]);
+
+  const fbAgg = useMemo(() => {
+    const stars = [0, 0, 0, 0, 0]; // index 0 = 1★ … 4 = 5★
+    let sum = 0;
+    for (const f of fbInRange) {
+      sum += f.rating;
+      stars[Math.min(5, Math.max(1, Math.round(f.rating))) - 1] += 1;
+    }
+    const avg = fbInRange.length > 0 ? sum / fbInRange.length : null;
+    const quotes = fbInRange
+      .filter((f) => f.comment && f.comment.trim().length > 0)
+      .slice(0, 3);
+    return { stars, avg, count: fbInRange.length, quotes };
+  }, [fbInRange]);
+
+  const exportRatings = useCallback(() => {
+    if (fbAgg.count === 0) return;
+    const rows: (string | number)[][] = [
+      ['Submitted (IST)', 'Order #', 'Rating (1-5)', 'Comment'],
+    ];
+    for (const f of [...fbInRange].reverse()) {
+      rows.push([
+        IST_DT.format(new Date(f.created_at)),
+        f.order_number,
+        f.rating,
+        f.comment ?? '',
+      ]);
+    }
+    downloadCsv(`servepoint-guest-ratings-${istTodayIso()}.csv`, rows);
+  }, [fbInRange, fbAgg.count]);
+
+  /* ── drawer honesty (020) — sealed shifts only, variance is STORED truth ── */
+
+  const shiftsInRange = useMemo(() => {
+    const { startMs, endMs } = rangeWindow(range);
+    return shifts.filter((s) => {
+      if (!s.closed_at) return false; // the section speaks only about SEALED shifts
+      const t = new Date(s.closed_at).getTime();
+      if (Number.isNaN(t)) return false;
+      if (startMs !== null && (t < startMs || t >= endMs)) return false;
+      return true;
+    });
+  }, [shifts, range]);
+
+  const shiftAgg = useMemo(() => {
+    let net = 0;
+    for (const s of shiftsInRange) net += Number(s.variance ?? 0);
+    return { net, count: shiftsInRange.length };
+  }, [shiftsInRange]);
 
   const retry = useCallback(() => {
     setLoading(true);
@@ -803,9 +955,229 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
             </section>
           </div>
 
+          {/* ── row: guest satisfaction (019) + drawer honesty (020) ── */}
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+            <section className="sp-card p-5 xl:col-span-2" aria-label="Guest satisfaction">
+              <div className="mb-1 flex items-center justify-between gap-2">
+                <h2 className="text-[15px] font-bold text-[#1A1A1A]">Guest satisfaction</h2>
+                <button
+                  onClick={exportRatings}
+                  disabled={fbAgg.count === 0}
+                  aria-label="Export guest ratings as CSV"
+                  title="Export the range's guest ratings as CSV"
+                  className="flex h-11 shrink-0 items-center gap-1.5 rounded-xl border border-[#E3E7E0] bg-white px-3 text-[12.5px] font-bold text-[#0F3D3E] transition hover:border-[#B88E2F] hover:text-[#B88E2F] disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <Download size={14} aria-hidden />
+                  CSV
+                </button>
+              </div>
+              <p className="mb-4 text-[11.5px] text-[#969696]">
+                Star ratings guests leave on their own phones, from the order's track page —
+                served tickets only. {RANGE_LABEL[range].toLowerCase()}.
+              </p>
+              {fbAgg.count === 0 ? (
+                <div className="flex flex-col items-center justify-center gap-2 py-8 text-center">
+                  <span className="flex h-14 w-14 items-center justify-center rounded-full bg-[#FDF6E7]">
+                    <Star size={22} className="text-[#B88E2F]" aria-hidden />
+                  </span>
+                  <p className="text-[12.5px] font-semibold text-[#1A1A1A]">
+                    No ratings in this range yet
+                  </p>
+                  <p className="max-w-xs text-[11.5px] text-[#969696]">
+                    Once served guests rate from their track page, the average and their words
+                    land here.
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="rounded-xl border border-[#E3E7E0] bg-[#FFFBF2] px-3.5 py-3">
+                      <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-[#8A5A00]">
+                        Average rating
+                      </p>
+                      <p
+                        className="mt-1 truncate text-[18px] font-extrabold tabular-nums leading-tight"
+                        style={{ color: ratingTone(fbAgg.avg) }}
+                      >
+                        {fbAgg.avg!.toFixed(1)}
+                        <span className="text-[12px] font-bold text-[#969696]"> / 5</span>
+                      </p>
+                      <p className="mt-0.5 text-[10px] font-semibold text-[#969696]">
+                        {ratingWord(fbAgg.avg)}
+                      </p>
+                    </div>
+                    <div className="rounded-xl border border-[#E3E7E0] bg-white px-3.5 py-3">
+                      <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-[#969696]">
+                        Ratings in range
+                      </p>
+                      <p className="mt-1 truncate text-[18px] font-extrabold tabular-nums leading-tight text-[#0F3D3E]">
+                        {fbAgg.count}
+                      </p>
+                      <p className="mt-0.5 truncate text-[10px] font-semibold text-[#969696]">
+                        {fbAgg.quotes.length} with {fbAgg.quotes.length === 1 ? 'a comment' : 'comments'}
+                      </p>
+                    </div>
+                  </div>
+                  {/* star histogram — 5★ first, the way a cafe reads it */}
+                  <div
+                    className="mt-4"
+                    role="img"
+                    aria-label={`Guest ratings histogram: ${fbAgg.stars[4]} five star, ${fbAgg.stars[3]} four star, ${fbAgg.stars[2]} three star, ${fbAgg.stars[1]} two star, ${fbAgg.stars[0]} one star ratings`}
+                  >
+                    <div className="flex h-28 items-end gap-2" aria-hidden>
+                      {fbAgg.stars
+                        .map((n, i) => ({ n, label: `${i + 1}★` }))
+                        .reverse()
+                        .map(({ n, label }, idx) => {
+                          const max = Math.max(1, ...fbAgg.stars);
+                          const h = n === 0 ? 6 : Math.max(14, (n / max) * 100);
+                          const modal = n > 0 && n === max;
+                          return (
+                            <div key={label} className="flex h-full min-w-0 flex-1 flex-col items-center">
+                              <span
+                                className={`text-[10.5px] font-bold tabular-nums ${n === 0 ? 'text-[#C9CFC9]' : modal ? 'text-[#8A5A00]' : 'text-[#6B6B6B]'}`}
+                              >
+                                {n}
+                              </span>
+                              {/* definite-height bar area so % heights resolve */}
+                              <div className="flex h-full w-full flex-1 items-end justify-center py-1">
+                                <div
+                                  className={`w-full max-w-[44px] rounded-t-md transition-all duration-700 ${
+                                    n === 0 ? 'bg-[#EAF0EC]' : modal ? 'bg-[#B88E2F]' : 'bg-[#0F3D3E]'
+                                  }`}
+                                  style={{ height: `${h}%`, transitionDelay: `${idx * 55}ms` }}
+                                />
+                              </div>
+                              <span className="text-[10px] font-semibold text-[#969696]">{label}</span>
+                            </div>
+                          );
+                        })}
+                    </div>
+                  </div>
+                  {fbAgg.quotes.length > 0 && (
+                    <ul className="mt-4 flex flex-col gap-2.5 border-t border-dashed border-[#E3E7E0] pt-3.5">
+                      {fbAgg.quotes.map((q) => (
+                        <li
+                          key={`${q.order_number}-${q.created_at}`}
+                          className="rounded-r-lg border-l-2 border-[#B88E2F] bg-[#FDFBF5] py-2 pl-3 pr-2.5 transition hover:bg-[#FBF5E6]"
+                        >
+                          <div className="flex items-start gap-1.5">
+                            <Quote size={11} aria-hidden className="mt-0.5 shrink-0 text-[#B88E2F]" />
+                            <p className="min-w-0 flex-1 text-[12px] italic leading-snug text-[#1A1A1A]">
+                              “{q.comment!.trim()}”
+                            </p>
+                            <span className="inline-flex shrink-0 items-center gap-1 text-[10.5px] font-bold tabular-nums text-[#8A5A00]">
+                              <Star size={10} aria-hidden className="fill-[#B88E2F] text-[#B88E2F]" />
+                              {q.rating} · #{q.order_number}
+                            </span>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </>
+              )}
+            </section>
+
+            <section className="sp-card p-5" aria-label="Drawer honesty">
+              <h2 className="mb-1 text-[15px] font-bold text-[#1A1A1A]">Drawer honesty</h2>
+              <p className="mb-4 text-[11.5px] text-[#969696]">
+                Sealed shifts only — expected is the ledger's math, variance is stored, never
+                re-derived. {RANGE_LABEL[range].toLowerCase()}.
+              </p>
+              {shiftAgg.count === 0 ? (
+                <div className="flex flex-col items-center justify-center gap-2 py-8 text-center">
+                  <span className="flex h-14 w-14 items-center justify-center rounded-full bg-[#EAF0EC]">
+                    <HandCoins size={22} className="text-[#0F3D3E]" aria-hidden />
+                  </span>
+                  <p className="text-[12.5px] font-semibold text-[#1A1A1A]">
+                    No sealed shifts in this range
+                  </p>
+                  <p className="max-w-[230px] text-[11.5px] text-[#969696]">
+                    Close a drawer shift on Close-out and its honesty lands here.
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div
+                      className={`rounded-xl border px-3.5 py-3 ${
+                        varianceTone(shiftAgg.net).cls.includes('2E7D32')
+                          ? 'border-[#BFDCC5] bg-[#F4FAF5]'
+                          : varianceTone(shiftAgg.net).cls.includes('8A5A00')
+                            ? 'border-[#EBD9A8] bg-[#FFFBF2]'
+                            : 'border-[#F0C4BE] bg-[#FEF4F3]'
+                      }`}
+                    >
+                      <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-[#969696]">
+                        Net variance
+                      </p>
+                      <p
+                        className={`mt-1 truncate text-[18px] font-extrabold tabular-nums leading-tight ${varianceTone(shiftAgg.net).cls}`}
+                      >
+                        {signedMoney(shiftAgg.net)}
+                      </p>
+                      <p className="mt-0.5 text-[10px] font-semibold text-[#969696]">
+                        {varianceTone(shiftAgg.net).label}
+                      </p>
+                    </div>
+                    <div className="rounded-xl border border-[#E3E7E0] bg-white px-3.5 py-3">
+                      <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-[#969696]">
+                        Shifts sealed
+                      </p>
+                      <p className="mt-1 truncate text-[18px] font-extrabold tabular-nums leading-tight text-[#0F3D3E]">
+                        {shiftAgg.count}
+                      </p>
+                      <p className="mt-0.5 text-[10px] font-semibold text-[#969696]">
+                        closed in range
+                      </p>
+                    </div>
+                  </div>
+                  <ul className="mt-4 flex flex-col gap-2.5 border-t border-dashed border-[#E3E7E0] pt-3.5">
+                    {shiftsInRange.slice(0, 5).map((s) => {
+                      const v = Number(s.variance ?? 0);
+                      const t = varianceTone(v);
+                      return (
+                        <li key={s.id}>
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="min-w-0 truncate text-[11.5px] font-semibold text-[#1A1A1A]">
+                              {s.closed_at ? IST_DT.format(new Date(s.closed_at)) : '—'}
+                            </span>
+                            <span className="flex shrink-0 items-center gap-2">
+                              <span className="text-[10.5px] tabular-nums text-[#969696]">
+                                {formatMoney(Number(s.expected_cash ?? 0))} exp ·{' '}
+                                {formatMoney(Number(s.counted_cash ?? 0))} counted
+                              </span>
+                              <span
+                                className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10.5px] font-bold tabular-nums ${t.chip}`}
+                              >
+                                {signedMoney(v)}
+                              </span>
+                            </span>
+                          </div>
+                          {s.closing_note ? (
+                            <p className="mt-0.5 truncate pl-0.5 text-[10.5px] italic text-[#969696]">
+                              “{s.closing_note}”
+                            </p>
+                          ) : null}
+                        </li>
+                      );
+                    })}
+                    {shiftsInRange.length > 5 && (
+                      <li className="pt-1 text-center text-[11.5px] text-[#969696]">
+                        + {shiftsInRange.length - 5} more sealed in range
+                      </li>
+                    )}
+                  </ul>
+                </>
+              )}
+            </section>
+          </div>
+
           <p className="px-1 text-[10.5px] text-[#969696]">
             Aggregated from the most recent 500 tickets in the cloud, IST calendar days. Cancelled
             tickets are excluded from every money figure; margin is computed on paid tickets only.
+            Guest satisfaction reads the ratings ledger; drawer honesty reads sealed shifts only.
           </p>
         </>
       )}
@@ -846,7 +1218,10 @@ const StatCard: React.FC<{ label: string; value: string; sub?: string; tone: str
   sub,
   tone,
 }) => (
-  <section className="sp-card p-4" aria-label={label}>
+  <section
+    className="sp-card p-4 transition duration-200 hover:-translate-y-0.5 hover:shadow-[0_8px_22px_rgba(15,61,62,0.10)]"
+    aria-label={label}
+  >
     <p className="text-[10.5px] font-bold uppercase tracking-[0.08em] text-[#969696]">{label}</p>
     <p
       className="mt-1.5 truncate text-[19px] font-extrabold tabular-nums leading-tight"
