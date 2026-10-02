@@ -3,6 +3,28 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.4.0] — 2026-10-02 — Inventory: the stock moves with the pan (NOVA inventory parity, migration 015 engine)
+
+### Added — the deduction ENGINE (migration `015_inventory_engine.sql`, CLI-applied + sentinel)
+- **Collaboration note**: the `inventory_items` shelf (location_id / current_stock / reorder_point / cost_per_unit) was applied to the live cloud out-of-band by the parallel round (no migration file); 015 **adopts it as canonical** and adds the missing moving parts. `inventory_items` was also missing from `supabase_realtime` — 015 subscribes both tables.
+- **`recipe_lines`** — what ONE serve of a menu item consumes (ingredient + qty, UNIQUE per item+ingredient).
+- **`stock_deductions`** — the append-only LEDGER keyed **UNIQUE (order_id, inventory_item_id)**: replays can never double-deduct a ticket. Stock going negative is allowed (real cafes oversell) — the UI shows it red.
+- **`trg_orders_deduct_stock`** — fires on `orders.status → 'preparing'` (and ONLY that transition): a ticket burning stock is the kitchen actually starting it — not placement (counter declines would phantom-burn stock), not completion (the food already left). One atomic CTE: insert ledger rows ON CONFLICT DO NOTHING, then apply exactly the rows it inserted. **SINGLE-ENGINE RULE** documented in the migration: any other stock-decrementing code must check this trigger first.
+- RLS two-policy shape (superadmin/tenant) on both new tables; validation block hard-fails unless tables+trigger+publication are whole.
+
+### Added — Inventory screen (`src/components/inventory/InventoryScreen.tsx`, nav "Inventory", Package icon after Reports)
+- **Stock tab** — level bars vs reorder point (green Healthy / amber Low / red Out), restock dialog with live "new level" preview, edit dialog (name/unit/current/reorder/cost), two-tap delete, and a **stat strip**: ingredients, low stock, out of stock, **stock value (Σ qty × cost)**. A low-stock alert banner appears only when something needs attention.
+- **Recent deductions feed** — the engine's audit trail on the board (ingredient, −qty, time), so the counter can SEE stock moving as tickets fire. Realtime (`inventory-<tenant>` channel) + 30s safety poll + Live chip.
+- **Recipes tab** — per-menu-item editor: pick an item, add ingredient + qty-per-serve rows, inline qty edit, save/discard with unsaved-changes guard, and honest copy: an item without a recipe moves no stock.
+
+### Proven end-to-end on the live cloud (DB + browser)
+- Engine: SKU "Coffee beans" 5,000 g + Flat White recipe (20 g/serve) → guest QR order ×2 → `preparing` → **stock 5,000 → 4,960, ledger row exactly 40 g** → replay-proof verified (status reset to pending and re-fired: stock unchanged, still 1 ledger row) → deleting the order cascades its ledger rows.
+- UI: ingredient created via the dialog (Coffee beans / g / 5,000 / 500 / ₹1.80), recipe saved via the Recipes editor (qty edit 18→20 verified in DB), live board showed **4,960 / reorder 500 · Healthy** with the "−40 g · 10:28 AM" feed row; stock value ₹8,928 = 4,960 × ₹1.80. Screenshots: empty shelf → stocked card → live deduction.
+- The demo SKU + recipe are KEPT on the QR Flow Cafe tenant as the owner's try-it-now inventory demo.
+
+### Housekeeping
+- `scripts/db-setup.mjs` sentinel 015 (2 tables + trigger + publication = green). Parallel-collision handled by protocol: their out-of-band shelf adopted, my conflicting 014 file deleted and renumbered engine-only 015.
+
 ## [5.3.3] — 2026-10-02 — Reports: sales, items and hours over real ranges (NOVA manager-reports parity)
 
 ### Added — Reports screen (`src/components/reports/ReportsScreen.tsx`, nav "Reports", BarChart3 between Close-out and Floor)

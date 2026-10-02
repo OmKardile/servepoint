@@ -1335,3 +1335,28 @@ Stage Summary:
 - Remaining NOVA parity for next rounds: inventory auto-deduction (recipes + migration 014), customers/offers, guest i18n, PWA (manifest + SW for the counter tablet), shared lib/csv.ts refactor (Bills + Reports duplicate csvCell).
 - Watch: I hit the CHANGELOG heading-swallow trap a THIRD time (my insert ate the `## [5.3.2]` marker; restored). Protocol: after any CHANGELOG insert, grep `^## \[` for consecutive-version integrity BEFORE committing.
 - Crons: 15-min webDevReview (job 430321).
+
+---
+Task ID: 42 (CLAIM — in progress)
+Agent: glm-5.3 (cron webDevReview round)
+Task: Claiming "inventory auto-deduction (recipes)" — migration 014_inventory_recipes.sql (inventory_items + recipe_lines + preparing-time deduction trigger + stock_deductions ledger + realtime), scripts/db-setup.mjs sentinel, api.ts inventory helpers, NEW src/components/inventory/InventoryScreen.tsx + nav wiring. Parallel agents: please do NOT take migration 014 / inventory this round and give me ~10 min of clean air on session.ts/Sidebar.tsx/App.tsx/api.ts/db-setup.mjs; customers/offers, guest i18n, PWA remain free.
+
+---
+Task ID: 42
+Agent: glm-5.3 (cron webDevReview round)
+Task: NOVA inventory parity — auto-deduction engine (migration 015) + Inventory screen + full live E2E
+
+Work Log:
+- Health sweep clean (tsc 0 / lint 0 / dev 200 / worktree clean at df8ff5a). Claimed "inventory auto-deduction" in the worklog BEFORE building.
+- PARALLEL COLLISION #3, handled by protocol: wrote my 014 (3-table shape: stock_qty/threshold), but db-setup failed on "policy already exists" — the parallel round had applied THEIR inventory_items to the live cloud out-of-band (location_id / current_stock / reorder_point / cost_per_unit, 4 policies, NO migration file on disk, NO engine, NOT on supabase_realtime). Adopted their shelf as canonical: deleted my 014 file, wrote **015_inventory_engine.sql** (engine-only, their column names): recipe_lines (per-serve consumption) + stock_deductions ledger (UNIQUE order+ingredient = replay-proof) + trg_orders_deduct_stock (fires ONLY on orders.status→preparing, single atomic CTE: insert ledger ON CONFLICT DO NOTHING → apply exactly the inserted rows) + realtime publication for both tables (theirs was missing too). First apply failed validation (pub=1 — their table wasn't on realtime); fixed the publication block to subscribe BOTH tables; re-applied green. Sentinel 015 in db-setup.mjs documents the provenance.
+- SINGLE-ENGINE RULE documented in the migration + worklog: any other stock-decrementing code must check trg_orders_deduct_stock first.
+- Engine E2E on the live cloud: SKU Coffee beans 5,000g + Flat White recipe 20g/serve → guest QR order ×2 (order #45 via RPC on a diag table) → preparing (direct UPDATE; trigger caller-agnostic) → **stock 5,000→4,960, exactly 1 ledger row of 40g** → REPLAY-PROOF: status reset to pending, re-fired preparing → stock unchanged, still 1 row → order DELETE cascades its ledger rows. Idempotent by construction, proven by execution.
+- NEW InventoryScreen (~800 lines, src/components/inventory/): Stock tab (level bars green/amber/red vs reorder point, restock dialog with live "new level" preview, edit dialog, two-tap delete, stat strip incl. stock value Σ qty×cost, low-stock alert banner only when needed) + Recipes tab (per-menu-item editor: ingredient + qty rows, inline edit, save/discard + unsaved guard, honest "no recipe moves no stock" copy) + Recent-deductions audit feed + realtime Live chip + 30s poll + skeleton/empty/tenant-retry states. api.ts: inventory CRUD + restock + recipe rewrite + subscribeInventoryRealtime (appended at file end to minimize merge surface). Nav: Inventory (Package) between Reports and Floor; Section + App wired.
+- Browser E2E (UI-driven): Add-ingredient dialog → card "Coffee beans: 5,000 g · Healthy" → Recipes editor linked Flat White→beans 18g. ONE transient: the first Save click didn't persist (no error, no row) — reproduced the exact client path in a node script with the owner JWT: INSERT worked fine, so the UI save path is sound; re-testing the UI edit (18→20) persisted correctly (DB-verified). Debug script deleted (contained owner creds — never commit that). Live deduction demo: order #46 ×2 → preparing → board showed **4,960 / reorder 500 · Healthy** + feed row "−40 g · 10:28 AM", stock value ₹8,928 = 4,960 × ₹1.80. Diag order/table deleted; **demo SKU + recipe KEPT** as the owner's try-it-now inventory demo.
+- tsc 0, lint clean. CHANGELOG [5.4.0] — heading-swallow trap hit a 4TH time (restored; grep-verify protocol caught it pre-commit).
+
+Stage Summary:
+- NOVA inventory parity SHIPPED: recipes + preparing-time auto-deduction + ledger + realtime board, proven end-to-end DB→UI. The cafe loop is now: sell (counter+QR) → cook (KDS gate) → collect (Bills) → close the day (Close-out) → read the business (Reports) → restock (Inventory).
+- For the parallel round: your inventory_items is canonical (adopted); your table was NOT on supabase_realtime — 015 fixed that; the deduction engine + ledger + trigger are MINE in 015 — do not add a second deduction path.
+- Remaining NOVA parity: customers/offers, guest i18n, PWA (manifest+SW), shared lib/csv.ts (Bills+Reports+Inventory could share), inventory cost integration into Close-out/Reports (COGS) as a future refinement.
+- Crons: 15-min webDevReview (job 430321).

@@ -176,6 +176,31 @@ try {
   };
   await applyFile('013_counter_gate', 'supabase/migrations/013_counter_gate.sql', await counterGateReady());
 
+  // 015 sentinel: inventory ENGINE (recipe_lines + deduction ledger + preparing-time
+  // trigger + realtime). inventory_items itself was applied out-of-band by a
+  // parallel round (014 is theirs, no file) — this engine ADOPTS it as canonical.
+  const inventoryEngineReady = async () => {
+    const tables = Number(
+      await scalar(
+        `SELECT count(*) FROM information_schema.tables WHERE table_schema='public'
+          AND table_name IN ('recipe_lines','stock_deductions')`
+      )
+    );
+    const trg = Number(
+      await scalar(
+        `SELECT count(*) FROM pg_trigger WHERE tgname='trg_orders_deduct_stock' AND NOT tgisinternal`
+      )
+    );
+    const pub = Number(
+      await scalar(
+        `SELECT count(*) FROM pg_publication_tables WHERE pubname='supabase_realtime'
+          AND tablename IN ('inventory_items','stock_deductions')`
+      )
+    );
+    return tables === 2 && trg === 1 && pub === 2;
+  };
+  await applyFile('015_inventory_engine', 'supabase/migrations/015_inventory_engine.sql', await inventoryEngineReady());
+
   // ── Verification ──────────────────────────────────────────────────────────
   const tables = await client.query(
     `SELECT table_name FROM information_schema.tables WHERE table_schema='public' ORDER BY table_name`

@@ -11,6 +11,7 @@ import { FoodDrinksScreen } from './components/food/FoodDrinksScreen';
 import { BillsScreen } from './components/bills/BillsScreen';
 import { EodScreen } from './components/eod/EodScreen';
 import { ReportsScreen } from './components/reports/ReportsScreen';
+import { InventoryScreen } from './components/inventory/InventoryScreen';
 import { KitchenScreen } from './components/kitchen/KitchenScreen';
 import { FloorScreen } from './components/floor/FloorScreen';
 import { MenuScreen } from './components/menu/MenuScreen';
@@ -85,6 +86,7 @@ const CafeApp: React.FC = () => {
       {section === 'bills' && <BillsScreen />}
       {section === 'eod' && <EodScreen />}
       {section === 'reports' && <ReportsScreen />}
+      {section === 'inventory' && <InventoryScreen />}
       {section === 'floor' && <FloorScreen />}
       {section === 'menu' && <MenuScreen />}
       {section === 'notifications' && <NotificationsScreen />}

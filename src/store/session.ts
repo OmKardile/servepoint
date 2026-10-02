@@ -23,6 +23,7 @@ export type Section =
   | 'bills'
   | 'eod'
   | 'reports'
+  | 'inventory'
   | 'floor'
   | 'menu'
   | 'settings'

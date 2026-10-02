@@ -1002,3 +1002,203 @@ export async function provisionBusiness(input: ProvisionInput): Promise<Provisio
 
   return { tenant, cloudError };
 }
+
+/* ── Inventory + recipes (v5.4.0 — migration 015 engine) ────────────────────
+ * inventory_items (the SKU shelf: current_stock / reorder_point / cost) was
+ * provisioned out-of-band (parallel round, "014"); the DEDUCTION ENGINE lives
+ * in 015: trg_orders_deduct_stock fires on orders.status → 'preparing' and
+ * writes an append-only stock_deductions ledger (UNIQUE per order+ingredient —
+ * replays can never double-deduct) against recipe_lines × ticket qty.
+ * ⚠️ SINGLE-ENGINE RULE: that trigger is THE deduction path.
+ */
+
+export interface InventoryItem {
+  id: string;
+  tenant_id: string;
+  location_id: string | null;
+  name: string;
+  unit: string; // 'g' | 'kg' | 'ml' | 'l' | 'pc'
+  current_stock: number;
+  reorder_point: number;
+  cost_per_unit: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface RecipeLine {
+  id: string;
+  tenant_id: string;
+  menu_item_id: string;
+  inventory_item_id: string;
+  qty_per_serve: number;
+}
+
+export interface StockDeduction {
+  id: string;
+  tenant_id: string;
+  order_id: string;
+  menu_item_id: string | null;
+  inventory_item_id: string;
+  qty: number;
+  created_at: string;
+}
+
+export async function fetchInventory(tenantId: string): Promise<InventoryItem[]> {
+  requireCloud();
+  const { data, error } = await supabase
+    .from('inventory_items')
+    .select('*')
+    .eq('tenant_id', tenantId)
+    .order('name', { ascending: true });
+  if (error) throw error;
+  return (data || []) as InventoryItem[];
+}
+
+export interface NewInventoryItemInput {
+  name: string;
+  unit: string;
+  currentStock: number;
+  reorderPoint: number;
+  costPerUnit?: number | null;
+}
+
+export async function createInventoryItem(
+  tenantId: string,
+  input: NewInventoryItemInput
+): Promise<InventoryItem> {
+  requireCloud();
+  const locationId = await ensureLocation(tenantId);
+  const { data, error } = await supabase
+    .from('inventory_items')
+    .insert({
+      tenant_id: tenantId,
+      location_id: locationId,
+      name: input.name.trim(),
+      unit: input.unit,
+      current_stock: input.currentStock,
+      reorder_point: input.reorderPoint,
+      cost_per_unit: input.costPerUnit ?? null,
+    })
+    .select('*')
+    .single();
+  if (error) throw error;
+  return data as InventoryItem;
+}
+
+export interface InventoryItemPatch {
+  name?: string;
+  unit?: string;
+  current_stock?: number;
+  reorder_point?: number;
+  cost_per_unit?: number | null;
+}
+
+export async function updateInventoryItem(
+  id: string,
+  patch: InventoryItemPatch
+): Promise<void> {
+  requireCloud();
+  const { error } = await supabase.from('inventory_items').update(patch).eq('id', id);
+  if (error) throw error;
+}
+
+/** Adds delivery stock to the shelf (restock = stock IN, always positive). */
+export async function restockInventoryItem(id: string, qty: number): Promise<void> {
+  requireCloud();
+  if (!(qty > 0)) throw new Error('Restock quantity must be greater than zero.');
+  // Read-modify-write within one RPC-less call — acceptable for single-terminal
+  // edits; the engine's money paths remain RPC/trigger-guarded.
+  const { data, error } = await supabase
+    .from('inventory_items')
+    .select('current_stock')
+    .eq('id', id)
+    .single();
+  if (error) throw error;
+  const next = Number(data.current_stock) + qty;
+  const { error: upErr } = await supabase
+    .from('inventory_items')
+    .update({ current_stock: next })
+    .eq('id', id);
+  if (upErr) throw upErr;
+}
+
+export async function deleteInventoryItem(id: string): Promise<void> {
+  requireCloud();
+  const { error } = await supabase.from('inventory_items').delete().eq('id', id);
+  if (error) throw error;
+}
+
+export async function fetchRecipeLines(tenantId: string): Promise<RecipeLine[]> {
+  requireCloud();
+  const { data, error } = await supabase
+    .from('recipe_lines')
+    .select('*')
+    .eq('tenant_id', tenantId);
+  if (error) throw error;
+  return (data || []) as RecipeLine[];
+}
+
+/** Rewrites the recipe for one menu item (diff-free, like setItemAddons). */
+export async function setRecipeLines(
+  tenantId: string,
+  menuItemId: string,
+  lines: { inventory_item_id: string; qty_per_serve: number }[]
+): Promise<void> {
+  requireCloud();
+  const del = await supabase.from('recipe_lines').delete().eq('menu_item_id', menuItemId);
+  if (del.error) throw del.error;
+  if (lines.length === 0) return;
+  const { error } = await supabase.from('recipe_lines').insert(
+    lines.map((l) => ({
+      tenant_id: tenantId,
+      menu_item_id: menuItemId,
+      inventory_item_id: l.inventory_item_id,
+      qty_per_serve: l.qty_per_serve,
+    }))
+  );
+  if (error) throw error;
+}
+
+export async function fetchRecentDeductions(
+  tenantId: string,
+  limit = 12
+): Promise<StockDeduction[]> {
+  requireCloud();
+  const { data, error } = await supabase
+    .from('stock_deductions')
+    .select('*')
+    .eq('tenant_id', tenantId)
+    .order('created_at', { ascending: false })
+    .limit(limit);
+  if (error) throw error;
+  return (data || []) as StockDeduction[];
+}
+
+/** Live stock board: inventory movements + deduction ledger, realtime + RLS. */
+export function subscribeInventoryRealtime(
+  tenantId: string,
+  onPing: () => void,
+  onState: (s: RealtimeState) => void
+): () => void {
+  requireCloud();
+  const channel = supabase
+    .channel(`inventory-${tenantId}`)
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'inventory_items', filter: `tenant_id=eq.${tenantId}` },
+      () => onPing()
+    )
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'stock_deductions', filter: `tenant_id=eq.${tenantId}` },
+      () => onPing()
+    )
+    .subscribe((status) => {
+      if (status === 'SUBSCRIBED') onState('live');
+      else if (status === 'TIMED_OUT' || status === 'CHANNEL_ERROR' || status === 'CLOSED') onState('offline');
+      else onState('connecting');
+    });
+  return () => {
+    void supabase.removeChannel(channel);
+  };
+}
