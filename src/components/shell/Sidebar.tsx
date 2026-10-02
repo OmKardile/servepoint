@@ -13,6 +13,7 @@ import {
   Receipt,
   Settings as SettingsIcon,
   UserRound,
+  Users,
 } from 'lucide-react';
 import { useSession, useUi, type Section } from '../../store/session';
 import brandMark from '../../assets/brand/mark.png';
@@ -25,6 +26,7 @@ const NAV: { id: Section; label: string; icon: React.ElementType }[] = [
   { id: 'eod', label: 'Close-out', icon: MoonStar },
   { id: 'reports', label: 'Reports', icon: BarChart3 },
   { id: 'inventory', label: 'Inventory', icon: Package },
+  { id: 'customers', label: 'Guests', icon: Users },
   { id: 'floor', label: 'Floor', icon: Armchair },
   { id: 'menu', label: 'Menu', icon: BookOpenText },
   { id: 'settings', label: 'Settings', icon: SettingsIcon },

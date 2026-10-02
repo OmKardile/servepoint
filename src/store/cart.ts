@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { MenuItem, OrderType } from '../types';
+import type { MenuItem, Offer, OrderType } from '../types';
 
 export interface CartLine {
   key: string;
@@ -20,6 +20,10 @@ interface CartState {
   tableLabel: string;
   guestCount: number;
   customerName: string;
+  /** CRM key (016) — typing a phone books the guest forever. */
+  customerPhone: string;
+  /** Offer picked in the drawer; discount is computed at render, ledger written on place. */
+  offer: Offer | null;
   add: (
     item: MenuItem,
     qty: number,
@@ -33,6 +37,8 @@ interface CartState {
   setTableLabel: (t: string) => void;
   setGuestCount: (n: number) => void;
   setCustomerName: (n: string) => void;
+  setCustomerPhone: (p: string) => void;
+  setOffer: (o: Offer | null) => void;
   clear: () => void;
 }
 
@@ -46,6 +52,8 @@ export const useCart = create<CartState>((set, get) => ({
   tableLabel: '',
   guestCount: 2,
   customerName: '',
+  customerPhone: '',
+  offer: null,
   add: (item, qty, addons) => {
     const addonNames = addons.map((a) => a.name);
     const addonTotal = addons.reduce((s, a) => s + a.price, 0);
@@ -84,8 +92,22 @@ export const useCart = create<CartState>((set, get) => ({
   setTableLabel: (tableLabel) => set({ tableLabel }),
   setGuestCount: (guestCount) => set({ guestCount }),
   setCustomerName: (customerName) => set({ customerName }),
-  clear: () => set({ lines: [] }),
+  setCustomerPhone: (customerPhone) => set({ customerPhone }),
+  setOffer: (offer) => set({ offer }),
+  // a placed ticket is a finished story — the next ticket starts anonymous,
+  // with no offer silently riding over from the last one
+  clear: () => set({ lines: [], offer: null, customerName: '', customerPhone: '' }),
 }));
 
 export const cartTotal = (lines: CartLine[]): number =>
   Math.round(lines.reduce((s, l) => s + l.qty * l.unitPrice, 0) * 100) / 100;
+
+/** Offer discount in rupees against a subtotal — percent or flat, never below zero, capped at the subtotal. */
+export const offerDiscount = (offer: Offer | null, subtotal: number): number => {
+  if (!offer || subtotal <= 0) return 0;
+  if (subtotal < offer.min_order_amount) return 0;
+  const raw = offer.discount_type === 'percent'
+    ? (subtotal * offer.discount_value) / 100
+    : offer.discount_value;
+  return Math.min(Math.round(raw * 100) / 100, subtotal);
+};

@@ -58,6 +58,21 @@ export interface PublicMenu {
   categories?: GuestCategory[];
 }
 
+/** Active offers for the guest menu banner (migration 016, read-only RPC). */
+export interface PublicOffer {
+  id: string;
+  title: string;
+  description: string | null;
+  discount_type: 'percent' | 'flat';
+  discount_value: number;
+  min_order_amount: number;
+}
+
+export interface PublicOffers {
+  is_valid: boolean;
+  offers: PublicOffer[];
+}
+
 export interface ResolvedTable {
   is_valid: boolean;
   error?: string;
@@ -196,6 +211,17 @@ export async function fetchPublicMenu(slug: string): Promise<PublicMenu> {
     return { is_valid: false, error: 'NETWORK', message: 'Could not load the menu. Check your connection and try again.' };
   }
   return data as PublicMenu;
+}
+
+/** Active offers for the banner — a failed fetch just hides the banner, never blocks the menu. */
+export async function fetchPublicOffers(slug: string): Promise<PublicOffer[]> {
+  try {
+    const { data, error } = await supabase.rpc('sp_public_offers', { p_slug: slug });
+    if (error || !data?.is_valid) return [];
+    return (data.offers || []) as PublicOffer[];
+  } catch {
+    return [];
+  }
 }
 
 /**

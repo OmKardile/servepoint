@@ -201,6 +201,38 @@ try {
   };
   await applyFile('015_inventory_engine', 'supabase/migrations/015_inventory_engine.sql', await inventoryEngineReady());
 
+  // 016 sentinel: CRM — customers/offers/offer_redemptions + stats view +
+  // auto-enrich + usage-bump triggers + public-offers RPC + realtime.
+  const crmReady = async () => {
+    const tables = Number(
+      await scalar(
+        `SELECT count(*) FROM information_schema.tables WHERE table_schema='public'
+          AND table_name IN ('customers','offers','offer_redemptions')`
+      )
+    );
+    const view = Number(
+      await scalar(
+        `SELECT count(*) FROM information_schema.views WHERE table_schema='public'
+          AND table_name='v_customer_stats'`
+      )
+    );
+    const trg = Number(
+      await scalar(
+        `SELECT count(*) FROM pg_trigger WHERE tgname IN
+          ('trg_orders_touch_customer','trg_offer_redemptions_usage') AND NOT tgisinternal`
+      )
+    );
+    const rpc = await scalar(`SELECT to_regprocedure('public.sp_public_offers(text)') IS NOT NULL`);
+    const pub = Number(
+      await scalar(
+        `SELECT count(*) FROM pg_publication_tables WHERE pubname='supabase_realtime'
+          AND tablename IN ('customers','offers')`
+      )
+    );
+    return tables === 3 && view === 1 && trg === 2 && rpc === true && pub === 2;
+  };
+  await applyFile('016_customers_offers', 'supabase/migrations/016_customers_offers.sql', await crmReady());
+
   // ── Verification ──────────────────────────────────────────────────────────
   const tables = await client.query(
     `SELECT table_name FROM information_schema.tables WHERE table_schema='public' ORDER BY table_name`

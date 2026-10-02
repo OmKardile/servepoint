@@ -24,6 +24,7 @@ export type Section =
   | 'eod'
   | 'reports'
   | 'inventory'
+  | 'customers'
   | 'floor'
   | 'menu'
   | 'settings'

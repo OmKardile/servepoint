@@ -5,9 +5,12 @@ import type {
   Category,
   ChatMessage,
   Conversation,
+  Customer,
+  CustomerStats,
   DashboardData,
   Employee,
   MenuItem,
+  Offer,
   Order,
   OrderItem,
   OrderType,
@@ -140,6 +143,12 @@ export interface NewOrderInput {
   tableLabel?: string | null;
   guestCount?: number | null;
   customerName?: string | null;
+  /** CRM key — the 016 trigger upserts the guest from it; null = anonymous walk-in. */
+  customerPhone?: string | null;
+  /** Pre-computed offer discount (rupees). The caller owns offer math; the DB owns the ledger. */
+  discountAmount?: number | null;
+  /** Offer applied — a 016 redemption ledger row is written with the order. */
+  offerId?: string | null;
   notes?: string | null;
   items: { name: string; qty: number; unitPrice: number; menuItemId?: string | null; notes?: string }[];
 }
@@ -181,9 +190,12 @@ export async function createOrder(tenantId: string, input: NewOrderInput): Promi
   const locationId = await ensureLocation(tenantId);
 
   const subtotal = input.items.reduce((s, it) => s + it.qty * it.unitPrice, 0);
+  // Offer discount (016) applies on the subtotal BEFORE GST — an MRP-level
+  // reduction, so tax follows the discounted base. Clamp: never below zero.
+  const discount = Math.min(Math.max(input.discountAmount || 0, 0), subtotal);
   const taxRate = 0.05; // GST 5% — standard F&B rate
-  const taxAmount = Math.round(subtotal * taxRate * 100) / 100;
-  const total = Math.round((subtotal + taxAmount) * 100) / 100;
+  const taxAmount = Math.round((subtotal - discount) * taxRate * 100) / 100;
+  const total = Math.round((subtotal - discount + taxAmount) * 100) / 100;
 
   // orders has NO guest_count column (migration 001) — sending one 400s.
   // Table/guest context rides in notes for KDS display, while tableId takes
@@ -207,8 +219,10 @@ export async function createOrder(tenantId: string, input: NewOrderInput): Promi
       status: 'new',
       table_id: input.tableId || null,
       customer_name: input.customerName || null,
+      customer_phone: input.customerPhone || null,
       subtotal,
       tax_amount: taxAmount,
+      discount_amount: discount,
       total,
       payment_status: 'pending',
       notes: contextNotes || null,
@@ -229,6 +243,18 @@ export async function createOrder(tenantId: string, input: NewOrderInput): Promi
   }));
   const { error: itemsErr } = await supabase.from('order_items').insert(rows);
   if (itemsErr) throw itemsErr;
+
+  // Offer redemption — the 016 ledger row is the ONLY thing that bumps
+  // usage_count (trigger). UNIQUE(order_id) makes a retry harmless.
+  if (input.offerId && discount > 0) {
+    const { error: redErr } = await supabase.from('offer_redemptions').insert({
+      tenant_id: tenantId,
+      offer_id: input.offerId,
+      order_id: created.id,
+      discount_amount: discount,
+    });
+    if (redErr) throw redErr;
+  }
 
   return { ...(created as OrderRow), items: rows as unknown as OrderItem[] } as Order;
 }
@@ -1191,6 +1217,154 @@ export function subscribeInventoryRealtime(
     .on(
       'postgres_changes',
       { event: '*', schema: 'public', table: 'stock_deductions', filter: `tenant_id=eq.${tenantId}` },
+      () => onPing()
+    )
+    .subscribe((status) => {
+      if (status === 'SUBSCRIBED') onState('live');
+      else if (status === 'TIMED_OUT' || status === 'CHANNEL_ERROR' || status === 'CLOSED') onState('offline');
+      else onState('connecting');
+    });
+  return () => {
+    void supabase.removeChannel(channel);
+  };
+}
+
+/* ═══════════════════════ Customers & Offers (016 CRM) ═══════════════════ */
+
+export async function fetchCustomers(tenantId: string): Promise<Customer[]> {
+  requireCloud();
+  const { data, error } = await supabase
+    .from('customers')
+    .select('*')
+    .eq('tenant_id', tenantId)
+    .order('updated_at', { ascending: false });
+  if (error) throw error;
+  return (data || []) as Customer[];
+}
+
+export interface CustomerInput {
+  name: string;
+  phone: string;
+  email?: string | null;
+  notes?: string | null;
+}
+
+export async function createCustomer(tenantId: string, input: CustomerInput): Promise<Customer> {
+  requireCloud();
+  const { data, error } = await supabase
+    .from('customers')
+    .insert({ tenant_id: tenantId, name: input.name, phone: input.phone, email: input.email || null, notes: input.notes || null })
+    .select('*')
+    .single();
+  if (error) throw error;
+  return data as Customer;
+}
+
+export async function updateCustomer(id: string, input: CustomerInput): Promise<void> {
+  requireCloud();
+  const { error } = await supabase
+    .from('customers')
+    .update({ name: input.name, phone: input.phone, email: input.email || null, notes: input.notes || null })
+    .eq('id', id);
+  if (error) throw error;
+}
+
+export async function deleteCustomer(id: string): Promise<void> {
+  requireCloud();
+  const { error } = await supabase.from('customers').delete().eq('id', id);
+  if (error) throw error;
+}
+
+/** Ledger-derived regulars — orders_placed / visits / total_spent / last_visit per phone. */
+export async function fetchCustomerStats(tenantId: string): Promise<Map<string, CustomerStats>> {
+  requireCloud();
+  const { data, error } = await supabase
+    .from('v_customer_stats')
+    .select('phone, orders_placed, visits, total_spent, last_visit_at')
+    .eq('tenant_id', tenantId);
+  if (error) throw error;
+  const map = new Map<string, CustomerStats>();
+  for (const row of (data || []) as CustomerStats[]) map.set(row.phone, row);
+  return map;
+}
+
+/** Recent tickets for one guest — joined client-side from the orders ledger. */
+export async function fetchCustomerOrders(tenantId: string, phone: string, limit = 8): Promise<Order[]> {
+  requireCloud();
+  const { data, error } = await supabase
+    .from('orders')
+    .select('*')
+    .eq('tenant_id', tenantId)
+    .eq('customer_phone', phone)
+    .order('created_at', { ascending: false })
+    .limit(limit);
+  if (error) throw error;
+  return attachItems((data || []) as OrderRow[], tenantId);
+}
+
+export async function fetchOffers(tenantId: string): Promise<Offer[]> {
+  requireCloud();
+  const { data, error } = await supabase
+    .from('offers')
+    .select('*')
+    .eq('tenant_id', tenantId)
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  return (data || []) as Offer[];
+}
+
+export interface OfferInput {
+  title: string;
+  description?: string | null;
+  discount_type: 'percent' | 'flat';
+  discount_value: number;
+  min_order_amount: number;
+  is_active: boolean;
+}
+
+export async function createOffer(tenantId: string, input: OfferInput): Promise<Offer> {
+  requireCloud();
+  const { data, error } = await supabase
+    .from('offers')
+    .insert({ tenant_id: tenantId, ...input, description: input.description || null })
+    .select('*')
+    .single();
+  if (error) throw error;
+  return data as Offer;
+}
+
+export async function updateOffer(id: string, input: OfferInput): Promise<void> {
+  requireCloud();
+  const { error } = await supabase
+    .from('offers')
+    .update({ ...input, description: input.description || null })
+    .eq('id', id);
+  if (error) throw error;
+}
+
+export async function deleteOffer(id: string): Promise<void> {
+  requireCloud();
+  const { error } = await supabase.from('offers').delete().eq('id', id);
+  if (error) throw error;
+}
+
+/** Live CRM board: identity + offer changes stream across devices. */
+export function subscribeCrmRealtime(
+  tenantId: string,
+  onPing: () => void,
+  onState: (s: RealtimeState) => void
+): () => void {
+  requireCloud();
+  const channel = supabase
+    .channel(`crm-${tenantId}`)
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'customers', filter: `tenant_id=eq.${tenantId}` },
+      () => onPing()
+    )
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'offers', filter: `tenant_id=eq.${tenantId}` },
       () => onPing()
     )
     .subscribe((status) => {

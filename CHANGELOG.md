@@ -3,6 +3,38 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.5.0] — 2026-10-02 — Guests & Offers: the CRM remembers (NOVA customers/offers parity, migration 016)
+
+### Added — the CRM engine (migration `016_customers_offers.sql`, CLI-applied + sentinel)
+- **`customers`** — identity keyed by `(tenant_id, phone)`. The auto-enrich trigger `trg_orders_touch_customer` upserts the guest the moment any order carries a phone: the counter types a number once and the CRM remembers forever. An edited CRM name always wins over a newer ticket's spelling; a blank name gets filled.
+- **`offers`** — percent or flat discounts with a `min_order_amount` floor, `is_active` pause switch, and a CHECK that forbids percent offers above 100 (an offer can never pay the guest).
+- **`offer_redemptions`** — the ledger. `UNIQUE(order_id)` makes one-offer-per-order replay-proof (015 ledger pattern); `trg_offer_redemptions_usage` RECOMPUTES `offers.usage_count` from the ledger on insert/delete/update, so a cascade-deleted order heals the counter instead of leaving a phantom use.
+- **`v_customer_stats`** — visits/spend are never stored: the view derives them from the orders ledger (`security_invoker = on` so tenant RLS applies), only PAID, non-cancelled tickets count. Nothing to drift.
+- **`sp_public_offers(p_slug)`** — SECURITY DEFINER RPC feeding the guest menu banner; guests never touch the offers table directly.
+- **Realtime**: `customers` + `offers` on `supabase_realtime` (idempotent membership check).
+
+### Added — the counter discount flow (cart ↔ DB honest math)
+- Order drawer gains **Phone** ("books the guest in CRM") and an **Offer** dropdown of active offers; below-minimum offers show their floor and stay unselectable.
+- Live totals: discount row in green (`OFFER` badge), **GST recomputed on the discounted base**, total = subtotal − discount + GST. The same math runs in `createOrder`, which now writes `customer_phone`, `discount_amount`, and the redemption ledger row atomically with the ticket.
+- A placed ticket clears name/phone/offer — the next ticket never inherits the last guest's discount silently.
+
+### Added — the Guests screen (nav: `Guests`, between Inventory and Floor)
+- **Guests tab**: KPI strip (guests on the books / regulars 2+ paid visits / VIPs ≥5 visits or ₹5,000 paid / top spender), search across name+phone+notes+email, ledger-honest rows (Visits grey at 0, Spent green when paid, last-visit "today 10:55 am"-style), deterministic tone-ring avatars by phone hash, tier chips (NEW/REGULAR/VIP), two-tap delete, add/edit dialog with phone validation.
+- **Guest detail drawer** (slide-over, Esc-closable): paid visits / paid total / all tickets from the ledger, plus the guest's recent tickets with items, status, green −discount and total.
+- **Offers tab**: card grid with discount medallions (gold % / sage flat), gold spine + LIVE chip on active offers, "used N×" from the ledger, pause toggle, edit, two-tap delete, honest empty states both tabs. Live chip + 30s poll, tenant-retry remount, skeletons.
+
+### Added — guest-side marketing (no login, capability-safe)
+- The QR menu (`/menu/:token`) renders a **gold offers banner** (scrollable chips: medallion + title + rule + min + description) fetched via `sp_public_offers` — best-effort: a failed fetch hides the banner, never blocks ordering.
+
+### QA — engine + money loop proven on the live cloud
+- `scripts/qa-crm-e2e.mjs`: 7/7 PASS — auto-enrich creates the guest from an order; unpaid ticket ⇒ visits=0 while orders_placed=1; payment ⇒ visits=1/spent=210; redemption insert recomputes usage; second redemption per order rejected (UNIQUE); deleting the order cascades the ledger AND heals usage_count to 0.
+- Browser E2E as the owner: offers tab renders the seeded demo offers → counter order #48 (2 × Flat White ₹440, Maya Iyer, 98765 43210) + "₹50 off over ₹300" → drawer showed −₹50 / GST ₹19.50 / **total ₹409.50** → placed → inbox shows "for Maya Iyer · ₹409.50" → DB verified (discount_amount=50, redemption row, usage_count=1, customer row auto-created) → Bills UPI charge → Guests screen flipped to VISITS 1 / SPENT ₹409.50 / top-spender card → guest QR menu shows both offer chips.
+- **Kept as the owner's try-it-now demo** (Task 42 inventory-demo precedent): Maya Iyer + paid ticket #48 + the two demo offers ("Morning flat white — 10% off", "₹50 off over ₹300"). Fixture scripts clean up after themselves.
+
+### Notes
+- NOVA parity remaining: guest i18n, PWA (manifest + SW), shared csv lib, COGS wiring into Reports/Close-out.
+- Migration 013's sentinel re-fired an idempotent re-apply during 016 provisioning (harmless; engine strings intact).
+
 ## [5.4.0] — 2026-10-02 — Inventory: the stock moves with the pan (NOVA inventory parity, migration 015 engine)
 
 ### Added — the deduction ENGINE (migration `015_inventory_engine.sql`, CLI-applied + sentinel)

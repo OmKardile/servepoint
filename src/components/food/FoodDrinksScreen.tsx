@@ -15,13 +15,13 @@ import {
   X,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
-import type { Category, MenuItem, OrderType } from '../../types';
-import { createOrder, fetchCategories, fetchMenuItems, fetchTables, type DiningTable } from '../../lib/api';
+import type { Category, MenuItem, Offer, OrderType } from '../../types';
+import { createOrder, fetchCategories, fetchMenuItems, fetchOffers, fetchTables, type DiningTable } from '../../lib/api';
 import { CounterInbox } from './CounterInbox';
 import { useTenant } from '../../lib/tenant';
 import { formatMoney } from '../../lib/prefs';
 import { useUi } from '../../store/session';
-import { cartTotal, useCart } from '../../store/cart';
+import { cartTotal, offerDiscount, useCart } from '../../store/cart';
 import { ItemDetailModal } from './ItemDetailModal';
 
 /**
@@ -224,9 +224,10 @@ const OrderDrawer: React.FC<{
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [tables, setTables] = useState<DiningTable[] | null>(null);
+  const [offers, setOffers] = useState<Offer[]>([]);
   const panelRef = useRef<HTMLDivElement>(null);
 
-  // floor list for the table picker — loaded when the drawer opens
+  // floor list + active offers — loaded when the drawer opens
   useEffect(() => {
     if (!open || !tenantId) return;
     let alive = true;
@@ -237,6 +238,13 @@ const OrderDrawer: React.FC<{
       })
       .catch(() => {
         if (alive) setTables([]);
+      });
+    fetchOffers(tenantId)
+      .then((o) => {
+        if (alive) setOffers(o.filter((x) => x.is_active));
+      })
+      .catch(() => {
+        if (alive) setOffers([]);
       });
     return () => {
       alive = false;
@@ -256,8 +264,10 @@ const OrderDrawer: React.FC<{
   if (!open) return null;
 
   const subtotal = round2(cartTotal(cart.lines));
-  const tax = round2(subtotal * 0.05);
-  const total = round2(subtotal + tax);
+  const discount = offerDiscount(cart.offer, subtotal);
+  const tax = round2((subtotal - discount) * 0.05);
+  const total = round2(subtotal - discount + tax);
+  const offerEligible = (o: Offer) => subtotal >= o.min_order_amount;
   const canPlace = cart.lines.length > 0 && !submitting;
 
   const placeOrder = async () => {
@@ -271,6 +281,9 @@ const OrderDrawer: React.FC<{
         tableLabel: cart.orderType === 'dine_in' ? cart.tableLabel || null : null,
         guestCount: cart.orderType === 'dine_in' ? cart.guestCount || null : null,
         customerName: cart.customerName || null,
+        customerPhone: cart.customerPhone.trim() || null,
+        discountAmount: discount > 0 ? discount : null,
+        offerId: discount > 0 && cart.offer ? cart.offer.id : null,
         items: cart.lines.map((l) => ({
           name: l.name,
           qty: l.qty,
@@ -400,6 +413,20 @@ const OrderDrawer: React.FC<{
                 className="sp-input h-11 w-full px-3 text-[13.5px]"
               />
             </div>
+            <div className="col-span-2">
+              <label htmlFor="od-phone" className="mb-1 block text-[12px] font-medium text-[#6B6B6B]">
+                Phone <span className="text-[#969696]">· books the guest in CRM</span>
+              </label>
+              <input
+                id="od-phone"
+                type="tel"
+                inputMode="tel"
+                value={cart.customerPhone}
+                onChange={(e) => cart.setCustomerPhone(e.target.value)}
+                placeholder="98765 43210"
+                className="sp-input h-11 w-full px-3 text-[13.5px]"
+              />
+            </div>
           </div>
 
           {/* Lines */}
@@ -462,11 +489,52 @@ const OrderDrawer: React.FC<{
               {submitError}
             </p>
           )}
+          {/* Offer picker (016) — active offers, min-order aware, live discount */}
+          {offers.length > 0 && (
+            <div className="mb-3">
+              <label htmlFor="od-offer" className="mb-1 block text-[12px] font-medium text-[#6B6B6B]">
+                Offer
+              </label>
+              <select
+                id="od-offer"
+                value={cart.offer?.id || ''}
+                onChange={(e) => {
+                  const next = offers.find((o) => o.id === e.target.value) || null;
+                  cart.setOffer(next && offerEligible(next) ? next : null);
+                }}
+                className="sp-input h-11 w-full px-3 text-[13.5px]"
+              >
+                <option value="">No offer</option>
+                {offers.map((o) => (
+                  <option key={o.id} value={o.id} disabled={!offerEligible(o)}>
+                    {o.title} · {o.discount_type === 'percent' ? `${o.discount_value}% off` : `${formatMoney(o.discount_value)} off`}
+                    {!offerEligible(o) && ` (min ${formatMoney(o.min_order_amount)})`}
+                  </option>
+                ))}
+              </select>
+              {cart.offer && !offerEligible(cart.offer) && (
+                <p className="mt-1 text-[11.5px] text-[#B42318]">
+                  Add {formatMoney(cart.offer.min_order_amount - subtotal)} more to use {cart.offer.title}.
+                </p>
+              )}
+            </div>
+          )}
           <dl className="mb-3 space-y-1.5 text-[13px]">
             <div className="flex items-center justify-between">
               <dt className="text-[#6B6B6B]">Subtotal</dt>
               <dd className="font-medium text-[#1A1A1A]">{formatMoney(subtotal)}</dd>
             </div>
+            {discount > 0 && (
+              <div className="flex items-center justify-between">
+                <dt className="flex items-center gap-1.5 text-[#2E7D32]">
+                  <span className="rounded-md bg-[#E8F3E9] px-1.5 py-0.5 text-[10.5px] font-bold uppercase tracking-wide">
+                    Offer
+                  </span>
+                  {cart.offer?.title}
+                </dt>
+                <dd className="font-semibold text-[#2E7D32]">−{formatMoney(discount)}</dd>
+              </div>
+            )}
             <div className="flex items-center justify-between">
               <dt className="text-[#6B6B6B]">GST (5%)</dt>
               <dd className="font-medium text-[#1A1A1A]">{formatMoney(tax)}</dd>

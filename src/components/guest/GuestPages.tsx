@@ -22,6 +22,7 @@ import {
 import {
   createPublicOrder,
   fetchPublicMenu,
+  fetchPublicOffers,
   fetchPublicOrder,
   openTableSession,
   resolveTableQr,
@@ -30,6 +31,7 @@ import {
   type GuestOrderSummary,
   type GuestVariant,
   type PublicMenu,
+  type PublicOffer,
   type TableSession,
 } from '../../lib/guest';
 
@@ -355,6 +357,7 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
   const [customerName, setCustomerName] = useState('');
   const [placing, setPlacing] = useState(false);
   const [placeError, setPlaceError] = useState<string | null>(null);
+  const [offers, setOffers] = useState<PublicOffer[]>([]);
 
   useEffect(() => {
     let alive = true;
@@ -385,6 +388,10 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
       setMenu(m);
       setPhase('ready');
       document.title = `${r.tenant.name} — order from Table ${r.table.table_number}`;
+      // offers banner — best effort, never blocks the menu
+      fetchPublicOffers(r.tenant.slug).then((o) => {
+        if (alive) setOffers(o);
+      });
     })();
     return () => {
       alive = false;
@@ -515,6 +522,32 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
       </header>
 
       <main className="mx-auto w-full max-w-xl flex-1 px-4 pb-36 pt-4">
+        {/* today's offers — read-only, active only, straight from the owner's CRM */}
+        {phase === 'ready' && offers.length > 0 && (
+          <section aria-label="Today's offers" className="mb-4">
+            <div className="flex gap-2.5 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              {offers.map((o) => (
+                <div
+                  key={o.id}
+                  className="flex min-w-[240px] max-w-[300px] flex-1 items-center gap-3 rounded-2xl border border-[#EED9B8] bg-gradient-to-br from-[#FBF3E4] to-[#F6EAD8] px-3.5 py-3 shadow-sm"
+                >
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#B88E2F] text-[11px] font-bold leading-none text-white">
+                    {o.discount_type === 'percent' ? `${Number(o.discount_value)}%` : '₹' + (Number(o.discount_value) % 1 === 0 ? Number(o.discount_value) : Number(o.discount_value).toFixed(0))}
+                  </span>
+                  <div className="min-w-0">
+                    <p className="truncate text-[12.5px] font-bold text-[#5B4300]">{o.title}</p>
+                    <p className="truncate text-[11px] text-[#8A5A00]">
+                      {o.discount_type === 'percent' ? `${Number(o.discount_value)}% off` : `₹${Number(o.discount_value)} off`}
+                      {Number(o.min_order_amount) > 0 && ` · min ₹${Number(o.min_order_amount)}`}
+                      {o.description ? ` — ${o.description}` : ''}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
         {phase === 'locked' && (
           <div className="rounded-3xl border border-[#E3E7E0] bg-white p-6 text-center shadow-sm">
             <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-[#FBF3E4]">

@@ -169,3 +169,41 @@ export interface DashboardData {
   bestEmployees: { name: string; role: string; sales: number }[];
   trendingDishes: { name: string; tag: string; orders: number; image_url?: string | null }[];
 }
+
+/* ── Customers & Offers (migration 016 CRM) ─────────────────────────────── */
+
+export interface Customer {
+  id: string;
+  tenant_id: string;
+  name: string;
+  phone: string;
+  email?: string | null;
+  notes?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Derived from the orders ledger by v_customer_stats — never stored, never stale. */
+export interface CustomerStats {
+  phone: string;
+  orders_placed: number;
+  visits: number;
+  total_spent: number;
+  last_visit_at: string | null;
+}
+
+export type OfferDiscountType = 'percent' | 'flat';
+
+export interface Offer {
+  id: string;
+  tenant_id: string;
+  title: string;
+  description?: string | null;
+  discount_type: OfferDiscountType;
+  discount_value: number;
+  min_order_amount: number;
+  is_active: boolean;
+  usage_count: number;
+  created_at: string;
+  updated_at: string;
+}

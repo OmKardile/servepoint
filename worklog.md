@@ -1360,3 +1360,31 @@ Stage Summary:
 - For the parallel round: your inventory_items is canonical (adopted); your table was NOT on supabase_realtime — 015 fixed that; the deduction engine + ledger + trigger are MINE in 015 — do not add a second deduction path.
 - Remaining NOVA parity: customers/offers, guest i18n, PWA (manifest+SW), shared lib/csv.ts (Bills+Reports+Inventory could share), inventory cost integration into Close-out/Reports (COGS) as a future refinement.
 - Crons: 15-min webDevReview (job 430321).
+
+---
+Task ID: 43 (CLAIM — in progress)
+Agent: glm-5.3 (cron webDevReview round)
+Task: Claiming "customers/offers" (NOVA parity CRM) — migration 016_customers_offers.sql (customers + offers + offer_redemptions ledger + auto-enrich trigger + realtime), counter-cart customer attach + offer apply with real discount_amount, NEW src/components/customers/CustomersScreen.tsx (Customers + Offers tabs), guest-side offers banner, api.ts + types + nav wiring. Parallel agents: please do NOT take migration 016 / customers / offers this round and give me ~10 min of clean air on session.ts/Sidebar.tsx/App.tsx/api.ts/cart.ts/FoodDrinksScreen.tsx; guest i18n / PWA / csv-lib refactor remain free.
+
+
+---
+Task ID: 43
+Agent: glm-5.3 (cron webDevReview round)
+Task: NOVA CRM parity — customers/offers (migration 016) + counter discount flow + Guests screen + guest QR offers banner + full live E2E
+
+Work Log:
+- Health sweep clean (tsc 0 / dev 200 / tree at 14233f7); no pending parallel claims — claimed "customers/offers" in the worklog BEFORE building. No collisions this round.
+- Migration 016_customers_offers.sql applied + sentinel in db-setup.mjs: customers (identity keyed by tenant+phone) + offers (percent/flat, min-order floor, percent ≤ 100 CHECK) + offer_redemptions ledger (UNIQUE(order_id) replay guard) + v_customer_stats (security_invoker view deriving visits/spend from the orders ledger — stored counters would drift; only PAID non-cancelled tickets count) + trg_orders_touch_customer (auto-enrich: any order with a phone books its guest; edited CRM name wins) + trg_offer_redemptions_usage (RECOMPUTES usage_count from the ledger — a cascade-deleted order HEALS the counter instead of leaving a phantom use) + sp_public_offers(p_slug) SECURITY DEFINER RPC for the guest banner + realtime (idempotent publication membership).
+- Two migration bugs caught during apply: non-idempotent ALTER PUBLICATION ADD TABLE (fails on re-apply) — fixed with a membership-checking DO block; usage trigger upgraded from blind increment to ledger recompute before first E2E.
+- api.ts: customers/offers CRUD + fetchCustomerStats (view→Map) + fetchCustomerOrders + subscribeCrmRealtime + NewOrderInput.{customerPhone,discountAmount,offerId}; createOrder writes customer_phone/discount_amount and the redemption row, GST recomputed on the discounted base. cart.ts: customerPhone + offer state, offerDiscount() helper, clear() now resets name/phone/offer so the NEXT ticket never inherits the last discount. Order drawer: Phone field ("books the guest in CRM") + Offer select (below-minimum disabled with floor shown) + green OFFER discount row.
+- NEW GuestsScreen (src/components/customers/CustomersScreen.tsx, ~1100 lines): Guests tab (KPI strip incl. top spender, search, ledger-honest rows with tone-ring avatars by phone hash + NEW/REGULAR/VIP tier chips, two-tap delete, add/edit dialog) + Guest detail slide-over (paid visits/total/all tickets + recent tickets with green −discount) + Offers tab (medallion cards, gold spine, LIVE/Paused chips, used-N× from ledger, pause toggle, edit, two-tap delete) + Live chip/30s poll/tenant-retry/skeletons/empty states.
+- Guest side: fetchPublicOffers + gold offers banner on /menu (scrollable chips; failed fetch hides banner, never blocks the menu).
+- E2E on the live cloud: scripts/qa-crm-e2e.mjs 7/7 PASS (auto-enrich; unpaid visits=0/orders_placed=1; paid visits=1/spent=210; usage recompute; UNIQUE replay rejection; cascade+heal on order delete; fixture cleanup). Browser run as owner: seeded 2 demo offers → Offers tab renders → counter order #48 (2× Flat White ₹440 + Maya Iyer 98765 43210 + ₹50/₹300 offer) → drawer −₹50/GST ₹19.50/total ₹409.50 (hand-verified) → placed → inbox "for Maya Iyer ₹409.50" → DB: discount_amount=50, redemption row, usage_count=1, customer auto-created → Bills UPI paid → Guests flips VISITS 1/SPENT ₹409.50 + top-spender card → guest QR menu shows both offer chips. Screenshots: tool-results/r43-*.png.
+- KEPT as owner demo (Task 42 precedent): Maya Iyer + paid #48 + "Morning flat white — 10% off" + "₹50 off over ₹300" — noted here so future rounds don't treat them as fixture garbage.
+- tsc 0; CHANGELOG [5.5.0] with heading-integrity grep (clean); one pre-round dev.log parse error at 8:47 AM was a parallel round's FloorScreen HMR transient, not mine — healed before my round.
+
+Stage Summary:
+- NOVA CRM parity SHIPPED: the cafe loop is now sell (counter+QR, with offers) → cook (KDS gate) → collect (Bills) → close the day (Close-out) → read the business (Reports) → restock (Inventory) → and REMEMBER THE GUEST (Guests CRM). Discounts are ledger-truth end to end: redemption UNIQUE per order, usage recomputed from the ledger, visits/spend derived from paid tickets only.
+- Remaining NOVA parity: guest i18n, PWA (manifest+SW for the counter tablet), shared lib/csv.ts refactor (Bills+Reports duplicate csvCell), COGS wiring (inventory cost into Close-out/Reports).
+- Watch: tsc-clean repo still had a stale dev.log parse error from a parallel HMR state — always timestamp-check dev.log lines before attributing.
+- Crons: 15-min webDevReview (job 430321).
