@@ -92,7 +92,10 @@ const TicketCard: React.FC<{
   const mins = ageMinutes(order.created_at, nowMs);
   const ageTone =
     mins >= 10 ? 'text-[#B3261E] bg-[#FCEBEA]' : mins >= 5 ? 'text-[#8A5A00] bg-[#FFF4DB]' : 'text-[#5F6B63] bg-[#F0F2EF]';
-  const isQr = Boolean(order.table_session_id);
+  // Guest QR tickets carry a real dining-table FK (sp_create_public_order
+  // resolves the scanned table). Counter walk-ins have none. (The type's
+  // table_session_id is never populated — orders don't link sessions yet.)
+  const isQr = Boolean(order.table_id);
   return (
     <article
       className="flex w-[300px] max-w-full shrink-0 flex-col gap-3 rounded-2xl border border-[#E3E7E0] bg-white p-4 shadow-[0_1px_2px_rgba(15,61,62,0.05)] transition-shadow hover:shadow-[0_4px_14px_rgba(15,61,62,0.10)]"

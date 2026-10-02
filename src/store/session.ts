@@ -21,6 +21,7 @@ export type Section =
   | 'food'
   | 'kitchen'
   | 'bills'
+  | 'eod'
   | 'floor'
   | 'menu'
   | 'settings'

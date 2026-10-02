@@ -9,6 +9,7 @@ import { NoWorkspaceScreen } from './components/shell/NoWorkspaceScreen';
 import { DashboardScreen } from './components/dashboard/DashboardScreen';
 import { FoodDrinksScreen } from './components/food/FoodDrinksScreen';
 import { BillsScreen } from './components/bills/BillsScreen';
+import { EodScreen } from './components/eod/EodScreen';
 import { KitchenScreen } from './components/kitchen/KitchenScreen';
 import { FloorScreen } from './components/floor/FloorScreen';
 import { MenuScreen } from './components/menu/MenuScreen';
@@ -81,6 +82,7 @@ const CafeApp: React.FC = () => {
       {section === 'food' && <FoodDrinksScreen />}
       {section === 'kitchen' && <KitchenScreen />}
       {section === 'bills' && <BillsScreen />}
+      {section === 'eod' && <EodScreen />}
       {section === 'floor' && <FloorScreen />}
       {section === 'menu' && <MenuScreen />}
       {section === 'notifications' && <NotificationsScreen />}
