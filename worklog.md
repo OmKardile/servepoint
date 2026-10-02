@@ -1702,3 +1702,22 @@ Task ID: 57 (CLAIM — in progress)
 Agent: glm-5.3 (cron webDevReview round)
 Task: CLAIM this round — health sweep + agent-browser QA first; then pick focus (fix vs feature) and record it here.
 
+---
+Task ID: 57
+Agent: glm-5.3 (cron webDevReview round + OWNER DIRECTIVE)
+Task: OWNER MESSAGE mid-round: Figma "ServePoint Brand" file (tC8f8ecS8ZVdy2dw1uZggS) — "file for logos, pick as per suitable, replace serve point branding with them". Focus switched from the planned Reports delta-chips feature to the branding swap (delta chips reverted mid-build, re-parked).
+
+Work Log:
+- Health sweep clean (tsc 0 / dev 200 / tree at b3ced78 5.18.0). QA sweep: Reports/Floor/Bills/KDS/guest all render, zero page errors. Regression probe: counter-gate Ok on ticket 66 → left the gate → KDS shows "Order 66 — Queued" (gate engine intact post-5.18.0).
+- OWNER DIRECTIVE took priority. Figma file opened in agent-browser (public view): 4 groups — "Logo Variations" (geometric stacked SERVE POINT on cream/black/gray), "Dual-Tone Brand Showcase" (cream+black), "Minimalist Brand Mark" + "traced from original" (horizontal ServePoint wordmark). Picked: geometric mark (chips/favicon/icons), minimalist wordmark (splash), dual-tone black tile (og/hero). Anonymous viewer cannot export → captured the canvas at 100% zoom via screenshots and cut assets in PIL.
+- Geometry recovered by scanning (captures are 1920x1080; cream 251,248,243 / tile-black 12,12,12): figma-7 cream tile = mark y11..329, SERVE y358..434, POINT y449..550, tagline y580..597; figma-9 wordmark band y433..762. The Figma toolbar remnant overlapped the mark band — erased to cream before keying (first cut had it baked in; caught by visual check).
+- scripts/brand-extract.py (repeatable): distance-based cream→alpha keying (thresh 24, hard 90), trim, then: mark.png (347x315 transparent), lockup-light.png (1122x354 transparent wordmark), stacked-lockup.png (549x264 text lockup, spare), favicon 128/32 (transparent), apple-touch 180 + icon-192/512 (mark on cream, 76%), maskable-512 (62% safe zone), og-image.jpg 1200x630 (dual-tone black tile), hero-lockup.jpg. White-composited checks verify every cut.
+- Deployed: src/assets/brand/mark.png + lockup-light.png + hero-lockup.jpg; public/favicon{,-32}.png, apple-touch-icon.png, icons/icon-{192,512,maskable-512}.png, og-image.jpg. Chip bg on mark holders: #D9E2DD → #F6F1E9 (Sidebar, PlatformScreen, Showcase x2, IndexHelp x2 — avatar/badge chips untouched). Showcase hero import hero-3d.jpg → hero-lockup.jpg.
+- Browser QA: sidebar shows the new mark on cream (zero errors); /showcase header + hero show mark + dual-tone lockup; /index-help clean; all 7 icon/og assets serve 200 + correct content-type; tsc 0; sw 5.18.0-r1 → 5.19.0-r1. ADR-0016: login screen UNTOUCHED (frozen).
+- QA OBSERVATION for next round: one transient PostgREST "None of these media types are available" on tenant resolve (No-business-workspace card) right after a reload — auto-recovered on remount, not reproducible, unrelated to asset changes. Watch for recurrence.
+
+Stage Summary:
+- The product now wears its official brand: real mark in every chip, official wordmark on the splash, brand icons for tabs/PWA, dual-tone lockup as og-image and showcase hero. Repeatable extractor means re-cuts are one command.
+- For the parallel round: only brand assets + 6 chip className swaps + ShowcasePage hero import changed. If you touch AuthScreen — DO NOT (ADR-0016). If you re-cut assets, run scripts/brand-extract.py after re-capturing the Figma canvas.
+- Ideas parked (again): Reports "vs prior range" delta chips (designed: priorWindow/priorRangeLabel helpers were written then reverted — re-derive from Task 57 notes), floor capacity heatmap, table sessions per card, per-section Z-report subtotals, reserved-seat CTA live test.
+- Crons: 15-min webDevReview (job 430321).

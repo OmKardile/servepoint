@@ -3,6 +3,19 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.19.0] — 2026-10-02 — The official brand arrives (Figma ServePoint-Brand logos ship everywhere)
+
+### Added — real brand identity from the owner's Figma file
+- **The gap**: every brand surface shipped placeholder-era art (a generic mark in the sidebar chips, an old 3D render on /showcase, stock favicon squares). The owner delivered the official brand file — Figma "ServePoint Brand" — and asked for the suitable marks to replace ServePoint branding.
+- **Asset extraction** (`scripts/brand-extract.py`, repeatable): the public Figma canvas was screenshotted at 100% zoom (band-scanned for exact tile boundaries — the captures are 1920×1080, cream `#F6F1E9` / tile-black `#0C0C0C`), then the **geometric mark** (black rounded triangle + orange disc + glass + peach pill with its warm glow) and the **minimalist "ServePoint" wordmark** were keyed off the cream background with a distance-based alpha ramp into clean transparent PNGs; the Figma toolbar remnant baked into the capture was erased before keying. White-composited checks verify every cut visually.
+- **Shipped everywhere the old brand lived**: sidebar / Platform / Showcase / IndexHelp chips now hold the real mark on the brand's own cream (`#D9E2DD` → `#F6F1E9` — the glow blends into it); the app **splash** now shows the official horizontal wordmark; **favicon 32/128 + apple-touch-icon + PWA icon-192/512/maskable-512** regenerated from the mark on cream (maskable keeps the 62% safe zone); **og-image** is the dual-tone SERVE POINT lockup on black; and the /showcase **hero** swaps the old 3D render for the official dual-tone lockup (`hero-lockup.jpg`).
+
+### Governance
+- **ADR-0016 respected**: the frozen login screen is untouched (visuals AND structure) — its existing brand stays as-is until the owner unfreezes it. `admin@tsos.dev` credentials, RLS function names, Render service name and historical records remain out of scope per the established exclusions.
+
+### Verified
+- Browser E2E: sidebar renders the new mark on the cream chip (orange pops against the teal rail), /showcase header + hero show the mark and the dual-tone lockup, /index-help header clean, all seven icon/og assets serve `200` with correct content types, `tsc` 0, sw `5.19.0-r1`. Guest QR + Dashboard regression-clean. One transient cloud hiccup observed during QA (a single PostgREST "None of these media types are available" on tenant resolve) — auto-recovered on remount, not reproducible, unrelated to asset-only changes; logged for the next round to watch.
+
 ## [5.18.0] — 2026-10-02 — The counter seats and starts in one tap (Floor → POS tap-through + the silent-table-carryover fix)
 
 ### Fixed — a placed ticket no longer chains the next one onto a seated table

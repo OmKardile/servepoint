@@ -11,7 +11,7 @@ import {
   Zap,
 } from 'lucide-react';
 import brandMark from '../../assets/brand/mark.png';
-import brandArt from '../../assets/brand/hero-3d.jpg';
+import brandArt from '../../assets/brand/hero-lockup.jpg';
 
 /**
  * /showcase — public product tour for ServePoint — smartPOS.
@@ -76,7 +76,7 @@ const ShowcasePage: React.FC = () => {
       {/* ── Nav ── */}
       <header className="sticky top-0 z-20 border-b border-[#E3E7E0]/70 bg-[#F6F5F2]/90 backdrop-blur">
         <div className="mx-auto flex h-16 w-full max-w-6xl items-center gap-3 px-4 sm:px-6">
-          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#D9E2DD] p-1">
+          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#F6F1E9] p-1">
             <img src={brandMark} alt="ServePoint logo" className="h-full w-full object-contain" />
           </span>
           <span className="text-[17px] font-semibold text-[#0F3D3E]">ServePoint</span>
@@ -132,7 +132,7 @@ const ShowcasePage: React.FC = () => {
           <figure className="mt-10 overflow-hidden rounded-3xl border border-[#E3E7E0] shadow-[0_18px_50px_rgba(15,61,62,0.14)]">
             <img
               src={brandArt}
-              alt="ServePoint 3D brand render"
+              alt="ServePoint brand — the official dual-tone lockup"
               className="h-auto w-full object-cover"
               loading="eager"
             />
@@ -225,7 +225,7 @@ const ShowcasePage: React.FC = () => {
       {/* ── Sticky footer ── */}
       <footer className="mt-auto border-t border-[#E3E7E0]/70 bg-[#F6F5F2]">
         <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center gap-3 px-4 py-5 sm:px-6">
-          <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#D9E2DD] p-0.5">
+          <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#F6F1E9] p-0.5">
             <img src={brandMark} alt="" aria-hidden className="h-full w-full object-contain" />
           </span>
           <p className="text-[12px] text-[#969696]">© 2026 ServePoint · smartPOS · v5.2.0</p>

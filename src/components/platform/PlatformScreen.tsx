@@ -796,7 +796,7 @@ export const PlatformScreen: React.FC = () => {
       >
         {/* Logo */}
         <div className="mb-6 flex items-center justify-center gap-2.5 md:justify-start md:px-2">
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#D9E2DD] p-1">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#F6F1E9] p-1">
             <img src={brandMark} alt="ServePoint logo" className="h-full w-full object-contain" />
           </span>
           <span className="hidden min-w-0 md:block">
