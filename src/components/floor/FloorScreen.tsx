@@ -13,6 +13,7 @@ import {
   Printer,
   QrCode,
   RefreshCw,
+  Smartphone,
   Users,
   X,
 } from 'lucide-react';
@@ -30,11 +31,13 @@ import {
 import {
   createTable,
   fetchOrders,
+  fetchTableSessions,
   fetchTables,
   subscribeTablesRealtime,
   updateTable,
   type DiningTable,
   type RealtimeState,
+  type TableSession,
   type TableStatus,
 } from '../../lib/api';
 import { useTenant } from '../../lib/tenant';
@@ -59,6 +62,13 @@ import type { Order, OrderItem } from '../../types';
  * that hold a table (walk-in counter tickets stay out), and is honest about
  * being a count of rounds, not of unique guests. Hour bucketing mirrors
  * Reports' Sales-by-hour IST math exactly.
+ *
+ * v5.23.0 adds the GUEST SESSION trail (migration 002's ephemeral 10-minute
+ * QR sessions): cards grow a "N scans" chip, the drill panel lists the six
+ * most recent sessions per table with IST open→expiry windows and honest
+ * clock-derived liveness (the DB keeps status='active' after ordinary
+ * expiry — the UI trusts expires_at, not the column). The trail rides the
+ * floor's refresh cycle, FAIL-SOFT: it can never take the board down.
  */
 
 const esc = (s: string): string =>
@@ -236,6 +246,44 @@ function TimeAgo({ iso }: { iso: string }): React.ReactElement {
   return <span>{mins < 1 ? 'just now' : mins < 60 ? `${mins}m` : `${Math.floor(mins / 60)}h ${mins % 60}m`}</span>;
 }
 
+/* ── Guest session trail (v5.23.0) — migration 002's ephemeral 10-minute
+   QR sessions, read honestly. The DB `status` column stays 'active' after
+   ordinary expiry (only revoke/consume paths write it back), so LIVE vs
+   EXPIRED is derived from the clock: expires_at vs now. ── */
+
+type SessionState = 'live' | 'expired' | 'consumed' | 'revoked';
+
+function sessionState(s: TableSession): SessionState {
+  if (s.status === 'consumed') return 'consumed';
+  if (s.status === 'revoked') return 'revoked';
+  return new Date(s.expires_at).getTime() > Date.now() ? 'live' : 'expired';
+}
+
+const SESSION_TONE: Record<SessionState, { dot: string; fg: string; label: string }> = {
+  live: { dot: '#0F3D3E', fg: '#0F3D3E', label: 'menu open' },
+  expired: { dot: '#969696', fg: '#6B6B6B', label: 'expired' },
+  consumed: { dot: '#2E7D32', fg: '#2E7D32', label: 'used' },
+  revoked: { dot: '#B3261E', fg: '#B3261E', label: 'cut' },
+};
+
+/** "20:49" IST wall clock for a session window row. */
+function istHM(iso: string): string {
+  return new Intl.DateTimeFormat('en-GB', {
+    timeZone: IST_TZ,
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(new Date(iso));
+}
+
+/** Relative text for the expiry moment: minutes left while live, ago once past. */
+function expiryRel(iso: string): string {
+  const diffMs = new Date(iso).getTime() - Date.now();
+  const mins = Math.round(Math.abs(diffMs) / 60000);
+  const span = mins < 60 ? `${Math.max(1, mins)}m` : `${Math.floor(mins / 60)}h ${mins % 60}m`;
+  return diffMs >= 0 ? `${span} left` : `${span} ago`;
+}
+
 function AddTableDialog({
   busy,
   error,
@@ -352,10 +400,12 @@ function ItemLines({ items }: { items: OrderItem[] }): React.ReactElement {
 function TableDrill({
   table,
   order,
+  sessions,
   onClose,
 }: {
   table: DiningTable;
   order: Order | undefined;
+  sessions: TableSession[];
   onClose: () => void;
 }): React.ReactElement {
   const meta = STATUS_META[table.status];
@@ -507,6 +557,65 @@ function TableDrill({
             </p>
           )}
 
+          {/* guest session trail (v5.23.0) — who scanned, when it expires */}
+          <div className="rounded-2xl border border-[#E3E7E0] bg-white p-4 shadow-sm">
+            <div className="mb-1 flex items-center justify-between gap-2">
+              <p className="flex items-center gap-1.5 text-[14px] font-bold text-[#1A1A1A]">
+                <Smartphone size={14} className="text-[#0F3D3E]" aria-hidden /> Guest sessions
+              </p>
+              {sessions.length > 0 && (
+                <span className="rounded-full bg-[#F1F4F1] px-2.5 py-1 text-[10.5px] font-bold tabular-nums text-[#0F3D3E]">
+                  {sessions.length} on record
+                </span>
+              )}
+            </div>
+            {sessions.length === 0 ? (
+              <p className="rounded-xl bg-[#FBFBF9] px-3 py-3 text-[12.5px] text-[#6B6B6B]">
+                No guest has scanned this table's QR yet — the session trail appears here the moment someone opens the menu.
+              </p>
+            ) : (
+              <>
+                <ul className="mt-2 space-y-1.5">
+                  {sessions.slice(0, 6).map((s) => {
+                    const st = sessionState(s);
+                    const tone = SESSION_TONE[st];
+                    return (
+                      <li
+                        key={s.id}
+                        className="flex items-center gap-2.5 rounded-xl bg-[#FBFBF9] px-3 py-2"
+                        title={`Session ${s.id.slice(0, 8)} · ${tone.label}`}
+                      >
+                        <span
+                          className={`h-2 w-2 shrink-0 rounded-full ${st === 'live' ? 'animate-pulse' : ''}`}
+                          style={{ background: tone.dot }}
+                          aria-hidden
+                        />
+                        <span className="w-[68px] shrink-0 text-[11px] font-bold" style={{ color: tone.fg }}>
+                          {tone.label}
+                        </span>
+                        <span className="min-w-0 flex-1 truncate font-mono text-[11px] tabular-nums text-[#6B6B6B]">
+                          {istHM(s.created_at)} → {istHM(s.expires_at)}
+                        </span>
+                        <span className="shrink-0 text-[10.5px] tabular-nums text-[#969696]">
+                          {st === 'live' || st === 'expired' ? expiryRel(s.expires_at) : tone.label}
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ul>
+                {sessions.length > 6 && (
+                  <p className="mt-2 text-[11px] text-[#969696]">
+                    +{sessions.length - 6} earlier scans on record
+                  </p>
+                )}
+                <p className="mt-2 border-t border-[#E3E7E0] pt-2 text-[10.5px] leading-relaxed text-[#969696]">
+                  Each row is one scan of this table's QR — a fresh 10-minute menu session every time.
+                  The clock, not the stored status, decides live vs expired. Rides the floor's refresh.
+                </p>
+              </>
+            )}
+          </div>
+
           {/* QR block — always available; big on open tables, compact footer on live ones */}
           <div className={`rounded-2xl border border-[#E3E7E0] bg-white p-4 text-center shadow-sm ${isLive ? '' : 'mt-6'}`}>
             {!isLive && (
@@ -592,6 +701,7 @@ export function FloorScreen(): React.ReactElement {
   const { tenant, tenantId, error: tenantError, loading } = useTenant();
   const [tables, setTables] = useState<DiningTable[] | null>(null);
   const [orders, setOrders] = useState<Order[]>([]);
+  const [sessions, setSessions] = useState<TableSession[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [rtState, setRtState] = useState<RealtimeState>('connecting');
@@ -614,6 +724,11 @@ export function FloorScreen(): React.ReactElement {
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : 'Could not load the floor.');
     }
+    // Guest session trail (v5.23.0) rides along FAIL-SOFT: a session-read
+    // hiccup must never take the board down, and a stale trail beats a blank one.
+    fetchTableSessions(tenantId)
+      .then((ss) => setSessions(ss))
+      .catch(() => undefined);
   }, [tenantId]);
 
   useEffect(() => {
@@ -734,6 +849,19 @@ export function FloorScreen(): React.ReactElement {
     () => (filter ? sections.reduce((n, [, list]) => n + list.length, 0) : (tables || []).length),
     [sections, filter, tables],
   );
+
+  /* Guest session trail (v5.23.0) — sessions grouped by table for the card
+     chips and the drill panel. Rides the floor's refresh cycle (reload +
+     realtime ping + 30s poll); the trail is a census, not a live socket. */
+  const sessionsByTable = useMemo(() => {
+    const m = new Map<string, TableSession[]>();
+    for (const s of sessions) {
+      const list = m.get(s.table_id);
+      if (list) list.push(s);
+      else m.set(s.table_id, [s]);
+    }
+    return m;
+  }, [sessions]);
 
   /* Floor rhythm (v5.22.0) — table-bound tickets per IST hour, last 7 IST days.
      Derives from the same orders array the board already fetched (rides
@@ -1025,6 +1153,14 @@ export function FloorScreen(): React.ReactElement {
                       </p>
                       <p className="mt-1.5 flex items-center gap-1.5 text-[12px] text-[#6B6B6B]">
                         <Users size={12} aria-hidden /> {t.capacity} seats
+                        {(sessionsByTable.get(t.id)?.length ?? 0) > 0 && (
+                          <span
+                            className="ml-1.5 flex items-center gap-1 rounded-full bg-[#F1F4F1] px-2 py-0.5 text-[10.5px] font-bold tabular-nums text-[#0F3D3E]"
+                            title={`${sessionsByTable.get(t.id)!.length} guest QR sessions on record for this table`}
+                          >
+                            <Smartphone size={10} aria-hidden /> {sessionsByTable.get(t.id)!.length} scan{sessionsByTable.get(t.id)!.length === 1 ? '' : 's'}
+                          </span>
+                        )}
                         {isLive && activeOrder && (
                           <span className="ml-auto flex items-center gap-1 tabular-nums" title="Since the order was placed">
                             <Clock size={11} aria-hidden /> <TimeAgo iso={activeOrder.created_at} />
@@ -1220,7 +1356,12 @@ export function FloorScreen(): React.ReactElement {
       )}
 
       {drillTable && (
-        <TableDrill table={drillTable} order={drillOrder} onClose={() => setDrillId(null)} />
+        <TableDrill
+          table={drillTable}
+          order={drillOrder}
+          sessions={sessionsByTable.get(drillTable.id) ?? []}
+          onClose={() => setDrillId(null)}
+        />
       )}
     </div>
   );

@@ -3,6 +3,16 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.23.0] — 2026-10-03 — The floor sees the guest's phone (QR session trail on every table)
+
+### Added — Floor: guest session trail (who scanned, when it expires)
+- **The gap**: the guest QR loop's counter half was blind — staff handed guests a table QR but could never see who had actually scanned, whether a menu was open right now, or when a session would die. Migration 002's ephemeral 10-minute `table_sessions` have been landing in the ledger since day one (33 rows on T1 alone) with zero UI. Now: every floor card grows a **"N scans"** chip (Smartphone icon, only when >0 — no fake zeros), and the drill panel gains a **Guest sessions** block: the six most recent sessions with their IST open→expiry windows ("22:28 → 22:38"), a relative clock ("10m left" while live, "1h 28m ago" once past), "+N earlier scans on record" overflow, and an honest empty state for never-scanned tables.
+- **The clock, not the column**: the DB's `status` stays 'active' after ordinary expiry (only revoke/consume paths write it back — verified against all 33 live rows: every one is status='active', `expires_at` past). The UI therefore DERIVES liveness from `expires_at` vs now and labels the four states honestly: live = "menu open" (teal, pulsing), expired = gray, consumed = "used" (green), revoked = "cut" (red). The block's caption states the rule so nobody trusts the stored column.
+- **Data path**: `fetchTableSessions()` (api.ts, most-recent 60 for the tenant, grouped client-side by table). The trail rides the floor's existing refresh cycle (reload + realtime ping + 30s poll) and loads **FAIL-SOFT** — a session-read hiccup can never take the board down, and a stale trail beats a blank one. No migration, no new realtime socket: it's a census that updates with the floor.
+
+### Verified
+- Full-loop E2E on real data: T1 card "33 scans" chip; T1 drill lists 6 rows + "+27 earlier scans on record" (6+27=33), all clock-derived "expired" with honest ago-times while the DB still says active — the derivation proven live. T2 (never scanned) showed the empty state; then the actual guest page was opened via T2's QR (`/t/c3b03…`), minting 2 fresh sessions — the floor's poll cycle updated the OPEN drill and the T2 card chip to "2 scans · menu open · 22:28 → 22:38 · 10m left" without any manual reload. Kannada-locale guest page renders its own session ribbon ("order ends 9:54"); zero page errors on guest and staff tabs; `tsc` 0; sw `5.23.0-r1`.
+
 ## [5.22.0] — 2026-10-03 — The floor learns its rhythm (per-hour seat demand on the board)
 
 ### Added — Floor: FLOOR RHYTHM strip (table tickets per IST hour, last 7 days)

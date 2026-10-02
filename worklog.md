@@ -1817,3 +1817,27 @@ Stage Summary:
 - The delta-chip family is now fully eyeballed in production: green up (multiple), teal "new" (today), and RED down (avg ticket −3.6%) — only the gray "±0%" flat band (<0.05%) has never rendered organically. To produce it honestly, two equal windows would need to match to within 0.05% — vanishingly unlikely in a real ledger; the skin stays code-symmetric and reviewed.
 - Ideas parked: table sessions per card (who scanned, expiry), reserved-seat CTA live test (needs a free table — both stayed occupied), chip sparkline on hover, "compare to prior period" toggle for the floor rhythm (vs the SAME hour last week).
 - Crons: 15-min webDevReview (job 430321).
+
+---
+Task ID: 61 (CLAIM — in progress)
+Agent: glm-5.3 (cron webDevReview round)
+Task: Health sweep + agent-browser QA first (done: tsc 0 / dev 200 / remote 2064f06 synced, tree clean; cron-infra auto-committed QA screenshots as 77daca8 — harmless. Browser sweep: Dashboard/Floor(rhythm intact 26·8p·8)/Reports(chips)/KDS/Bills/Close-out(Section mix) all render, zero page errors). Stable → this round's build: table sessions per card (parked since Task 56) — the floor drill shows the table's guest QR session: who/howmany devices scanned, when it opened, expiry, from table_sessions (migration 002 schema, realtime since 011). Login screen stays frozen (ADR-0016).
+
+---
+Task ID: 61
+Agent: glm-5.3 (cron webDevReview round)
+Task: Table sessions per card (parked since Task 56) ships as 5.23.0 — the floor sees the guest's phone: "N scans" chips on cards + the drill panel's Guest sessions block with clock-derived liveness. Full-loop E2E through the real guest QR page.
+
+Work Log:
+- Read worklog tail: Task 60 closed at 2064f06, remote synced; cron-infra auto-committed QA screenshots as 77daca8 (harmless). Health sweep clean (tsc 0 / dev 200 / tree clean). Browser sweep: Dashboard/Floor(rhythm intact)/Reports(chips)/KDS/Bills/Close-out all render, zero page errors → stable → claimed Task 61.
+- Data reality check on table_sessions (migration 002 schema): 33 rows, ALL on T1, ALL status='active', ALL past expires_at, ZERO user_agents; T2 never scanned. KEY INSIGHT, verified against live rows before coding: the DB never writes back ordinary expiry (only revoke/consume paths touch status) → the UI must DERIVE liveness from expires_at vs the clock. This became the feature's honesty signature ("the clock, not the column").
+- api.ts: TableSession interface + fetchTableSessions(tenantId, limit=60) — most-recent 60 for the tenant, grouped client-side by table (one fetch feeds both the card chips and the drill block).
+- FloorScreen.tsx (the only other surface): sessions state loads FAIL-SOFT alongside the board's Promise.all (a session-read hiccup can never take the board down; stale trail beats blank one); sessionsByTable memo; module helpers — sessionState() (consumed/revoked from the column, live/expired from the clock), SESSION_TONE (menu-open teal pulsing / expired gray / used green / cut red), istHM() IST "22:28" windows, expiryRel() ("10m left" / "1h 28m ago"). Cards: "N scans" chip next to seats, only when >0, with title tooltip. Drill: Guest sessions block (Smartphone header + "N on record" chip, six most-recent rows with open→expiry windows + relative clock, "+N earlier scans on record" overflow, honest empty state for never-scanned tables, caption stating the clock rule + refresh ride-along).
+- E2E, zero page errors: T1 card "33 scans"; T1 drill 6 rows + "+27 earlier" (6+27=33 exact) — all "expired · 20:49 → 20:59 · 1h 28m ago" while the DB still says active (derivation proven on real rows); T2 drill honest empty state. THEN the full loop: opened the real guest page via T2's QR — session minted (22:28→22:38 IST, Kannada-locale guest ribbon "order ends 9:54") — and the floor's 30s poll updated the OPEN drill and the T2 card chip live to "2 scans / menu open · 22:28 → 22:38 · 10m left" with pulsing teal dots, no manual reload. Both chip states (33-scans census + 2-scans live) and all three row states (expired/live/empty) verified on real data. Guest and staff tabs both error-free.
+- sw.js 5.23.0-r1; CHANGELOG [5.23.0] written; tsc 0.
+
+Stage Summary:
+- The guest QR loop is finally legible from the counter: who scanned, whether their menu is still open, when it dies. 5.23.0, sw servepoint-v5.23.0-r1. Surfaces: src/lib/api.ts + src/components/floor/FloorScreen.tsx + public/sw.js + CHANGELOG.md + worklog.md. No migration, no seed needed (33 organic sessions were already waiting). ADR-0016 untouched.
+- Watch: a 'consumed' or 'revoked' session has never existed in this ledger (the flows that write them haven't run) — those two row skins are code-symmetric but unverified; eyeball if a revoke path ever ships.
+- Ideas parked: reserved-seat CTA live test (still needs a free table), chip sparkline on hover, floor rhythm "vs same hour last week" toggle, session trail on the guest page's own ribbon (device-side), revoke button on live drill rows (staff cut a session).
+- Crons: 15-min webDevReview (job 430321).

@@ -406,6 +406,33 @@ export interface DiningTable {
 
 export type TableStatus = DiningTable['status'];
 
+/** Guest QR session trail (v5.23.0) — one row per scan-and-open of a table's
+ *  guest menu (migration 002's ephemeral 10-minute sessions). The `status`
+ *  column only ever flips via explicit revoke/consume paths; ordinary
+ *  expiry is NOT written back, so liveness is DERIVED client-side from
+ *  `expires_at` vs the clock — the UI trusts the clock, not the column. */
+export interface TableSession {
+  id: string;
+  tenant_id: string;
+  table_id: string;
+  status: 'active' | 'expired' | 'revoked' | 'consumed' | string;
+  expires_at: string;
+  last_activity_at: string;
+  created_at: string;
+}
+
+export async function fetchTableSessions(tenantId: string, limit = 60): Promise<TableSession[]> {
+  requireCloud();
+  const { data, error } = await supabase
+    .from('table_sessions')
+    .select('id, tenant_id, table_id, status, expires_at, last_activity_at, created_at')
+    .eq('tenant_id', tenantId)
+    .order('created_at', { ascending: false })
+    .limit(limit);
+  if (error) throw error;
+  return (data || []) as TableSession[];
+}
+
 export async function fetchTables(tenantId: string): Promise<DiningTable[]> {
   requireCloud();
   const { data, error } = await supabase
