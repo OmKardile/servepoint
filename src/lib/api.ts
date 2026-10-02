@@ -116,6 +116,8 @@ export async function fetchOrders(tenantId: string, limit = 100): Promise<Order[
 
 export interface NewOrderInput {
   orderType: OrderType;
+  /** Real FK to dining_tables — the 011 trigger uses this to hold/release the table. */
+  tableId?: string | null;
   tableLabel?: string | null;
   guestCount?: number | null;
   customerName?: string | null;
@@ -165,8 +167,8 @@ export async function createOrder(tenantId: string, input: NewOrderInput): Promi
   const total = Math.round((subtotal + taxAmount) * 100) / 100;
 
   // orders has NO guest_count column (migration 001) — sending one 400s.
-  // Table/guest context is parked in notes until the table-sessions roadmap
-  // item gives it a real home.
+  // Table/guest context rides in notes for KDS display, while tableId takes
+  // the real FK slot (migration 011 trigger holds/releases the table from it).
   const contextNotes = [
     input.notes || null,
     input.tableLabel ? `Table: ${input.tableLabel}` : null,
@@ -184,6 +186,7 @@ export async function createOrder(tenantId: string, input: NewOrderInput): Promi
       // Migration 001 CHECK: new|pending|preparing|ready|completed|cancelled.
       // Orders enter as 'new'; the counter advances them through the engine.
       status: 'new',
+      table_id: input.tableId || null,
       customer_name: input.customerName || null,
       subtotal,
       tax_amount: taxAmount,
@@ -328,6 +331,109 @@ export function subscribeOrdersRealtime(
     .on(
       'postgres_changes',
       { event: '*', schema: 'public', table: 'order_items', filter: `tenant_id=eq.${tenantId}` },
+      () => onPing()
+    )
+    .subscribe((status) => {
+      if (status === 'SUBSCRIBED') onState('live');
+      else if (status === 'TIMED_OUT' || status === 'CHANNEL_ERROR' || status === 'CLOSED') onState('offline');
+      else onState('connecting');
+    });
+  return () => {
+    void supabase.removeChannel(channel);
+  };
+}
+
+/* ── Floor (dining_tables — migration 011: realtime + lifecycle trigger) ─── */
+
+export interface DiningTable {
+  id: string;
+  tenant_id: string;
+  location_id: string;
+  table_number: string;
+  capacity: number;
+  section: string;
+  qr_token: string;
+  status: 'available' | 'occupied' | 'reserved' | 'billing';
+  active_order_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export type TableStatus = DiningTable['status'];
+
+export async function fetchTables(tenantId: string): Promise<DiningTable[]> {
+  requireCloud();
+  const { data, error } = await supabase
+    .from('dining_tables')
+    .select('*')
+    .eq('tenant_id', tenantId)
+    .order('table_number', { ascending: true });
+  if (error) throw error;
+  return (data || []) as DiningTable[];
+}
+
+export async function createTable(
+  tenantId: string,
+  input: { tableNumber: string; capacity: number; section?: string }
+): Promise<DiningTable> {
+  requireCloud();
+  const locationId = await ensureLocation(tenantId);
+  const { data, error } = await supabase
+    .from('dining_tables')
+    .insert({
+      tenant_id: tenantId,
+      location_id: locationId,
+      table_number: input.tableNumber,
+      capacity: input.capacity,
+      section: input.section || 'Main Floor',
+    })
+    .select('*')
+    .single();
+  if (error) throw error;
+  return data as DiningTable;
+}
+
+/**
+ * Manual staff action on a table (seat / reserve / start billing / free).
+ * Freeing clears active_order_id too — the 011 trigger only acts when THIS
+ * order still holds the table, so a manual free is never fought by the engine.
+ */
+export async function updateTable(
+  tableId: string,
+  tenantId: string,
+  patch: { status?: TableStatus; active_order_id?: string | null }
+): Promise<void> {
+  requireCloud();
+  const { error } = await supabase
+    .from('dining_tables')
+    .update(patch)
+    .eq('id', tableId)
+    .eq('tenant_id', tenantId);
+  if (error) throw error;
+}
+
+/**
+ * Floor realtime: dining_tables + table_sessions (both on the supabase_realtime
+ * publication since migration 011). Order events reach the floor indirectly —
+ * the trg_orders_sync_table trigger UPDATEs the table row, which is itself a
+ * realtime event, so one subscription covers everything the board shows.
+ */
+export function subscribeTablesRealtime(
+  tenantId: string,
+  onPing: () => void,
+  onState: (s: RealtimeState) => void
+): () => void {
+  requireCloud();
+  const channel = supabase
+    .channel(`floor-${tenantId}`)
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'dining_tables', filter: `tenant_id=eq.${tenantId}` },
+      () => onPing()
+    )
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'table_sessions', filter: `tenant_id=eq.${tenantId}` },
       () => onPing()
     )
     .subscribe((status) => {

@@ -15,6 +15,8 @@ export interface CartLine {
 interface CartState {
   lines: CartLine[];
   orderType: OrderType;
+  /** Real dining_tables FK — null = walk-in/unassigned. Drives the 011 table-hold trigger. */
+  tableId: string | null;
   tableLabel: string;
   guestCount: number;
   customerName: string;
@@ -27,6 +29,7 @@ interface CartState {
   decrement: (key: string) => void;
   remove: (key: string) => void;
   setOrderType: (t: OrderType) => void;
+  setTableId: (id: string | null) => void;
   setTableLabel: (t: string) => void;
   setGuestCount: (n: number) => void;
   setCustomerName: (n: string) => void;
@@ -39,6 +42,7 @@ const lineKey = (menuItemId: string, addonNames: string[]) =>
 export const useCart = create<CartState>((set, get) => ({
   lines: [],
   orderType: 'dine_in',
+  tableId: null,
   tableLabel: '',
   guestCount: 2,
   customerName: '',
@@ -76,6 +80,7 @@ export const useCart = create<CartState>((set, get) => ({
     }),
   remove: (key) => set({ lines: get().lines.filter((l) => l.key !== key) }),
   setOrderType: (orderType) => set({ orderType }),
+  setTableId: (tableId) => set({ tableId }),
   setTableLabel: (tableLabel) => set({ tableLabel }),
   setGuestCount: (guestCount) => set({ guestCount }),
   setCustomerName: (customerName) => set({ customerName }),

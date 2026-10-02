@@ -108,6 +108,32 @@ try {
       )
     );
   await applyFile('010_realtime_kds', 'supabase/migrations/010_realtime_kds.sql', (await realtimeCount()) === 2);
+  // 011 sentinel: floor tables streaming + lifecycle trigger + both fixed policies
+  const floorReady = async () => {
+    const pub = Number(
+      await scalar(
+        `SELECT count(*) FROM pg_publication_tables
+          WHERE pubname='supabase_realtime' AND schemaname='public'
+            AND tablename IN ('dining_tables','table_sessions')`
+      )
+    );
+    const trg = Number(
+      await scalar(
+        `SELECT count(*) FROM pg_trigger
+          WHERE tgname='trg_orders_sync_table' AND tgrelid='orders'::regclass AND NOT tgisinternal`
+      )
+    );
+    const pol = Number(
+      await scalar(
+        `SELECT count(*) FROM pg_policies
+          WHERE schemaname='public'
+            AND ((tablename='dining_tables' AND policyname='Public guest verify dining table by token')
+              OR (tablename='table_sessions' AND policyname='Diners view own session by token header'))`
+      )
+    );
+    return pub === 2 && trg === 1 && pol === 2;
+  };
+  await applyFile('011_floor_security_realtime', 'supabase/migrations/011_floor_security_realtime.sql', await floorReady());
 
   // ── Verification ──────────────────────────────────────────────────────────
   const tables = await client.query(
