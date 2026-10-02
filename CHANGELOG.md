@@ -3,6 +3,24 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.18.0] — 2026-10-02 — The counter seats and starts in one tap (Floor → POS tap-through + the silent-table-carryover fix)
+
+### Fixed — a placed ticket no longer chains the next one onto a seated table
+- **The gap**: `useCart.clear()` reset lines/offer/customer fields but left `tableId`, `tableLabel` and `guestCount` untouched — so the ticket AFTER a dine-in placement opened **still pre-linked to the same table**, silently. The dropdown's occupied-guard (`disabled` unless the occupied table IS the cart's table) made the chained table selectable again, meaning a walk-in could quietly land on a table that was already seated. "Another round" is a deliberate act, not a leftover.
+- **The fix**: `clear()` now releases the full seating context — `tableId: null`, `tableLabel: ''`, `guestCount: 2`. Verified live: placed #68 on T2 → the very next drawer reads **"Walk-in / unassigned"**.
+
+### Added — Floor drill gains the seat-and-start tap-through
+- **Available tables**: the drill footer now leads with **"Seat & start ticket here (T2)"** — a full-width teal CTA that pre-links the cart (dine-in, real table FK, label, guest count prefilled from the table's capacity), closes the drill, and lands on Food & Drinks with the ticket already seated. One tap from "empty table" to "taking the order".
+- **Reserved tables**: same action in gold — **"Seat reserved guests — start ticket on T…"** — because seating the reservation and opening their ticket is one gesture, not two.
+- **Occupied/billing tables**: a secondary outline action **"Start another round on Table T…"** sits under *Open Bills to settle* — the re-order gesture, pointed at the right table by construction. The cart's existing lines ride along (the ticket IS the cart); the strip below announces the new binding.
+- **POS pre-link strip** (`TablePrelinkStrip`, Food & Drinks): while `cart.tableId` is bound, a teal band under the Counter inbox states **"Ticket seated at T2 · 2 guests — guests can also scan the table's own QR"** with a one-tap **Unassign**. A cart is never silently seated; the binding is visible the whole time it lives and vanishes the moment it's gone.
+
+### STYLE MANDATE
+- Seat CTA: full-width rounded-full `h-12`, bold white on tenant-teal (`#0F3D3E`) / gold for reserved, `hover:opacity-90` + `active:scale-[0.98]`, gold focus-visible ring; another-round button mirrors the drill's outline-pill language (hover gold border + warm `#FBF7EC` fill). Strip: `#EAF4F0` teal tint with `#CFE3DC` border, white round icon chip with the Armchair glyph, tabular-nums guest count, white-hover Unassign pill. All new controls keyboard-reachable with gold focus-visible outlines.
+
+### Verified
+- Browser E2E on real data, ZERO page errors: Floor → T2 available drill shows the seat CTA → tap → POS opens with the teal strip ("Unassign table T2") and the drawer preselects **"Table T2 · Patio · 2 seats", Guests 2** → Flat White added → placed → counter gate holds **Ticket 68 "Table: T2 · Guests: 2"** → T2 flips OCCUPIED live (011 trigger; floor reads "6/6 seats busy") → **next drawer honestly reads "Walk-in / unassigned"** (carryover fix proven). T1 occupied drill shows Open Bills + "Start another round on Table T1" → tap → strip rebinds → placed → **Ticket 69 "Table: T1 · Guests: 4"**. Unassign tap clears the strip (`role=status` gone). DB truth: orders 68/69 `dine_in` with table FK set and the exact context notes; T1+T2 `occupied`. Seat CTA correctly yields to the live footer once a table is occupied. Guest QR menu regression-clean (KN persisted, session ribbon, cart bar ₹283.50). tsc 0. `sw.js` `5.18.0-r1`.
+
 ## [5.17.0] — 2026-10-02 — The floor becomes the counter's table cockpit (+ THE OFFERLESS-ORDER CRASH FIX)
 
 ### Fixed — migration 022: guest QR checkout crashed without an offer (CRITICAL)

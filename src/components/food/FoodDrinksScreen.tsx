@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Armchair,
   Coffee,
   Croissant,
   CupSoda,
@@ -51,6 +52,47 @@ const ORDER_TYPES: { value: OrderType; label: string }[] = [
 ];
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
+
+/** Teal strip bound to cart.tableId (v5.18.0): which table this cart is
+ *  seated at, one-tap unassign, honest hint that guests can also scan the
+ *  table's own QR. Invisible the moment the binding is gone. */
+function TablePrelinkStrip(): React.ReactElement | null {
+  const tableId = useCart((s) => s.tableId);
+  const tableLabel = useCart((s) => s.tableLabel);
+  const guestCount = useCart((s) => s.guestCount);
+  if (!tableId) return null;
+  return (
+    <div
+      role="status"
+      className="mb-5 flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-[#CFE3DC] bg-[#EAF4F0] px-4 py-3"
+    >
+      <p className="flex items-center gap-2.5 text-[13px] text-[#0F3D3E]">
+        <span
+          aria-hidden
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#0F3D3E] text-white"
+        >
+          <Armchair size={15} />
+        </span>
+        <span>
+          Ticket seated at <span className="font-bold">{tableLabel || 'a table'}</span>
+          {guestCount > 0 && <span className="tabular-nums"> · {guestCount} guests</span>}
+          <span className="text-[#416B62]"> — guests can also scan the table's own QR</span>
+        </span>
+      </p>
+      <button
+        type="button"
+        onClick={() => {
+          useCart.getState().setTableId(null);
+          useCart.getState().setTableLabel('');
+        }}
+        aria-label={`Unassign table ${tableLabel || ''}`}
+        className="flex h-8 items-center gap-1 rounded-full px-3 text-[12px] font-bold text-[#0F3D3E] transition-colors hover:bg-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#967221]"
+      >
+        <X size={13} aria-hidden /> Unassign
+      </button>
+    </div>
+  );
+}
 
 /* ─────────────────────────── presentational bits ─────────────────────────── */
 
@@ -739,6 +781,11 @@ const FoodDrinksInner: React.FC<{ onRetry: () => void }> = ({ onRetry }) => {
       <div className="mb-5">
         <CounterInbox />
       </div>
+
+      {/* Pre-linked table strip (v5.18.0): arrives from Floor's "Seat & start
+          ticket here" tap-through. Announces the binding while it lives, and
+          unassigns in one tap — a cart is never silently seated. */}
+      <TablePrelinkStrip />
 
       {!isItemsLevel && (
         <>

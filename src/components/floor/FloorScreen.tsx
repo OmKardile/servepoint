@@ -30,6 +30,7 @@ import {
 import { useTenant } from '../../lib/tenant';
 import { formatMoney } from '../../lib/prefs';
 import { useUi } from '../../store/session';
+import { useCart } from '../../store/cart';
 import type { Order, OrderItem } from '../../types';
 
 /**
@@ -331,6 +332,21 @@ function TableDrill({
   const discount = Number(order?.discount_amount ?? 0);
   const paid = order?.payment_status === 'paid';
 
+  /** Tap-through (v5.18.0): pre-link the cart to THIS table and open the POS
+   *  with the ticket already seated — dine-in, table FK, label and a guest
+   *  count prefilled from the table's capacity. The 011 trigger flips the
+   *  table to occupied the moment the order lands; the POS strip announces
+   *  the binding so nobody ever wonders which table a cart belongs to. */
+  const startTicket = useCallback(() => {
+    const c = useCart.getState();
+    c.setOrderType('dine_in');
+    c.setTableId(table.id);
+    c.setTableLabel(table.table_number);
+    c.setGuestCount(table.capacity);
+    onClose();
+    useUi.getState().goSection('food', ['Food & Drinks']);
+  }, [table, onClose]);
+
   return (
     <div className="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label={`Table ${table.table_number}`}>
       <button
@@ -460,18 +476,41 @@ function TableDrill({
         {/* footer */}
         <div className="border-t border-[#E3E7E0] bg-white px-4 py-3">
           {isLive ? (
-            <button
-              type="button"
-              onClick={() => useUi.getState().goSection('bills', ['Bills'])}
-              className="flex h-11 w-full items-center justify-center gap-2 rounded-full px-4 text-[13px] font-semibold text-white hover:opacity-90"
-              style={{ background: '#0F3D3E' }}
-            >
-              <ExternalLink size={14} aria-hidden /> Open Bills to settle
-            </button>
+            <div className="space-y-2">
+              <button
+                type="button"
+                onClick={() => useUi.getState().goSection('bills', ['Bills'])}
+                className="flex h-11 w-full items-center justify-center gap-2 rounded-full px-4 text-[13px] font-semibold text-white hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#967221]"
+                style={{ background: '#0F3D3E' }}
+              >
+                <ExternalLink size={14} aria-hidden /> Open Bills to settle
+              </button>
+              <button
+                type="button"
+                onClick={startTicket}
+                className="flex h-10 w-full items-center justify-center gap-2 rounded-full border border-[#E3E7E0] px-4 text-[12.5px] font-semibold text-[#0F3D3E] transition-colors hover:border-[#B88E2F] hover:bg-[#FBF7EC] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#967221]"
+              >
+                <Plus size={14} aria-hidden /> Start another round on Table {table.table_number}
+              </button>
+            </div>
           ) : (
-            <p className="px-1 text-center text-[11.5px] leading-relaxed text-[#6B6B6B]">
-              Print this as the table sticker — <span className="font-semibold text-[#0F3D3E]">Print stickers</span> in the header renders every table at once.
-            </p>
+            <div className="space-y-2">
+              <button
+                type="button"
+                onClick={startTicket}
+                className="flex h-12 w-full items-center justify-center gap-2 rounded-full px-4 text-[13.5px] font-bold text-white shadow-sm transition-all hover:opacity-90 active:scale-[0.98] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#967221]"
+                style={{ background: table.status === 'reserved' ? '#B88E2F' : '#0F3D3E' }}
+              >
+                <Plus size={15} aria-hidden />
+                {table.status === 'reserved'
+                  ? `Seat reserved guests — start ticket on ${table.table_number}`
+                  : `Seat & start ticket here (${table.table_number})`}
+              </button>
+              <p className="px-1 text-center text-[11.5px] leading-relaxed text-[#6B6B6B]">
+                Opens Food &amp; Drinks with the ticket already seated — guests can also scan the QR above.
+                Print as the table sticker with <span className="font-semibold text-[#0F3D3E]">Print stickers</span> in the header.
+              </p>
+            </div>
           )}
         </div>
       </aside>

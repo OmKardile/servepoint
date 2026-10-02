@@ -95,8 +95,20 @@ export const useCart = create<CartState>((set, get) => ({
   setCustomerPhone: (customerPhone) => set({ customerPhone }),
   setOffer: (offer) => set({ offer }),
   // a placed ticket is a finished story — the next ticket starts anonymous,
-  // with no offer silently riding over from the last one
-  clear: () => set({ lines: [], offer: null, customerName: '', customerPhone: '' }),
+  // with no offer silently riding over from the last one. The TABLE binding
+  // releases too (v5.18.0): a chained pre-link would quietly put the next
+  // walk-in on a table that is already seated. "Another round" is a
+  // deliberate act — Floor's drill has a button for exactly that.
+  clear: () =>
+    set({
+      lines: [],
+      offer: null,
+      customerName: '',
+      customerPhone: '',
+      tableId: null,
+      tableLabel: '',
+      guestCount: 2,
+    }),
 }));
 
 export const cartTotal = (lines: CartLine[]): number =>

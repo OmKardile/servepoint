@@ -1671,3 +1671,28 @@ Stage Summary:
 - For the parallel round: FloorScreen.tsx + migration 022 + db-setup sentinel + qrcode dep are this round's surfaces; no other file touched. sp_create_public_order body was replaced in place — if you touch 017's checkout path, re-run db-setup and re-prove the offerless call.
 - Ideas parked: tap-through New Order pre-linked to a table (counter seats guests and starts the ticket in one flow); table sessions list per card (who scanned, when the session expires); sticker sheet batch numbering (T1..Tn auto-add); floor capacity heatmap by hour from the orders ledger; per-section subtotals on the Close-out Z-report.
 - Crons: 15-min webDevReview (job 430321).
+
+---
+Task ID: 56 (CLAIM — in progress)
+Agent: glm-5.3 (cron webDevReview round)
+Task: CLAIM this round — health sweep + agent-browser QA first; then pick focus (fix vs feature) and record it here.
+
+---
+Task ID: 56
+Agent: glm-5.3 (cron webDevReview round)
+Task: "The counter seats and starts in one tap" — Floor drill tap-through (Seat & start ticket for available/reserved, Start another round for occupied), POS pre-link strip (TablePrelinkStrip with one-tap Unassign), AND the silent-table-carryover bug fix (cart.clear() now releases the table binding)
+
+Work Log:
+- Health sweep clean (tsc 0 / dev 200 / tree at 19e747f 5.17.0-r1). agent-browser QA sweep FIRST: guest QR menu (KN persisted, session ribbon, offers, cart bar), Floor 5.17.0 cockpit (stat filters, sections, drill CTAs), Reports 5.16.0 trends (range tabs + all six KPI regions), Dashboard (margin card, guest love) — ALL render, ZERO page errors. No UI bugs → stable phase.
+- Plan sweep found THE bug while designing the tap-through: useCart.clear() left tableId/tableLabel/guestCount set — the ticket after a dine-in placement stayed silently pre-linked to the same table, and the dropdown occupied-guard made that seated table selectable again. Fixed: clear() resets tableId null / label empty / guests 2. "Another round" is a deliberate act (Floor drill now has the button for it).
+- FloorScreen.tsx only (merge-surface discipline): TableDrill gains startTicket() (pre-links cart: dine_in + table FK + label + guestCount=capacity, closes drill, goSection food) — available tables: teal full-width "Seat & start ticket here (Tn)"; reserved: gold "Seat reserved guests — start ticket"; occupied/billing: secondary outline "Start another round on Table Tn" under Open Bills. Print-sticker hint kept under the seat CTA.
+- FoodDrinksScreen.tsx: TablePrelinkStrip (teal #EAF4F0 band under Counter inbox, Armchair chip, "Ticket seated at Tn · N guests — guests can also scan the table's own QR", one-tap Unassign). Renders only while cart.tableId lives; guest cart is a separate store (verified — guest pages do not import useCart).
+- Browser E2E, zero page errors: T2 available drill → seat CTA → POS strip + drawer preselects "Table T2 · Patio · 2 seats" + Guests 2 → Flat White → placed → gate holds Ticket 68 "Table: T2 · Guests: 2" → T2 flips OCCUPIED live (floor "6/6 seats busy") → NEXT drawer honestly "Walk-in / unassigned" (fix proven). T1 drill → "Start another round on Table T1" → strip rebinds → placed → Ticket 69 "Table: T1 · Guests: 4". Unassign clears the strip. Reserved-CTA variant untested live (both tables occupied by round end) — shares the available path, ternary-only difference.
+- DB truth via pooler: orders 68/69 dine_in, table_id FK set, notes exactly "Table: T2 · Guests: 2" / "Table: T1 · Guests: 4"; dining_tables T1+T2 occupied.
+- sw.js 5.17.0-r1 → 5.18.0-r1. tsc 0. CHANGELOG [5.18.0] written.
+
+Stage Summary:
+- The counter-side half of the QR loop is now one gesture: an empty table seats and starts its ticket in one tap, a seated table takes another round in one tap, and the POS always says which table the cart belongs to. The silent-carryover bug is dead — a fresh ticket never inherits a table.
+- For the parallel round: FloorScreen.tsx + FoodDrinksScreen.tsx (TablePrelinkStrip + imports) + src/store/cart.ts (clear()) are this round's surfaces; no migration, no other files. If you touch the drawer table-select or the 011 trigger, re-prove the carryover fix (place on a table, next drawer must read Walk-in).
+- Ideas parked: reserved-seat CTA live test (needs a free table), floor capacity heatmap by hour, table sessions per card (who scanned, session expiry), per-section subtotals on the Z-report, "vs previous range" delta chips on Reports KPIs.
+- Crons: 15-min webDevReview (job 430321).
