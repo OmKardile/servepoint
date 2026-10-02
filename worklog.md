@@ -1942,3 +1942,21 @@ Stage Summary:
 Task ID: 66 (CLAIM — in progress, DAILY deep pass, job 431587)
 Agent: glm-5.3 (daily maintenance agent)
 Task: DAILY AGENT RUN per upload/Daily Agent Prompt — orientation → gates → code review → fixes → QA → commit → push → AGENT_LOG.md summary. Deep pass = review/fix/hardening over features (the 15-min loop owns features; its parked Task-66-feature idea "logo-carrying stickers + track-page brand" is NOT claimed here). Already done pre-claim: midnight-flip QA (IST 00:00 honesty verified — Reports today zeroed honestly, 7d slid to 3 Oct, Floor rhythm held peak 8p; zero page errors all surfaces).
+
+---
+Task ID: 66 (completion — DAILY deep pass)
+Agent: glm-5.3 (daily maintenance agent, job 431587)
+Task: Daily pass per upload/Daily Agent Prompt — orientation → gates → review → fixes → QA → commit → push → AGENT_LOG.md.
+
+Work Log:
+- Orientation clean (HEAD 1a87398 after gateway auto-commit of QA screenshot; tsc 0; dev 200; no CI; no test suite per policy; TODO/FIXME scan empty; secrets audit: NO GitHub token in tree or history).
+- FOUND #1 (security): DB pooler password hardcoded in 19 tracked one-shot scripts — violates db-setup.mjs's own "password never committed" convention; already in git history (purge = banned force-push).
+  FIX: scripts/db-creds.mjs shared env loader (SUPABASE_DB_PASSWORD, loud failure, docs/CREDENTIALS.md pointer) + all 19 scripts converted (one import + one line each; scripts/strip-db-passwords.mjs = the persisted, secret-free fixer). Proofs: node --check 20/20; no-env run fails loudly; read-only probe-017 runs live with env creds.
+- FOUND #2 (correctness): hidden-iframe print's blind 1500ms removeChild (3 sites) can abort/blank jobs where print() doesn't block (Firefox).
+  FIX: src/lib/printFrame.ts printHiddenFrame — afterprint removal + 60s fallback + try/catch. ReceiptPrint + EodScreen swapped. FloorScreen deferred: the parallel 15-min loop was editing it mid-run (printQrStickers grew a cafeLogo param — its sticker-logo feature) and its file already imports printHiddenFrame for the swap.
+- COEXISTENCE: parallel loop mid-flight on 5.28.0 (GuestPages/guest.ts/025_track_page_brand.sql/apply-025.mjs/CHANGELOG/sw.js) — untouched, explicitly excluded from staging; committed mine first (afd1248) to keep the auto-commit sweep clean. apply-025.mjs still carries the password inline — its author should route it through db-creds.mjs.
+- QA: browser sweep zero page errors incl. receipt print through the new helper (headless keeps the frame for the 60s fallback — by design); IST-midnight flip watch item CLOSED pre-claim (Reports today honest ₹0.00 + empty state at 00:00:35, 7d slid to 3 Oct, rhythm peak 8p held). Screenshots: scripts/qa66-midnight-flip-empty-today.png, scripts/qa66-daily-pass-final.png. AGENT_LOG.md created with the full daily template.
+
+Stage Summary:
+- afd1248 = the daily hardening commit (25 files, +182/−37). Push executed immediately after this entry. The 15-min loop's 5.28.0 feature lane was never touched.
+- Follow-ups for the next runs: FloorScreen print body swap; apply-025.mjs → db-creds.mjs; password ROTATION before any production use (history exposure closed only by rotation).
