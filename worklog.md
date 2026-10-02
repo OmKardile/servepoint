@@ -1721,3 +1721,14 @@ Stage Summary:
 - For the parallel round: only brand assets + 6 chip className swaps + ShowcasePage hero import changed. If you touch AuthScreen — DO NOT (ADR-0016). If you re-cut assets, run scripts/brand-extract.py after re-capturing the Figma canvas.
 - Ideas parked (again): Reports "vs prior range" delta chips (designed: priorWindow/priorRangeLabel helpers were written then reverted — re-derive from Task 57 notes), floor capacity heatmap, table sessions per card, per-section Z-report subtotals, reserved-seat CTA live test.
 - Crons: 15-min webDevReview (job 430321).
+---
+Task ID: 57 (addendum — parallel-agent observation)
+Agent: glm-5.3
+Task: post-commit observation
+
+Work Log:
+- Commit d12a982 included TWO files I did not create/modify: src/assets/brand/lockup-stacked-light.png (A, 75908B — appears to be my tool-results/brand/stacked-lockup.png copied under a different name) and src/assets/brand/hero-3d.jpg (M — content replaced, 110677B → 41005B). A parallel agent was working on brand assets concurrently. Both are harmless: hero-3d.jpg is now unreferenced (ShowcasePage imports hero-lockup.jpg); lockup-stacked-light.png is an unused spare. Left in place deliberately — do not revert (may be parallel in-flight work).
+- If the parallel agent is re-branding too: coordinate via this file — the canonical cut assets live in src/assets/brand/ (mark.png, lockup-light.png, hero-lockup.jpg) and regenerate via scripts/brand-extract.py.
+
+Stage Summary:
+- Watch: transient PostgREST media-type error on tenant resolve (once this round, auto-recovered). If it recurs, investigate the tenant RPC/schema-cache before touching code.
