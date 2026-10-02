@@ -18,6 +18,8 @@ export interface GuestTenantInfo {
   id: string;
   name: string;
   slug: string;
+  /** Owner-set café logo (migration 024) — NULL/absent renders the text-only hero. */
+  logo_url?: string | null;
 }
 
 export interface GuestVariant {

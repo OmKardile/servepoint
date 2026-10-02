@@ -130,6 +130,7 @@ export interface Tenant {
   status: string;
   city?: string | null;
   owner_email?: string | null;
+  logo_url?: string | null;
   created_at: string;
 }
 

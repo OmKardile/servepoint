@@ -9,6 +9,7 @@ import {
   EyeOff,
   Glasses,
   Globe2,
+  ImagePlus,
   Info,
   Lock,
   LogOut,
@@ -37,12 +38,19 @@ import type { Employee } from '../../types';
  * panel right (bold label + small description + gold toggle, hairline
  * dividers, full-width gold Save Changes). Every editable section persists
  * REAL preferences via getPrefs/setPrefs (src/lib/prefs.ts).
+ *
+ * v5.27.0 adds the owner's Café brand section (migration 024): paste a
+ * publicly reachable logo URL → it rides sp_get_public_menu to every guest
+ * phone's menu hero. Live preview with an honest broken-URL fallback, an
+ * async-aware Save (the gold chip only after the RLS write actually held),
+ * and a one-tap Remove back to the honest text-only hero.
  */
 
 /* ────────────────────────── shared primitives ───────────────────────── */
 
 type SettingsSection =
   | 'profile'
+  | 'brand'
   | 'notification'
   | 'appearance'
   | 'checkout'
@@ -52,6 +60,7 @@ type SettingsSection =
 
 const SECTION_TITLES: Record<SettingsSection, string> = {
   profile: 'Profile',
+  brand: 'Café brand',
   notification: 'Notification',
   appearance: 'Appearance',
   checkout: 'Checkout Settings',
@@ -1061,6 +1070,167 @@ const StaffSection: React.FC = () => {
   );
 };
 
+/* ─────────────────────────── 7 · Café brand ────────────────────────── */
+
+/**
+ * Café brand (v5.27.0, migration 024): the owner pastes a publicly
+ * reachable logo URL; it rides sp_get_public_menu to every guest phone's
+ * menu hero. Honest at both ends — a dead URL hides its own tile on the
+ * guest side (never a broken-image glyph), and an RLS refusal here says so
+ * instead of pretending to save. NULL is the honest default: no logo means
+ * the pre-5.27 text-only hero, exactly as shipped.
+ */
+const CafeBrandSection: React.FC = () => {
+  const session = useSession((s) => s.session);
+  const { tenantId } = useTenant();
+  const [loading, setLoading] = useState<boolean>(() => !!tenantId);
+  const [savedUrl, setSavedUrl] = useState<string | null>(null);
+  const [draft, setDraft] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [saved, fireSaved] = useTransientFlag(2400);
+  const [previewBroken, setPreviewBroken] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    if (!tenantId) {
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    void supabase
+      .from('tenants')
+      .select('logo_url')
+      .eq('id', tenantId)
+      .single()
+      .then(({ data, error }) => {
+        if (!alive) return;
+        if (!error && data) {
+          const url = (data as { logo_url: string | null }).logo_url;
+          setSavedUrl(url);
+          setDraft(url || '');
+        }
+        setLoading(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [tenantId]);
+
+  useEffect(() => setPreviewBroken(false), [draft]);
+
+  const trimmed = draft.trim();
+  const valid = trimmed === '' || /^https?:\/\/\S+$/i.test(trimmed);
+  const dirty = trimmed !== (savedUrl || '');
+  const previewSrc = trimmed !== '' && valid && !previewBroken ? trimmed : null;
+  const initial = (session?.tenantName || 'C').charAt(0).toUpperCase();
+
+  const persist = async (value: string) => {
+    if (!tenantId || busy) return;
+    setBusy(true);
+    setErr(null);
+    const { error } = await supabase
+      .from('tenants')
+      .update({ logo_url: value === '' ? null : value })
+      .eq('id', tenantId);
+    setBusy(false);
+    if (error) {
+      setErr(`Could not save — ${dbErrorHint(error.message) || error.message}`);
+      return;
+    }
+    setSavedUrl(value === '' ? null : value);
+    setDraft(value);
+    fireSaved();
+  };
+
+  return (
+    <div>
+      <SectionHeading title="Café brand" description="The face guests see when they scan your table QR." />
+      <div className="mt-6 flex items-center gap-4">
+        {previewSrc ? (
+          <img
+            src={previewSrc}
+            alt="Café logo preview"
+            onError={() => setPreviewBroken(true)}
+            className="h-16 w-16 shrink-0 rounded-2xl bg-[#D9E2DD] object-contain p-1.5 shadow-sm"
+          />
+        ) : (
+          <span
+            aria-hidden
+            className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-[#D9E2DD] text-[22px] font-bold text-[#0F3D3E]"
+          >
+            {initial}
+          </span>
+        )}
+        <div className="min-w-0">
+          <p className="truncate text-[15px] font-semibold text-[#1A1A1A]">{session?.tenantName || '—'}</p>
+          <p className="mt-0.5 text-[12.5px] leading-snug text-[#6B6B6B]">
+            {previewBroken
+              ? 'That URL doesn’t render — the guest menu will show the café name only.'
+              : savedUrl
+                ? 'Live on the guest menu’s header tile.'
+                : 'No logo yet — the guest menu shows the café name only.'}
+          </p>
+        </div>
+      </div>
+
+      <div className="mt-6 border-t border-[#E3E7E0] pt-5">
+        <label htmlFor="cafe-logo-url" className="block text-[13px] font-semibold text-[#1A1A1A]">
+          Logo image URL
+        </label>
+        <p className="mt-1 text-[12px] leading-snug text-[#6B6B6B]">
+          Paste a publicly reachable image (https://…). The guest’s phone loads it directly — a private file or dead link never renders.
+        </p>
+        <input
+          id="cafe-logo-url"
+          type="url"
+          inputMode="url"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          placeholder="https://example.com/logo.png"
+          aria-label="Café logo image URL"
+          className={`sp-input mt-3 h-11 w-full text-[13.5px] ${draft !== '' && !valid ? 'border-[#B3261E]' : ''}`}
+        />
+        {draft !== '' && !valid && (
+          <p role="alert" className="mt-2 text-[12px] font-medium text-[#B3261E]">
+            Enter a full http(s):// image URL — or clear the field to remove the logo.
+          </p>
+        )}
+        {err && <Note tone="error">{err}</Note>}
+      </div>
+
+      <div className="mt-5 flex flex-wrap items-center gap-3">
+        <button
+          type="button"
+          disabled={busy || !dirty || !valid || loading}
+          onClick={() => void persist(trimmed)}
+          className="sp-cta min-h-[44px] flex-1 py-2.5 text-[14px] disabled:opacity-50"
+        >
+          {busy ? 'Saving…' : 'Save Changes'}
+        </button>
+        {savedUrl !== null && (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void persist('')}
+            className="min-h-[44px] rounded-full border border-[#E3E7E0] px-4 text-[13px] font-semibold text-[#6B6B6B] transition hover:bg-[#F6F5F2] hover:text-[#1A1A1A] disabled:opacity-50"
+          >
+            Remove logo
+          </button>
+        )}
+        {saved && (
+          <span
+            role="status"
+            className="inline-flex items-center gap-1.5 rounded-full bg-[#E8F5EC] px-3.5 py-2 text-[12px] font-semibold text-[#2E7D32]"
+          >
+            <Check size={14} aria-hidden /> Saved
+          </span>
+        )}
+      </div>
+    </div>
+  );
+};
+
 /* ─────────────────────────────── screen ─────────────────────────────── */
 
 const NAV_ITEMS: { id: SettingsSection; label: string; icon: LucideIcon }[] = [
@@ -1078,6 +1248,10 @@ export const SettingsScreen: React.FC = () => {
   const [active, setActive] = useState<SettingsSection>('checkout');
   const [, setPrefsTick] = useState(0);
   const canManageStaff = canPerformAction(session?.role, 'manage_staff');
+  // Registry (provisioned) owner sessions carry tenantSlug but no tenantId —
+  // useTenant() resolves the id from the slug, so the gate accepts either.
+  const isTenantOwner =
+    session?.role === 'owner' && !!(session?.tenantId || session?.tenantSlug);
 
   useEffect(() => {
     setBreadcrumb(['Settings', 'Checkout Settings']);
@@ -1090,9 +1264,15 @@ export const SettingsScreen: React.FC = () => {
   };
 
   const items = [...NAV_ITEMS];
+  // Café brand is an owner decision about THEIR tenant — superadmins run the
+  // platform, staff run tickets; only the tenant owner sees the section.
+  if (isTenantOwner) items.splice(1, 0, { id: 'brand', label: 'Café brand', icon: ImagePlus });
   if (canManageStaff) items.push({ id: 'staff', label: 'Staff accounts', icon: Users });
 
-  const effective: SettingsSection = active === 'staff' && !canManageStaff ? 'checkout' : active;
+  const effective: SettingsSection =
+    (active === 'staff' && !canManageStaff) || (active === 'brand' && !isTenantOwner)
+      ? 'checkout'
+      : active;
 
   return (
     <div className="p-5 lg:p-8">
@@ -1129,6 +1309,7 @@ export const SettingsScreen: React.FC = () => {
 
         <div className="sp-card w-full min-w-0 flex-1 p-5 sm:p-6">
           {effective === 'profile' && <ProfileSection />}
+          {effective === 'brand' && <CafeBrandSection />}
           {effective === 'notification' && <NotificationSection />}
           {effective === 'appearance' && <AppearanceSection />}
           {effective === 'checkout' && <CheckoutSection />}

@@ -526,6 +526,15 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
     [phase],
   );
 
+  /* Café logo (migration 024): the owner-set URL rides the menu payload. A
+     URL that fails to load hides its own tile (never a broken-image glyph) —
+     the text-only hero of every release before 5.27 stays the honest base. */
+  const logoUrl = menu?.tenant?.logo_url || null;
+  const [logoBroken, setLogoBroken] = useState(false);
+  useEffect(() => {
+    setLogoBroken(false);
+  }, [logoUrl]);
+
   const filtered = useMemo(() => {
     if (!menu?.categories) return [];
     const q = query.trim().toLowerCase();
@@ -654,6 +663,15 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
       <header className="px-4 pb-4 pt-6" style={{ background: `linear-gradient(160deg, ${brand.teal} 0%, #14514f 100%)` }}>
         <div className="mx-auto flex max-w-xl items-start justify-between gap-3">
           <div>
+            {logoUrl && !logoBroken && (
+              <img
+                src={logoUrl}
+                alt=""
+                aria-hidden
+                onError={() => setLogoBroken(true)}
+                className="mb-2.5 h-14 w-14 rounded-2xl bg-white/95 object-contain p-1 shadow-sm"
+              />
+            )}
             <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#E7C878]">{t('tablesideMenu')}</p>
             <h1 className="mt-1 font-serif text-[30px] italic leading-tight text-white">{resolved?.tenantName}</h1>
             <p className="mt-1.5 flex items-center gap-1.5 text-[12.5px] text-white/75">

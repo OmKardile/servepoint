@@ -3,6 +3,19 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.27.0] — 2026-10-03 — The café's own face: tenant logo on the guest menu
+
+### Added — Settings → Café brand (owner-only, migration 024)
+- A new **Café brand** section (Profile-adjacent, visible only to tenant owners — superadmins run the platform, staff run tickets) lets the owner paste a **publicly reachable logo URL**. Live preview tile beside the café name with three honest states: "No logo yet — the guest menu shows the café name only", "Live on the guest menu's header tile", and "That URL doesn't render — …" when the preview's own onError fires. The Save is **async-aware**: the gold "Saved" chip appears only after the RLS write actually held; an RLS refusal surfaces as an inline error instead of pretending. One-tap **Remove logo** returns to the honest text-only hero. Field validation demands a full `http(s)://…` URL with an inline red explanation.
+- Gate fix found in E2E: registry-provisioned owner sessions (the QR one-click login) carry `tenantSlug` but no `tenantId` — the section gate now accepts either and lets `useTenant()` resolve the id from the slug.
+
+### Added — the guest sees it (migration 024)
+- `tenants.logo_url text` (nullable) + `sp_get_public_menu` replaced to carry `logo_url` in its tenant payload — same body as 016's otherwise, SECURITY DEFINER + `search_path=public` preserved, verified column/RPC/RLS/write-path/revert (5 SQL proofs). The write path rides the existing "Tenant owner update access on own tenant" RLS policy — no policy change.
+- The guest menu hero renders the logo as a 56px rounded tile (white backing, object-contain — any logo shape fits) above the TABLESIDE MENU eyebrow. **Honest fallback**: a URL that fails to load hides its own tile via onError (never a broken-image glyph) and the pre-5.27 text-only hero stands unchanged; NULL renders exactly that hero too.
+
+### Verified
+- E2E, zero page errors (fresh-load console + page-error buffers both clean): Settings → Café brand appears for the owner and not for platform/staff gates; URL pasted → live preview rendered → Save → "Saved" chip + status line + DB row set; guest menu header img loaded (naturalWidth 180, real pixels); dead URL (`example.invalid`) → Settings preview honestly says "doesn't render", guest menu hides the tile and keeps the café name; Remove/restore round-trips through the UI; `tsc` 0; sw `5.27.0-r1`. Demo value left on QR Flow Cafe (the app's own apple-touch-icon URL) so the guest menu demos the feature — replaceable by the owner at will.
+
 ## [5.26.0] — 2026-10-03 — One scan, one window; a ledger that answers back
 
 ### Fixed — the guest gate was minting phantom windows (latent bug, caught live)
