@@ -1,4 +1,4 @@
-// Supabase provisioning script: applies ServePoint migrations 001-009 to the live
+// Supabase provisioning script: applies ServePoint migrations 001-010 to the live
 // Supabase project via the Supavisor session pooler (IPv4 path — direct
 // db.<ref>.supabase.co:5432 is IPv6-only on current projects), then verifies.
 // NOT part of the app bundle.
@@ -98,6 +98,16 @@ try {
     'supabase/migrations/009_owner_membership.sql',
     await functionExists('sp_claim_tenant_memberships')
   );
+  // 010 sentinel: both KDS tables streaming on the realtime publication
+  const realtimeCount = async () =>
+    Number(
+      await scalar(
+        `SELECT count(*) FROM pg_publication_tables
+          WHERE pubname='supabase_realtime' AND schemaname='public'
+            AND tablename IN ('orders','order_items')`
+      )
+    );
+  await applyFile('010_realtime_kds', 'supabase/migrations/010_realtime_kds.sql', (await realtimeCount()) === 2);
 
   // ── Verification ──────────────────────────────────────────────────────────
   const tables = await client.query(

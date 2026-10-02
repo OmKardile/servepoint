@@ -3,6 +3,28 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.2.0] — 2026-10-02 — Kitchen Display System: the live rail (NOVA roadmap #1)
+
+### Added — Kitchen screen (owner + staff)
+- **`src/components/kitchen/KitchenScreen.tsx`** — a real KDS rail in the brand palette: four stage columns (New → Preparing → Ready to serve → Completed), stat strip with per-stage counts, "oldest active ticket waiting" clock, and today-only scoping (completed capped to newest 12 with an overflow note; cancelled orders leave the rail but count in the context line).
+- **Order cards** built for the pass: bold `#N` + customer, Dine-in/Takeaway/Delivery chip, live per-second elapsed timer that escalates green → amber (10 min) → red (20 min) and greys out when terminal, qty × item lines with per-item notes (`↳ …`), parked table/guest context from notes, and a payment chip on completed cards (**Paid** / **Unpaid · bill at counter**).
+- **Engine actions on the card**: Start preparing → Mark ready → Complete, all through the guarded `sp_advance_order` RPC (legal-transition map server-side); cancel is a two-tap confirm (no browser dialogs) also via the engine. Busy state per card, error banner with retry.
+- **New-order chime**: WebAudio two-tone ping when a fresh `new` order appears on the rail, persisted mute toggle (`sp.kds.sound`), unmute gives an audible confirmation and unlocks the AudioContext on the user gesture.
+- **Navigation**: "Kitchen" with a ChefHat icon between Food & Drinks and Messages (`Section` union extended; breadcrumb + header search work as everywhere else).
+
+### Added — realtime (migration 010, applied to the live cloud from the CLI)
+- `supabase/migrations/010_realtime_kds.sql` (additive, idempotent, guarded verification block): puts `orders` + `order_items` on the `supabase_realtime` publication — the first tables in the project to stream. Realtime enforces the tables' SELECT RLS, so subscribers only ever receive their own tenant's rows.
+- **`subscribeOrdersRealtime()`** in `lib/api.ts`: postgres_changes channel (`kds-<tenantId>`) filtered per tenant; any event triggers a debounced (250 ms) refetch — no client-side server-state duplication. Connection chip in the KDS header: **Live** (pulsing dot) / Connecting… / **Polling 30s** fallback (plus a 30 s safety poll in all states).
+- `scripts/db-setup.mjs` applies 010 with a `pg_publication_tables` sentinel — migrations now 001→010, all CLI-applied.
+
+### Proven end-to-end on the live cloud (agent-browser, as a freshly provisioned owner)
+Wizard provision "KDS Rail Cafe" (009 trigger + claim worked first try) → owner sign-in → menu seeded via REST → **golden path in UI**: Food & Drinks cart (1× Flat White + 2× Masala Toastie, ₹504) → Place Order → KDS card appears in New with items, `Table: T4 · Guests: 2`, ticking timer → Start preparing → Mark ready → Complete (each hop verified in its column) → Bills → Charge UPI → **Paid + Payment recorded** → KDS card flips to the **Paid** chip live (payment UPDATE = realtime ping → refetch). **Realtime injection test**: two orders created via raw REST while the board sat untouched appeared on the rail by themselves (New 1 → 2) and vanished into the "cancelled today" counter after engine-RPC cancels. Desktop (1440) + mobile (390) screenshots.
+- Bug found & fixed during QA: the KDS root lacked the shell's screen padding (`p-4 lg:p-5`) — the h1 hugged the sticky header; matches Messages/Bills spacing after the fix.
+- Cleanup: test tenant + provisioning audit row + both test auth users deleted via pooler (also purged the orphan `smoke.owner@coolkafe.in` left by an earlier round). Cloud census: 1 tenant (CheeseBurg), 0 orders, 0 payments, 2 auth users / 2 tenant_users.
+
+### Verified
+- `tsc --noEmit` 0 errors; lint clean; migration 010 sentinel-green from CLI; dev.log HMR-only. Login untouched (ADR-0016).
+
 ## [5.1.3] — 2026-10-01 — Test → Debug → Retest: live-cloud E2E round (owners can finally sell)
 
 ### Live-cloud E2E battery on the real 007 engine (REST, superadmin probe) — 11/11 PASS

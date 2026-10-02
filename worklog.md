@@ -1173,3 +1173,26 @@ Stage Summary:
 - Crons: 15-min webDevReview ACTIVE.
 
 
+
+---
+Task ID: 36
+Agent: glm-5.3
+Task: "cmon iterate and push improve more and more debug" — QA loop continued; NOVA roadmap #1 (KDS board) delivered + realtime.
+
+Work Log:
+- Health sweep first: tsc 0 / lint clean / dev.log HMR-only / app 200 — clean base from 5.1.3.
+- NEW migration 010_realtime_kds.sql (additive, idempotent, guarded verify block): orders + order_items join the supabase_realtime publication — the project's first streaming tables. RLS still gates what subscribers receive. Applied to the LIVE cloud from the CLI on the spot (sentinels: 001–004+006 SKIP, 005/009 idempotent re-apply, 008 SKIP, 010 APPLY ✓); db-setup.mjs now covers 001→010 with a pg_publication_tables sentinel; CREDENTIALS.md range updated.
+- api.ts: subscribeOrdersRealtime() — tenant-filtered postgres_changes channel, debounced refetch on any event, onState → Live/Connecting/Polling chip; KitchenScreen additionally polls every 30s as a safety net.
+- NEW src/components/kitchen/KitchenScreen.tsx (KDS rail): 4 stage columns New/Preparing/Ready to serve/Completed (today-only; completed capped 12 + overflow note; cancelled off-rail but counted), stat strip, oldest-ticket clock, per-second elapsed timers escalating green→amber(10m)→red(20m), qty×items with per-item notes, table/guest context from parked notes, Paid/Unpaid chips on completed, engine actions (Start preparing / Mark ready / Complete) via sp_advance_order, two-tap cancel via engine, per-card busy state, error banner + retry, WebAudio new-order chime with persisted mute (sp.kds.sound), Live/Chime/Refresh header controls, responsive 1/2/4 columns (1-col stacks at 390px verified).
+- Wiring: Section union + 'kitchen'; Sidebar "Kitchen" ChefHat between Food & Drinks and Messages; App.tsx renders KitchenScreen; breadcrumb works.
+- E2E golden path (agent-browser, real provisioned owner): operator → wizard "KDS Rail Cafe" (Saved to cloud; 009 trigger+claim first-try) → owner sign-in → REST-seeded menu → Food & Drinks cart 1×Flat White + 2×Masala Toastie ₹504 → Place Order → KDS card in New with items + "Table: T4 · Guests: 2" + ticking timer → Start preparing → Mark ready → Complete (each hop verified) → Bills → Charge UPI → "Paid + Payment recorded" → KDS flips to Paid chip LIVE. Realtime injection test: two REST-created orders appeared on the untouched board (New 1→2) then left the rail after engine-RPC cancels ("2 cancelled today"). Screenshots desktop+mobile.
+- QA bug found+fixed: KDS root missed the shell screen padding (h1 hugged the sticky header) → p-4 lg:p-5 matching Messages/Bills; re-verified visually.
+- Cleanup via pooler: test tenant + its provisioning audit row + auth user deleted; ALSO purged orphan smoke.owner@coolkafe.in left by an earlier round (found in the census). Cloud: 1 tenant (CheeseBurg), 0 orders, 0 payments, 2 auth users / 2 tenant_users.
+- Verified: tsc 0, lint clean, dev.log HMR-only, login screen untouched (ADR-0016).
+- Docs: CHANGELOG [5.2.0]. Commit + push (owner identity) follow this record.
+
+Stage Summary:
+- ServePoint now has a LIVE Kitchen Display System: orders appear on the rail the instant they are placed (realtime, migration 010), move through the guarded engine, and the board mirrors money state (Paid/Unpaid) from the counter — full loop Food&Drinks → KDS → Bills proven on the production cloud.
+- Realtime infra (010 + subscribeOrdersRealtime) is reusable for the next NOVA items (table floor sessions, notifications live ping).
+- Next rounds: table floor/QR sessions (dining_tables + table_sessions already exist in schema 001/002 — UI is the gap), reports/EOD, inventory auto-deduction.
+- Crons: 15-min webDevReview ACTIVE.

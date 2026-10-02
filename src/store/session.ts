@@ -19,6 +19,7 @@ export const useSession = create<SessionState>((set) => ({
 export type Section =
   | 'dashboard'
   | 'food'
+  | 'kitchen'
   | 'messages'
   | 'bills'
   | 'settings'

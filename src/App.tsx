@@ -9,6 +9,7 @@ import { NoWorkspaceScreen } from './components/shell/NoWorkspaceScreen';
 import { DashboardScreen } from './components/dashboard/DashboardScreen';
 import { FoodDrinksScreen } from './components/food/FoodDrinksScreen';
 import { BillsScreen } from './components/bills/BillsScreen';
+import { KitchenScreen } from './components/kitchen/KitchenScreen';
 import { MessagesScreen } from './components/messages/MessagesScreen';
 import { NotificationsScreen } from './components/notifications/NotificationsScreen';
 import { SupportScreen } from './components/support/SupportScreen';
@@ -67,6 +68,7 @@ const CafeApp: React.FC = () => {
     <AppShell>
       {section === 'dashboard' && <DashboardScreen />}
       {section === 'food' && <FoodDrinksScreen />}
+      {section === 'kitchen' && <KitchenScreen />}
       {section === 'messages' && <MessagesScreen />}
       {section === 'bills' && <BillsScreen />}
       {section === 'notifications' && <NotificationsScreen />}

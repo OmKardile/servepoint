@@ -1,6 +1,7 @@
 import React from 'react';
 import {
   Bell,
+  ChefHat,
   CookingPot,
   Headphones,
   LayoutGrid,
@@ -15,6 +16,7 @@ import brandMark from '../../assets/brand/mark.png';
 const NAV: { id: Section; label: string; icon: React.ElementType }[] = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutGrid },
   { id: 'food', label: 'Food & Drinks', icon: CookingPot },
+  { id: 'kitchen', label: 'Kitchen', icon: ChefHat },
   { id: 'messages', label: 'Messages', icon: MessageSquareText },
   { id: 'bills', label: 'Bills', icon: Receipt },
   { id: 'settings', label: 'Settings', icon: SettingsIcon },

@@ -61,7 +61,7 @@ bootstrap operator, zero demo rows). To re-provision any environment idempotentl
 SUPABASE_DB_PASSWORD='<db-password>' bun scripts/db-setup.mjs
 ```
 
-The script applies any missing migration (001→009) via the session pooler and prints a
+The script applies any missing migration (001→010) via the session pooler and prints a
 verification summary. Migration files remain in `supabase/migrations/` for the SQL-editor
 route as well.
 

@@ -300,6 +300,46 @@ export async function fetchOrderHistory(tenantId: string, orderId: string): Prom
   return (data || []) as OrderStatusEvent[];
 }
 
+/* ── Realtime (migration 010 — KDS live board) ────────────────────────────── */
+
+export type RealtimeState = 'connecting' | 'live' | 'offline';
+
+/**
+ * Subscribes to postgres_changes on orders + order_items (migration 010 puts
+ * both tables on the supabase_realtime publication). Realtime enforces the
+ * tables' SELECT RLS policies against the subscriber's JWT, so a tenant member
+ * only ever receives their own tenant's rows. Every event pings the callback;
+ * the screen debounces one refetch — the simplest correct way to stay fresh
+ * without duplicating server state client-side.
+ */
+export function subscribeOrdersRealtime(
+  tenantId: string,
+  onPing: () => void,
+  onState: (s: RealtimeState) => void
+): () => void {
+  requireCloud();
+  const channel = supabase
+    .channel(`kds-${tenantId}`)
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'orders', filter: `tenant_id=eq.${tenantId}` },
+      () => onPing()
+    )
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'order_items', filter: `tenant_id=eq.${tenantId}` },
+      () => onPing()
+    )
+    .subscribe((status) => {
+      if (status === 'SUBSCRIBED') onState('live');
+      else if (status === 'TIMED_OUT' || status === 'CHANNEL_ERROR' || status === 'CLOSED') onState('offline');
+      else onState('connecting');
+    });
+  return () => {
+    void supabase.removeChannel(channel);
+  };
+}
+
 /* ─────────────────────────── Dashboard ──────────────────────────── */
 
 function pct(current: number, previous: number): number {
