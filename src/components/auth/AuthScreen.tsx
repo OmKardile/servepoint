@@ -50,6 +50,12 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onSuccess }) => {
     return () => window.clearInterval(t);
   }, []);
 
+  // v5.32.0 — the tab strip stays honest at the gate: a signed-out tab reads
+  // "Sign in · ServePoint", never a screen name it isn't showing.
+  useEffect(() => {
+    document.title = 'Sign in · ServePoint';
+  }, []);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);

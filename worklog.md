@@ -2041,3 +2041,24 @@ Stage Summary:
 - Ideas parked: Supabase Storage logo upload vs URL-paste; EOD Z-report logo; reserved-seat CTA live test (T3 via real Add dialog); DS showcase link from the app's /showcase page (needs owner OK); serve the DS showcase under public/ (duplication concern — needs owner OK).
 - Watch items carried: DB password ROTATION (owner decision); /coolkafe/floor direct URL falls to Dashboard (pre-existing fallback).
 - Crons: 15-min webDevReview (job 430321) + DAILY deep pass (job 431587, 09:00 IST).
+
+---
+Task ID: 71 (completion — 15-min webDevReview round, trace 202610030339)
+Agent: glm-5.3 (cron webDevReview round)
+Task: Post-5.31.0 orientation + QA sweep, then the round's focus: the URL tells the truth — staff deep links (closing the /coolkafe/floor-falls-to-Dashboard watch item) + honest tab titles + keyboard-visible focus on the nav rail.
+
+Work Log:
+- Orientation clean (HEAD 38586f8 = 5.31.0 pushed; tree clean; tsc 0; dev 200; zero page errors on the sweep).
+- ROOT CAUSE of the watch item: AppRoutes handles public paths (/showcase, /help, /t/, /menu/, /track/) but staff routing is pure app state — CafeApp renders useUi.section which always boots 'dashboard'; window.location.pathname was never consulted for staff screens.
+- DEEP LINKS (App.tsx + Sidebar.tsx): exported SECTION_LABELS from the sidebar's NAV/OTHERS arrays (single source of truth — same labels the rail renders); CafeApp reads the path ONCE on mount (read-once philosophy preserved), picks parts[1] (two-segment /:slug/:screen) or parts[0] (single-segment /:screen), and goSection()s it with the proper breadcrumb if it names a real section. Object.hasOwn guard (prototype-key safe). Slug stays decorative — the session owns the workspace. In-app nav keeps URL writes out of scope (documented: sections are state, not routes).
+- TAB TITLE TRUTH (App.tsx + AuthScreen.tsx): document.title = "<Screen> · ServePoint" on every section change; the sign-in gate sets "Sign in · ServePoint" (a signed-out tab no longer wears a stale screen name it isn't showing).
+- FOCUS RINGS (styling/a11y): sidebar nav pills gain focus-visible ring-2 gold #B88E2F/70 with ring-offset teal-900 #0B2E2F — keyboard/tablet-keyboard operators see focus on the primary rail; zero mouse/touch visual change. DS-aligned (gold accent + teal-900 are DS primitives).
+- E2E (agent-browser): /coolkafe/floor → Floor (h1 "Floor", breadcrumb "Floor", title "Floor · ServePoint"); /coolkafe/nonsense → Dashboard fallback unchanged; /kitchen single-segment works; sidebar click Bills → h1 Bills + title syncs; FULL BOOKMARK JOURNEY: signed out via profile card → reopened /coolkafe/floor → auth gate (title "Sign in · ServePoint") → signed in as owner → landed directly on Floor (deep link survives auth — effect lives on CafeApp mount). Zero page errors throughout.
+- sw servepoint-v5.32.0-r1; CHANGELOG [5.32.0]; tsc 0 after every edit.
+
+Stage Summary:
+- 5.32.0 — the URL tells the truth. Surfaces: src/App.tsx + src/components/shell/Sidebar.tsx + src/components/auth/AuthScreen.tsx + public/sw.js + CHANGELOG.md + worklog.md. No migration, no schema change, no API change.
+- Watch item CLOSED: /coolkafe/floor direct URL now lands on Floor (was: pre-existing route fallback, flagged in Tasks 67–68).
+- Ideas parked: URL write-back on in-app nav (pushState sync — deliberate non-goal this round, sections-as-state is the documented philosophy); Supabase Storage logo upload vs URL-paste; EOD Z-report logo (deliberate); reserved-seat CTA live test (T3); DS showcase link from /showcase (owner OK pending); serve DS showcase under public/ (owner OK pending).
+- Watch items carried: DB password ROTATION (owner decision — the old credential remains in git history).
+- Crons: 15-min webDevReview (job 430321) + DAILY deep pass (job 431587, 09:00 IST).

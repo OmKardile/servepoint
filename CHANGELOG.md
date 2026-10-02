@@ -3,6 +3,21 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.32.0] — 2026-10-03 — The URL tells the truth: staff deep links + the honest tab title
+
+### Added — every staff screen is deep-linkable (`/:slug/:screen`)
+- Opening `/coolkafe/floor`, `/kitchen`, `/coolkafe/bills`… now boots straight into that screen instead of silently falling back to the Dashboard (the watch item first recorded in the Task 66 round, closed). `CafeApp` reads the path **once** on mount — same read-once philosophy as the public router — and if the screen segment names a real section (the sidebar's own `SECTION_LABELS` map is the single source of truth), it navigates there with the proper breadcrumb. The slug stays decorative: the signed-in session already decides the workspace. Unknown or missing screen → Dashboard, byte-for-byte unchanged. Built for the real use cases: bookmarks, staff shortcuts, and pinned wall displays — especially the KDS (`/coolkafe/kitchen` on a kitchen tablet now just works). In-app navigation keeps the URL where it is (pre-existing behavior: sections are app state, not routes).
+- The full bookmark journey verified E2E: signed-out → open `/coolkafe/floor` → login gate → sign in → **lands directly on Floor** (the deep link survives auth because the effect lives on CafeApp's mount).
+
+### Added — the tab strip tells the truth (document.title sync)
+- The browser tab title now follows the active screen: `Floor · ServePoint`, `Kitchen · ServePoint`, `Bills · ServePoint`… so multi-tab operators and pinned displays read at a glance. The sign-in gate is honest too: a signed-out tab reads `Sign in · ServePoint` instead of a stale screen name.
+
+### Improved — keyboard focus you can see on the rail (styling/a11y detail)
+- Sidebar nav pills gain a DS-aligned focus-visible ring (gold `#B88E2F` at 70%, offset against the teal-900 rail) — keyboard operators (and the POS's tablet keyboards) can now see where focus sits on the primary navigation. Zero visual change for mouse/touch users.
+
+### Verified
+- `tsc` 0 after every edit; zero page errors. E2E in agent-browser: `/coolkafe/floor` → Floor (h1 + breadcrumb + title all "Floor"); `/coolkafe/nonsense` → Dashboard fallback unchanged; `/kitchen` single-segment form works; in-app sidebar nav still works and re-syncs the title; signed-out bookmark journey lands on Floor after sign-in; auth gate title honest. sw `5.32.0-r1`.
+
 ## [5.31.0] — 2026-10-03 — The pass wears the crest; the rhythm speaks hour by hour
 
 ### Added — brand tile on the Kitchen Display header

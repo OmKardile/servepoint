@@ -2,7 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { authService } from './lib/authService';
 import { normalizeRole } from './lib/rbac';
 import { useTenant } from './lib/tenant';
-import { useSession, useUi } from './store/session';
+import { useSession, useUi, type Section } from './store/session';
+import { SECTION_LABELS } from './components/shell/Sidebar';
 import { AuthScreen } from './components/auth/AuthScreen';
 import { AppShell } from './components/shell/AppShell';
 import { NoWorkspaceScreen } from './components/shell/NoWorkspaceScreen';
@@ -55,10 +56,36 @@ const Splash: React.FC = () => (
 );
 
 const CafeApp: React.FC = () => {
-  const { section } = useUi();
+  const { section, goSection } = useUi();
   const session = useSession((s) => s.session);
   const setSession = useSession((s) => s.setSession);
   const [retryKey, setRetryKey] = useState(0);
+
+  /* v5.32.0 — staff deep links: /:slug/:screen (or /:screen) boots straight
+   *  into the named screen — bookmarks, staff shortcuts, pinned wall displays.
+   *  The path is read ONCE on mount (same philosophy as usePathname above);
+   *  the slug segment stays decorative — the signed-in session already
+   *  decides the workspace. Unknown/missing screen → Dashboard, unchanged.
+   *  In-app navigation keeps the URL where it is (pre-existing behavior:
+   *  sections are app state, not routes). */
+  const deepLinkDone = React.useRef(false);
+  useEffect(() => {
+    if (deepLinkDone.current) return;
+    deepLinkDone.current = true;
+    const parts = window.location.pathname.split('/').filter(Boolean);
+    const seg = parts.length >= 2 ? parts[1] : parts[0];
+    if (seg && Object.hasOwn(SECTION_LABELS, seg)) {
+      goSection(seg as Section, [SECTION_LABELS[seg as Section]]);
+    }
+  }, [goSection]);
+
+  /* v5.32.0 — the tab strip tells the truth: the browser tab title follows
+   *  the active screen ("Floor · ServePoint"), so multi-tab operators and
+   *  pinned wall displays read at a glance. */
+  useEffect(() => {
+    document.title = `${SECTION_LABELS[section]} · ServePoint`;
+  }, [section]);
+
   // Resolve the workspace ONCE at the shell: if the signed-in account has no
   // business tenant in the cloud, show one actionable state instead of letting
   // every screen render its own "Workspace not found" error card.

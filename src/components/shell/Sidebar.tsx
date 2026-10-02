@@ -37,6 +37,13 @@ const OTHERS: { id: Section; label: string; icon: React.ElementType }[] = [
   { id: 'support', label: 'Support', icon: Headphones },
 ];
 
+/** v5.32.0 — deep links: every staff screen is addressable as /:slug/:screen
+ *  (bookmarks, staff shortcuts, pinned wall displays). This map is the single
+ *  source of truth for screen names — the same labels the sidebar renders. */
+export const SECTION_LABELS: Readonly<Record<Section, string>> = Object.freeze(
+  Object.fromEntries([...NAV, ...OTHERS].map((i) => [i.id, i.label]))
+) as Readonly<Record<Section, string>>;
+
 interface Props {
   unreadCount?: number;
 }
@@ -56,7 +63,7 @@ export const Sidebar: React.FC<Props> = ({ unreadCount = 0 }) => {
         onClick={() => goSection(item.id, [item.label])}
         aria-current={active ? 'page' : undefined}
         title={item.label}
-        className={`sp-nav-pill relative flex w-full items-center justify-center gap-3 rounded-xl px-4 py-2.5 text-[13.5px] font-medium md:justify-start ${
+        className={`sp-nav-pill relative flex w-full items-center justify-center gap-3 rounded-xl px-4 py-2.5 text-[13.5px] font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B88E2F]/70 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0B2E2F] md:justify-start ${
           active ? 'bg-[#B88E2F] text-white shadow-sm' : 'text-white/70 hover:bg-white/10 hover:text-white'
         }`}
       >
