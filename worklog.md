@@ -1264,3 +1264,26 @@ Stage Summary:
 - NOVA parity next: QR-orders inbox on New Sale (Ok-gate UX), Orders page (unpaid priority + CSV), inventory auto-deduction, EOD/z-report, customers/offers/reports, guest i18n, PWA.
 - Watch item: concurrent cron rounds can collide on shared QA tenants — prefer provisioning a fresh tenant per round for browser E2E.
 - Crons: 15-min webDevReview (this round's job 430321).
+
+---
+Task ID: 39
+Agent: glm-5.3 (cron webDevReview round)
+Task: Continue NOVA main flow — close last round's open verification points, E2E the counter-gate, advance NOVA parity (Orders page: unpaid priority + CSV)
+
+Work Log:
+- Recovered the previous round's truncated verification. Read worklog + git: Task 38 (NOVA main flow) was already committed (e0ef57f) and a parallel cron round had landed commit e19fa3c (migration 013_counter_gate + CounterInbox.tsx + KDS gate + qa-cleanup-orders.mjs) with NO worklog entry.
+- Verified migration 013 LIVE via pooler: sp_advance_order has the new→pending ladder, sp_record_payment auto-advances new/pending on payment, realtime publication intact (dining_tables + table_sessions).
+- CLOSED the carry-over verification point (trigger auto-release on cancel): staged an isolated diagnostic table (TRG-DIAG) + guest order via sp_create_public_order (fixed my own items-key mistake — the RPC wants `qty`, not `quantity`; it returned BAD_QTY with ZERO residue, proving validate-before-insert) → table auto-flipped occupied+active_order_id on create → cancelled → table AUTO-RELEASED (available, FK cleared) + order_status_history stamped. Double-proven later when cleaning the inbox fixture (INBOX-DIAG). sp_advance_order correctly 42501s bare pooler callers (auth.uid() null → membership guard works; caller-agnostic trigger still fires on direct UPDATE, which is how the release path was exercised).
+- Discovered a LIVE collision: my first fixture order came back as #14 (client_operation_id = a UUID, not mine) — the parallel agent was mid-E2E on T1 at the same moment. Followed the worklog watch-item: switched to isolated diagnostic tables and never touched their orders. Their #14 completed+paid cleanly; tenant reset.
+- Found a real bug in the fresh CounterInbox: `orders.table_session_id` is declared in types.ts but NO migration creates it → the QR-vs-walk-in badge heuristic never fired (every QR ticket showed "Walk-in"). Before I could fix it, the parallel agent was editing the same file (file grew 413→416 lines mid-Read); they switched the heuristic to `order.table_id` — I did NOT touch their file and independently verified their fix in the browser: ticket #16 now badges "QR · Table INBOX-DIAG".
+- E2E'd the Ok-gate in the browser (the part their commit hadn't proven): staged order #16 (Aarav, Flat White Large ×2 + Extra shot, ₹693) on INBOX-DIAG → New Sale inbox showed exactly one ticket with full detail (items/variant/add-on/notes, age chip, Live realtime chip) → clicked "Ok — fire to kitchen" → inbox band disappeared entirely (zero-noise design) → KDS showed #16 in the QUEUED column (pending) with Start preparing action; literal `new` never rendered on the rail (stageOf returns null for it). Counter-gate rule #1 now browser-proven. Screenshots: /tmp/inbox-ticket16.png, /tmp/inbox-badge-fixed.png, /tmp/inbox-after-ok.png, /tmp/kds-queued.png.
+- MY feature this round (no-collision zone — parallel agent claimed CounterInbox + a new EOD/Close-out section): NOVA "Orders page — unpaid priority + CSV" in BillsScreen. (1) Unpaid-first sort (active → paid → cancelled, newest within group) with auto-select of the most urgent bill on load/filter change + a gold "N unpaid" count chip (filter-independent, across loaded orders). (2) CSV export button: exports the CURRENTLY FILTERED list — 14 columns incl. item summary (qty × name (variant) [+ add-ons]), method label, GST split; UTF-8 BOM for Excel, bare decimals, OWASP CSV-injection escaping (leading =+-@ neutralized). Verified live with a 3-order fixture: list rendered 17 (unpaid, oldest) → 18 (paid) → 19 (cancelled), CSV downloaded and inspected (BOM + correct order + escaped cells), zero console errors. All fixtures deleted after.
+- Noted for the parallel agent: their scripts/qa-013-verify.mjs backlog query selects `grand_total` — the column is `total` (script will error on that query).
+- tsc 0 errors, lint clean (one transient failure was the parallel agent's mid-flight Sidebar 'eod' edit, resolved by them while I worked).
+
+Stage Summary:
+- The NOVA counter-gate is now proven end-to-end on the live cloud by BOTH agents independently: guest QR order → counter inbox (QR badge + full ticket) → Ok → KDS Queued (pending); KDS never sees `new`; payment auto-advance wired; table hold/release trigger double-proven.
+- Bills now match NOVA's Orders-page parity: unpaid-first priority with auto-select + unpaid chip + injection-safe CSV export of the filtered view.
+- Tenant hygiene maintained: zero leftover test orders/tables; demo QR link intact.
+- Next-up NOVA parity: EOD/z-report (parallel agent's Close-out section appears in-progress), inventory auto-deduction, customers/offers, guest i18n, PWA; consider orders.table_session_id properly (migration) if session-scoped billing is wanted later.
+- Crons: 15-min webDevReview (job 430321).

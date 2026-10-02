@@ -3,6 +3,21 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.3.1] — 2026-10-02 — Counter-gate proven live; Bills get unpaid-priority + CSV (NOVA Orders-page parity)
+
+### Added — Bills: the counter's money view gets teeth
+- **Unpaid-first priority** (`BillsScreen`): money-outstanding bills float to the top of the list (then paid, then cancelled; newest within each group) — the counter never loses sight of what's owed. On load / filter change the detail pane auto-selects the **most urgent** bill. A gold **"N unpaid" chip** beside the title shows money outstanding across everything loaded (filter-independent).
+- **CSV export**: a header button exports the **currently filtered** list (what you see is what you export) — order #, placed-at, status, payment + method, type, customer, table, full item summary (qty × name (variant) [+ add-ons]), subtotal/GST/discount/total, notes. UTF-8 BOM for Excel, bare decimals for spreadsheet formatting, and **CSV-injection-safe cell escaping** (leading `=+-@` neutralized) so a hostile note can't become a formula. Verified live: 3-order fixture exported in priority order.
+
+### Verified — the counter is the gate, end-to-end (independent re-proof on the live cloud)
+- **Migration 013 engine live**: `sp_advance_order` accepts `new → pending` (the inbox Ok) and `sp_record_payment` auto-advances un-started tickets (money in hand ⇒ cook).
+- **Inbox Ok-gate E2E** (agent-browser): a QR guest ticket (order #16, Flat White Large ×2 + Extra shot = ₹693, Aarav, INBOX-DIAG) appeared **only** in the counter inbox with a `QR · Table` badge, full ticket detail (items/variant/add-on/cook-note/order-note) and a Live chip → **"Ok — fire to kitchen"** emptied the inbox (the band disappears at zero) and the KDS received the ticket in the **Queued** column (`pending`) — the KDS never rendered the `new` state. Screenshots: inbox ticket, empty inbox after Ok, KDS queued.
+- **Table hold/release trigger double-proven** on isolated diagnostic tables: order created → table `occupied` + `active_order_id` set; order cancelled → table **auto-released** (`available`, FK cleared) with the status hop stamped in `order_status_history`. `sp_create_public_order` validates before insert (a malformed-qty call returned `BAD_QTY` and left **zero residue**). `sp_advance_order` correctly refuses unauthenticated bare-DB callers (42501 — membership guard, not a bug).
+- **Badge bug found & fixed**: `orders.table_session_id` is declared in `types.ts` but no migration creates it, so the inbox's QR-vs-walk-in badge heuristic never fired — every QR ticket showed "Walk-in". Heuristic switched to `order.table_id` (guest QR orders always carry a real table FK; counter walk-ins don't).
+
+### Housekeeping
+- All QA fixtures (diagnostic tables + test orders #15–#19) deleted; the QR Flow Cafe demo tenant is back to a clean state (T1 available, zero orders) — the owner's try-it-now link still works: `/t/2e65bd6858a063cf41614b1b1519b385`.
+
 ## [5.3.0] — 2026-10-02 — The main flow is whole: menu depth, live floor, guest QR ordering (Messages removed)
 
 ### Removed — Messages (owner directive: "remove the messages system; it's a point of sale app")

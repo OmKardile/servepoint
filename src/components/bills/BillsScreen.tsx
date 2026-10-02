@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Check,
   ChevronDown,
+  Download,
   Loader2,
   MoreHorizontal,
   Plus,
@@ -100,6 +101,88 @@ function capitalize(s: string): string {
 
 function isSameLocalDay(iso: string): boolean {
   return new Date(iso).toDateString() === new Date().toDateString();
+}
+
+/* ── CSV export (NOVA "Orders page — CSV", v5.3.1) ──────────────────────────
+ * Exports the CURRENTLY FILTERED list — the counter exports exactly what they
+ * see. Numbers are bare decimals (₹-free) so Excel/Sheets can format them;
+ * cells that could be read as formulas are neutralized (OWASP CSV injection).
+ */
+function csvCell(value: unknown): string {
+  let s =
+    value === null || value === undefined
+      ? ''
+      : String(value).replace(/\r/g, '').replace(/\n/g, ' ');
+  if (/^[=+\-@]/.test(s)) s = `'${s}`; // never let a cell become a formula
+  return `"${s.replace(/"/g, '""')}"`;
+}
+
+function itemsSummary(o: Order): string {
+  return (o.items || [])
+    .map((it) => {
+      let line = `${it.qty} × ${it.name}`;
+      if (it.variant_name) line += ` (${it.variant_name})`;
+      if (it.addons && it.addons.length > 0)
+        line += ` [+ ${it.addons.map((a) => a.name).join(', ')}]`;
+      return line;
+    })
+    .join('; ');
+}
+
+function exportBillsCsv(rows: Order[]): void {
+  if (rows.length === 0) return;
+  const header = [
+    'Order #',
+    'Placed at',
+    'Status',
+    'Payment',
+    'Method',
+    'Type',
+    'Customer',
+    'Table',
+    'Items',
+    'Subtotal (INR)',
+    'GST (INR)',
+    'Discount (INR)',
+    'Total (INR)',
+    'Notes',
+  ];
+  const lines = [header.map(csvCell).join(',')];
+  for (const o of rows) {
+    const st = STATUS_LABEL[displayStatus(o)] || displayStatus(o);
+    const method = o.payment_method ? METHOD_LABEL[o.payment_method as MethodKey] || o.payment_method : '';
+    lines.push(
+      [
+        o.order_number,
+        new Date(o.created_at).toLocaleString(),
+        st,
+        o.payment_status || 'pending',
+        method,
+        TYPE_LABEL[String(o.order_type)] || String(o.order_type),
+        o.customer_name || '',
+        o.table_label || '',
+        itemsSummary(o),
+        Number(o.subtotal ?? 0).toFixed(2),
+        Number(o.tax_amount ?? 0).toFixed(2),
+        Number(o.discount_amount ?? 0).toFixed(2),
+        Number(o.total ?? 0).toFixed(2),
+        o.notes || '',
+      ]
+        .map(csvCell)
+        .join(',')
+    );
+  }
+  const blob = new Blob(['\ufeff' + lines.join('\n')], {
+    type: 'text/csv;charset=utf-8;',
+  });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `servepoint-bills-${new Date().toISOString().slice(0, 10)}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
 }
 
 /** Secondary line on a row card: "Table 12 · 2 guests" or type + customer. */
@@ -276,11 +359,33 @@ const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRet
     });
   }, [orders, statusFilter, dateFilter, search]);
 
-  /* Keep a valid selection (auto-select newest on load / after filter change). */
+  /* NOVA "unpaid priority" (v5.3.1): money-outstanding bills float to the top
+     of the list so the counter never loses sight of what's owed; within each
+     group, newest first. Cancelled bills sink to the bottom. */
+  const sorted = useMemo(() => {
+    const rank = (o: Order): number =>
+      displayStatus(o) === 'active' ? 0 : displayStatus(o) === 'cancelled' ? 2 : 1;
+    return [...visible].sort((a, b) => {
+      const ra = rank(a);
+      const rb = rank(b);
+      if (ra !== rb) return ra - rb;
+      return b.created_at.localeCompare(a.created_at);
+    });
+  }, [visible]);
+
+  /* Money outstanding across everything loaded (not filter-dependent) — the
+     "you still owe / are owed" signal for the counter. */
+  const unpaidCount = useMemo(
+    () => orders.filter((o) => displayStatus(o) === 'active').length,
+    [orders]
+  );
+
+  /* Keep a valid selection (auto-select the most urgent bill on load / after
+     a filter change — top of the sorted list, i.e. oldest unpaid first). */
   useEffect(() => {
-    if (ordersLoading || visible.length === 0) return;
-    if (!visible.some((o) => o.id === selectedId)) setSelectedId(visible[0].id);
-  }, [visible, selectedId, ordersLoading]);
+    if (ordersLoading || sorted.length === 0) return;
+    if (!sorted.some((o) => o.id === selectedId)) setSelectedId(sorted[0].id);
+  }, [sorted, selectedId, ordersLoading]);
 
   const selected = orders.find((o) => o.id === selectedId) || null;
 
@@ -444,15 +549,38 @@ const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRet
         className="sp-card flex min-h-0 w-full flex-col p-4 lg:w-[55%]"
       >
         <div className="flex items-center justify-between gap-3">
-          <h1 className="text-[20px] font-bold text-[#1A1A1A]">Bills</h1>
-          <button
-            onClick={goFood}
-            aria-label="New order"
-            title="New order — start in Food & Drinks"
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#B88E2F] text-white transition hover:bg-[#967221] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#967221]"
-          >
-            <Plus size={20} aria-hidden />
-          </button>
+          <div className="flex min-w-0 items-center gap-2.5">
+            <h1 className="text-[20px] font-bold text-[#1A1A1A]">Bills</h1>
+            {unpaidCount > 0 && (
+              <span
+                title="Bills awaiting payment in the loaded list"
+                className="inline-flex shrink-0 items-center gap-1 rounded-full bg-[#FFF4DB] px-2.5 py-1 text-[11px] font-extrabold tabular-nums text-[#8A5A00]"
+              >
+                <Receipt size={11} aria-hidden />
+                {unpaidCount} unpaid
+              </span>
+            )}
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            <button
+              onClick={() => exportBillsCsv(sorted)}
+              disabled={sorted.length === 0}
+              aria-label="Export filtered bills as CSV"
+              title="Export the filtered list as CSV (opens in Excel / Sheets)"
+              className="flex h-11 items-center gap-1.5 rounded-xl border border-[#E3E7E0] bg-white px-3 text-[12.5px] font-bold text-[#0F3D3E] transition hover:border-[#B88E2F] hover:text-[#B88E2F] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#B88E2F] disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <Download size={15} aria-hidden />
+              CSV
+            </button>
+            <button
+              onClick={goFood}
+              aria-label="New order"
+              title="New order — start in Food & Drinks"
+              className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#B88E2F] text-white transition hover:bg-[#967221] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#967221]"
+            >
+              <Plus size={20} aria-hidden />
+            </button>
+          </div>
         </div>
 
         <div className="mt-3 flex items-center gap-2">
@@ -522,7 +650,7 @@ const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRet
                   <div className="sp-skeleton h-[68px]" />
                 </div>
               ))
-            : visible.map((o) => {
+            : sorted.map((o) => {
                 const isSelected = o.id === selectedId;
                 const status = displayStatus(o);
                 return (
