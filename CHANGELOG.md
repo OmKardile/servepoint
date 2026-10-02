@@ -3,6 +3,18 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.20.0] — 2026-10-03 — The report learns what "better" means (vs-prior-range delta chips on every headline KPI)
+
+### Added — Reports: comparison chips that answer "better than when?"
+- **The gap**: the headline strip stated figures in isolation — ₹2,967.30 sounds great until you ask "compared to when?". Twice designed and twice parked (helpers committed unused since `a7a4c34`), the "vs previous range" comparison finally ships: every headline KPI (Gross sales, GST collected, Net ex-GST, Orders, Avg ticket, Items sold) now carries a **delta chip** against the same KPI recomputed over the **equal-length window immediately before the selected range** — prior day / prior 7 days / prior 30 days, IST-exact like every window in the app.
+- **One aggregation body, zero drift**: the money-view loop was extracted into `aggregateTickets()` — the headline `agg` and the new `priorAgg` memo share the exact same body, so a chip's percentage can never drift from the headline figure it annotates (cancelled excluded, margin on paid tickets only, all of it preserved byte-for-byte).
+- **Honest states, in the app's health vocabulary**: up = green with a trending-up icon, down = red, flat = gray `±0%` (<0.05% band), and an empty prior window chips an honest teal **"new"** instead of a fake "+∞%". Both windows empty → no chip at all. **All time has no earlier boundary** — it gets NO chips plus a one-line explanation under the strip, never a fabricated baseline. The exact money always rides the chip's tooltip + aria label ("₹2,967.30 vs ₹693.00 (prior 7 days)") — a percentage never hides the figures it came from.
+- **Demo seed for the math** (`scripts/seed-prior-demo.mjs`, idempotent via `demo:prior-seed` marker, 5/5 self-verifying): three marked Flat-White tickets planted in the prior windows (Sep 22 ₹231 UPI, Sep 24 ₹462 cash → prior-7d = ₹693 · 2 orders · 3 items; Sep 1 ₹693 UPI → prior-30d = ₹693 · 1 order · 3 items) so the percent path renders on real, hand-checkable data. Today reads "new" across the strip (Oct 1 empty by construction) — both chip states live at once.
+
+### Verified
+- Window math cross-checked three ways: seed script SQL sums (5/5 PASS), chip arithmetic hand-checked (7d gross (2,967.30−693)/693 = +328.2% → "328%", avg ticket 370.91 vs 346.50 = +7.0%; 30d (3,660.30−693)/693 = +428%, orders 10 vs 1 = +900%, items 15 vs 3 = +400% — the Sep 22/24 seeds correctly fall inside current-30d but outside current-7d), and All time shows no chips + the hint line. `tsc` 0; zero page errors across Dashboard / Reports / Floor / Bills / KDS / Close-out; sw `5.20.0-r1`.
+- Untested paths stated honestly: the red "down" and gray "±0%" chip skins are code-symmetric to the verified green/new skins — no window pair in the live ledger currently produces them (no data was bent for QA).
+
 ## [5.19.0] — 2026-10-02 — The official brand arrives (Figma ServePoint-Brand logos ship everywhere)
 
 ### Added — real brand identity from the owner's Figma file

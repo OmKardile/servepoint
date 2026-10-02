@@ -1747,3 +1747,25 @@ Stage Summary:
 - One brand, one owner of record: d12a982 is the canonical branding commit; scripts/brand-extract.py is the regenerator; this pass added no divergent assets. Lesson banked: BOTH agents now know the shared agent-browser session carries headers across tasks — reset headers after any custom-header work.
 - Reports "vs prior range" delta chips remain parked (designed twice now — priorWindow helpers sit committed at a7a4c34, unused, lint-clean; wire them next round).
 - Crons: 15-min webDevReview (job 430321).
+---
+Task ID: 58 (CLAIM — in progress)
+Agent: glm-5.3 (cron webDevReview round)
+Task: Health sweep + agent-browser QA first; then the twice-designed, twice-parked feature becomes this round's build: Reports "vs prior range" delta chips (priorWindow/priorRangeLabel helpers sit committed and unused since a7a4c34 — wire them). Styling mandate rides on the chips; feature mandate = the comparison engine itself. Surfaces: ReportsScreen.tsx + a marked idempotent demo-seed for prior-window tickets. Login screen stays frozen (ADR-0016).
+
+---
+Task ID: 58
+Agent: glm-5.3 (cron webDevReview round)
+Task: Reports "vs prior range" delta chips — the twice-designed, twice-parked comparison feature ships (5.20.0). Health sweep + QA first; seed-then-build; hand-checked chip math; docs + push.
+
+Work Log:
+- Read worklog tail: branding already canonical at d12a982 (5.19.0); Task 57's parked delta chips (priorWindow/priorRangeLabel committed unused) were the explicit "next round" item → claimed as Task 58.
+- Health sweep clean (tsc 0 / dev 200 / tree at 007c19a). agent-browser QA sweep (session headers clean this time): Dashboard/Reports/Floor/Bills/KDS/Close-out all render, ZERO page errors → stable phase → build the parked feature.
+- Data reality check: DB had NO orders before Sep 29 → every chip would have honestly read "new", exercising none of the percent math. Wrote scripts/seed-prior-demo.mjs (idempotent, demo:prior-seed marker, same pattern as seed-reports-demo.mjs): 3 marked Flat-White tickets — Sep 22 ₹231 UPI + Sep 24 ₹462 cash (prior-7d window = ₹693 · 2 orders · 3 items), Sep 1 ₹693 UPI (prior-30d = ₹693 · 1 order · 3 items). Self-verify 5/5 PASS (after fixing my own verify bug: pg COUNT returns strings, "2"===2 is false — Number() cast).
+- ReportsScreen.tsx (ONLY code surface): extracted the money-view loop into module-level aggregateTickets(rows, cogsMap) + RangeAgg interface — headline agg and new priorAgg memo share ONE body so chips can never drift from headlines; priorAgg filters orders into priorWindow(range), null for 'all'; deltaProps(current, prior, fmt) helper returns spread-able {delta, deltaBaseline} or {}; DeltaChip component (up green #2E7D32 / down red #B3261E / flat gray / NEW teal #0F3D3E — 0.05% flat band, ≥100% rounds to integers, tooltip+aria always carry exact money "₹2,967.30 vs ₹693.00 (prior 7 days)"); StatCard grew optional delta+deltaBaseline props (chip row under the value, "vs prior X" microtext); all 6 KPI cards wired; 'all' shows a one-line honest hint instead of chips; footer + header doc updated.
+- E2E on real data: 7d — six green up-chips, gross +328% (2,967.30 vs 693), avg ticket +7.0%, orders +300%, items +300%; today — all six "new" chips (prior day Oct 1 empty); 30d — gross +428% (3,660.30 vs 693), orders +900% (10 vs 1), items +400% (15 vs 3) — cross-checked that Sep 22/24 seeds fall inside current-30d but outside current-7d (window boundaries exact); all — NO chips + hint line renders. Tooltip verified via JS eval (aria-label carries the exact figures). tsc 0; zero page errors post-change.
+- HONEST GAP: red "down" and gray "±0%" skins are code-symmetric to the verified green/new skins but no window pair in the live ledger produces them — recorded, not faked. Watch: the day a 7d dips under its prior window, the chip should render red — eyeball it then.
+
+Stage Summary:
+- Reports now answers "better than when?" on every headline figure. 5.20.0, sw servepoint-v5.20.0-r1, CHANGELOG written. Surfaces: src/components/reports/ReportsScreen.tsx + scripts/seed-prior-demo.mjs + public/sw.js + CHANGELOG.md + worklog.md. No migration. ADR-0016 untouched.
+- Ideas parked: per-section Z-report subtotals, floor capacity heatmap by hour, table sessions per card, reserved-seat CTA live test, chip sparkline on hover (micro-trend behind the %).
+- Crons: 15-min webDevReview (job 430321).

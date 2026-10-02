@@ -53,7 +53,11 @@ import type { Order } from '../../types';
  * All time, in IST calendar days like Close-out):
  *
  *   1. Headline strip — gross, GST collected, net (ex-GST), orders (+
- *      cancelled sinkage), average ticket, items sold.
+ *      cancelled sinkage), average ticket, items sold — each carrying a
+ *      "vs prior range" delta chip: the same KPI recomputed over the
+ *      equal-length window immediately before the selected one (prior day /
+ *      prior 7 / prior 30). All time has no earlier boundary, so it gets no
+ *      chips instead of a fake baseline; empty prior windows chip "new".
  *   2. Trends — the shape of the range, day by day (IST calendar days):
  *      gross bars + ticket line per day with the best day gold, and the
  *      guest-rating average per day as a gold line with honest gaps.
@@ -131,6 +135,58 @@ function priorWindow(range: RangeKey): { startMs: number; endMs: number } | null
 function priorRangeLabel(range: RangeKey): string | null {
   if (range === 'all') return null;
   return range === 'today' ? 'prior day' : range === '7d' ? 'prior 7 days' : 'prior 30 days';
+}
+
+/** The single money-view aggregation shared by the selected range AND its
+ *  prior comparison window (v5.20.0 — one body, so the chips can never drift
+ *  from the headline figures they compare against). */
+interface RangeAgg {
+  gross: number;
+  gst: number;
+  net: number;
+  placed: number;
+  cancelled: number;
+  items: number;
+  avgTicket: number;
+  paidNet: number;
+  cogs: number;
+  margin: number;
+  marginPct: number;
+  paidCount: number;
+}
+
+function aggregateTickets(rows: Order[], cogsMap: Map<string, number>): RangeAgg {
+  let gross = 0;
+  let gst = 0;
+  let net = 0;
+  let placed = 0;
+  let cancelled = 0;
+  let items = 0;
+  let paidNet = 0;
+  let cogs = 0;
+  let paidCount = 0;
+  for (const o of rows) {
+    const st = String(o.status || '').toLowerCase();
+    if (st === 'cancelled') {
+      cancelled += 1;
+      continue; // money view skips cancelled entirely
+    }
+    placed += 1;
+    gross += Number(o.total ?? 0);
+    gst += Number(o.tax_amount ?? 0);
+    net += Number(o.subtotal ?? 0) - Number(o.discount_amount ?? 0);
+    items += (o.items || []).reduce((n, it) => n + Number(it.qty ?? 0), 0);
+    // margin banks on COLLECTED money only
+    if (String(o.payment_status || '').toLowerCase() === 'completed') {
+      paidCount += 1;
+      paidNet += Number(o.subtotal ?? 0) - Number(o.discount_amount ?? 0);
+      cogs += cogsMap.get(o.id) ?? 0;
+    }
+  }
+  const avgTicket = placed > 0 ? gross / placed : 0;
+  const margin = paidNet - cogs;
+  const marginPct = paidNet > 0 ? (margin / paidNet) * 100 : 0;
+  return { gross, gst, net, placed, cancelled, items, avgTicket, paidNet, cogs, margin, marginPct, paidCount };
 }
 
 /** Hour-of-day (0–23) in IST for an ISO timestamp. */
@@ -347,39 +403,31 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
     });
   }, [orders, range]);
 
-  const agg = useMemo(() => {
-    let gross = 0;
-    let gst = 0;
-    let net = 0;
-    let placed = 0;
-    let cancelled = 0;
-    let items = 0;
-    let paidNet = 0;
-    let cogs = 0;
-    let paidCount = 0;
-    for (const o of inRange) {
-      const st = String(o.status || '').toLowerCase();
-      if (st === 'cancelled') {
-        cancelled += 1;
-        continue; // money view skips cancelled entirely
-      }
-      placed += 1;
-      gross += Number(o.total ?? 0);
-      gst += Number(o.tax_amount ?? 0);
-      net += Number(o.subtotal ?? 0) - Number(o.discount_amount ?? 0);
-      items += (o.items || []).reduce((n, it) => n + Number(it.qty ?? 0), 0);
-      // margin banks on COLLECTED money only
-      if (String(o.payment_status || '').toLowerCase() === 'completed') {
-        paidCount += 1;
-        paidNet += Number(o.subtotal ?? 0) - Number(o.discount_amount ?? 0);
-        cogs += cogsMap.get(o.id) ?? 0;
-      }
-    }
-    const avgTicket = placed > 0 ? gross / placed : 0;
-    const margin = paidNet - cogs;
-    const marginPct = paidNet > 0 ? (margin / paidNet) * 100 : 0;
-    return { gross, gst, net, placed, cancelled, items, avgTicket, paidNet, cogs, margin, marginPct, paidCount };
-  }, [inRange, cogsMap]);
+  const agg = useMemo(() => aggregateTickets(inRange, cogsMap), [inRange, cogsMap]);
+
+  /** The equal-length window immediately before the selected one — the
+   *  delta-chip baseline. `null` for All time (no earlier boundary). */
+  const priorAgg = useMemo(() => {
+    const w = priorWindow(range);
+    if (!w) return null;
+    const rows = orders.filter((o) => {
+      const t = new Date(o.created_at).getTime();
+      if (Number.isNaN(t)) return false;
+      return t >= w.startMs && t < w.endMs;
+    });
+    return aggregateTickets(rows, cogsMap);
+  }, [orders, range, cogsMap]);
+
+  /** Spread-able chip props for a headline KPI: `{ delta, deltaBaseline }`
+   *  when a prior window exists, `{}` otherwise (All time → no chips). */
+  const priorLabel = priorRangeLabel(range);
+  const deltaProps = (current: number, prior: number, fmt: (n: number) => string) =>
+    priorAgg && priorLabel
+      ? {
+          delta: <DeltaChip current={current} prior={prior} baseline={priorLabel} fmt={fmt} />,
+          deltaBaseline: priorLabel,
+        }
+      : {};
 
   const hourly = useMemo(() => {
     const buckets = Array.from({ length: 24 }, (_, h) => ({ hour: h, label: hourLabel(h), gross: 0 }));
@@ -735,18 +783,51 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
 
       {/* ── headline strip ── */}
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-        <StatCard label="Gross sales" value={formatMoney(agg.gross)} tone="#0F3D3E" />
-        <StatCard label="GST collected" value={formatMoney(agg.gst)} tone="#8A5A00" />
-        <StatCard label="Net (ex-GST)" value={formatMoney(agg.net)} tone="#0F3D3E" />
+        <StatCard
+          label="Gross sales"
+          value={formatMoney(agg.gross)}
+          tone="#0F3D3E"
+          {...deltaProps(agg.gross, priorAgg?.gross ?? 0, formatMoney)}
+        />
+        <StatCard
+          label="GST collected"
+          value={formatMoney(agg.gst)}
+          tone="#8A5A00"
+          {...deltaProps(agg.gst, priorAgg?.gst ?? 0, formatMoney)}
+        />
+        <StatCard
+          label="Net (ex-GST)"
+          value={formatMoney(agg.net)}
+          tone="#0F3D3E"
+          {...deltaProps(agg.net, priorAgg?.net ?? 0, formatMoney)}
+        />
         <StatCard
           label="Orders"
           value={String(agg.placed)}
           sub={agg.cancelled > 0 ? `${agg.cancelled} cancelled excluded` : 'live in range'}
           tone="#0F3D3E"
+          {...deltaProps(agg.placed, priorAgg?.placed ?? 0, (n) => String(Math.round(n)))}
         />
-        <StatCard label="Avg ticket" value={formatMoney(agg.avgTicket)} tone="#B88E2F" />
-        <StatCard label="Items sold" value={String(agg.items)} tone="#0F3D3E" />
+        <StatCard
+          label="Avg ticket"
+          value={formatMoney(agg.avgTicket)}
+          tone="#B88E2F"
+          {...deltaProps(agg.avgTicket, priorAgg?.avgTicket ?? 0, formatMoney)}
+        />
+        <StatCard
+          label="Items sold"
+          value={String(agg.items)}
+          tone="#0F3D3E"
+          {...deltaProps(agg.items, priorAgg?.items ?? 0, (n) => String(Math.round(n)))}
+        />
       </div>
+
+      {range === 'all' && !loading && (
+        <p className="px-1 text-[10.5px] text-[#969696]">
+          All time has no earlier window to compare — comparison chips appear on Today, Last 7
+          days and Last 30 days.
+        </p>
+      )}
 
       {inRange.length === 0 && !loading ? (
         <div className="sp-card flex flex-col items-center justify-center gap-2 px-4 py-14 text-center">
@@ -1618,8 +1699,9 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
           <p className="px-1 text-[10.5px] text-[#969696]">
             Aggregated from the most recent 500 tickets in the cloud, IST calendar days. Cancelled
             tickets are excluded from every money figure; margin is computed on paid tickets only.
-            Guest satisfaction reads the ratings ledger; drawer honesty reads sealed shifts only.
-            All-time day buckets show the most recent 30 ticket days.
+            Comparison chips read the equal-length window immediately before the selected range,
+            from the same ledger. Guest satisfaction reads the ratings ledger; drawer honesty reads
+            sealed shifts only. All-time day buckets show the most recent 30 ticket days.
           </p>
         </>
       )}
@@ -1654,12 +1736,60 @@ function peakHourLabel(hourly: { hour: number; gross: number }[]): string {
   return best < 0 || bestVal === 0 ? '—' : `${hourLabel(best)} (${formatMoney(bestVal)})`;
 }
 
-const StatCard: React.FC<{ label: string; value: string; sub?: string; tone: string }> = ({
-  label,
-  value,
-  sub,
-  tone,
-}) => (
+/** Delta chip — the "vs prior range" comparison on the headline KPIs
+ *  (v5.20.0). Direction-colored in the app's health vocabulary: up = green,
+ *  down = red, flat = gray, and an honest teal "new" when the prior window
+ *  had no sales at all. The exact figures always live in the tooltip + aria
+ *  label — a percentage never hides the money it came from. */
+const DELTA_SKIN: Record<'up' | 'down' | 'flat' | 'new', { fg: string; bg: string; bd: string }> = {
+  up: { fg: '#2E7D32', bg: '#E7F2EB', bd: '#CFE6D8' },
+  down: { fg: '#B3261E', bg: '#FDEEEC', bd: '#F0C4BE' },
+  flat: { fg: '#6B6B6B', bg: '#F1F2EF', bd: '#E3E7E0' },
+  new: { fg: '#0F3D3E', bg: '#DCE9E4', bd: '#C6D8D1' },
+};
+
+const DeltaChip: React.FC<{
+  current: number;
+  prior: number;
+  baseline: string;
+  fmt: (n: number) => string;
+}> = ({ current, prior, baseline, fmt }) => {
+  if (prior === 0 && current === 0) return null;
+  const isNew = prior === 0 && current > 0;
+  const pct = prior > 0 ? ((current - prior) / prior) * 100 : 0;
+  const flat = !isNew && Math.abs(pct) < 0.05;
+  const kind = isNew ? 'new' : flat ? 'flat' : pct > 0 ? 'up' : 'down';
+  const skin = DELTA_SKIN[kind];
+  const text = isNew
+    ? 'new'
+    : flat
+      ? '±0%'
+      : `${Math.abs(pct) >= 100 ? Math.round(Math.abs(pct)) : Math.abs(pct).toFixed(1)}%`;
+  const detail = isNew
+    ? `${fmt(current)} — no sales in the earlier window (${baseline})`
+    : `${fmt(current)} vs ${fmt(prior)} (${baseline})`;
+  const Icon = kind === 'up' ? TrendingUp : kind === 'down' ? TrendingDown : Minus;
+  return (
+    <span
+      className="inline-flex shrink-0 items-center gap-1 rounded-full px-1.5 py-[1.5px] text-[10px] font-bold leading-none tabular-nums"
+      style={{ color: skin.fg, backgroundColor: skin.bg, border: `1px solid ${skin.bd}` }}
+      title={detail}
+      aria-label={`vs ${baseline}: ${detail}`}
+    >
+      <Icon size={10} aria-hidden strokeWidth={2.5} />
+      {text}
+    </span>
+  );
+};
+
+const StatCard: React.FC<{
+  label: string;
+  value: string;
+  sub?: string;
+  tone: string;
+  delta?: React.ReactNode;
+  deltaBaseline?: string;
+}> = ({ label, value, sub, tone, delta, deltaBaseline }) => (
   <section
     className="sp-card p-4 transition duration-200 hover:-translate-y-0.5 hover:shadow-[0_8px_22px_rgba(15,61,62,0.10)]"
     aria-label={label}
@@ -1671,6 +1801,14 @@ const StatCard: React.FC<{ label: string; value: string; sub?: string; tone: str
     >
       {value}
     </p>
+    {delta ? (
+      <div className="mt-1.5 flex items-center gap-1">
+        {delta}
+        {deltaBaseline ? (
+          <span className="truncate text-[10px] font-medium text-[#969696]">vs {deltaBaseline}</span>
+        ) : null}
+      </div>
+    ) : null}
     {sub ? <p className="mt-0.5 truncate text-[10.5px] text-[#969696]">{sub}</p> : null}
   </section>
 );
