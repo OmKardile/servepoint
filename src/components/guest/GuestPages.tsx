@@ -34,6 +34,7 @@ import {
   type PublicOffer,
   type TableSession,
 } from '../../lib/guest';
+import { GUEST_LANGS, useGuestLang } from '../../lib/guest-i18n';
 
 /**
  * Guest QR surfaces (v5.3.0) — the customer side of the main flow.
@@ -78,19 +79,21 @@ function twoToneChime(): void {
 }
 
 function GuestFooter(): React.ReactElement {
+  const { t } = useGuestLang();
   return (
     <footer className="mt-auto border-t border-[#E3E7E0] bg-white">
       <div className="mx-auto flex max-w-xl items-center justify-between px-4 py-3 text-[11px] text-[#6B6B6B]">
         <span className="font-semibold uppercase tracking-[0.14em]" style={{ color: brand.teal }}>
           ServePoint
         </span>
-        <span>Powered by ServePoint — smartPOS</span>
+        <span>{t('poweredBy')}</span>
       </div>
     </footer>
   );
 }
 
 function GuestErrorCard({ title, body, onRetry }: { title: string; body: string; onRetry?: () => void }): React.ReactElement {
+  const { t } = useGuestLang();
   return (
     <div className="mx-auto mt-10 max-w-md px-4">
       <div className="rounded-3xl border border-[#E3E7E0] bg-white p-6 text-center shadow-sm">
@@ -106,7 +109,7 @@ function GuestErrorCard({ title, body, onRetry }: { title: string; body: string;
             className="mt-5 inline-flex h-11 items-center gap-2 rounded-full px-5 text-[13.5px] font-semibold text-white transition-opacity hover:opacity-90"
             style={{ background: brand.teal }}
           >
-            <RefreshCw size={15} aria-hidden /> Try again
+            <RefreshCw size={15} aria-hidden /> {t('tryAgain')}
           </button>
         )}
       </div>
@@ -117,24 +120,25 @@ function GuestErrorCard({ title, body, onRetry }: { title: string; body: string;
 /* ════════════════════════════ 1 · GATE ════════════════════════════ */
 
 export function GuestGatePage({ qrToken }: { qrToken: string }): React.ReactElement {
+  const { t } = useGuestLang();
   const [state, setState] = useState<'working' | 'invalid' | 'session'>('working');
-  const [detail, setDetail] = useState('Checking this table…');
+  const [detail, setDetail] = useState(t('checking'));
 
   const run = useCallback(async () => {
     setState('working');
-    setDetail('Checking this table…');
+    setDetail(t('checking'));
     if (!qrToken) {
       setState('invalid');
-      setDetail('This link is missing its table code. Scan the QR sticker on your table.');
+      setDetail(t('missingCode'));
       return;
     }
     const resolved = await resolveTableQr(qrToken);
     if (!resolved.is_valid || !resolved.tenant || !resolved.table) {
       setState('invalid');
-      setDetail(resolved.message || 'This table code is not valid. Scan the QR sticker on your table.');
+      setDetail(resolved.message || t('invalidCode'));
       return;
     }
-    setDetail(`Opening your session at ${resolved.tenant.name}…`);
+    setDetail(t('opening', { cafe: resolved.tenant.name }));
     const opened = await openTableSession({
       slug: resolved.tenant.slug,
       tableNumber: resolved.table.table_number,
@@ -142,11 +146,11 @@ export function GuestGatePage({ qrToken }: { qrToken: string }): React.ReactElem
     });
     if (!opened.ok || !opened.session) {
       setState('session');
-      setDetail(opened.message || 'This table could not be opened right now. Ask our staff for help.');
+      setDetail(opened.message || t('sessionFail'));
       return;
     }
     window.location.assign(`/menu/${encodeURIComponent(qrToken)}`);
-  }, [qrToken]);
+  }, [qrToken, t]);
 
   useEffect(() => {
     void run();
@@ -161,11 +165,11 @@ export function GuestGatePage({ qrToken }: { qrToken: string }): React.ReactElem
               <QrCode size={30} aria-hidden />
             </div>
             <p className="text-[14px] font-medium text-[#1A1A1A]">{detail}</p>
-            <p className="text-[12px] text-[#6B6B6B]">ServePoint table service</p>
+            <p className="text-[12px] text-[#6B6B6B]">{t('serviceLine')}</p>
           </div>
         )}
-        {state === 'invalid' && <GuestErrorCard title="This link didn't work" body={detail} />}
-        {state === 'session' && <GuestErrorCard title="Table didn't open" body={detail} onRetry={() => void run()} />}
+        {state === 'invalid' && <GuestErrorCard title={t('gateInvalidTitle')} body={detail} />}
+        {state === 'session' && <GuestErrorCard title={t('gateSessionTitle')} body={detail} onRetry={() => void run()} />}
       </main>
       <GuestFooter />
     </div>
@@ -193,10 +197,11 @@ const CART_KEY = (token: string) => `sp.guest.cart.${token}`;
 
 /** Session countdown ribbon — the ONLY 1s-ticking component on the page. */
 function SessionRibbon({ session }: { session: TableSession }): React.ReactElement {
+  const { t } = useGuestLang();
   const [msLeft, setMsLeft] = useState(() => new Date(session.expires_at).getTime() - Date.now());
   useEffect(() => {
-    const t = window.setInterval(() => setMsLeft(new Date(session.expires_at).getTime() - Date.now()), 1000);
-    return () => window.clearInterval(t);
+    const t2 = window.setInterval(() => setMsLeft(new Date(session.expires_at).getTime() - Date.now()), 1000);
+    return () => window.clearInterval(t2);
   }, [session.expires_at]);
   const totalSec = Math.max(0, Math.floor(msLeft / 1000));
   const mm = String(Math.floor(totalSec / 60));
@@ -207,19 +212,20 @@ function SessionRibbon({ session }: { session: TableSession }): React.ReactEleme
       className="flex items-center justify-center gap-2 px-4 py-2 text-[12.5px] font-semibold"
       style={{ background: warm ? '#FBF3E4' : brand.teal, color: warm ? '#8A5A16' : '#FFFFFF' }}
       role="status"
-      aria-label={`Ordering session ends in ${mm}:${ss}`}
+      aria-label={t('ariaEnds', { t: `${mm}:${ss}` })}
     >
       <Clock size={14} aria-hidden />
-      <span>{warm ? 'Session ending soon — ' : 'Ordering window — '}</span>
+      <span>{warm ? t('endingSoon') : t('orderingWindow')}</span>
       <span className="font-mono tabular-nums">
         {mm}:{ss}
       </span>
-      <span className="hidden sm:inline">· rescan the table QR to renew</span>
+      <span className="hidden sm:inline">{t('rescanHint')}</span>
     </div>
   );
 }
 
 function Customizer({ item, onAdd }: { item: GuestMenuItem; onAdd: (l: Omit<CartLine, 'key'>) => void }): React.ReactElement {
+  const { t } = useGuestLang();
   const [variantId, setVariantId] = useState<string | null>(null);
   const [addonIds, setAddonIds] = useState<string[]>([]);
   const [qty, setQty] = useState(1);
@@ -233,7 +239,7 @@ function Customizer({ item, onAdd }: { item: GuestMenuItem; onAdd: (l: Omit<Cart
     <div className="mt-3 rounded-2xl border border-[#E3E7E0] bg-[#FBFBF9] p-3">
       {item.variants.length > 0 && (
         <fieldset className="mb-3">
-          <legend className="mb-1.5 text-[11.5px] font-semibold uppercase tracking-wide text-[#6B6B6B]">Choose one</legend>
+          <legend className="mb-1.5 text-[11.5px] font-semibold uppercase tracking-wide text-[#6B6B6B]">{t('chooseOne')}</legend>
           <div className="flex flex-wrap gap-1.5">
             {item.variants.map((v) => {
               const active = variantId === v.id;
@@ -263,7 +269,7 @@ function Customizer({ item, onAdd }: { item: GuestMenuItem; onAdd: (l: Omit<Cart
 
       {item.addons.length > 0 && (
         <fieldset className="mb-3">
-          <legend className="mb-1.5 text-[11.5px] font-semibold uppercase tracking-wide text-[#6B6B6B]">Add-ons</legend>
+          <legend className="mb-1.5 text-[11.5px] font-semibold uppercase tracking-wide text-[#6B6B6B]">{t('addons')}</legend>
           <div className="flex flex-wrap gap-1.5">
             {item.addons.map((a) => {
               const active = addonIds.includes(a.id);
@@ -293,8 +299,8 @@ function Customizer({ item, onAdd }: { item: GuestMenuItem; onAdd: (l: Omit<Cart
         value={notes}
         onChange={(e) => setNotes(e.target.value)}
         maxLength={140}
-        placeholder="Cook note (e.g. less spicy) — optional"
-        aria-label="Cook note"
+        placeholder={t('cookNotePh')}
+        aria-label={t('cookNoteAria')}
         className="sp-input h-11 w-full px-3 text-[13.5px]"
       />
 
@@ -302,7 +308,7 @@ function Customizer({ item, onAdd }: { item: GuestMenuItem; onAdd: (l: Omit<Cart
         <div className="flex items-center gap-1 rounded-full border border-[#E3E7E0] bg-white p-1">
           <button
             type="button"
-            aria-label="Decrease quantity"
+            aria-label={t('decQty')}
             onClick={() => setQty((q) => Math.max(1, q - 1))}
             className="flex h-9 w-9 items-center justify-center rounded-full text-[#6B6B6B] hover:bg-[#F6F5F2] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#0F3D3E]"
           >
@@ -313,7 +319,7 @@ function Customizer({ item, onAdd }: { item: GuestMenuItem; onAdd: (l: Omit<Cart
           </span>
           <button
             type="button"
-            aria-label="Increase quantity"
+            aria-label={t('incQty')}
             onClick={() => setQty((q) => Math.min(50, q + 1))}
             className="flex h-9 w-9 items-center justify-center rounded-full text-[#6B6B6B] hover:bg-[#F6F5F2] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#0F3D3E]"
           >
@@ -330,14 +336,45 @@ function Customizer({ item, onAdd }: { item: GuestMenuItem; onAdd: (l: Omit<Cart
           className="flex h-11 flex-1 items-center justify-center gap-2 rounded-full text-[13.5px] font-semibold text-white transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#B88E2F]"
           style={{ background: brand.teal }}
         >
-          <Plus size={15} aria-hidden /> Add to order · {money(unit * qty)}
+          <Plus size={15} aria-hidden /> {t('addToOrder', { amt: money(unit * qty) })}
         </button>
       </div>
     </div>
   );
 }
 
+/** Language pills — EN / हिंदी / ಕನ್ನಡ, persisted per device. */
+function LangSwitcher({ dark }: { dark?: boolean }): React.ReactElement {
+  const { lang, setLang, t } = useGuestLang();
+  return (
+    <div
+      role="group"
+      aria-label={t('langAria')}
+      className={`inline-flex items-center gap-0.5 rounded-full border p-[3px] ${dark ? 'border-white/15 bg-white/10' : 'border-[#E3E7E0] bg-white shadow-sm'}`}
+    >
+      {GUEST_LANGS.map((l) => {
+        const active = lang === l.code;
+        return (
+          <button
+            key={l.code}
+            type="button"
+            onClick={() => setLang(l.code)}
+            aria-pressed={active}
+            className={`flex h-8 items-center rounded-full px-3 text-[12.5px] font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 ${
+              dark ? 'focus-visible:outline-white' : 'focus-visible:outline-[#B88E2F]'
+            } ${active ? 'text-white shadow-sm' : dark ? 'text-white/70 hover:text-white' : 'text-[#6B6B6B] hover:text-[#1A1A1A]'}`}
+            style={active ? { background: dark ? brand.gold : brand.teal } : undefined}
+          >
+            {l.native}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElement {
+  const { t } = useGuestLang();
   const [phase, setPhase] = useState<'loading' | 'ready' | 'locked' | 'error'>('loading');
   const [errorBody, setErrorBody] = useState('');
   const [resolved, setResolved] = useState<{ tenantName: string; slug: string; tableNumber: string; capacity: number } | null>(null);
@@ -366,7 +403,7 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
       if (!alive) return;
       if (!r.is_valid || !r.tenant || !r.table) {
         setPhase('error');
-        setErrorBody(r.message || 'This table code is not valid. Scan the QR sticker on your table.');
+        setErrorBody(r.message || t('invalidCode'));
         return;
       }
       setResolved({ tenantName: r.tenant.name, slug: r.tenant.slug, tableNumber: r.table.table_number, capacity: r.table.capacity });
@@ -374,7 +411,7 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
       if (!alive) return;
       if (!opened.ok || !opened.session) {
         setPhase('locked');
-        setErrorBody(opened.message || 'Your ordering window closed. Scan the table QR again to continue.');
+        setErrorBody(opened.message || t('sessionClosed'));
         return;
       }
       setSessionToken(opened.session);
@@ -382,12 +419,12 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
       if (!alive) return;
       if (!m.is_valid) {
         setPhase('error');
-        setErrorBody(m.message || 'The menu could not be loaded.');
+        setErrorBody(m.message || t('menuFail'));
         return;
       }
       setMenu(m);
       setPhase('ready');
-      document.title = `${r.tenant.name} — order from Table ${r.table.table_number}`;
+      document.title = t('docTitleMenu', { cafe: r.tenant.name, n: r.table.table_number });
       // offers banner — best effort, never blocks the menu
       fetchPublicOffers(r.tenant.slug).then((o) => {
         if (alive) setOffers(o);
@@ -434,6 +471,30 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
   const cartTax = round2(cartSubtotal * 0.05);
   const cartTotal = round2(cartSubtotal + cartTax);
 
+  // sticky category rail — scroll-spy highlights the section under the reader's thumb
+  const [activeCat, setActiveCat] = useState<string | null>(null);
+  useEffect(() => {
+    if (phase !== 'ready') return;
+    const els = Array.from(document.querySelectorAll<HTMLElement>('[data-cat]'));
+    if (els.length === 0) return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        const vis = entries
+          .filter((e) => e.isIntersecting)
+          .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
+        if (vis[0]) setActiveCat((vis[0].target as HTMLElement).dataset.cat ?? null);
+      },
+      { rootMargin: '-130px 0px -65% 0px', threshold: 0 },
+    );
+    els.forEach((el) => io.observe(el));
+    return () => io.disconnect();
+  }, [phase, filtered]);
+
+  const jumpToCat = (id: string) => {
+    setActiveCat(id);
+    document.getElementById(`cat-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
   const placeOrder = async () => {
     if (lines.length === 0 || placing) return;
     setPlacing(true);
@@ -452,7 +513,7 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
       clientOperationId: crypto.randomUUID(),
     });
     if (!res.is_valid || !res.order) {
-      setPlaceError(res.message || 'The order did not go through. Please try again.');
+      setPlaceError(res.message || t('orderFail'));
       setPlacing(false);
       if (res.error === 'INVALID_TOKEN') {
         sessionStorage.removeItem(CART_KEY(qrToken));
@@ -468,7 +529,7 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
     return (
       <div className="flex min-h-screen flex-col items-center justify-center bg-[#F6F5F2]">
         <div className="h-10 w-10 animate-spin rounded-full border-[#E3E7E0] border-t-[#0F3D3E]" style={{ borderWidth: 3 }} />
-        <p className="mt-3 text-[13px] text-[#6B6B6B]">Setting the table…</p>
+        <p className="mt-3 text-[13px] text-[#6B6B6B]">{t('settingTable')}</p>
       </div>
     );
   }
@@ -476,7 +537,7 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
     return (
       <div className="flex min-h-screen flex-col bg-[#F6F5F2]">
         <main className="flex-1">
-          <GuestErrorCard title="Menu unavailable" body={errorBody} />
+          <GuestErrorCard title={t('menuUnavailable')} body={errorBody} />
         </main>
         <GuestFooter />
       </div>
@@ -491,40 +552,73 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
       <header className="px-4 pb-4 pt-6" style={{ background: `linear-gradient(160deg, ${brand.teal} 0%, #14514f 100%)` }}>
         <div className="mx-auto flex max-w-xl items-start justify-between gap-3">
           <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#E7C878]">Tableside menu</p>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#E7C878]">{t('tablesideMenu')}</p>
             <h1 className="mt-1 font-serif text-[30px] italic leading-tight text-white">{resolved?.tenantName}</h1>
             <p className="mt-1.5 flex items-center gap-1.5 text-[12.5px] text-white/75">
               <UtensilsCrossed size={13} aria-hidden />
-              Table {resolved?.tableNumber} · {resolved?.capacity} seats — scan to order, pay at the counter
+              {t('tableLine', { n: resolved?.tableNumber ?? '', s: resolved?.capacity ?? '' })}
             </p>
           </div>
           <button
             type="button"
             onClick={() => window.location.assign(`/t/${encodeURIComponent(qrToken)}`)}
             className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-white"
-            aria-label="Back to table check-in"
+            aria-label={t('backToCheckin')}
           >
             <ArrowLeft size={18} aria-hidden />
           </button>
         </div>
 
-        <div className="relative mx-auto mt-4 max-w-xl">
-          <Search size={16} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[#6B6B6B]" aria-hidden />
-          <input
-            type="search"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search the menu…"
-            aria-label="Search the menu"
-            className="h-12 w-full rounded-full border border-white/15 bg-white pl-10 pr-4 text-[14px] text-[#1A1A1A] shadow-sm placeholder:text-[#9A9A9A] focus:outline focus:outline-2 focus:outline-[#B88E2F]"
-          />
+        <div className="mx-auto mt-4 flex max-w-xl items-center gap-2">
+          <div className="relative flex-1">
+            <Search size={16} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[#6B6B6B]" aria-hidden />
+            <input
+              type="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder={t('searchPh')}
+              aria-label={t('searchAria')}
+              className="h-12 w-full rounded-full border border-white/15 bg-white pl-10 pr-4 text-[14px] text-[#1A1A1A] shadow-sm placeholder:text-[#9A9A9A] focus:outline focus:outline-2 focus:outline-[#B88E2F]"
+            />
+          </div>
+          <LangSwitcher dark />
         </div>
       </header>
 
       <main className="mx-auto w-full max-w-xl flex-1 px-4 pb-36 pt-4">
+        {/* sticky category rail — thumb-friendly jumps, scroll-spy highlight */}
+        {phase === 'ready' && filtered.length > 0 && (
+          <nav
+            aria-label={t('categoriesAria')}
+            className="sticky top-0 z-30 -mx-4 mb-4 border-b border-[#E3E7E0] bg-[#F6F5F2]/95 px-4 py-2.5 backdrop-blur"
+          >
+            <div className="flex gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              {filtered.map((c) => {
+                const active = activeCat === c.id;
+                return (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() => jumpToCat(c.id)}
+                    aria-current={active ? 'true' : undefined}
+                    className={`h-9 shrink-0 rounded-full border px-3.5 text-[12.5px] font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[#B88E2F] ${
+                      active
+                        ? 'border-transparent text-white shadow-sm'
+                        : 'border-[#E3E7E0] bg-white text-[#1A1A1A] hover:border-[#B88E2F]'
+                    }`}
+                    style={active ? { background: brand.teal } : undefined}
+                  >
+                    {c.name}
+                  </button>
+                );
+              })}
+            </div>
+          </nav>
+        )}
+
         {/* today's offers — read-only, active only, straight from the owner's CRM */}
         {phase === 'ready' && offers.length > 0 && (
-          <section aria-label="Today's offers" className="mb-4">
+          <section aria-label={t('offersAria')} className="mb-4">
             <div className="flex gap-2.5 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
               {offers.map((o) => (
                 <div
@@ -553,7 +647,7 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
             <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-[#FBF3E4]">
               <Clock size={24} className="text-[#8A5A16]" aria-hidden />
             </div>
-            <h2 className="mt-3 font-serif text-[22px] italic text-[#0F3D3E]">Ordering paused</h2>
+            <h2 className="mt-3 font-serif text-[22px] italic text-[#0F3D3E]">{t('orderingPaused')}</h2>
             <p className="mt-2 text-[13.5px] text-[#6B6B6B]">{errorBody}</p>
             <button
               type="button"
@@ -561,15 +655,15 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
               className="mt-5 inline-flex h-11 items-center gap-2 rounded-full px-5 text-[13.5px] font-semibold text-white"
               style={{ background: brand.teal }}
             >
-              <QrCode size={15} aria-hidden /> Re-open my session
+              <QrCode size={15} aria-hidden /> {t('reopen')}
             </button>
           </div>
         )}
 
-        {phase === 'ready' && filtered.length === 0 && <p className="mt-10 text-center text-[13.5px] text-[#6B6B6B]">Nothing matches “{query}”.</p>}
+        {phase === 'ready' && filtered.length === 0 && <p className="mt-10 text-center text-[13.5px] text-[#6B6B6B]">{t('nothingMatches', { q: query })}</p>}
 
         {filtered.map((cat) => (
-          <section key={cat.id} className="mt-5" aria-label={cat.name}>
+          <section key={cat.id} id={`cat-${cat.id}`} data-cat={cat.id} className="mt-5 scroll-mt-16" aria-label={cat.name}>
             <h2 className="mb-2 font-serif text-[21px] italic text-[#0F3D3E]">{cat.name}</h2>
             <div className="overflow-hidden rounded-3xl border border-[#E3E7E0] bg-white shadow-sm">
               {cat.items.map((item, i) => {
@@ -584,7 +678,7 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
                     >
                       <span
                         className="mt-1 flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border"
-                        title={item.is_veg ? 'Vegetarian' : 'Non-vegetarian'}
+                        title={item.is_veg ? t('veg') : t('nonveg')}
                         style={{ borderColor: item.is_veg ? '#2E7D32' : '#B4483C' }}
                       >
                         <span className="h-2 w-2 rounded-full" style={{ background: item.is_veg ? '#2E7D32' : '#B4483C' }} />
@@ -600,12 +694,12 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
                         <span className="mt-1 flex flex-wrap gap-1">
                           {item.variants.length > 0 && (
                             <span className="rounded-full bg-[#F1F4F1] px-2 py-0.5 text-[10.5px] font-medium text-[#0F3D3E]">
-                              {item.variants.length} option{item.variants.length > 1 ? 's' : ''}
+                              {t('nOptions', { n: item.variants.length, s: item.variants.length > 1 ? 's' : '' })}
                             </span>
                           )}
                           {item.addons.length > 0 && (
                             <span className="rounded-full bg-[#FDF9F0] px-2 py-0.5 text-[10.5px] font-medium text-[#8A5A16]">
-                              {item.addons.length} add-on{item.addons.length > 1 ? 's' : ''}
+                              {t('nAddons', { n: item.addons.length, s: item.addons.length > 1 ? 's' : '' })}
                             </span>
                           )}
                         </span>
@@ -635,24 +729,33 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
           >
             <span className="flex items-center gap-2 text-[13.5px] font-semibold">
               <ShoppingBag size={16} aria-hidden />
-              {cartCount} item{cartCount > 1 ? 's' : ''}
+              {t('nItems', { n: cartCount, s: cartCount > 1 ? 's' : '' })}
             </span>
-            <span className="text-[14px] font-bold">View order · {money(cartTotal)}</span>
+            <span className="text-[14px] font-bold">{t('viewOrder', { amt: money(cartTotal) })}</span>
           </button>
         </div>
       )}
 
       {/* cart drawer */}
       {drawerOpen && (
-        <div className="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label="Your order">
-          <button type="button" aria-label="Close cart" onClick={() => setDrawerOpen(false)} className="absolute inset-0 h-full w-full cursor-default bg-[#0F3D3E]/45" />
-          <div className="absolute right-0 top-0 flex h-full w-full max-w-md flex-col rounded-l-[24px] bg-white shadow-2xl">
+        <div className="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label={t('yourOrder')}>
+          <button
+            type="button"
+            aria-label={t('closeCart')}
+            onClick={() => setDrawerOpen(false)}
+            className="absolute inset-0 h-full w-full cursor-default bg-[#0F3D3E]/45"
+            style={{ animation: 'spFadeIn 200ms ease-out' }}
+          />
+          <div
+            className="absolute right-0 top-0 flex h-full w-full max-w-md flex-col rounded-l-[24px] bg-white shadow-2xl"
+            style={{ animation: 'spDrawerIn 280ms cubic-bezier(0.22, 1, 0.36, 1)' }}
+          >
             <div className="flex items-center justify-between border-b border-[#E3E7E0] px-5 py-4">
-              <h2 className="text-base font-bold text-[#1A1A1A]">Your order · Table {resolved?.tableNumber}</h2>
+              <h2 className="text-base font-bold text-[#1A1A1A]">{t('yourOrderTable', { n: resolved?.tableNumber ?? '' })}</h2>
               <button
                 type="button"
                 onClick={() => setDrawerOpen(false)}
-                aria-label="Close"
+                aria-label={t('close')}
                 className="flex h-11 w-11 items-center justify-center rounded-full text-[#6B6B6B] hover:bg-[#F6F5F2] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#967221]"
               >
                 <X size={18} aria-hidden />
@@ -660,7 +763,7 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
             </div>
 
             <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
-              {lines.length === 0 && <p className="mt-10 text-center text-[13.5px] text-[#6B6B6B]">Your order is empty — pick something from the menu.</p>}
+              {lines.length === 0 && <p className="mt-10 text-center text-[13.5px] text-[#6B6B6B]">{t('emptyCart')}</p>}
               {lines.map((l) => (
                 <div key={l.key} className="border-b border-[#F0F2EE] py-3 last:border-0">
                   <div className="flex items-start justify-between gap-3">
@@ -675,7 +778,7 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
                     <div className="shrink-0 text-right">
                       <p className="text-[14px] font-bold text-[#1A1A1A]">{money(lineUnit(l) * l.qty)}</p>
                       <button type="button" onClick={() => setLines((prev) => prev.filter((x) => x.key !== l.key))} className="mt-1 text-[11.5px] font-medium text-[#B4483C] hover:underline">
-                        Remove
+                        {t('remove')}
                       </button>
                     </div>
                   </div>
@@ -685,7 +788,7 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
               {lines.length > 0 && (
                 <div className="mt-4">
                   <label htmlFor="g-name" className="mb-1 block text-[12px] font-medium text-[#6B6B6B]">
-                    Your name (so we can find you) — optional
+                    {t('nameLabel')}
                   </label>
                   <input
                     id="g-name"
@@ -693,7 +796,7 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
                     value={customerName}
                     onChange={(e) => setCustomerName(e.target.value)}
                     maxLength={60}
-                    placeholder="e.g. Aarav"
+                    placeholder={t('namePh')}
                     className="sp-input h-11 w-full px-3 text-[13.5px]"
                   />
                 </div>
@@ -704,15 +807,15 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
               <div className="border-t border-[#E3E7E0] px-5 py-4">
                 <div className="space-y-1 text-[13px] text-[#6B6B6B]">
                   <div className="flex justify-between">
-                    <span>Subtotal</span>
+                    <span>{t('subtotal')}</span>
                     <span className="tabular-nums">{money(cartSubtotal)}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span>GST 5%</span>
+                    <span>{t('gst')}</span>
                     <span className="tabular-nums">{money(cartTax)}</span>
                   </div>
                   <div className="flex justify-between text-[15px] font-bold text-[#1A1A1A]">
-                    <span>Total</span>
+                    <span>{t('total')}</span>
                     <span className="tabular-nums">{money(cartTotal)}</span>
                   </div>
                 </div>
@@ -722,7 +825,7 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
                   </p>
                 )}
                 <p className="mt-2 flex items-center gap-1.5 text-[11.5px] text-[#6B6B6B]">
-                  <Wallet size={13} aria-hidden /> Pay at the counter after your meal — no online payment.
+                  <Wallet size={13} aria-hidden /> {t('payNote')}
                 </p>
                 <button
                   type="button"
@@ -731,7 +834,7 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
                   className="mt-3 flex h-12 w-full items-center justify-center gap-2 rounded-full text-[14px] font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#B88E2F]"
                   style={{ background: brand.teal }}
                 >
-                  {placing ? 'Sending to the counter…' : `Place order · ${money(cartTotal)}`}
+                  {placing ? t('sending') : t('placeOrder', { amt: money(cartTotal) })}
                 </button>
               </div>
             )}
@@ -746,11 +849,11 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
 
 /* ════════════════════════════ 3 · TRACK ════════════════════════════ */
 
-const FLOW: { key: string; label: string; hint: string }[] = [
-  { key: 'new', label: 'Placed', hint: 'The counter has your ticket' },
-  { key: 'preparing', label: 'In the kitchen', hint: 'Your food is being made' },
-  { key: 'ready', label: 'Ready', hint: 'Heading to your table' },
-  { key: 'completed', label: 'Served', hint: 'Enjoy — pay at the counter' },
+const FLOW: { key: string; labelKey: string; hintKey: string }[] = [
+  { key: 'new', labelKey: 'flowPlaced', hintKey: 'flowPlacedHint' },
+  { key: 'preparing', labelKey: 'flowKitchen', hintKey: 'flowKitchenHint' },
+  { key: 'ready', labelKey: 'flowReady', hintKey: 'flowReadyHint' },
+  { key: 'completed', labelKey: 'flowServed', hintKey: 'flowServedHint' },
 ];
 
 function statusIndex(status: string): number {
@@ -758,11 +861,21 @@ function statusIndex(status: string): number {
   return i < 0 ? 0 : i;
 }
 
+/** raw order_type enum → translated label (t() falls back to the raw value). */
+const OT_KEYS: Record<string, string> = {
+  dine_in: 'otDineIn',
+  dinein: 'otDineIn',
+  takeaway: 'otTakeaway',
+  delivery: 'otDelivery',
+};
+
 export function GuestTrackPage({ orderId }: { orderId: string }): React.ReactElement {
+  const { t } = useGuestLang();
   const uuidLike = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(orderId);
   const [order, setOrder] = useState<GuestOrderSummary | null>(null);
   const [state, setState] = useState<'loading' | 'ready' | 'bad' | 'net'>('loading');
   const [muted, setMuted] = useState(() => localStorage.getItem('sp.guest.chime') === 'off');
+  const [copied, setCopied] = useState(false);
   const prevStatus = useRef<string | null>(null);
 
   const tick = useCallback(async () => {
@@ -779,16 +892,16 @@ export function GuestTrackPage({ orderId }: { orderId: string }): React.ReactEle
       }
       prevStatus.current = res.order.status;
       const labels: Record<string, string> = {
-        new: 'Placed',
-        pending: 'Placed',
-        preparing: 'Preparing',
-        ready: 'Ready',
-        completed: 'Served',
-        cancelled: 'Cancelled',
+        new: t('stNew'),
+        pending: t('stNew'),
+        preparing: t('stPreparing'),
+        ready: t('stReady'),
+        completed: t('stCompleted'),
+        cancelled: t('stCancelled'),
       };
-      document.title = `#${res.order.order_number} · ${labels[res.order.status] || res.order.status} — ServePoint`;
+      document.title = t('docTitleTrack', { n: res.order.order_number, s: labels[res.order.status] || res.order.status });
     }
-  }, [orderId, muted]);
+  }, [orderId, muted, t]);
 
   useEffect(() => {
     if (!uuidLike) {
@@ -812,7 +925,7 @@ export function GuestTrackPage({ orderId }: { orderId: string }): React.ReactEle
     return (
       <div className="flex min-h-screen flex-col bg-[#F6F5F2]">
         <main className="flex-1">
-          <GuestErrorCard title="Order link not valid" body="This tracking link is broken or the order doesn't exist. Keep the link from your order screen." />
+          <GuestErrorCard title={t('badLinkTitle')} body={t('badLinkBody')} />
         </main>
         <GuestFooter />
       </div>
@@ -828,11 +941,11 @@ export function GuestTrackPage({ orderId }: { orderId: string }): React.ReactEle
       <header className="px-4 pb-4 pt-5" style={{ background: `linear-gradient(160deg, ${brand.teal} 0%, #14514f 100%)` }}>
         <div className="mx-auto flex max-w-xl items-center justify-between">
           <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#E7C878]">Your ticket</p>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#E7C878]">{t('yourTicket')}</p>
             <h1 className="mt-0.5 font-serif text-[30px] italic text-white">{order ? `#${order.order_number}` : '· · ·'}</h1>
             {order && (
               <p className="mt-1 text-[12.5px] text-white/75">
-                {order.table_number ? `Table ${order.table_number}` : order.order_type}
+                {order.table_number ? t('tableN', { n: order.table_number }) : t(OT_KEYS[order.order_type] || order.order_type)}
                 {order.customer_name ? ` · ${order.customer_name}` : ''}
               </p>
             )}
@@ -845,23 +958,26 @@ export function GuestTrackPage({ orderId }: { orderId: string }): React.ReactEle
               localStorage.setItem('sp.guest.chime', next ? 'off' : 'on');
               if (!next) twoToneChime();
             }}
-            aria-label={muted ? 'Unmute ready chime' : 'Mute ready chime'}
+            aria-label={muted ? t('unmute') : t('mute')}
             className="flex h-11 w-11 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-white"
           >
             {muted ? <VolumeX size={17} aria-hidden /> : <Volume2 size={17} aria-hidden />}
           </button>
         </div>
+        <div className="mx-auto mt-3 max-w-xl">
+          <LangSwitcher dark />
+        </div>
       </header>
 
       <main className="mx-auto w-full max-w-xl flex-1 px-4 pb-10 pt-5">
-        {state === 'loading' && <p className="mt-10 text-center text-[13.5px] text-[#6B6B6B]">Finding your ticket…</p>}
-        {state === 'net' && !order && <GuestErrorCard title="Connection trouble" body="We couldn't reach the cafe. Retrying automatically…" />}
+        {state === 'loading' && <p className="mt-10 text-center text-[13.5px] text-[#6B6B6B]">{t('finding')}</p>}
+        {state === 'net' && !order && <GuestErrorCard title={t('netTitle')} body={t('netBody')} />}
 
         {order && cancelled && (
           <div className="rounded-3xl border border-[#E3E7E0] bg-white p-6 text-center shadow-sm">
             <CircleAlert size={26} className="mx-auto text-[#B4483C]" aria-hidden />
-            <h2 className="mt-3 font-serif text-[22px] italic text-[#0F3D3E]">This order was cancelled</h2>
-            <p className="mt-2 text-[13.5px] text-[#6B6B6B]">Nothing was charged. Speak to our staff if this looks wrong — they can re-take your order.</p>
+            <h2 className="mt-3 font-serif text-[22px] italic text-[#0F3D3E]">{t('cancelledTitle')}</h2>
+            <p className="mt-2 text-[13.5px] text-[#6B6B6B]">{t('cancelledBody')}</p>
           </div>
         )}
 
@@ -886,17 +1002,17 @@ export function GuestTrackPage({ orderId }: { orderId: string }): React.ReactEle
                         {now && <ChefHat size={12} className="text-white" aria-hidden />}
                       </span>
                       <p className={`text-[14.5px] font-bold ${now ? 'text-[#0F3D3E]' : done ? 'text-[#1A1A1A]' : 'text-[#9A9A9A]'}`}>
-                        {f.label}
+                        {t(f.labelKey)}
                         {now && <span className="ml-2 inline-block h-2 w-2 animate-pulse rounded-full" style={{ background: brand.gold }} aria-hidden />}
                       </p>
-                      <p className="text-[12px] text-[#6B6B6B]">{now ? f.hint : done ? 'Done' : 'Waiting'}</p>
+                      <p className="text-[12px] text-[#6B6B6B]">{now ? t(f.hintKey) : done ? t('done') : t('waiting')}</p>
                     </li>
                   );
                 })}
               </ol>
               {order.status === 'ready' && (
                 <p className="mt-4 rounded-xl bg-[#EAF4EC] px-3 py-2.5 text-center text-[13px] font-semibold text-[#2E7D32]">
-                  Your order is ready — it's coming to your table!
+                  {t('readyBanner')}
                 </p>
               )}
             </div>
@@ -905,12 +1021,12 @@ export function GuestTrackPage({ orderId }: { orderId: string }): React.ReactEle
             <div className="mt-4 overflow-hidden rounded-3xl border border-[#E3E7E0] bg-white shadow-sm">
               <div className="flex items-center gap-2 border-b border-[#F0F2EE] px-5 py-3.5">
                 <ReceiptText size={16} className="text-[#6B6B6B]" aria-hidden />
-                <h2 className="text-[14px] font-bold text-[#1A1A1A]">Bill</h2>
+                <h2 className="text-[14px] font-bold text-[#1A1A1A]">{t('bill')}</h2>
                 <span
                   className="ml-auto rounded-full px-2.5 py-1 text-[11px] font-bold"
                   style={paid ? { background: '#EAF4EC', color: '#2E7D32' } : { background: '#FBF3E4', color: '#8A5A16' }}
                 >
-                  {paid ? 'PAID' : 'DUE AT COUNTER'}
+                  {paid ? t('paid') : t('due')}
                 </span>
               </div>
               <div className="px-5 py-3">
@@ -929,39 +1045,43 @@ export function GuestTrackPage({ orderId }: { orderId: string }): React.ReactEle
                 ))}
                 <div className="space-y-1 pt-2 text-[13px] text-[#6B6B6B]">
                   <div className="flex justify-between">
-                    <span>Subtotal</span>
+                    <span>{t('subtotal')}</span>
                     <span className="tabular-nums">{money(order.subtotal)}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span>GST 5%</span>
+                    <span>{t('gst')}</span>
                     <span className="tabular-nums">{money(order.tax_amount)}</span>
                   </div>
                   <div className="flex justify-between text-[15px] font-bold text-[#1A1A1A]">
-                    <span>Total</span>
+                    <span>{t('total')}</span>
                     <span className="tabular-nums">{money(order.total)}</span>
                   </div>
                 </div>
                 {!paid && (
                   <p className="mt-3 flex items-center gap-1.5 rounded-xl bg-[#FBF3E4] px-3 py-2.5 text-[12.5px] font-medium text-[#8A5A16]">
-                    <Wallet size={14} aria-hidden /> Show order #{order.order_number} at the counter and pay there.
+                    <Wallet size={14} aria-hidden /> {t('showCounter', { n: order.order_number })}
                   </p>
                 )}
               </div>
             </div>
 
             <p className="mt-4 flex items-center justify-center gap-1.5 text-[11.5px] text-[#6B6B6B]">
-              <RefreshCw size={11} aria-hidden /> This page updates itself every 10 seconds.
+              <RefreshCw size={11} aria-hidden /> {t('autoUpdate')}
             </p>
             <div className="mt-2 flex items-center justify-center gap-2 text-[11.5px] text-[#6B6B6B]">
               <button
                 type="button"
-                onClick={() => void navigator.clipboard?.writeText(window.location.href)}
+                onClick={() => {
+                  void navigator.clipboard?.writeText(window.location.href);
+                  setCopied(true);
+                  window.setTimeout(() => setCopied(false), 1600);
+                }}
                 className="inline-flex items-center gap-1.5 rounded-full border border-[#E3E7E0] bg-white px-3 py-1.5 font-medium hover:border-[#B88E2F]"
               >
-                <Copy size={12} aria-hidden /> Copy tracking link
+                <Copy size={12} aria-hidden /> {copied ? t('copied') : t('copyLink')}
               </button>
               <button type="button" onClick={() => window.location.assign('/')} className="inline-flex items-center gap-1.5 rounded-full border border-[#E3E7E0] bg-white px-3 py-1.5 font-medium hover:border-[#B88E2F]">
-                ServePoint home
+                {t('goHome')}
               </button>
             </div>
           </>

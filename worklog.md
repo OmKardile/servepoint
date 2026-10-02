@@ -1420,3 +1420,24 @@ Stage Summary:
 - Remaining NOVA parity: guest i18n (EN/HI/KN on /menu), shared lib/csv.ts refactor (Bills+Reports duplicate csvCell), COGS wiring (inventory cost → Close-out/Reports), update-notification toast when a new SW version waits.
 - Watch: sw.js VERSION must be bumped on every shell-changing deploy; the inject step runs automatically via `bun run build`.
 - Crons: 15-min webDevReview (job 430321).
+
+---
+Task ID: 45
+Agent: glm-5.3 (cron webDevReview round)
+Task: NOVA guest-i18n parity (EN/हिंदी/ಕನ್ನಡ on gate/menu/track) + SW update toast + guest-menu style polish, full browser E2E
+
+Work Log:
+- Health sweep clean (dev 200 / tsc 0 / tree at a226bee 5.6.0 / dev.log HMR-only). agent-browser QA: guest QR menu (offers banner, categories, customizer) + staff Bills render clean, zero page errors. No parallel agent mid-flight. Claimed "guest i18n" in the worklog BEFORE building.
+- NEW src/lib/guest-i18n.ts (~400 lines, zero deps): ~110-key EN/HI/KN dictionaries covering gate, ribbon, menu hero/search/offers-aria, customizer, cart drawer, track (stepper labels+hints, bill, PAID/DUE, copy-link); `{var}` interpolation, EN fallback, `document.documentElement.lang` sync. Owner data (items/categories/offer titles) intentionally untranslated.
+- BUG CAUGHT BY MY OWN BROWSER QA pre-commit: first hook used per-component useState → clicking हिंदी translated ONLY the switcher (group aria → भाषा) while the page body stayed EN — N hook instances = N disconnected states. Rebuilt on a module-level store with useSyncExternalStore: one switch re-renders every guest component; localStorage `sp.guest.lang` persists across reloads/surfaces.
+- GuestPages.tsx fully wired to t(): gate errors, tableLine, search, locked card, veg/nonveg titles, option/add-on chips, customizer (Choose one/Add-ons/cook note/qty/Add to order), cart bar + drawer (items, totals, GST, pay-note, place order, remove, empty), track (ticket, mute, stepper, bill, show-counter, auto-update, home). Track subtitle now translates the order_type enum (dine_in → Dine-in/डाइन-इन/ಡೈನ್-ಇನ್) instead of showing the raw value. LangSwitcher pills (dark gold-active) on menu + track heroes.
+- Style additions (mandatory): sticky category chip rail with IntersectionObserver scroll-spy + smooth-scroll jumps (scroll-mt-16 anchors); cart drawer slide-in + backdrop fade (spDrawerIn/spFadeIn keyframes, prefers-reduced-motion gated); copy-link "Copied!" 1.6s feedback state.
+- PAIRED FEATURE — SW update toast (last NOVA PWA leftover): main.tsx detects reg.waiting/updatefound→installed and dispatches sp:sw-waiting; controllerchange guarded to ONE reload; register now passes updateViaCache:'none'. PwaLayer renders the dark+gold "New version ready · Refresh" toast (all surfaces, z-95) → posts SP_CHECK_UPDATE (sw.js skipWaiting path existed since 5.6.0). sw.js VERSION bumped 5.6.0-r3 → 5.7.0-r1 (shell-changing deploy discipline).
+- E2E: guest menu EN→HI→KN→EN instant re-render everywhere, persistence across reload, Kannada menu + cart screenshots (tool-results has copies at /tmp/guest-kn-*.png); customizer + cart money math unchanged (Large+Extra shot ₹346.50 = prior-round value); track page KN with translated stepper/bill/PAID + copied-feedback; tsc 0; zero page errors throughout.
+- SW update E2E on vite preview :4173 (2 builds): toast renders from a dispatched sp:sw-waiting, Refresh posts SP_CHECK_UPDATE (postMessage observed), fresh-worker install/activate/cache-eviction/claim proven for real. HARNESS LIMIT found: this headless Chromium never propagates SW update checks on an activated registration — soft navigation update AND reg.update() both no-op despite byte diffs, Cache-Control: no-cache, and updateViaCache:'none'. The waiting→skipWaiting→controllerchange chain follows the standard pattern (code-verified); UI half browser-proven. Preview killed after.
+
+Stage Summary:
+- NOVA guest-i18n parity SHIPPED: a guest in Bengaluru can now order in ಕನ್ನಡ, one in Delhi in हिंदी — same flow, same ledger-honest money, zero new dependencies. The PWA now also TELLS the user when a new version waits instead of silently replacing itself.
+- Remaining NOVA parity: shared lib/csv.ts refactor (Bills+Reports duplicate csvCell), COGS wiring (inventory cost → Close-out/Reports), staff-side i18n (deliberately out of scope — guests first), guest offers auto-apply in cart (offers banner is currently read-only on guest side by design).
+- Watch: the headless browser cannot E2E SW update propagation — future SW lifecycle changes need the 3-part proof used here (synthetic event for UI, fresh install for engine, code review for the chain).
+- Crons: 15-min webDevReview (job 430321).

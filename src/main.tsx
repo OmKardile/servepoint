@@ -43,11 +43,39 @@ createRoot(document.getElementById('root')!).render(
  * PWA service worker (v5.6.0) — PRODUCTION ONLY.
  * Registering in dev would cache Vite's unbundled modules and break HMR;
  * in production the SW gives the counter tablet offline resilience.
+ *
+ * Update flow (v5.7.0): a newly installed worker WAITS (sw.js never
+ * self-skips). We surface it to PwaLayer as `sp:sw-waiting` (with the worker
+ * as detail); the user taps "Refresh" → SP_CHECK_UPDATE → skipWaiting →
+ * controllerchange → ONE controlled reload. No mid-task page yanks.
  */
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch((err) => {
-      console.warn('[ServePoint] service worker registration skipped:', err);
-    });
+    navigator.serviceWorker
+      .register('/sw.js', { scope: '/', updateViaCache: 'none' })
+      .then((reg) => {
+        const announce = (w: ServiceWorker | null) => {
+          if (w && navigator.serviceWorker.controller) {
+            window.dispatchEvent(new CustomEvent('sp:sw-waiting', { detail: w }));
+          }
+        };
+        announce(reg.waiting);
+        reg.addEventListener('updatefound', () => {
+          const installing = reg.installing;
+          if (!installing) return;
+          installing.addEventListener('statechange', () => {
+            if (installing.state === 'installed') announce(installing);
+          });
+        });
+        let refreshing = false;
+        navigator.serviceWorker.addEventListener('controllerchange', () => {
+          if (refreshing) return;
+          refreshing = true;
+          window.location.reload();
+        });
+      })
+      .catch((err) => {
+        console.warn('[ServePoint] service worker registration skipped:', err);
+      });
   });
 }

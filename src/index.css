@@ -128,3 +128,17 @@ body {
 @media (prefers-reduced-motion: reduce) {
   [style*="spPwaDrop"], [style*="spPwaRise"] { animation: none !important; }
 }
+
+/* ── Guest surfaces (v5.7.0): cart drawer slide + backdrop fade ─────────── */
+@keyframes spDrawerIn {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+@keyframes spFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  [style*="spDrawerIn"], [style*="spFadeIn"] { animation: none !important; }
+}
+

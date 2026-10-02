@@ -102,6 +102,30 @@ export function PwaLayer() {
   const showInstall =
     mode === 'staff' && !standalone && !installed && !cooledDown && Boolean(installEvent);
 
+  // ── New-version toast (v5.7.0) ───────────────────────────────────────────
+  // main.tsx announces a WAITING service worker via `sp:sw-waiting`; the tap
+  // posts SP_CHECK_UPDATE (sw.js then skipWaiting()s) and controllerchange
+  // reloads once. Awaiting worker is also probed on mount (covers a reload
+  // that happened while an update already waited).
+  const [waitingWorker, setWaitingWorker] = useState<ServiceWorker | null>(null);
+  useEffect(() => {
+    const onWaiting = (e: Event) => setWaitingWorker((e as CustomEvent<ServiceWorker>).detail || null);
+    window.addEventListener('sp:sw-waiting', onWaiting);
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker
+        .getRegistration()
+        .then((reg) => {
+          if (reg?.waiting && navigator.serviceWorker.controller) setWaitingWorker(reg.waiting);
+        })
+        .catch(() => undefined);
+    }
+    return () => window.removeEventListener('sp:sw-waiting', onWaiting);
+  }, []);
+
+  const applyUpdate = () => {
+    waitingWorker?.postMessage('SP_CHECK_UPDATE');
+  };
+
   return (
     <>
       {/* ── Offline banner (all surfaces) ─────────────────────────────────── */}
@@ -182,6 +206,34 @@ export function PwaLayer() {
                 </svg>
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── New-version toast (all surfaces, once an update waits) ────────── */}
+      {waitingWorker && (
+        <div
+          role="status"
+          className="fixed inset-x-0 bottom-4 z-[95] flex justify-center px-3 sm:bottom-6"
+          style={{ animation: 'spPwaRise 320ms cubic-bezier(0.22, 1, 0.36, 1)' }}
+        >
+          <div className="flex items-center gap-3 rounded-full border border-[#B88E2F]/40 bg-[#1A1A1A] py-2 pl-4 pr-2 shadow-xl shadow-black/25">
+            <span className="relative flex h-2 w-2">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#E7C878] opacity-60" />
+              <span className="relative inline-flex h-2 w-2 rounded-full bg-[#E7C878]" />
+            </span>
+            <span className="whitespace-nowrap text-xs font-medium tracking-wide text-[#F6F5F2]">
+              New version ready
+            </span>
+            <button
+              onClick={applyUpdate}
+              className="ml-1 flex items-center gap-1.5 rounded-full bg-[#B88E2F] px-3.5 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-[#967221]"
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M21 12a9 9 0 1 1-2.64-6.36M21 3v6h-6" />
+              </svg>
+              Refresh
+            </button>
           </div>
         </div>
       )}

@@ -3,6 +3,28 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.7.0] — 2026-10-02 — Guests speak Hindi & Kannada (NOVA guest-i18n parity) + SW update toast
+
+### Added — guest i18n (EN / हिंदी / ಕನ್ನಡ)
+- **`src/lib/guest-i18n.ts`** — self-contained dictionary + hook, NO external i18n dependency. ~110 keys per language covering every guest surface: gate (check-in, invalid-link, session errors), session ribbon, menu hero/search/offers, customizer (variants, add-ons, cook note, qty), cart drawer (totals, GST, pay-at-counter, place order), track page (stepper labels + hints, bill, PAID/DUE, copy-link, auto-refresh). `{var}` interpolation; EN is the fallback for any missing key; owner data (menu items, categories, offer titles) correctly stays untranslated.
+- **Shared language store** — `useSyncExternalStore`-backed module store: switching language in ONE component re-renders EVERY guest component instantly. (First cut used per-component `useState` — browser QA caught the page split into two languages; fixed before commit.) Choice persists in `localStorage` (`sp.guest.lang`), survives reloads and applies across menu → track navigation; `document.documentElement.lang` syncs for screen readers.
+- **`LangSwitcher` pills** — English / हिंदी / ಕನ್ನಡ on the menu hero (dark variant, gold active) and the track hero; native-script labels, `aria-pressed` states.
+- **Order-type labels**: the track subtitle no longer shows the raw `dine_in` enum — translated Dine-in / Takeaway / Delivery (Hindi uses the natural café terms डाइन-इन / पार्सल / डिलीवरी).
+
+### Added — SW update toast (completes the 5.6.0 PWA story)
+- **Detection (`main.tsx`)**: `reg.waiting` probe + `updatefound`→`statechange` announce a WAITING worker via the `sp:sw-waiting` event; `controllerchange` fires exactly ONE guarded reload. Registration now uses `updateViaCache: 'none'` (best practice; preview serves `no-cache` anyway). `sw.js` never self-skips — the user stays in control.
+- **Toast (`PwaLayer.tsx`)**: dark pill, gold beacon + "New version ready" + Refresh → posts `SP_CHECK_UPDATE` (sw.js then `skipWaiting()`s) → controlled reload. Mount-probe covers a reload that happened while an update already waited. Shown on all surfaces, z above the install card.
+
+### Style — guest menu polish
+- **Sticky category rail**: horizontally scrollable chips under the hero with scroll-spy highlight (IntersectionObserver) and smooth-scroll jumps (`scroll-mt` anchored sections) — one-tap navigation once the menu grows past a screen.
+- **Cart drawer animation**: slide-in panel + backdrop fade (280ms brand easing), `prefers-reduced-motion` honoured (keyframes gated in `index.css`).
+- **Copy-link feedback**: the track page's copy button flips to "Copied!"/"ನಕಲಾಗಿದೆ!"/"कॉपी हो गया!" for 1.6s.
+
+### Verified (browser E2E on the live dev server)
+- EN default → हिंदी → ಕನ್ನಡ → EN switching re-renders every string instantly (ribbon, hero, search, chips, offers region, customizer, cart, track stepper); choice persists across reloads; zero page errors. Full Kannada menu + cart drawer screenshots (`/tmp/guest-kn-menu.png`, `/tmp/guest-kn-cart.png`); cart math unchanged (Large + Extra shot ₹330 + 5% = ₹346.50, matching prior E2E money).
+- Update toast E2E (production build, `vite preview :4173`): toast renders on `sp:sw-waiting`, Refresh posts `SP_CHECK_UPDATE` (postMessage observed), fresh-worker install/activate/cache-eviction/claim all browser-proven. **Known harness limit**: this headless Chromium does not propagate SW update checks on activated registrations (soft-update and `reg.update()` both no-op despite byte diffs, `no-cache` headers and `updateViaCache:'none'`) — the waiting→skipWaiting→controllerchange chain is the standard pattern, verified in code; the UI half is browser-proven.
+- `tsc` 0; preview server killed after E2E.
+
 ## [5.6.0] — 2026-10-02 — PWA: the POS survives the Wi-Fi (installable counter tablet, offline shell)
 
 ### Added — installable app (manifest + icons)
