@@ -2082,3 +2082,23 @@ Stage Summary:
 - Parked idea RETIRED: "Supabase Storage upload vs URL-paste" — both now exist, upload first. Remaining parked: EOD Z-report logo (deliberate); reserved-seat CTA live test (T3); DS showcase link from /showcase (owner OK); serve DS showcase under public/ (owner OK); URL write-back on in-app nav (deliberate non-goal); storage folder silting report (per-operator usage line someday).
 - Watch items carried: DB password ROTATION (owner decision). Note: scripts/qa72-storage-policy.mjs embeds the owner test credential (same exposure class as earlier QA scripts — covered by the standing rotation watch item).
 - Crons: 15-min webDevReview (job 430321) + DAILY deep pass (job 431587, 09:00 IST).
+
+---
+Task ID: 73 (completion — 15-min webDevReview round, trace 202610030409)
+Agent: glm-5.3 (cron webDevReview round)
+Task: Post-5.33.0 orientation + QA sweep, then the round's pair: the day, exported (Close-out day-ledger CSV) + Close-out wears its h1 (the only screen without one).
+
+Work Log:
+- Orientation clean (HEAD c4aa193 = 5.33.0 pushed; tree clean; tsc 0; dev 200). 5.33.0 landed between rounds — confirmed remote sha matches.
+- QA sweep via deep links (5.32.0 feature doubles as the sweep vehicle): all 11 sections land on their screens, zero live page errors. False alarms chased and cleared: `closeout`/`guests` slugs are `eod`/`customers` (my sweep error, deep links correct); Menu's 4 red text elements are deliberate 86/stepper controls, not error states; vite "Failed to reload" console lines are stale HMR noise from Task 72's edit-time session. Structural finding: Close-out was the ONLY screen without an h1 (10 of 11 have one).
+- DAY-LEDGER CSV (feature): Close-out header grows a CSV button (white/hairline secondary beside the gold Print z-report, same disabled-when-empty guard) — exportDayCsv writes one row per ticket (Ticket, Time IST, Type, Status, Payment, Method, Customer, Total, Tax, COGS) through the shared 5.8.0 downloadCsv (OWASP formula neutralization + UTF-8 BOM). Honest joins: payments grouped per order with distinct methods joined ("cash + upi" for splits), fallback to order.payment_method, COGS from the 018 view (un-mapped items = the view's own 0, never fabricated). Filename follows the viewed date.
+- H1 HEAD (styling): standard head row — MoonStar tile (sidebar's own Close-out icon), h1 "Close-out", subtitle "The day, counted — sales, drawer and the z-report" — mirroring Reports' header pattern; heading hierarchy no longer jumps to h2.
+- E2E (stage→verify→clean): scripts/qa73-eod-fixture.mjs staged #104 (dine_in cash 231 = 220+11 GST) and #105 (takeaway 462 split cash+upi, both payments rows) tagged 'eod-fixture'. Clicked the REAL button; `agent-browser download` saved the file; parsed exact — BOM, header, both rows, Dine-in/Takeaway labels, split join ("upi + cash"; row order inside the split is nondeterministic by created_at tie — cosmetic, both methods present), totals match GST math. COGS honest 0 (no recipe mapping on fixture items — the view's truth, same as Reports treats it). Clean → 0 tagged rows, 0 orphan payments, 30s safety poll → CSV button honestly disabled again. Screenshot scripts/qa73-eod-header.png.
+- sw servepoint-v5.34.0-r1; CHANGELOG [5.34.0]; tsc 0 after every edit.
+
+Stage Summary:
+- 5.34.0 — the day, exported. Surfaces: src/components/eod/EodScreen.tsx + public/sw.js + CHANGELOG.md + worklog.md + scripts/qa73-eod-fixture.mjs (+1 screenshot +1 downloaded csv under scripts/qa73-dl/). No migration, no schema change, no API change; cloud state fully restored (0 tagged rows).
+- Note: EOD remains the only screen whose h1 was added late — no other screen-level semantics gaps found by the sweep.
+- Ideas parked: reserved-seat CTA live test (T3 via real Add dialog); EOD Z-report logo (deliberate); DS showcase link from /showcase (owner OK); serve DS showcase under public/ (owner OK); URL write-back on in-app nav (deliberate non-goal); storage folder silting report (someday); drawer movements CSV (the movements list is small and on-screen — only if asked).
+- Watch items carried: DB password ROTATION (owner decision — the old credential remains in git history).
+- Crons: 15-min webDevReview (job 430321) + DAILY deep pass (job 431587, 09:00 IST).

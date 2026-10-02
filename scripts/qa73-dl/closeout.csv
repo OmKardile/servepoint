@@ -1,0 +1,3 @@
+﻿"Ticket","Time (IST)","Type","Status","Payment","Method","Customer","Total","Tax","COGS"
+"#104","00:10","Dine-in","completed","completed","cash","EOD Fixture Cash","231","11","0"
+"#105","00:35","Takeaway","completed","completed","upi + cash","EOD Fixture Split","462","22","0"

@@ -3,6 +3,18 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.34.0] — 2026-10-03 — The day, exported: Close-out wears its h1 and hands the ledger to the spreadsheet
+
+### Added — day-ledger CSV export (Close-out header, beside Print z-report)
+- The z-report was print-only; the accountant's copy is usually a spreadsheet. Close-out grows a **CSV** button (white/hairline secondary against the gold Print, same honest disabled-when-empty guard): one row per ticket, **exactly the loaded day's ledger** — ticket #, time IST, type, status, payment status, method, customer, total, tax, COGS — written through the shared 5.8.0 export (OWASP formula-injection neutralization + UTF-8 BOM, so `₹` and any pasted-in `=HYPERLINK()` survive the trip to Excel/Sheets as text).
+- Honest joins, not inventions: split payments travel as their distinct methods joined (`cash + upi`); COGS rides along from the 018 view (un-mapped items show the view's own 0 — never a fabricated margin); an order with no payment rows falls back to its `payment_method`. Filename `servepoint-closeout-<date>.csv` follows the date you're viewing, so back-dating the stepper back-dates the export.
+
+### Improved — Close-out wears its h1 (styling/semantics detail)
+- A full-screen sweep found Close-out was the **only screen without an `<h1>`** (ten of eleven screens have one; EOD jumped straight to `h2` section headings). It now wears the standard head — MoonStar tile, `Close-out` h1, "The day, counted — sales, drawer and the z-report" subtitle — matching Reports' header pattern, so the heading hierarchy, screen readers and tab order all read like every other screen.
+
+### Verified
+- `tsc` 0 after every edit; zero page errors. **E2E with staged fixtures** (`scripts/qa73-eod-fixture.mjs`, tagged `eod-fixture`): #104 dine-in cash 231 (220 + 5% GST = 11 tax) and #105 takeaway 462 split across cash + UPI — clicked the real button, agent-browser saved the download, and the file parsed back exact: header, both rows, correct type labels (Dine-in/Takeaway), the split join (`upi + cash`), and BOM-prefixed cells. Cleanup honest: 0 tagged rows, 0 orphan payments, and after the 30s safety poll the CSV button returned to its disabled empty-day state (`qa73-eod-header.png`). sw `5.34.0-r1`.
+
 ## [5.33.0] — 2026-10-03 — The logo comes from your own file: Storage-backed brand upload
 
 ### Added — upload the café logo from this device (Settings → Café brand, migration 026)

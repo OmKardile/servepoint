@@ -7,6 +7,7 @@ import {
   ChevronRight,
   Clock,
   Coins,
+  Download,
   Flame,
   HandCoins,
   LockKeyhole,
@@ -33,6 +34,7 @@ import {
 } from '../../lib/api';
 import { formatMoney } from '../../lib/prefs';
 import { printHiddenFrame } from '../../lib/printFrame';
+import { downloadCsv } from '../../lib/csv';
 import { useTenant } from '../../lib/tenant';
 import { useSession } from '../../store/session';
 
@@ -1115,6 +1117,37 @@ const EodScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
     });
   };
 
+  /* ── day-ledger CSV — the accountant's twin of the printed z-report.
+     One row per ticket, exactly the loaded day's orders (nothing fetched,
+     nothing rounded): split payments join their methods, COGS rides along
+     from the 018 view so margin can be recomputed in the spreadsheet. */
+  const exportDayCsv = () => {
+    const methodsByOrder = new Map<string, string>();
+    for (const p of payments) {
+      const prev = methodsByOrder.get(p.order_id);
+      methodsByOrder.set(p.order_id, prev && !prev.includes(p.method) ? `${prev} + ${p.method}` : p.method);
+    }
+    const cogsByOrder = new Map(cogsRows.map((c) => [c.order_id, Number(c.cogs)]));
+    const typeLabel = (t: string) =>
+      t === 'dine_in' ? 'Dine-in' : t === 'takeaway' ? 'Takeaway' : t === 'delivery' ? 'Delivery' : t;
+    const rows: unknown[][] = [
+      ['Ticket', 'Time (IST)', 'Type', 'Status', 'Payment', 'Method', 'Customer', 'Total', 'Tax', 'COGS'],
+      ...orders.map((o) => [
+        `#${o.order_number}`,
+        istTime(o.created_at),
+        typeLabel(o.order_type),
+        o.status,
+        o.payment_status || '',
+        methodsByOrder.get(o.id) || o.payment_method || '',
+        o.customer_name || '',
+        Number(o.total),
+        Number(o.tax_amount),
+        cogsByOrder.get(o.id) ?? '',
+      ]),
+    ];
+    downloadCsv(`servepoint-closeout-${dateIso}.csv`, rows);
+  };
+
   /* ── tenant gates ── */
   if (tenantLoading) {
     return (
@@ -1142,6 +1175,20 @@ const EodScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
 
   return (
     <div className="flex h-full flex-col gap-4 overflow-y-auto p-4 lg:p-5" aria-label="Close-out">
+      {/* ── screen head — every screen wears an h1; Close-out was the last
+          one without (heading hierarchy jumped straight to h2 sections) ── */}
+      <div className="flex items-center gap-2.5">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#EAF0EC] text-[#0F3D3E]">
+          <MoonStar size={17} aria-hidden />
+        </span>
+        <div className="min-w-0">
+          <h1 className="text-[20px] font-bold leading-tight text-[#1A1A1A]">Close-out</h1>
+          <p className="truncate text-[11.5px] text-[#6B6B6B]">
+            The day, counted — sales, drawer and the z-report
+          </p>
+        </div>
+      </div>
+
       {/* ── day stepper ── */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-1.5">
@@ -1191,6 +1238,15 @@ const EodScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
             aria-label="Refresh"
           >
             <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
+          </button>
+          <button
+            onClick={exportDayCsv}
+            disabled={loading || orders.length === 0}
+            title="One row per ticket — the day's ledger for the spreadsheet"
+            className="flex min-h-[44px] items-center gap-2 rounded-xl border border-[#E3E7E0] bg-white px-4 text-[13px] font-extrabold text-[#0F3D3E] transition-colors hover:bg-[#F0F2EF] disabled:opacity-40"
+          >
+            <Download size={15} aria-hidden />
+            CSV
           </button>
           <button
             onClick={printReport}
