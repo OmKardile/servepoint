@@ -1917,3 +1917,23 @@ Stage Summary:
 - 5.26.0 — one scan = one window; the floor cuts a leaked sticker in one armed tap; Bills search matches what the card prints and answers with a count. Surfaces: src/lib/guest.ts + src/components/floor/FloorScreen.tsx + src/components/bills/BillsScreen.tsx + public/sw.js + CHANGELOG.md. No migration (in-flight dedupe is client-side; bulk cut rides 5.24.0's revoke RLS path).
 - Ideas parked: per-tenant logo upload (owner sets a café logo → guest menu header + receipts) — natural next branding step after the owner's logos question; bulk-cut audit line ("N cuts on T1 at HH:MM") in an activity feed; floor rhythm "vs same hour last week" toggle; reserved-seat CTA live test (needs a free table — T3 via the real Add dialog); Bills search-by-table worth one more eyeball with real staff fingers.
 - Crons: 15-min webDevReview (job 430321). Watch item carries: IST flips to Oct 3 ~midnight — Reports today/7d + Floor rhythm windows must recompute honestly next round.
+
+---
+Task ID: 65
+Agent: glm-5.3 (cron webDevReview round)
+Task: Per-tenant café logo (the natural next step after the owner's "worked with logos?" question) — migration 024, owner-facing Settings section, guest menu hero render, full E2E.
+
+Work Log:
+- Health sweep clean (tsc 0 / dev 200 / remote 624a429 synced, tree clean). No bugs from the sweep → feature round per plan.
+- Migration 024_tenant_logo.sql: tenants.logo_url text (nullable) + sp_get_public_menu replaced to carry logo_url in the tenant payload (SECURITY DEFINER + search_path=public preserved). Applied via scripts/apply-024.mjs with 5 SQL proofs: column exists / RPC payload carries the key / 4 RLS policies intact / server-side write+revert / RPC reflects a set value then reverted to NULL (honest default).
+- Client: types.ts Tenant.logo_url; guest.ts GuestTenantInfo.logo_url; GuestPages hero renders a 56px rounded tile (white backing, object-contain) above the TABLESIDE eyebrow when menu.tenant.logo_url is set — onError hides the tile itself (never a broken-image glyph), NULL/broken both fall back to the untouched pre-5.27 text-only hero.
+- NEW Settings → Café brand section (owner-only; splices into the sage nav right after Profile): live preview tile with three honest states (no logo yet / live on the guest menu / "That URL doesn't render"), async-aware Save (gold "Saved" chip ONLY after the RLS write held; refusal surfaces inline), one-tap Remove logo, strict http(s):// validation with inline red explanation.
+- GATE FIX found by E2E: registry-provisioned owner sessions (QR one-click login) carry tenantSlug but NO tenantId — isTenantOwner now accepts either and useTenant() resolves the id from the slug. (First QA pass showed the section missing entirely for the owner.)
+- E2E (agent-browser + SQL, zero page errors on fresh loads): owner sees the section; URL pasted → preview rendered → Save → "Saved" + "Live on the guest menu's header tile." + DB row set; guest menu header img loaded (naturalWidth 180); dead URL (example.invalid) → Settings preview says "doesn't render" honestly, guest menu hides the tile and keeps the café name; remove/restore round-trips through the UI. Console + page-error buffers verified clean on fresh loads (a stale-buffer scare — Statsig/GSI/hook-call noise from earlier page states — did not reproduce).
+- sw servepoint-v5.27.0-r1; CHANGELOG [5.27.0]; tsc 0 after every edit.
+
+Stage Summary:
+- 5.27.0 — the café's own face: owners paste a logo URL, guests see it on the menu hero, honesty guards at both ends (broken URLs vanish, never fake). Surfaces: supabase/migrations/024_tenant_logo.sql + scripts/apply-024.mjs + src/types.ts + src/lib/guest.ts + src/components/guest/GuestPages.tsx + src/components/settings/SettingsScreen.tsx + public/sw.js + CHANGELOG.md. Demo value left on QR Flow Cafe (the app's apple-touch-icon URL) — owner-replaceable at will.
+- Watch item carried: IST flipped to Oct 3 at 00:00 (23:52 IST pre-flip Reports today showed the Oct-2 window intact) — post-flip Reports today/7d + Floor rhythm recompute still to eyeball next round.
+- Ideas parked: logo on the guest TRACK page header + KDS cards (small tile next to the TABLE chip); Supabase Storage upload as an alternative to URL-paste; logo in receipt print header; per-table QR sticker generator carrying the logo.
+- Crons: 15-min webDevReview (job 430321).
