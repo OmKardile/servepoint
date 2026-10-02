@@ -1,4 +1,4 @@
-// Supabase provisioning script: applies ServePoint migrations 001-020 to the live
+// Supabase provisioning script: applies ServePoint migrations 001-021 to the live
 // Supabase project via the Supavisor session pooler (IPv4 path — direct
 // db.<ref>.supabase.co:5432 is IPv6-only on current projects), then verifies.
 // NOT part of the app bundle.
@@ -334,6 +334,38 @@ try {
     return table === true && rls === 1 && idx === 1 && overloads === 2 && anonExec === false && pub === 1;
   };
   await applyFile('020_cash_drawer', 'supabase/migrations/020_cash_drawer.sql', await drawerReady());
+
+  // 021 sentinel: cash drawer movements — outflow ledger (payout/drop) +
+  // movement RPC (exactly ONE overload, no anon EXECUTE) + a re-bodied
+  // sp_close_drawer that nets the movements + realtime + member RLS policy.
+  const drawerMovementsReady = async () => {
+    const table = await scalar(
+      `SELECT to_regclass('public.cash_drawer_movements') IS NOT NULL`
+    );
+    const rls = Number(
+      await scalar(
+        `SELECT relrowsecurity::int FROM pg_class WHERE oid='public.cash_drawer_movements'::regclass`
+      )
+    );
+    const moveRpc = await scalar(
+      `SELECT to_regprocedure('public.sp_record_drawer_movement(uuid,text,numeric,text)') IS NOT NULL`
+    );
+    const closeNets = await scalar(
+      `SELECT position('cash_drawer_movements' in prosrc) > 0 FROM pg_proc
+        WHERE proname='sp_close_drawer' AND pronamespace='public'::regnamespace`
+    );
+    const anonExec = await scalar(
+      `SELECT has_function_privilege('anon','sp_record_drawer_movement(uuid,text,numeric,text)','EXECUTE')`
+    );
+    const pub = Number(
+      await scalar(
+        `SELECT count(*) FROM pg_publication_tables WHERE pubname='supabase_realtime'
+          AND tablename='cash_drawer_movements'`
+      )
+    );
+    return table === true && rls === 1 && moveRpc === true && closeNets === true && anonExec === false && pub === 1;
+  };
+  await applyFile('021_cash_movements', 'supabase/migrations/021_cash_movements.sql', await drawerMovementsReady());
 
   // ── Verification ──────────────────────────────────────────────────────────
   const tables = await client.query(

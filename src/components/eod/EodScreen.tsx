@@ -8,10 +8,12 @@ import {
   Clock,
   Coins,
   Flame,
+  HandCoins,
   LockKeyhole,
   MoonStar,
   Printer,
   RefreshCw,
+  TrendingDown,
   Wallet,
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
@@ -20,8 +22,11 @@ import {
   fetchActiveDrawerSession,
   fetchCashInSince,
   fetchDrawerHistory,
+  fetchDrawerMovements,
   fetchOrderCogs,
   openDrawerSession,
+  recordDrawerMovement,
+  type DrawerMovement,
   type DrawerSession,
 } from '../../lib/api';
 import { formatMoney } from '../../lib/prefs';
@@ -308,11 +313,15 @@ const VarianceChip: React.FC<{ v: number }> = ({ v }) => {
 /** Stable RPC codes → honest words (never a raw postgres message). */
 const DRAWER_ERR: Record<string, string> = {
   DRAWER_ALREADY_OPEN: 'A drawer is already open — count and close it first.',
+  DRAWER_NOT_OPEN: 'That shift is sealed — movements can only land on an open drawer.',
   ALREADY_CLOSED: 'That shift is already sealed.',
   NOT_FOUND: 'That drawer shift is not in this workspace.',
   BAD_FLOAT: 'Opening float must be zero or more.',
   BAD_COUNT: 'Counted cash must be zero or more.',
-  TOO_LONG: 'Note is over 280 characters.',
+  BAD_KIND: 'A movement is either a payout or a safe drop.',
+  BAD_AMOUNT: 'Movement amount must be more than zero.',
+  REASON_REQUIRED: 'A movement needs a reason — "₹200 out" without a why is a leak.',
+  TOO_LONG: 'That text is over 280 characters.',
   NOT_A_MEMBER: 'Your account is not linked to this workspace.',
 };
 const drawerErrText = (e: unknown): string => {
@@ -326,13 +335,14 @@ const DrawerDialog: React.FC<{
   mode: 'open' | 'close';
   active: DrawerSession | null;
   cashIn: number;
+  moveOut: number;
   busy: boolean;
   onCancel: () => void;
   onConfirm: (amount: number, note: string) => void;
-}> = ({ mode, active, cashIn, busy, onCancel, onConfirm }) => {
+}> = ({ mode, active, cashIn, moveOut, busy, onCancel, onConfirm }) => {
   const [amount, setAmount] = useState('');
   const [note, setNote] = useState('');
-  const expected = mode === 'close' && active ? Number(active.opening_float) + cashIn : 0;
+  const expected = mode === 'close' && active ? Number(active.opening_float) + cashIn - moveOut : 0;
   const parsed = amount.trim() === '' ? null : Number(amount);
   const valid = parsed !== null && Number.isFinite(parsed) && parsed >= 0;
   const variance = mode === 'close' && valid ? Math.round((parsed! - expected) * 100) / 100 : null;
@@ -373,6 +383,12 @@ const DrawerDialog: React.FC<{
               <span>Cash payments since open</span>
               <span className="tabular-nums">{formatMoney(cashIn)}</span>
             </div>
+            {moveOut > 0 ? (
+              <div className="mt-1 flex items-center justify-between text-[12px] font-semibold text-[#B3261E]">
+                <span>Paid out / dropped</span>
+                <span className="tabular-nums">−{formatMoney(moveOut)}</span>
+              </div>
+            ) : null}
             <div className="mt-2 flex items-center justify-between border-t border-dashed border-[#D9DFD9] pt-2 text-[13.5px] font-extrabold text-[#0F3D3E]">
               <span>Expected in drawer</span>
               <span className="tabular-nums">{formatMoney(expected)}</span>
@@ -458,17 +474,134 @@ const DrawerDialog: React.FC<{
   );
 };
 
+/** Record a payout or safe drop on the open shift — reason is not optional. */
+const MovementDialog: React.FC<{
+  busy: boolean;
+  onCancel: () => void;
+  onConfirm: (kind: 'payout' | 'drop', amount: number, reason: string) => void;
+}> = ({ busy, onCancel, onConfirm }) => {
+  const [kind, setKind] = useState<'payout' | 'drop'>('payout');
+  const [amount, setAmount] = useState('');
+  const [reason, setReason] = useState('');
+  const parsed = amount.trim() === '' ? null : Number(amount);
+  const valid = parsed !== null && Number.isFinite(parsed) && parsed > 0 && reason.trim().length > 0;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-[#0F3D3E]/45 p-4 backdrop-blur-[2px]"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Record a drawer movement"
+      onClick={(e) => e.target === e.currentTarget && !busy && onCancel()}
+    >
+      <div className="w-full max-w-sm rounded-2xl border border-[#E3E7E0] bg-white p-5 shadow-xl">
+        <div className="flex items-center gap-2.5">
+          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#0F3D3E] text-white">
+            <TrendingDown size={17} aria-hidden />
+          </span>
+          <div>
+            <h3 className="text-[15px] font-extrabold tracking-tight text-[#0F3D3E]">Money leaving the drawer</h3>
+            <p className="text-[11px] font-semibold text-[#8A938C]">on the record, with a reason — or it's a leak</p>
+          </div>
+        </div>
+
+        <div className="mt-4 grid grid-cols-2 gap-2" role="radiogroup" aria-label="Movement kind">
+          {([['payout', 'Payout', 'paid out — supplier, petty cash'], ['drop', 'Safe drop', 'moved to the safe']] as const).map(
+            ([k, label, sub]) => {
+              const on = kind === k;
+              return (
+                <button
+                  key={k}
+                  onClick={() => setKind(k)}
+                  role="radio"
+                  aria-checked={on}
+                  className={`rounded-xl border px-3 py-2.5 text-left transition-all ${
+                    on
+                      ? 'border-[#0F3D3E] bg-[#0F3D3E] text-white shadow-[0_1px_2px_rgba(15,61,62,0.2)]'
+                      : 'border-[#E3E7E0] bg-white text-[#0F3D3E] hover:bg-[#F7F8F6]'
+                  }`}
+                >
+                  <span className="block text-[13px] font-extrabold">{label}</span>
+                  <span className={`block text-[10.5px] font-semibold ${on ? 'text-white/70' : 'text-[#8A938C]'}`}>{sub}</span>
+                </button>
+              );
+            },
+          )}
+        </div>
+
+        <label className="mt-4 block text-[11px] font-bold uppercase tracking-[0.08em] text-[#8A938C]">
+          Amount (₹)
+        </label>
+        <input
+          autoFocus
+          type="number"
+          inputMode="decimal"
+          min={0.01}
+          step="0.01"
+          value={amount}
+          onChange={(e) => setAmount(e.target.value)}
+          placeholder="0.00"
+          aria-label="Movement amount in rupees"
+          className="mt-1.5 w-full rounded-xl border border-[#E3E7E0] bg-white px-3.5 py-2.5 text-[15px] font-extrabold tabular-nums text-[#0F3D3E] outline-none transition-shadow placeholder:font-semibold placeholder:text-[#C8CFC9] focus:border-[#B88E2F] focus:ring-2 focus:ring-[#B88E2F]/25"
+        />
+
+        <label className="mt-3 block text-[11px] font-bold uppercase tracking-[0.08em] text-[#8A938C]">
+          Reason <span className="text-[#B3261E]">· required</span>
+        </label>
+        <input
+          type="text"
+          maxLength={280}
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && valid && !busy && onConfirm(kind, parsed!, reason)}
+          placeholder={kind === 'payout' ? 'e.g. vegetables vendor, paid cash' : 'e.g. lunch rush — drawer to safe'}
+          aria-label="Why the money left the drawer"
+          className="mt-1.5 w-full rounded-xl border border-[#E3E7E0] bg-white px-3.5 py-2.5 text-[12.5px] font-semibold text-[#0F3D3E] outline-none transition-shadow placeholder:text-[#C8CFC9] focus:border-[#B88E2F] focus:ring-2 focus:ring-[#B88E2F]/25"
+        />
+        <p className="mt-1 text-right text-[10.5px] font-semibold tabular-nums text-[#C8CFC9]">{reason.length}/280</p>
+
+        <div className="mt-3 flex gap-2.5">
+          <button
+            onClick={onCancel}
+            disabled={busy}
+            className="min-h-[44px] flex-1 rounded-xl border border-[#E3E7E0] bg-white text-[13px] font-bold text-[#0F3D3E] transition-colors hover:bg-[#F0F2EF] disabled:opacity-40"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={() => valid && !busy && onConfirm(kind, parsed!, reason)}
+            disabled={!valid || busy}
+            className="min-h-[44px] flex-1 rounded-xl bg-[#0F3D3E] text-[13px] font-extrabold text-white shadow-[0_1px_2px_rgba(15,61,62,0.15)] transition-all hover:bg-[#0C3233] active:scale-[0.99] disabled:opacity-40"
+          >
+            {busy ? (
+              <span className="inline-flex items-center gap-2">
+                <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" aria-hidden />
+                recording…
+              </span>
+            ) : (
+              'Record movement'
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 /** The live drawer card — today's shift at a glance + recent sealed shifts. */
 const DrawerCard: React.FC<{
   active: DrawerSession | null;
   history: DrawerSession[];
   cashIn: number;
   cashLoading: boolean;
+  movements: DrawerMovement[];
   onOpenFlow: () => void;
   onCloseFlow: () => void;
-}> = ({ active, history, cashIn, cashLoading, onOpenFlow, onCloseFlow }) => {
+  onRecordMovement: () => void;
+}> = ({ active, history, cashIn, cashLoading, movements, onOpenFlow, onCloseFlow, onRecordMovement }) => {
   const [histOpen, setHistOpen] = useState(false);
-  const expected = active ? Number(active.opening_float) + cashIn : 0;
+  const moveSum = movements.reduce((s, m) => s + Number(m.amount || 0), 0);
+  const expected = active ? Number(active.opening_float) + cashIn - moveSum : 0;
   const last = history[0];
 
   return (
@@ -492,13 +625,22 @@ const DrawerCard: React.FC<{
         )}
         <div className="ml-auto flex items-center gap-2">
           {active ? (
-            <button
-              onClick={onCloseFlow}
-              className="flex min-h-[40px] items-center gap-2 rounded-xl bg-[#B88E2F] px-3.5 text-[12.5px] font-extrabold text-white shadow-[0_1px_2px_rgba(15,61,62,0.15)] transition-colors hover:bg-[#A57D27] active:scale-[0.99]"
-            >
-              <LockKeyhole size={14} aria-hidden />
-              Count &amp; close
-            </button>
+            <>
+              <button
+                onClick={onRecordMovement}
+                className="flex min-h-[40px] items-center gap-2 rounded-xl border border-[#E3E7E0] bg-white px-3.5 text-[12.5px] font-extrabold text-[#0F3D3E] transition-colors hover:bg-[#F0F2EF] active:scale-[0.99]"
+              >
+                <HandCoins size={14} aria-hidden />
+                Movement
+              </button>
+              <button
+                onClick={onCloseFlow}
+                className="flex min-h-[40px] items-center gap-2 rounded-xl bg-[#B88E2F] px-3.5 text-[12.5px] font-extrabold text-white shadow-[0_1px_2px_rgba(15,61,62,0.15)] transition-colors hover:bg-[#A57D27] active:scale-[0.99]"
+              >
+                <LockKeyhole size={14} aria-hidden />
+                Count &amp; close
+              </button>
+            </>
           ) : (
             <button
               onClick={onOpenFlow}
@@ -531,11 +673,42 @@ const DrawerCard: React.FC<{
             </div>
             <div className="rounded-xl border border-[#B88E2F]/35 bg-[#FDF9F0] px-3 py-2.5">
               <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-[#8A5A16]">In drawer</p>
-              <p className="text-[15px] font-extrabold tabular-nums text-[#8A5A16]">{formatMoney(expected)}</p>
+              <p className={`text-[15px] font-extrabold tabular-nums text-[#8A5A16] ${expected < 0 ? 'text-[#B3261E]' : ''}`}>
+                {formatMoney(expected)}
+              </p>
             </div>
           </div>
+          {movements.length > 0 ? (
+            <div className="mt-2.5">
+              <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-[#8A938C]">
+                Movements out · {formatMoney(moveSum)}
+              </p>
+              <ul className="mt-1 flex flex-col gap-1">
+                {movements.map((m) => (
+                  <li
+                    key={m.id}
+                    className="flex flex-wrap items-center gap-x-2 gap-y-0.5 rounded-lg bg-[#FDF6F5] px-2.5 py-1.5 text-[11.5px] font-semibold text-[#5F6B63]"
+                  >
+                    <span
+                      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${
+                        m.kind === 'payout' ? 'bg-[#FCEBEA] text-[#B3261E]' : 'bg-[#EAF2F7] text-[#1D5D7E]'
+                      }`}
+                    >
+                      <TrendingDown size={10} aria-hidden />
+                      {m.kind}
+                    </span>
+                    <span className="font-extrabold tabular-nums text-[#0F3D3E]">−{formatMoney(Number(m.amount))}</span>
+                    <span className="min-w-0 flex-1 truncate" title={m.reason}>
+                      {m.reason}
+                    </span>
+                    <span className="text-[10px] font-semibold text-[#C8CFC9]">{istTime(m.created_at)}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
           <p className="mt-2 text-[10.5px] font-semibold text-[#8A938C]">
-            cash-in is ledger truth · every cash payment taken since the drawer opened
+            expected = float + cash-in − payouts &amp; drops · ledger truth, never a guess
           </p>
         </>
       ) : last ? (
@@ -614,7 +787,9 @@ const EodScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
   const [drawerHistory, setDrawerHistory] = useState<DrawerSession[]>([]);
   const [cashIn, setCashIn] = useState(0);
   const [cashLoading, setCashLoading] = useState(false);
+  const [movements, setMovements] = useState<DrawerMovement[]>([]);
   const [drawerDialog, setDrawerDialog] = useState<'open' | 'close' | null>(null);
+  const [moveDialog, setMoveDialog] = useState(false);
   const [drawerBusy, setDrawerBusy] = useState(false);
   const [drawerError, setDrawerError] = useState<string | null>(null);
 
@@ -670,6 +845,8 @@ const EodScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
   }, [load]);
 
   /* ── drawer ledger: active session + recent sealed shifts ── */
+  const moveSum = movements.reduce((s, m) => s + Number(m.amount || 0), 0);
+
   const loadDrawer = useCallback(async () => {
     if (!tenantId) return;
     try {
@@ -681,9 +858,15 @@ const EodScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
       setDrawerHistory(hist);
       if (act) {
         setCashLoading(true);
-        setCashIn(await fetchCashInSince(tenantId, act.opened_at));
+        const [cash, movs] = await Promise.all([
+          fetchCashInSince(tenantId, act.opened_at),
+          fetchDrawerMovements(tenantId, act.id).catch(() => [] as DrawerMovement[]),
+        ]);
+        setCashIn(cash);
+        setMovements(movs);
       } else {
         setCashIn(0);
+        setMovements([]);
       }
     } catch {
       // drawer is fail-soft: the day's money view must never hard-fail on it
@@ -724,6 +907,21 @@ const EodScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
     try {
       await closeDrawerSession(drawerActive.id, Math.round(amount * 100) / 100, note);
       setDrawerDialog(null);
+      await loadDrawer();
+    } catch (e: unknown) {
+      setDrawerError(drawerErrText(e));
+    } finally {
+      setDrawerBusy(false);
+    }
+  };
+
+  const confirmRecordMovement = async (kind: 'payout' | 'drop', amount: number, reason: string) => {
+    if (!drawerActive) return;
+    setDrawerBusy(true);
+    setDrawerError(null);
+    try {
+      await recordDrawerMovement(drawerActive.id, kind, amount, reason);
+      setMoveDialog(false);
       await loadDrawer();
     } catch (e: unknown) {
       setDrawerError(drawerErrText(e));
@@ -821,7 +1019,8 @@ const EodScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
           [`Opened ${istTime(drawerActive.opened_at)} IST`, drawerActive.opened_by_email || 'counter'],
           ['Float', formatMoney(Number(drawerActive.opening_float))],
           ['Cash in (ledger)', formatMoney(cashIn)],
-          ['IN DRAWER (expected)', formatMoney(Number(drawerActive.opening_float) + cashIn)],
+          ...(moveSum > 0 ? [['Payouts/drops', `-${formatMoney(moveSum)}`] as [string, string]] : []),
+          ['IN DRAWER (expected)', formatMoney(Number(drawerActive.opening_float) + cashIn - moveSum)],
         ],
         strongLast: true,
       };
@@ -831,12 +1030,15 @@ const EodScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
       );
       if (daySess) {
         const v = Number(daySess.variance || 0);
+        // expected − float is the shift's NET (cash-in minus payouts/drops)
+        // since 021 — it was pure cash-in under 020; the label must say so
+        const net = Number(daySess.expected_cash || 0) - Number(daySess.opening_float);
         drawer = {
           title: 'CASH DRAWER · LAST SHIFT',
           rows: [
             [`Closed ${daySess.closed_at ? istTime(daySess.closed_at) : '—'}`, daySess.closed_by_email || 'counter'],
             ['Float', formatMoney(Number(daySess.opening_float))],
-            ['Cash in (ledger)', formatMoney(Number(daySess.expected_cash || 0) - Number(daySess.opening_float))],
+            ['Net cash (in − out)', `${net < 0 ? '-' : net > 0 ? '+' : ''}${formatMoney(Math.abs(net))}`],
             ['Counted', formatMoney(Number(daySess.counted_cash || 0))],
             ['VARIANCE', `${v > 0 ? '+' : v < 0 ? '-' : ''}${formatMoney(Math.abs(v))}`],
           ],
@@ -1003,6 +1205,7 @@ const EodScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
           history={drawerHistory}
           cashIn={cashIn}
           cashLoading={cashLoading}
+          movements={movements}
           onOpenFlow={() => {
             setDrawerError(null);
             setDrawerDialog('open');
@@ -1010,6 +1213,10 @@ const EodScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
           onCloseFlow={() => {
             setDrawerError(null);
             setDrawerDialog('close');
+          }}
+          onRecordMovement={() => {
+            setDrawerError(null);
+            setMoveDialog(true);
           }}
         />
       ) : null}
@@ -1236,11 +1443,21 @@ const EodScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
           mode={drawerDialog}
           active={drawerActive}
           cashIn={cashIn}
+          moveOut={moveSum}
           busy={drawerBusy}
           onCancel={() => setDrawerDialog(null)}
           onConfirm={(amount, note) =>
             void (drawerDialog === 'open' ? confirmOpenDrawer(amount) : confirmCloseDrawer(amount, note))
           }
+        />
+      ) : null}
+
+      {/* ── movement dialog (payout / safe drop) ── */}
+      {moveDialog ? (
+        <MovementDialog
+          busy={drawerBusy}
+          onCancel={() => setMoveDialog(false)}
+          onConfirm={(kind, amount, reason) => void confirmRecordMovement(kind, amount, reason)}
         />
       ) : null}
     </div>

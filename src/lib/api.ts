@@ -1725,3 +1725,48 @@ export async function closeDrawerSession(
   if (error) throw error;
   return data as { cash_in: number; expected_cash: number; variance: number };
 }
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * Cash drawer movements (migration 021 — payouts & safe drops).
+ * Append-only outflow ledger bound to an OPEN drawer session: money leaves
+ * the drawer on the record, with a REQUIRED reason, so a close after a
+ * payout never blames the operator. expected = float + cash-in − movements,
+ * computed server-side at close time (021 rebody of sp_close_drawer).
+ * ────────────────────────────────────────────────────────────────────────── */
+
+export interface DrawerMovement {
+  id: string;
+  session_id: string;
+  kind: 'payout' | 'drop';
+  amount: number;
+  reason: string;
+  created_by_email: string;
+  created_at: string;
+}
+
+export async function fetchDrawerMovements(tenantId: string, sessionId: string): Promise<DrawerMovement[]> {
+  const { data, error } = await supabase
+    .from('cash_drawer_movements')
+    .select('*')
+    .eq('tenant_id', tenantId)
+    .eq('session_id', sessionId)
+    .order('created_at', { ascending: true });
+  if (error) throw error;
+  return (data || []) as DrawerMovement[];
+}
+
+/** Record a payout or safe drop on the open shift. Reason is required. */
+export async function recordDrawerMovement(
+  sessionId: string,
+  kind: 'payout' | 'drop',
+  amount: number,
+  reason: string,
+): Promise<void> {
+  const { error } = await supabase.rpc('sp_record_drawer_movement', {
+    p_session_id: sessionId,
+    p_kind: kind,
+    p_amount: Math.round(amount * 100) / 100,
+    p_reason: reason.trim(),
+  });
+  if (error) throw error;
+}

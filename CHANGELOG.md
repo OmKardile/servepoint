@@ -3,6 +3,26 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.14.0] — 2026-10-02 — The drawer lets money leave — honestly (cash drawer movements)
+
+### Added — Migration 021: the `cash_drawer_movements` outflow ledger
+- **The honesty gap 5.13.0 parked out loud, closed**: a real drawer doesn't only take money in — a supplier gets paid at the door (**payout**) or the counter skips cash to the safe before it grows top-heavy (**safe drop**). Without a ledger for that, an operator closing after a payout would be blamed for a variance that isn't theirs — the whole point of stored variance is trust. `cash_drawer_movements` (tenant_id, session_id CASCADE, kind CHECK `payout|drop`, amount > 0, **reason REQUIRED** 1–280 after trim — "₹200 out" without a why is not evidence, it's a leak, created_by_email, created_at) is append-only evidence: member-only RLS, zero anon paths, session-bound so a shift dies with its movements.
+- **`sp_record_drawer_movement(UUID, TEXT, NUMERIC, TEXT)`** — SECURITY DEFINER, tenant from `current_tenant_id()`, stable P0001 codes (`BAD_KIND`, `BAD_AMOUNT`, `REASON_REQUIRED`, `TOO_LONG`, `NOT_FOUND`, `DRAWER_NOT_OPEN` — a sealed shift can never be amended, that would rewrite sealed evidence), reason trimmed server-side, **PUBLIC default EXECUTE revoked before the grant** (the 020 lesson baked in from the start). The migration's own DO-block verifies the table/RLS/policy/one-overload/no-anon/realtime AND that the re-bodied close actually reads the movements ledger.
+- **`sp_close_drawer` re-bodied, same single overload**: expected = `opening_float + cash-in − Σ(movements)`. **With zero movements the math is byte-identical to 020** — the 020 E2E suite stays green untouched (proven: the movements E2E re-asserts the no-movement path). The close response now also returns `movements_out` alongside `cash_in`, and DB E2E 24/24 proves the core invariant live: float ₹500 + ₹0 cash − ₹300 outflows (₹200 payout + ₹100 drop) ⇒ expected ₹200, counted ₹200, **variance ₹0 — the payout is NOT the operator's fault**. `db-setup.mjs` gains the 021 sentinel (001→021).
+
+### Added — Close-out: movements on the drawer card + dialogs
+- **Movements strip on the open card**: every payout/drop as a row — kind chip (red PAYOUT / blue SAFE DROP), `−₹` amount, the required reason, IST time — under a `Movements out · ₹` header; the gold **In drawer** tile now nets them (`float + cash-in − movements`, flips red if paper-negative) and the honesty line spells the formula: *expected = float + cash-in − payouts & drops · ledger truth, never a guess*. Header gains a **Movement** button beside Count & close.
+- **Movement dialog**: kind radios (Payout *paid out — supplier, petty cash* / Safe drop *moved to the safe*), amount, and a **required** reason with its own placeholder voice per kind and a 280 counter — the confirm button stays disabled until both amount and reason are real. Recording shows a spinner; new stable codes map to honest copy in the alert banner.
+- **Count & close dialog** gains the breakdown row: `Paid out / dropped −₹150.00` between cash-in and the expected line, so the operator sees the outflow *before* being asked for the recount.
+- **STYLE MANDATE**: movement rows use a soft red-tinted surface (`#FDF6F5`) that visually reads as "money left", kind chips carry the existing red/blue ledger vocabulary, the dialog kind-radios invert to the dark-teal active state, and everything stays `tabular-nums` on money.
+
+### Fixed
+- **A label-honesty bug the browser E2E caught in my own new code**: the Z-report's sealed-shift block derived cash-in as `expected − float` — true under 020, but with movements that derivation is the shift's **net** (₹400 float − ₹150 payout ⇒ it printed "Cash in (ledger) ₹-150.00" when cash-in was actually ₹0). The Z-report must never claim a number that isn't what it says it is: the row is now **`Net cash (in − out)`** with an explicit sign, derived from stored columns only (the shift window's raw split isn't persisted, and the report refuses to fake it).
+
+### Verification
+- DB E2E 24/24 (structure + RPC loop as the forged-claims owner: kind/amount/reason rejections, payout+drop recorded with trimmed reason, close nets outflows to variance ₹0, DRAWER_NOT_OPEN after seal, 020 no-movement math unchanged, anon lockout, cascade cleanup) and a full browser loop on real data: open ₹400 → record payout ₹150 "vegetables vendor paid cash" → In-drawer ₹250 with the movements strip → close dialog shows the −₹150 row → count ₹250 → "✓ right on the ledger" → sealed → Z-report block re-captured after the label fix → cleanup back to a zero-row ledger. Zero page errors throughout. `tsc` clean; SW `5.14.0-r1`.
+
+
 ## [5.13.0] — 2026-10-02 — The drawer counts the cash (shifts & drawer — THE LAST UNBUILT NOVA ITEM)
 
 ### Added — Migration 020: the `cash_drawer_sessions` ledger
