@@ -1,0 +1,165 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   ServePoint Design System — tokens/servepoint.css v1.0.0
+   Drop-in CSS custom properties + the canonical utility layer.
+   Source of truth: tokens/servepoint.tokens.json (this file is the build).
+   The app's own src/index.css carries the same :root block under ADR-0012 —
+   when the two drift, the tokens JSON wins and index.css follows.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* ── primitive: color ─────────────────────────────────────────────────── */
+  --sp-teal-900: #0B2E2F;
+  --sp-teal-800: #0F3D3E;
+  --sp-gold-600: #967221;
+  --sp-gold-500: #B88E2F;
+  --sp-gold-100: #F3E8CF;
+  --sp-gold-50: #FFF4DB;
+  --sp-sage-300: #D9E2DD;
+  --sp-sage-200: #EAF0EC;
+  --sp-sage-150: #F1F4F1;
+  --sp-sage-700: #5F6B63;
+  --sp-sage-600: #8A938C;
+  --sp-ink-900: #1A1A1A;
+  --sp-ink-600: #6B6B6B;
+  --sp-ink-400: #969696;
+  --sp-hairline: #E3E7E0;
+  --sp-paper-50: #F6F5F2;
+  --sp-paper-100: #F0F2EF;
+  --sp-paper-150: #FBFBF9;
+  --sp-white: #FFFFFF;
+  --sp-green-700: #2E7D32;
+  --sp-green-100: #EAF4EC;
+  --sp-red-700: #B42318;
+  --sp-red-600: #B3261E;
+  --sp-terracotta-600: #B4483C;
+  --sp-terracotta-50: #FDF3F2;
+  --sp-terracotta-25: #FDECEA;
+  --sp-amber-900: #8A5A00;
+  --sp-amber-800: #8A5A16;
+  --sp-orange-600: #C2571B;
+  --sp-amber-50: #FDF3E4;
+
+  /* ── primitive: radius / space / duration ─────────────────────────────── */
+  --sp-r-md: 6px;
+  --sp-r-lg: 8px;
+  --sp-r-xl: 12px;
+  --sp-r-2xl: 16px;
+  --sp-r-3xl: 24px;
+  --sp-r-pill: 100px;
+  --sp-space-1: 4px;
+  --sp-space-2: 8px;
+  --sp-space-3: 12px;
+  --sp-space-4: 16px;
+  --sp-space-5: 20px;
+  --sp-space-6: 24px;
+  --sp-space-8: 32px;
+  --sp-dur-fast: 120ms;
+  --sp-dur-base: 150ms;
+  --sp-dur-slow: 160ms;
+
+  /* ── semantic ─────────────────────────────────────────────────────────── */
+  --sp-canvas: var(--sp-paper-50);
+  --sp-surface: var(--sp-white);
+  --sp-surface-washed: var(--sp-paper-150);
+  --sp-ink: var(--sp-ink-900);
+  --sp-ink-soft: var(--sp-ink-600);
+  --sp-ink-faint: var(--sp-ink-400);
+  --sp-brand: var(--sp-teal-800);
+  --sp-brand-deep: var(--sp-teal-900);
+  --sp-accent: var(--sp-gold-500);
+  --sp-accent-deep: var(--sp-gold-600);
+  --sp-accent-text: var(--sp-amber-900);
+  --sp-accent-tint: var(--sp-gold-100);
+  --sp-success: var(--sp-green-700);
+  --sp-success-tint: var(--sp-green-100);
+  --sp-danger: var(--sp-red-700);
+  --sp-danger-dot: var(--sp-red-600);
+  --sp-danger-text: var(--sp-terracotta-600);
+  --sp-danger-tint: var(--sp-terracotta-50);
+  --sp-warning-dot: var(--sp-orange-600);
+  --sp-warning-tint: var(--sp-amber-50);
+  --sp-focus-ring: var(--sp-gold-600);
+
+  /* ── elevation (hairline-first — borders do the work) ─────────────────── */
+  --sp-elev-rest: 0 1px 2px rgba(26, 26, 26, 0.05);
+  --sp-elev-hover: 0 4px 12px rgba(15, 61, 62, 0.10);
+  --sp-elev-overlay: 0 4px 14px rgba(15, 61, 62, 0.10);
+  --sp-elev-modal: 0 20px 50px rgba(15, 61, 62, 0.18);
+
+  /* ── typography ───────────────────────────────────────────────────────── */
+  --sp-font-sans: 'Poppins', 'Inter', system-ui, -apple-system, sans-serif;
+  --sp-font-display: 'Instrument Serif', Georgia, serif;
+  --sp-font-mono: 'JetBrains Mono', ui-monospace, monospace;
+}
+
+/* ═══ canonical utilities (mirror of the app's src/index.css layer) ═════ */
+
+/* Gold CTA — the one button that asks for the sale */
+.sp-cta {
+  background-color: var(--sp-accent);
+  color: var(--sp-white);
+  font-weight: 600;
+  border-radius: var(--sp-r-xl);
+  transition: background-color var(--sp-dur-slow) ease, transform var(--sp-dur-fast) ease, box-shadow var(--sp-dur-slow) ease;
+}
+.sp-cta:hover { background-color: var(--sp-accent-deep); }
+.sp-cta:active { transform: scale(0.985); }
+.sp-cta:focus-visible { outline: 2px solid var(--sp-accent-deep); outline-offset: 2px; }
+.sp-cta:disabled { opacity: 0.55; cursor: not-allowed; }
+
+/* Deep teal button — the structural action */
+.sp-teal-btn {
+  background-color: var(--sp-brand);
+  color: var(--sp-white);
+  font-weight: 600;
+  border-radius: var(--sp-r-xl);
+  transition: background-color var(--sp-dur-slow) ease;
+}
+.sp-teal-btn:hover { background-color: var(--sp-brand-deep); }
+
+/* The card — hairline-led elevation, 16px radius */
+.sp-card {
+  background: var(--sp-surface);
+  border: 1px solid var(--sp-hairline);
+  border-radius: var(--sp-r-2xl);
+}
+
+/* Input — gold focus ring, honest placeholder */
+.sp-input {
+  background: var(--sp-surface);
+  border: 1px solid var(--sp-hairline);
+  border-radius: var(--sp-r-xl);
+  color: var(--sp-ink);
+  transition: border-color 140ms ease, box-shadow 140ms ease;
+}
+.sp-input::placeholder { color: var(--sp-ink-faint); }
+.sp-input:focus {
+  outline: none;
+  border-color: var(--sp-accent);
+  box-shadow: 0 0 0 3px rgba(184, 142, 47, 0.18);
+}
+
+/* Skeleton shimmer — loading is visible, never a lie */
+.sp-skeleton {
+  background: linear-gradient(90deg, #E9E9E6 25%, #F2F1EE 50%, #E9E9E6 75%);
+  background-size: 200% 100%;
+  animation: sp-shimmer 1.4s ease infinite;
+  border-radius: var(--sp-r-2xl);
+}
+@keyframes sp-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* Scrollbars — quiet, sage-thumb */
+* { scrollbar-width: thin; scrollbar-color: #C9CFC9 transparent; }
+*::-webkit-scrollbar { width: 8px; height: 8px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb { background: #C9CFC9; border-radius: 100px; }
+*::-webkit-scrollbar-thumb:hover { background: #AEB5AE; }
+
+/* Motion is a courtesy — reduce means stop */
+@media (prefers-reduced-motion: reduce) {
+  .sp-cta, .sp-teal-btn { transition: none; }
+  .sp-skeleton { animation: none; }
+}

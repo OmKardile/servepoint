@@ -3,6 +3,14 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.30.0] — 2026-10-03 — The ServePoint Design System (owner-commissioned)
+
+### Added — a whole design system around the web app (`design-system/`, DS v1.0.0)
+- Per the owner's directive ("I liked the whole site's UI/UX — create one whole design system around the web app; research first, separate root directory, then push"), the repo now carries **`design-system/`**: `docs/01-research.md` (industry methodology, grounded in a live web sweep: Figma docs guide, USWDS principles, Brad Frost, W3C DTCG token format), `docs/02-audit.md` (the app's real design language extracted by **code census** — top-30 hex counts, type/radius/shadow/icon/motion/a11y censuses, the status semantic table), `docs/03–05` (foundations, component specs, the eleven normative UX patterns — honesty family, arm→confirm, IST math, print honesty…), `docs/06-governance.md` (add-don't-rename, evidence-based tokens, semver).
+- **Tokens**: `tokens/servepoint.tokens.json` — 3-tier (primitive → semantic → component), 31 internal references all validated; `tokens/servepoint.css` — the drop-in build (mirrors the app's ADR-0012 `:root` block + canonical `sp-*` utilities).
+- **Living showcase**: `showcase/index.html` — the style guide that renders the system (palette with census ranks, ink ramp, status chips, type specimens, geometry/elevation, live component specimens incl. a working arm→confirm demo). Browser-verified in agent-browser, zero console errors.
+- **No runtime change**: the app shell, routes, sw (`servepoint-v5.29.0-r1`) and every component are untouched — this release ships a repo-level design artifact, versioned independently as DS 1.0.0.
+
 ## [5.29.0] — 2026-10-03 — The paper carries the face; the rhythm learns hindsight
 
 ### Added — logo on the customer receipt (Bills → Print receipt)

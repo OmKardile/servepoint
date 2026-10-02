@@ -1,0 +1,357 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>ServePoint Design System — v1.0.0</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500;600&family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
+<style>
+/* ── tokens (mirrors tokens/servepoint.css — the build of servepoint.tokens.json) ── */
+:root{
+  --sp-teal-900:#0B2E2F; --sp-teal-800:#0F3D3E;
+  --sp-gold-600:#967221; --sp-gold-500:#B88E2F; --sp-gold-100:#F3E8CF; --sp-gold-50:#FFF4DB;
+  --sp-sage-300:#D9E2DD; --sp-sage-200:#EAF0EC; --sp-sage-150:#F1F4F1;
+  --sp-sage-700:#5F6B63; --sp-sage-600:#8A938C;
+  --sp-ink-900:#1A1A1A; --sp-ink-600:#6B6B6B; --sp-ink-400:#969696;
+  --sp-hairline:#E3E7E0; --sp-paper-50:#F6F5F2; --sp-paper-100:#F0F2EF; --sp-paper-150:#FBFBF9;
+  --sp-white:#FFFFFF; --sp-green-700:#2E7D32; --sp-green-100:#EAF4EC;
+  --sp-red-700:#B42318; --sp-red-600:#B3261E; --sp-terracotta-600:#B4483C; --sp-terracotta-50:#FDF3F2;
+  --sp-amber-900:#8A5A00; --sp-amber-800:#8A5A16; --sp-orange-600:#C2571B; --sp-amber-50:#FDF3E4;
+  --sp-canvas:var(--sp-paper-50); --sp-surface:var(--sp-white);
+  --sp-brand:var(--sp-teal-800); --sp-brand-deep:var(--sp-teal-900);
+  --sp-accent:var(--sp-gold-500); --sp-accent-deep:var(--sp-gold-600);
+  --sp-elev-rest:0 1px 2px rgba(26,26,26,.05); --sp-elev-hover:0 4px 12px rgba(15,61,62,.10);
+  --sp-elev-overlay:0 4px 14px rgba(15,61,62,.10); --sp-elev-modal:0 20px 50px rgba(15,61,62,.18);
+  --sp-font-sans:'Poppins','Inter',system-ui,sans-serif;
+  --sp-font-display:'Instrument Serif',Georgia,serif;
+  --sp-font-mono:'JetBrains Mono',ui-monospace,monospace;
+}
+/* ── base ── */
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--sp-canvas);color:var(--sp-ink-900);font-family:var(--sp-font-sans);-webkit-font-smoothing:antialiased}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+.wrap{max-width:1060px;margin:0 auto;padding:0 20px}
+/* ── hero ── */
+.hero{background:linear-gradient(160deg,var(--sp-teal-800) 0%,var(--sp-teal-900) 100%);color:#fff;padding:64px 0 56px}
+.hero .eyebrow{font-size:11px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:#D9E2DD}
+.hero h1{font-family:var(--sp-font-display);font-style:italic;font-weight:400;font-size:52px;line-height:1.05;margin:14px 0 10px}
+.hero p{max-width:640px;color:#CFDDD5;font-size:14px;line-height:1.7;margin:0}
+.hero .meta{display:flex;gap:10px;flex-wrap:wrap;margin-top:26px}
+.hero .meta span{font-size:11px;font-weight:600;border:1px solid rgba(255,255,255,.25);border-radius:100px;padding:6px 14px;color:#EAF0EC}
+/* ── section chrome ── */
+section{padding:52px 0 8px}
+.kicker{font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--sp-gold-600)}
+h2.title{font-family:var(--sp-font-display);font-style:italic;font-weight:400;font-size:34px;margin:8px 0 6px;color:var(--sp-teal-800)}
+p.lede{font-size:13px;color:var(--sp-ink-600);max-width:620px;line-height:1.7;margin:0 0 26px}
+/* ── swatches ── */
+.grid{display:grid;gap:14px}
+.swatches{grid-template-columns:repeat(auto-fill,minmax(158px,1fr))}
+.sw{background:#fff;border:1px solid var(--sp-hairline);border-radius:16px;overflow:hidden;box-shadow:var(--sp-elev-rest);transition:transform 150ms ease,box-shadow 150ms ease}
+.sw:hover{transform:translateY(-2px);box-shadow:var(--sp-elev-hover)}
+.sw .chip{height:74px;display:block;width:100%}
+.sw .info{padding:10px 12px 12px}
+.sw .name{font-size:12px;font-weight:600;color:var(--sp-ink-900)}
+.sw .hex{font-family:var(--sp-font-mono);font-size:11px;color:var(--sp-ink-600)}
+.sw .role{font-size:10.5px;color:var(--sp-ink-400);margin-top:2px;line-height:1.5}
+/* ── ink ramp ── */
+.ramp{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.ramp .step{border:1px solid var(--sp-hairline);border-radius:16px;background:#fff;padding:16px;box-shadow:var(--sp-elev-rest)}
+.ramp .step .sample{font-size:20px;font-weight:700}
+.ramp .step .meta{font-family:var(--sp-font-mono);font-size:10.5px;color:var(--sp-ink-400);margin-top:6px}
+/* ── type specimens ── */
+.type-card{background:#fff;border:1px solid var(--sp-hairline);border-radius:16px;padding:24px;box-shadow:var(--sp-elev-rest)}
+.spec{display:flex;align-items:baseline;justify-content:space-between;gap:16px;padding:14px 0;border-bottom:1px dashed var(--sp-hairline)}
+.spec:last-child{border-bottom:0}
+.spec .demo{font-size:15px}
+.spec .tag{font-family:var(--sp-font-mono);font-size:10.5px;color:var(--sp-ink-400);white-space:nowrap}
+/* ── component specimens ── */
+.demos{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px}
+.demo-card{background:#fff;border:1px solid var(--sp-hairline);border-radius:16px;padding:20px;box-shadow:var(--sp-elev-rest)}
+.demo-card h3{margin:0 0 4px;font-size:14px;font-weight:700;color:var(--sp-ink-900)}
+.demo-card .note{font-size:11px;color:var(--sp-ink-400);margin:0 0 16px;line-height:1.6}
+.row{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+/* buttons */
+.sp-cta{background:var(--sp-accent);color:#fff;font-weight:600;border:0;border-radius:12px;height:44px;padding:0 20px;font-family:var(--sp-font-sans);font-size:13px;cursor:pointer;transition:background-color 160ms ease,transform 120ms ease}
+.sp-cta:hover{background:var(--sp-accent-deep)} .sp-cta:active{transform:scale(.985)}
+.sp-cta:focus-visible{outline:2px solid var(--sp-accent-deep);outline-offset:2px}
+.sp-teal-btn{background:var(--sp-brand);color:#fff;font-weight:600;border:0;border-radius:12px;height:44px;padding:0 20px;font-family:var(--sp-font-sans);font-size:13px;cursor:pointer;transition:background-color 160ms ease}
+.sp-teal-btn:hover{background:var(--sp-brand-deep)} .sp-teal-btn:focus-visible{outline:2px solid var(--sp-accent-deep);outline-offset:2px}
+.ghost{background:#fff;color:var(--sp-teal-800);font-weight:600;border:1px solid var(--sp-hairline);border-radius:100px;height:44px;padding:0 18px;font-family:var(--sp-font-sans);font-size:13px;cursor:pointer;transition:border-color 150ms ease}
+.ghost:hover{border-color:var(--sp-accent)} .ghost:focus-visible{outline:2px solid var(--sp-accent-deep);outline-offset:2px}
+/* status chips */
+.chip{display:inline-flex;align-items:center;gap:7px;border-radius:100px;padding:6px 13px;font-size:11.5px;font-weight:600}
+.chip .dot{width:10px;height:10px;border-radius:100px}
+/* kpi tiles */
+.kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.kpi{border:1px solid var(--sp-hairline);border-radius:16px;background:#fff;padding:12px 14px}
+.kpi .label{font-size:10.5px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--sp-ink-600)}
+.kpi .value{font-size:22px;font-weight:700;font-variant-numeric:tabular-nums;margin-top:2px}
+.kpi .delta{font-size:10.5px;font-weight:600;margin-top:2px;font-variant-numeric:tabular-nums}
+/* inputs */
+.sp-input{width:100%;background:#fff;border:1px solid var(--sp-hairline);border-radius:12px;height:44px;padding:0 14px;font-family:var(--sp-font-sans);font-size:13px;color:var(--sp-ink-900);transition:border-color 140ms ease,box-shadow 140ms ease}
+.sp-input::placeholder{color:var(--sp-ink-400)}
+.sp-input:focus{outline:none;border-color:var(--sp-accent);box-shadow:0 0 0 3px rgba(184,142,47,.18)}
+/* segmented */
+.seg{display:inline-flex;border:1px solid var(--sp-hairline);background:#fff;border-radius:100px;padding:3px}
+.seg button{border:0;background:transparent;border-radius:100px;padding:7px 14px;font-family:var(--sp-font-sans);font-size:11px;font-weight:700;color:var(--sp-ink-600);cursor:pointer;transition:background-color 150ms ease,color 150ms ease}
+.seg button[aria-pressed="true"]{background:var(--sp-brand);color:#fff}
+.seg button:focus-visible{outline:2px solid var(--sp-accent-deep);outline-offset:1px}
+/* empty state */
+.empty{display:flex;flex-direction:column;align-items:center;text-align:center;padding:34px 18px;border:1px dashed #C9D4CC;border-radius:24px;background:rgba(255,255,255,.6)}
+.empty .ic{width:46px;height:46px;border-radius:100px;background:var(--sp-sage-200);display:flex;align-items:center;justify-content:center;color:var(--sp-ink-600)}
+.empty h4{font-family:var(--sp-font-display);font-style:italic;font-weight:400;font-size:21px;margin:12px 0 4px;color:var(--sp-teal-800)}
+.empty p{font-size:11.5px;color:var(--sp-ink-600);max-width:280px;line-height:1.65;margin:0}
+/* skeleton */
+.skel{height:12px;border-radius:8px;background:linear-gradient(90deg,#E9E9E6 25%,#F2F1EE 50%,#E9E9E6 75%);background-size:200% 100%;animation:sp-shimmer 1.4s ease infinite}
+@keyframes sp-shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+/* list row */
+.list{border:1px solid var(--sp-hairline);border-radius:16px;overflow:hidden;background:#fff}
+.list .li{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:11px 16px;border-bottom:1px solid var(--sp-hairline);font-size:12.5px}
+.list .li:last-child{border-bottom:0}
+.list .li:hover{background:var(--sp-paper-150)}
+.list .money{font-family:var(--sp-font-mono);font-variant-numeric:tabular-nums;font-weight:600}
+/* elevation demos */
+.elev{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+.elev .box{background:#fff;border:1px solid var(--sp-hairline);border-radius:16px;padding:18px;font-size:10.5px;color:var(--sp-ink-600);text-align:center}
+/* radius demos */
+.rads{display:flex;gap:14px;flex-wrap:wrap}
+.rad{width:120px;height:76px;background:var(--sp-sage-200);border:1px solid var(--sp-sage-300);display:flex;align-items:center;justify-content:center;font-family:var(--sp-font-mono);font-size:10.5px;color:var(--sp-sage-700)}
+/* arm-confirm demo */
+.arm{border:1px solid #F0D9D5;background:var(--sp-terracotta-50);border-radius:16px;padding:16px}
+.arm .txt{font-size:12px;color:var(--sp-terracotta-600);font-weight:600;margin-bottom:10px}
+/* footer */
+footer{margin-top:64px;border-top:1px solid var(--sp-hairline);background:#fff;padding:26px 0 34px}
+footer p{font-size:11px;color:var(--sp-ink-400);margin:4px 0}
+@media (prefers-reduced-motion: reduce){*{animation:none!important;transition:none!important}}
+@media (max-width:640px){.hero h1{font-size:38px}.ramp{grid-template-columns:1fr}.kpis{grid-template-columns:1fr}.elev{grid-template-columns:repeat(2,1fr)}}
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="wrap">
+    <div class="eyebrow">ServePoint — smartPOS · Design System</div>
+    <h1>The café, set in type<br/>and warm paper.</h1>
+    <p>ServePoint's whole UI/UX, formalized: a warm-paper canvas under hairline-led
+    cards, a deep-teal spine, brass gold reserved for the ask, Instrument Serif
+    italic for the human voice — and honesty as the first pattern. Every value
+    below is extracted from the production app by census, not invented.</p>
+    <div class="meta">
+      <span>v1.0.0</span><span>3-tier tokens · W3C DTCG style</span><span>light theme</span>
+      <span>Lucide</span><span>Poppins · Instrument Serif · JetBrains Mono</span>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <section aria-labelledby="t-principles">
+    <div class="kicker">Principles</div>
+    <h2 class="title" id="t-principles">Six laws the app already obeys</h2>
+    <p class="lede">Codified from the audit — each one is visible in production today.</p>
+    <div class="demos">
+      <div class="demo-card"><h3>1 · Honest first</h3><p class="note">Empty states explain the future. Deltas cite stored facts. Broken images vanish. Zero renders zero.</p></div>
+      <div class="demo-card"><h3>2 · Hairline does the work</h3><p class="note">Structure comes from 1px #E3E7E0 borders. Shadows whisper only on hover and overlay.</p></div>
+      <div class="demo-card"><h3>3 · Teal is the spine, gold is the ask</h3><p class="note">Deep teal structures every screen; brass gold appears only when we ask for action or mark the peak.</p></div>
+      <div class="demo-card"><h3>4 · Dense data, human voice</h3><p class="note">Poppins steps in 0.5px increments for instruments; Instrument Serif italic speaks the titles.</p></div>
+      <div class="demo-card"><h3>5 · Motion is a courtesy</h3><p class="note">120–160ms, press-scale 0.985, and every animation dies politely under prefers-reduced-motion.</p></div>
+      <div class="demo-card"><h3>6 · Touch is law</h3><p class="note">44px minimum interactive height — h-11 across the whole product, cashier gloves included.</p></div>
+    </div>
+  </section>
+
+  <section aria-labelledby="t-color">
+    <div class="kicker">Foundations · Color</div>
+    <h2 class="title" id="t-color">The palette, with its evidence</h2>
+    <p class="lede">Census ranks shown under each swatch — how many times the production
+    tree reaches for that value. A palette kept honest by usage.</p>
+    <div class="grid swatches">
+      <div class="sw"><div class="chip" style="background:#0F3D3E"></div><div class="info"><div class="name">Deep Teal · brand</div><div class="hex">#0F3D3E</div><div class="role">spine — ×280 · rank 3</div></div></div>
+      <div class="sw"><div class="chip" style="background:#B88E2F"></div><div class="info"><div class="name">Brass Gold · accent</div><div class="hex">#B88E2F</div><div class="role">the ask — ×219 · rank 5</div></div></div>
+      <div class="sw"><div class="chip" style="background:#967221"></div><div class="info"><div class="name">Gold Deep · hover/focus</div><div class="hex">#967221</div><div class="role">rings — ×52 · rank 11</div></div></div>
+      <div class="sw"><div class="chip" style="background:#F6F5F2;border-bottom:1px solid #E3E7E0"></div><div class="info"><div class="name">Warm Paper · canvas</div><div class="hex">#F6F5F2</div><div class="role">background — ×97 · rank 8</div></div></div>
+      <div class="sw"><div class="chip" style="background:#D9E2DD"></div><div class="info"><div class="name">Sage</div><div class="hex">#D9E2DD</div><div class="role">air — ×44 · rank 13</div></div></div>
+      <div class="sw"><div class="chip" style="background:#EAF0EC"></div><div class="info"><div class="name">Sage Light</div><div class="hex">#EAF0EC</div><div class="role">quiet fills — ×36</div></div></div>
+      <div class="sw"><div class="chip" style="background:#1A1A1A"></div><div class="info"><div class="name">Ink</div><div class="hex">#1A1A1A</div><div class="role">text — ×316 · rank 1</div></div></div>
+      <div class="sw"><div class="chip" style="background:#E3E7E0"></div><div class="info"><div class="name">Hairline</div><div class="hex">#E3E7E0</div><div class="role">every border — ×269 · rank 4</div></div></div>
+      <div class="sw"><div class="chip" style="background:#2E7D32"></div><div class="info"><div class="name">Success</div><div class="hex">#2E7D32</div><div class="role">delta up — ×111 · rank 7</div></div></div>
+      <div class="sw"><div class="chip" style="background:#B42318"></div><div class="info"><div class="name">Danger</div><div class="hex">#B42318</div><div class="role">delta down — ×67 · rank 9</div></div></div>
+      <div class="sw"><div class="chip" style="background:#F3E8CF"></div><div class="info"><div class="name">Gold Tint</div><div class="hex">#F3E8CF</div><div class="role">washes — ×12</div></div></div>
+      <div class="sw"><div class="chip" style="background:#FDF3F2"></div><div class="info"><div class="name">Terracotta Tint</div><div class="hex">#FDF3F2</div><div class="role">danger panels — ×17</div></div></div>
+    </div>
+    <h3 style="font-size:13px;font-weight:700;margin:26px 0 10px;color:var(--sp-teal-800)">Ink ramp — text only, three steps</h3>
+    <div class="ramp">
+      <div class="step"><div class="sample" style="color:#1A1A1A">Headings & values</div><div class="meta">#1A1A1A · --sp-ink · ×316</div></div>
+      <div class="step"><div class="sample" style="color:#6B6B6B">Body & secondary</div><div class="meta">#6B6B6B · --sp-ink-soft · ×292</div></div>
+      <div class="step"><div class="sample" style="color:#969696">Captions & placeholders</div><div class="meta">#969696 · --sp-ink-faint · ×207</div></div>
+    </div>
+    <h3 style="font-size:13px;font-weight:700;margin:26px 0 10px;color:var(--sp-teal-800)">Status semantics — tint bg + deep text + saturated dot</h3>
+    <div class="row">
+      <span class="chip" style="background:#EAF4EC;color:#2E7D32"><span class="dot" style="background:#2E7D32"></span>Available</span>
+      <span class="chip" style="background:#FDF3E4;color:#8A5A16"><span class="dot" style="background:#C2571B"></span>Occupied</span>
+      <span class="chip" style="background:#F1F4F1;color:#0F3D3E"><span class="dot" style="background:#0F3D3E"></span>Reserved</span>
+      <span class="chip" style="background:#FDECEA;color:#B4483C"><span class="dot" style="background:#B4483C"></span>Billing</span>
+      <span class="chip" style="background:#F1F4F1;color:#B3261E"><span class="dot" style="background:#B3261E"></span>cut</span>
+    </div>
+  </section>
+
+  <section aria-labelledby="t-type">
+    <div class="kicker">Foundations · Typography</div>
+    <h2 class="title" id="t-type">Three voices, one instrument panel</h2>
+    <p class="lede">Instrument Serif italic speaks; Poppins works the floor; JetBrains Mono counts the money.</p>
+    <div class="type-card">
+      <div class="spec"><span class="demo" style="font-family:var(--sp-font-display);font-style:italic;font-size:34px;color:var(--sp-teal-800)">Floor</span><span class="tag">display · Instrument Serif italic 400 · 19–40px</span></div>
+      <div class="spec"><span class="demo" style="font-size:13px;font-weight:700">Seated rounds · 7d <span style="color:var(--sp-ink-400);font-weight:500">— UI standard, Poppins 600–700</span></span><span class="tag">ui · Poppins · 14–18px</span></div>
+      <div class="spec"><span class="demo" style="font-size:12.5px;color:var(--sp-ink-600)">Table tickets seated per hour of day — dense instrument copy.</span><span class="tag">ui-dense · Poppins · 10–13.5px, 0.5px steps</span></div>
+      <div class="spec"><span class="demo" style="font-family:var(--sp-font-mono);font-size:15px;font-weight:600;font-variant-numeric:tabular-nums">₹5,046.30 · #96 · /t/2e65bd68…</span><span class="tag">numeric · JetBrains Mono 400–600 · tabular-nums</span></div>
+      <div class="spec"><span class="demo" style="font-size:10.5px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--sp-ink-600)">Peak hour · label caps</span><span class="tag">kpi-label · Poppins 600 · uppercase, tracked</span></div>
+    </div>
+  </section>
+
+  <section aria-labelledby="t-geo">
+    <div class="kicker">Foundations · Geometry & Elevation</div>
+    <h2 class="title" id="t-geo">Pills everywhere; shadows whisper</h2>
+    <p class="lede">Radius census: rounded-full ×306 · 12px ×190 · 16px ×98 · 24px ×18.
+    Shadow census: sm ×32 · md ×7 · xl ×6 — borders carry the structure.</p>
+    <div class="rads">
+      <div class="rad" style="border-radius:12px">12 · controls</div>
+      <div class="rad" style="border-radius:16px">16 · cards</div>
+      <div class="rad" style="border-radius:24px">24 · sheets</div>
+      <div class="rad" style="border-radius:100px">100 · pills</div>
+    </div>
+    <div class="elev" style="margin-top:16px">
+      <div class="box" style="box-shadow:0 1px 2px rgba(26,26,26,.05)">rest<br/>0 1px 2px 5%</div>
+      <div class="box" style="box-shadow:0 4px 12px rgba(15,61,62,.10)">hover<br/>0 4px 12px teal</div>
+      <div class="box" style="box-shadow:0 4px 14px rgba(15,61,62,.10)">overlay<br/>tooltips</div>
+      <div class="box" style="box-shadow:0 20px 50px rgba(15,61,62,.18)">modal<br/>0 20px 50px</div>
+    </div>
+  </section>
+
+  <section aria-labelledby="t-comp">
+    <div class="kicker">Components</div>
+    <h2 class="title" id="t-comp">Specimens, rendered live</h2>
+    <p class="lede">Every specimen below is built from the tokens on this page — the same
+    classes the app ships (sp-cta, sp-card, sp-input…).</p>
+    <div class="demos">
+      <div class="demo-card">
+        <h3>Buttons — the ask, the structure, the quiet tool</h3>
+        <p class="note">One gold CTA per view. Teal for structure. Ghost pills for everything else.</p>
+        <div class="row">
+          <button class="sp-cta" type="button">Ask for the bill</button>
+          <button class="sp-teal-btn" type="button">Add table</button>
+          <button class="ghost" type="button">Print stickers</button>
+        </div>
+      </div>
+      <div class="demo-card">
+        <h3>KPI tiles + the honest delta</h3>
+        <p class="note">tabular-nums values; deltas cite stored facts with context.</p>
+        <div class="kpis">
+          <div class="kpi"><div class="label">Seated rounds · 7d</div><div class="value">27</div><div class="delta" style="color:#2E7D32">+25 vs prior 7d (+1250%) <span style="color:#969696;font-weight:400">· prior 2</span></div></div>
+          <div class="kpi"><div class="label">Peak hour</div><div class="value" style="color:#8A5A00">8p</div><div class="delta" style="color:#969696;font-weight:500">· 8 tickets</div></div>
+          <div class="kpi"><div class="label">Today</div><div class="value">₹0.00</div><div class="delta" style="color:#969696;font-weight:400">no sales yet — honest zero</div></div>
+        </div>
+      </div>
+      <div class="demo-card">
+        <h3>Inputs — the gold focus ring</h3>
+        <p class="note">Focus = gold border + 3px 18% halo. Placeholders are ink-faint, never gray-on-gray lies.</p>
+        <label class="sr-only" for="d1">Search</label>
+        <input class="sp-input" id="d1" placeholder="Search tables, orders, guests…"/>
+      </div>
+      <div class="demo-card">
+        <h3>Segmented toggle — aria-pressed</h3>
+        <p class="note">The rhythm card's compare grammar. Keyboard operable, gold focus rings.</p>
+        <div class="seg" role="group" aria-label="Rhythm comparison mode">
+          <button type="button" aria-pressed="true">This 7d</button>
+          <button type="button" aria-pressed="false">vs prior wk</button>
+        </div>
+      </div>
+      <div class="demo-card">
+        <h3>Empty state — it explains the future</h3>
+        <p class="note">Icon → serif headline → what will fill the space. Never "No data".</p>
+        <div class="empty">
+          <div class="ic" aria-hidden="true">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 11V7a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v4"/><path d="M3 11h18v2a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3z"/><path d="M6 19v2"/><path d="M18 19v2"/></svg>
+          </div>
+          <h4>Nothing reserved right now</h4>
+          <p>The board refreshes itself the moment an order lands or a table frees up.</p>
+        </div>
+      </div>
+      <div class="demo-card">
+        <h3>Skeleton — loading is visible, never a lie</h3>
+        <p class="note">Shimmer shapes mirror the content they replace (1.4s, reduced-motion aware).</p>
+        <div style="display:grid;gap:10px">
+          <div class="skel" style="width:70%"></div>
+          <div class="skel" style="width:90%"></div>
+          <div class="skel" style="width:45%"></div>
+        </div>
+      </div>
+      <div class="demo-card">
+        <h3>List rows + money in mono</h3>
+        <p class="note">Hairline-divided, hover wash, tabular money right-aligned.</p>
+        <div class="list">
+          <div class="li"><span>#96 · Meera J · <span class="chip" style="background:#FDF3E4;color:#8A5A16;padding:2px 9px;font-size:10px"><span class="dot" style="width:7px;height:7px;background:#C2571B"></span>pending</span></span><span class="money">₹693.00</span></div>
+          <div class="li"><span>#95 · Arjun · <span class="chip" style="background:#EAF4EC;color:#2E7D32;padding:2px 9px;font-size:10px"><span class="dot" style="width:7px;height:7px;background:#2E7D32"></span>paid</span></span><span class="money">₹440.00</span></div>
+          <div class="li"><span>#94 · Sana · <span class="chip" style="background:#EAF4EC;color:#2E7D32;padding:2px 9px;font-size:10px"><span class="dot" style="width:7px;height:7px;background:#2E7D32"></span>paid</span></span><span class="money">₹671.50</span></div>
+        </div>
+      </div>
+      <div class="demo-card">
+        <h3>Two-step destructive grammar</h3>
+        <p class="note">Destructive actions arm first, state the count, then confirm. Try it — armed state reverts after 3s.</p>
+        <div class="arm">
+          <div class="txt" id="armText">1 live window open on T1 · session began 20:49</div>
+          <button class="ghost" type="button" id="armBtn" style="border-color:#F0D9D5;color:#B4483C" onclick="armDemo(this)">Cut session</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section aria-labelledby="t-motion">
+    <div class="kicker">Foundations · Motion</div>
+    <h2 class="title" id="t-motion">A courtesy, never a requirement</h2>
+    <p class="lede">Hover-lift −2px with shadow-md; press scale 0.985; 120–160ms ease;
+    skeletons shimmer at 1.4s. Every keyframe ships a prefers-reduced-motion kill switch.</p>
+    <div class="demos">
+      <div class="demo-card"><h3>Hover lift</h3><div class="sw" style="max-width:220px"><div class="chip" style="height:56px;background:linear-gradient(120deg,var(--sp-sage-200),var(--sp-gold-50))"></div><div class="info"><div class="name">Interactive card</div><div class="role">hover me — −2px + shadow-md</div></div></div></div>
+      <div class="demo-card"><h3>Press scale</h3><div class="row"><button class="sp-cta" type="button">Hold me down</button><span class="note" style="margin:0">scale(0.985) on :active</span></div></div>
+    </div>
+  </section>
+
+</div>
+
+<footer>
+  <div class="wrap">
+    <p><strong style="color:var(--sp-ink-900)">ServePoint Design System · v1.0.0</strong> — tokens are the contract; the showcase is the proof.</p>
+    <p>Source of truth: tokens/servepoint.tokens.json · build: tokens/servepoint.css · specs: docs/03–05 · rules: docs/06-governance.md</p>
+  </div>
+</footer>
+
+<script>
+// arm→confirm demo — the app's two-step destructive grammar, live.
+function armDemo(btn){
+  if (btn.dataset.armed) return;
+  const txt = document.getElementById('armText');
+  const prev = btn.textContent, prevTxt = txt.textContent;
+  btn.dataset.armed = '1';
+  btn.textContent = 'Cut the 20:49 session?';
+  btn.style.background = '#B4483C'; btn.style.borderColor = '#B4483C'; btn.style.color = '#fff';
+  txt.textContent = 'Armed — tap again to confirm. This ends the guest\u2019s window.';
+  const revert = () => {
+    delete btn.dataset.armed;
+    btn.textContent = prev;
+    btn.style.background = ''; btn.style.borderColor = ''; btn.style.color = '';
+    txt.textContent = prevTxt;
+  };
+  const timer = setTimeout(revert, 3000);
+  btn.addEventListener('click', () => { clearTimeout(timer); txt.textContent = 'Cut — the window ends. (Demo only; nothing was harmed.)'; revert(); }, { once:true });
+}
+// segmented demo — aria-pressed flip
+document.querySelectorAll('.seg').forEach(seg => {
+  seg.querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
+    seg.querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+  }));
+});
+</script>
+</body>
+</html>

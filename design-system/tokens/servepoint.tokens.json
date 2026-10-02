@@ -1,0 +1,452 @@
+{
+  "$description": "ServePoint Design System — tokens v1.0.0. Three tiers: primitive (raw, census-evidenced values) → semantic (role-named) → component (assembled). Values are extracted from the ServePoint smartPOS codebase (src/index.css :root block, ADR-0012) and validated by a full-tree color/size/radius census (see docs/02-audit.md). Format follows the W3C Design Tokens Community Group draft structure.",
+  "$author": "ServePoint — smartPOS",
+  "$version": "1.0.0",
+  "primitive": {
+    "color": {
+      "teal900": {
+        "$value": "#0B2E2F",
+        "$type": "color"
+      },
+      "teal800": {
+        "$value": "#0F3D3E",
+        "$type": "color"
+      },
+      "gold600": {
+        "$value": "#967221",
+        "$type": "color"
+      },
+      "gold500": {
+        "$value": "#B88E2F",
+        "$type": "color"
+      },
+      "gold100": {
+        "$value": "#F3E8CF",
+        "$type": "color"
+      },
+      "gold50": {
+        "$value": "#FFF4DB",
+        "$type": "color"
+      },
+      "sage300": {
+        "$value": "#D9E2DD",
+        "$type": "color"
+      },
+      "sage200": {
+        "$value": "#EAF0EC",
+        "$type": "color"
+      },
+      "sage150": {
+        "$value": "#F1F4F1",
+        "$type": "color"
+      },
+      "sage700": {
+        "$value": "#5F6B63",
+        "$type": "color"
+      },
+      "sage600": {
+        "$value": "#8A938C",
+        "$type": "color"
+      },
+      "ink900": {
+        "$value": "#1A1A1A",
+        "$type": "color"
+      },
+      "ink600": {
+        "$value": "#6B6B6B",
+        "$type": "color"
+      },
+      "ink400": {
+        "$value": "#969696",
+        "$type": "color"
+      },
+      "hairline": {
+        "$value": "#E3E7E0",
+        "$type": "color"
+      },
+      "paper50": {
+        "$value": "#F6F5F2",
+        "$type": "color"
+      },
+      "paper100": {
+        "$value": "#F0F2EF",
+        "$type": "color"
+      },
+      "paper150": {
+        "$value": "#FBFBF9",
+        "$type": "color"
+      },
+      "green700": {
+        "$value": "#2E7D32",
+        "$type": "color"
+      },
+      "green100": {
+        "$value": "#EAF4EC",
+        "$type": "color"
+      },
+      "red700": {
+        "$value": "#B42318",
+        "$type": "color"
+      },
+      "red600": {
+        "$value": "#B3261E",
+        "$type": "color"
+      },
+      "terracotta600": {
+        "$value": "#B4483C",
+        "$type": "color"
+      },
+      "terracotta50": {
+        "$value": "#FDF3F2",
+        "$type": "color"
+      },
+      "terracotta25": {
+        "$value": "#FDECEA",
+        "$type": "color"
+      },
+      "amber900": {
+        "$value": "#8A5A00",
+        "$type": "color"
+      },
+      "amber800": {
+        "$value": "#8A5A16",
+        "$type": "color"
+      },
+      "orange600": {
+        "$value": "#C2571B",
+        "$type": "color"
+      },
+      "amber50": {
+        "$value": "#FDF3E4",
+        "$type": "color"
+      },
+      "white": {
+        "$value": "#FFFFFF",
+        "$type": "color"
+      }
+    },
+    "radius": {
+      "r-none": {
+        "$value": "0px",
+        "$type": "dimension"
+      },
+      "r-md": {
+        "$value": "6px",
+        "$type": "dimension"
+      },
+      "r-lg": {
+        "$value": "8px",
+        "$type": "dimension"
+      },
+      "r-xl": {
+        "$value": "12px",
+        "$type": "dimension"
+      },
+      "r-2xl": {
+        "$value": "16px",
+        "$type": "dimension"
+      },
+      "r-3xl": {
+        "$value": "24px",
+        "$type": "dimension"
+      },
+      "r-pill": {
+        "$value": "100px",
+        "$type": "dimension"
+      }
+    },
+    "space": {
+      "1": {
+        "$value": "4px",
+        "$type": "dimension"
+      },
+      "2": {
+        "$value": "8px",
+        "$type": "dimension"
+      },
+      "3": {
+        "$value": "12px",
+        "$type": "dimension"
+      },
+      "4": {
+        "$value": "16px",
+        "$type": "dimension"
+      },
+      "5": {
+        "$value": "20px",
+        "$type": "dimension"
+      },
+      "6": {
+        "$value": "24px",
+        "$type": "dimension"
+      },
+      "8": {
+        "$value": "32px",
+        "$type": "dimension"
+      }
+    },
+    "font": {
+      "sans": {
+        "$value": "Poppins, Inter, system-ui, -apple-system, sans-serif",
+        "$type": "fontFamily"
+      },
+      "display": {
+        "$value": "Instrument Serif, Georgia, serif",
+        "$type": "fontFamily"
+      },
+      "mono": {
+        "$value": "JetBrains Mono, ui-monospace, monospace",
+        "$type": "fontFamily"
+      }
+    },
+    "fontWeight": {
+      "regular": {
+        "$value": "400",
+        "$type": "fontWeight"
+      },
+      "medium": {
+        "$value": "500",
+        "$type": "fontWeight"
+      },
+      "semibold": {
+        "$value": "600",
+        "$type": "fontWeight"
+      },
+      "bold": {
+        "$value": "700",
+        "$type": "fontWeight"
+      },
+      "extrabold": {
+        "$value": "800",
+        "$type": "fontWeight"
+      }
+    },
+    "duration": {
+      "fast": {
+        "$value": "120ms",
+        "$type": "duration"
+      },
+      "base": {
+        "$value": "150ms",
+        "$type": "duration"
+      },
+      "slow": {
+        "$value": "160ms",
+        "$type": "duration"
+      },
+      "shimmer": {
+        "$value": "1400ms",
+        "$type": "duration"
+      }
+    }
+  },
+  "semantic": {
+    "color": {
+      "canvas": {
+        "$value": "{primitive.color.paper50}",
+        "$type": "color",
+        "$description": "App background — warm paper, never pure gray"
+      },
+      "surface": {
+        "$value": "{primitive.color.white}",
+        "$type": "color",
+        "$description": "Cards, sheets, rails"
+      },
+      "surfaceWashed": {
+        "$value": "{primitive.color.paper150}",
+        "$type": "color"
+      },
+      "ink": {
+        "$value": "{primitive.color.ink900}",
+        "$type": "color"
+      },
+      "inkSoft": {
+        "$value": "{primitive.color.ink600}",
+        "$type": "color"
+      },
+      "inkFaint": {
+        "$value": "{primitive.color.ink400}",
+        "$type": "color"
+      },
+      "hairline": {
+        "$value": "{primitive.color.hairline}",
+        "$type": "color",
+        "$description": "Borders do the elevation work — hairline-first"
+      },
+      "brand": {
+        "$value": "{primitive.color.teal800}",
+        "$type": "color",
+        "$description": "Deep teal — the app's spine"
+      },
+      "brandDeep": {
+        "$value": "{primitive.color.teal900}",
+        "$type": "color"
+      },
+      "accent": {
+        "$value": "{primitive.color.gold500}",
+        "$type": "color",
+        "$description": "Brass gold — CTAs, peaks, focus"
+      },
+      "accentDeep": {
+        "$value": "{primitive.color.gold600}",
+        "$type": "color"
+      },
+      "accentText": {
+        "$value": "{primitive.color.amber900}",
+        "$type": "color"
+      },
+      "accentTint": {
+        "$value": "{primitive.color.gold100}",
+        "$type": "color"
+      },
+      "sage": {
+        "$value": "{primitive.color.sage300}",
+        "$type": "color"
+      },
+      "sageLight": {
+        "$value": "{primitive.color.sage200}",
+        "$type": "color"
+      },
+      "sageMist": {
+        "$value": "{primitive.color.sage150}",
+        "$type": "color"
+      },
+      "success": {
+        "$value": "{primitive.color.green700}",
+        "$type": "color"
+      },
+      "successTint": {
+        "$value": "{primitive.color.green100}",
+        "$type": "color"
+      },
+      "danger": {
+        "$value": "{primitive.color.red700}",
+        "$type": "color"
+      },
+      "dangerDot": {
+        "$value": "{primitive.color.red600}",
+        "$type": "color"
+      },
+      "dangerText": {
+        "$value": "{primitive.color.terracotta600}",
+        "$type": "color"
+      },
+      "dangerTint": {
+        "$value": "{primitive.color.terracotta50}",
+        "$type": "color"
+      },
+      "warningDot": {
+        "$value": "{primitive.color.orange600}",
+        "$type": "color"
+      },
+      "warningTint": {
+        "$value": "{primitive.color.amber50}",
+        "$type": "color"
+      },
+      "focusRing": {
+        "$value": "{primitive.color.gold600}",
+        "$type": "color",
+        "$description": "Every focus-visible is gold — never default blue"
+      },
+      "scrollThumb": {
+        "$value": "#C9CFC9",
+        "$type": "color"
+      }
+    },
+    "radius": {
+      "control": {
+        "$value": "{primitive.radius.r-xl}",
+        "$type": "dimension",
+        "$description": "Buttons, inputs, small chips"
+      },
+      "card": {
+        "$value": "{primitive.radius.r-2xl}",
+        "$type": "dimension"
+      },
+      "sheet": {
+        "$value": "{primitive.radius.r-3xl}",
+        "$type": "dimension"
+      },
+      "pill": {
+        "$value": "{primitive.radius.r-pill}",
+        "$type": "dimension"
+      }
+    },
+    "elevation": {
+      "rest": {
+        "$value": "0 1px 2px rgba(26,26,26,0.05)",
+        "$type": "shadow",
+        "$description": "shadow-sm — the default card state"
+      },
+      "hover": {
+        "$value": "0 4px 12px rgba(15,61,62,0.10)",
+        "$type": "shadow"
+      },
+      "overlay": {
+        "$value": "0 4px 14px rgba(15,61,62,0.10)",
+        "$type": "shadow",
+        "$description": "Tooltips/popovers"
+      },
+      "modal": {
+        "$value": "0 20px 50px rgba(15,61,62,0.18)",
+        "$type": "shadow"
+      }
+    },
+    "motion": {
+      "hoverLift": {
+        "$value": "-2px",
+        "$type": "dimension"
+      },
+      "pressScale": {
+        "$value": "0.985",
+        "$type": "other",
+        "$description": "CTA press; 0.99 for large quiet buttons"
+      },
+      "ease": {
+        "$value": "ease",
+        "$type": "other"
+      }
+    }
+  },
+  "component": {
+    "button": {
+      "heightTouch": {
+        "$value": "44px",
+        "$type": "dimension",
+        "$description": "h-11 — the minimum touch target"
+      },
+      "heightQuiet": {
+        "$value": "40px",
+        "$type": "dimension",
+        "$description": "h-10 icon buttons in rails"
+      }
+    },
+    "card": {
+      "padding": {
+        "$value": "{primitive.space.5}",
+        "$type": "dimension",
+        "$description": "p-5 default; p-4 on dense rails"
+      },
+      "gap": {
+        "$value": "{primitive.space.4}",
+        "$type": "dimension"
+      }
+    },
+    "kpiTile": {
+      "valueSize": {
+        "$value": "22px",
+        "$type": "dimension"
+      },
+      "labelSize": {
+        "$value": "10.5px",
+        "$type": "dimension"
+      }
+    },
+    "statusChip": {
+      "dotSize": {
+        "$value": "10px",
+        "$type": "dimension"
+      }
+    }
+  }
+}
