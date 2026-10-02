@@ -433,6 +433,19 @@ export async function fetchTableSessions(tenantId: string, limit = 60): Promise<
   return (data || []) as TableSession[];
 }
 
+/**
+ * Staff cut (v5.24.0): end a guest's live QR session. RLS ("Tenant staff manage
+ * sessions", migration 002) scopes the write to this tenant; the guest's open
+ * menu locks within its next 30s re-verify and the token dies for order
+ * submission (migration 023's gate). A fresh scan of the printed sticker
+ * reopens — the cut ends the window, not the table.
+ */
+export async function revokeTableSession(sessionId: string): Promise<void> {
+  requireCloud();
+  const { error } = await supabase.from('table_sessions').update({ status: 'revoked' }).eq('id', sessionId);
+  if (error) throw error;
+}
+
 export async function fetchTables(tenantId: string): Promise<DiningTable[]> {
   requireCloud();
   const { data, error } = await supabase

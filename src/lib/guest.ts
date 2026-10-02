@@ -208,6 +208,33 @@ export async function openTableSession(input: {
   return { ok: true, session };
 }
 
+/**
+ * Ribbon re-verify (v5.24.0, migration 023): the guest's phone polls its own
+ * session every 30s. The server — not the client clock — decides whether the
+ * window is still open, so a STAFF CUT locks the menu within one tick. A
+ * natural expiry converges the stored status the same way.
+ */
+export async function verifyTableSession(sessionToken: string): Promise<{ ok: boolean; reason?: string }> {
+  try {
+    const { data, error } = await supabase.rpc('sp_verify_table_session', { p_session_token: sessionToken });
+    if (error) return { ok: true, reason: 'network' }; // fail-soft: retry on the next tick
+    const res = data as { is_valid: boolean; reason?: string };
+    return res?.is_valid ? { ok: true } : { ok: false, reason: res.reason || 'unknown' };
+  } catch {
+    return { ok: true, reason: 'network' }; // a network hiccup never locks a paying guest
+  }
+}
+
+/** Drop the cached ephemeral session (staff cut / SESSION_CLOSED paths) so a
+ *  rescan re-issues a fresh window instead of reusing a dead token. */
+export function clearCachedSession(qrToken: string): void {
+  try {
+    sessionStorage.removeItem(SESSION_KEY(qrToken));
+  } catch {
+    /* private mode — nothing to clear */
+  }
+}
+
 /** Live menu bundle (available items only, server-side). */
 export async function fetchPublicMenu(slug: string): Promise<PublicMenu> {
   const { data, error } = await supabase.rpc('sp_get_public_menu', { p_slug: slug });
@@ -241,10 +268,15 @@ export async function createPublicOrder(input: {
   notes?: string | null;
   clientOperationId: string;
   offerId?: string | null;
+  /** v5.24.0 (migration 023): when presented, the ephemeral session must be
+   *  alive — a staff-cut token comes back SESSION_CLOSED, never silently
+   *  ignored. Omitted/NULL keeps the printed-QR-only path for other callers. */
+  sessionToken?: string | null;
 }): Promise<{
   is_valid: boolean;
   duplicate?: boolean;
   error?: string;
+  reason?: string;
   message?: string;
   order?: { id: string; order_number: number; total: number; discount_amount?: number; offer_title?: string | null; status: string; payment_status: string; table_number?: string };
 }> {
@@ -257,6 +289,7 @@ export async function createPublicOrder(input: {
     p_notes: input.notes ?? null,
     p_client_operation_id: input.clientOperationId,
     p_offer_id: input.offerId ?? null,
+    p_session_token: input.sessionToken ?? null,
   });
   if (error) {
     return { is_valid: false, error: 'NETWORK', message: 'The order did not go through. Check your connection and try again.' };
@@ -265,6 +298,7 @@ export async function createPublicOrder(input: {
     is_valid: boolean;
     duplicate?: boolean;
     error?: string;
+    reason?: string;
     message?: string;
     order?: { id: string; order_number: number; total: number; status: string; payment_status: string; table_number?: string };
   };

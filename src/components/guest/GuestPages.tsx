@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowLeft,
+  Ban,
   Check,
   ChefHat,
   CircleAlert,
@@ -22,6 +23,7 @@ import {
   X,
 } from 'lucide-react';
 import {
+  clearCachedSession,
   createPublicOrder,
   fetchPublicMenu,
   fetchPublicOffers,
@@ -29,6 +31,7 @@ import {
   openTableSession,
   resolveTableQr,
   submitPublicFeedback,
+  verifyTableSession,
   type GuestAddon,
   type GuestMenuItem,
   type GuestOrderSummary,
@@ -210,25 +213,28 @@ function SessionRibbon({ session }: { session: TableSession }): React.ReactEleme
   const totalSec = Math.max(0, Math.floor(msLeft / 1000));
   const mm = String(Math.floor(totalSec / 60));
   const ss = String(totalSec % 60).padStart(2, '0');
-  const warm = totalSec < 180;
+  const ended = totalSec === 0;
+  const warm = totalSec < 180 && !ended;
   return (
     <div
       className="flex items-center justify-center gap-2 px-4 py-2 text-[12.5px] font-semibold"
-      style={{ background: warm ? '#FBF3E4' : brand.teal, color: warm ? '#8A5A16' : '#FFFFFF' }}
+      style={{ background: ended ? '#F1F4F1' : warm ? '#FBF3E4' : brand.teal, color: ended ? '#6B6B6B' : warm ? '#8A5A16' : '#FFFFFF' }}
       role="status"
       aria-label={t('ariaEnds', { t: `${mm}:${ss}` })}
     >
       <Clock size={14} aria-hidden />
-      <span>{warm ? t('endingSoon') : t('orderingWindow')}</span>
-      <span className="font-mono tabular-nums">
-        {mm}:{ss}
-      </span>
-      <span className="hidden sm:inline">{t('rescanHint')}</span>
+      <span>{ended ? 'Window ended' : warm ? t('endingSoon') : t('orderingWindow')}</span>
+      {!ended && (
+        <span className="font-mono tabular-nums">
+          {mm}:{ss}
+        </span>
+      )}
+      <span className="hidden sm:inline">{ended ? 'scan the table QR to continue' : t('rescanHint')}</span>
     </div>
   );
 }
 
-function Customizer({ item, onAdd }: { item: GuestMenuItem; onAdd: (l: Omit<CartLine, 'key'>) => void }): React.ReactElement {
+function Customizer({ item, onAdd, locked }: { item: GuestMenuItem; onAdd: (l: Omit<CartLine, 'key'>) => void; locked?: boolean }): React.ReactElement {
   const { t } = useGuestLang();
   const [variantId, setVariantId] = useState<string | null>(null);
   const [addonIds, setAddonIds] = useState<string[]>([]);
@@ -332,15 +338,16 @@ function Customizer({ item, onAdd }: { item: GuestMenuItem; onAdd: (l: Omit<Cart
         </div>
         <button
           type="button"
+          disabled={locked}
           onClick={() => {
             onAdd({ item, variant, addons, qty, notes });
             setQty(1);
             setNotes('');
           }}
-          className="flex h-11 flex-1 items-center justify-center gap-2 rounded-full text-[13.5px] font-semibold text-white transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#B88E2F]"
+          className="flex h-11 flex-1 items-center justify-center gap-2 rounded-full text-[13.5px] font-semibold text-white transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#B88E2F] disabled:cursor-not-allowed disabled:opacity-45"
           style={{ background: brand.teal }}
         >
-          <Plus size={15} aria-hidden /> {t('addToOrder', { amt: money(unit * qty) })}
+          <Plus size={15} aria-hidden /> {locked ? t('orderingPaused') : t('addToOrder', { amt: money(unit * qty) })}
         </button>
       </div>
     </div>
@@ -384,6 +391,7 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
   const [resolved, setResolved] = useState<{ tenantName: string; slug: string; tableNumber: string; capacity: number } | null>(null);
   const [menu, setMenu] = useState<PublicMenu | null>(null);
   const [sessionToken, setSessionToken] = useState<TableSession | null>(null);
+  const [lockTone, setLockTone] = useState<'clock' | 'cut'>('clock');
   const [lines, setLines] = useState<CartLine[]>(() => {
     try {
       const raw = sessionStorage.getItem(CART_KEY(qrToken));
@@ -465,18 +473,58 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
     }
   }, [selectedOfferId, qrToken]);
 
-  const addLine = useCallback((l: Omit<CartLine, 'key'>) => {
-    setLines((prev) => {
-      const key = lineKey(l.item.id, l.variant?.id || null, l.addons.map((a) => a.id), l.notes);
-      const idx = prev.findIndex((x) => x.key === key);
-      if (idx >= 0) {
-        const next = [...prev];
-        next[idx] = { ...next[idx], qty: Math.min(50, next[idx].qty + l.qty) };
-        return next;
-      }
-      return [...prev, { ...l, key }];
-    });
-  }, []);
+  /** Lock the ordering UI — the server said this window is dead. Drops the
+   *  cached token so a rescan re-issues a FRESH window instead of reusing the
+   *  dead one (v5.24.0). */
+  const lockGuest = useCallback(
+    (reason: string) => {
+      clearCachedSession(qrToken);
+      setSessionToken(null);
+      setDrawerOpen(false); // the cut freezes the cart too, not just the submit
+      setLockTone(reason === 'revoked' ? 'cut' : 'clock');
+      setErrorBody(
+        reason === 'revoked'
+          ? 'This session was closed by the cafe. Please speak to our staff, or scan the table QR to start over.'
+          : reason === 'expired'
+            ? 'Your 10-minute table session ended. Scan the table QR to open a fresh window.'
+            : 'Your table session is no longer open. Scan the table QR to continue.',
+      );
+      setPhase('locked');
+    },
+    [qrToken],
+  );
+
+  // Session re-verify (v5.24.0, migration 023) — the server, not this phone's
+  // clock, decides whether the window is still open. A staff cut from the
+  // floor locks the menu within one 30s tick; a network hiccup never locks a
+  // paying guest (fail-soft, retried next tick).
+  useEffect(() => {
+    if (phase !== 'ready' || !sessionToken) return;
+    const token = sessionToken.session_token;
+    const iv = window.setInterval(() => {
+      void verifyTableSession(token).then((r) => {
+        if (!r.ok) lockGuest(r.reason || 'unknown');
+      });
+    }, 30000);
+    return () => window.clearInterval(iv);
+  }, [phase, sessionToken, lockGuest]);
+
+  const addLine = useCallback(
+    (l: Omit<CartLine, 'key'>) => {
+      if (phase !== 'ready') return; // locked windows accept nothing (v5.24.0)
+      setLines((prev) => {
+        const key = lineKey(l.item.id, l.variant?.id || null, l.addons.map((a) => a.id), l.notes);
+        const idx = prev.findIndex((x) => x.key === key);
+        if (idx >= 0) {
+          const next = [...prev];
+          next[idx] = { ...next[idx], qty: Math.min(50, next[idx].qty + l.qty) };
+          return next;
+        }
+        return [...prev, { ...l, key }];
+      });
+    },
+    [phase],
+  );
 
   const filtered = useMemo(() => {
     if (!menu?.categories) return [];
@@ -556,12 +604,19 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
       customerName: customerName || null,
       clientOperationId: crypto.randomUUID(),
       offerId: selectedOffer && offerReady ? selectedOffer.id : null,
+      sessionToken: sessionToken?.session_token ?? null,
     });
     if (!res.is_valid || !res.order) {
       setPlaceError(res.message || t('orderFail'));
       // a stale offer (paused mid-session) drops off so the retry is clean
       if (res.error === 'OFFER_INVALID') setSelectedOfferId(null);
       setPlacing(false);
+      if (res.error === 'SESSION_CLOSED') {
+        // the window died mid-checkout (staff cut or the clock) — no silent
+        // retry, no auto-reopen: the cut must hold. The guest rescans.
+        lockGuest(res.reason || 'unknown');
+        return;
+      }
       if (res.error === 'INVALID_TOKEN') {
         sessionStorage.removeItem(CART_KEY(qrToken));
         window.location.assign(`/t/${encodeURIComponent(qrToken)}`);
@@ -721,10 +776,19 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
 
         {phase === 'locked' && (
           <div className="rounded-3xl border border-[#E3E7E0] bg-white p-6 text-center shadow-sm">
-            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-[#FBF3E4]">
-              <Clock size={24} className="text-[#8A5A16]" aria-hidden />
+            <div
+              className="mx-auto flex h-14 w-14 items-center justify-center rounded-full"
+              style={{ background: lockTone === 'cut' ? '#FDF3F2' : '#FBF3E4' }}
+            >
+              {lockTone === 'cut' ? (
+                <Ban size={24} style={{ color: '#B3261E' }} aria-hidden />
+              ) : (
+                <Clock size={24} className="text-[#8A5A16]" aria-hidden />
+              )}
             </div>
-            <h2 className="mt-3 font-serif text-[22px] italic text-[#0F3D3E]">{t('orderingPaused')}</h2>
+            <h2 className="mt-3 font-serif text-[22px] italic text-[#0F3D3E]">
+              {lockTone === 'cut' ? 'Ordering closed' : t('orderingPaused')}
+            </h2>
             <p className="mt-2 text-[13.5px] text-[#6B6B6B]">{errorBody}</p>
             <button
               type="button"
@@ -784,7 +848,7 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
                     </button>
                     {open && (
                       <div className="px-4 pb-4">
-                        <Customizer item={item} onAdd={addLine} />
+                        <Customizer item={item} onAdd={addLine} locked={phase !== 'ready'} />
                       </div>
                     )}
                   </div>
@@ -796,7 +860,7 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
       </main>
 
       {/* floating cart bar */}
-      {cartCount > 0 && !drawerOpen && (
+      {phase === 'ready' && cartCount > 0 && !drawerOpen && (
         <div className="fixed inset-x-0 bottom-0 z-40 border-t border-[#E3E7E0] bg-white/95 p-3 backdrop-blur">
           <button
             type="button"
@@ -814,7 +878,7 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
       )}
 
       {/* cart drawer */}
-      {drawerOpen && (
+      {drawerOpen && phase === 'ready' && (
         <div className="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label={t('yourOrder')}>
           <button
             type="button"

@@ -385,10 +385,51 @@ try {
     const anonExec = await scalar(
       `SELECT has_function_privilege('anon',
         'sp_create_public_order(TEXT,TEXT,JSONB,TEXT,TEXT,TEXT,TEXT,UUID)','EXECUTE')`
-    );
+    ).catch(() => null);
+    // has_function_privilege ERRORS when the signature doesn't exist — after
+    // migration 023 the 8-arg overload is gone (replaced by the 9-arg gate),
+    // and 023's body carries 022's fix, so the intent is satisfied there.
+    if (anonExec === null) return overloads === 1 && body.includes('v_offer_title');
     return overloads === 1 && body.includes('v_offer_title') && !body.includes('THEN v_offer.title') && anonExec === true;
   };
   await applyFile('022_public_order_offer_fix', 'supabase/migrations/022_public_order_offer_fix.sql', await offerlessFixReady());
+
+  // 023 sentinel: the session gate + staff cut — sp_create_public_order gains
+  // the optional p_session_token (a PRESENTED token must be alive, else
+  // SESSION_CLOSED; NULL proceeds as before), and sp_verify_table_session
+  // exists for the guest ribbon's 30s re-verify poll.
+  const sessionGateReady = async () => {
+    const overloads = Number(
+      await scalar(
+        `SELECT count(*) FROM pg_proc WHERE pronamespace='public'::regnamespace
+          AND proname='sp_create_public_order'`
+      )
+    );
+    const argInfo = await client.query(
+      `SELECT proargnames FROM pg_proc WHERE pronamespace='public'::regnamespace
+        AND proname='sp_create_public_order' LIMIT 1`
+    );
+    const args = argInfo.rows[0]?.proargnames || [];
+    const body = String(
+      await scalar(
+        `SELECT prosrc FROM pg_proc WHERE pronamespace='public'::regnamespace
+          AND proname='sp_create_public_order' LIMIT 1`
+      )
+    );
+    const verifyRpc = await scalar(`SELECT to_regprocedure('public.sp_verify_table_session(text)') IS NOT NULL`);
+    const anonExec = await scalar(
+      `SELECT has_function_privilege('anon',
+        'sp_create_public_order(TEXT,TEXT,JSONB,TEXT,TEXT,TEXT,TEXT,UUID,TEXT)','EXECUTE')`
+    );
+    return (
+      overloads === 1 &&
+      args.includes('p_session_token') &&
+      body.includes('SESSION_CLOSED') &&
+      verifyRpc === true &&
+      anonExec === true
+    );
+  };
+  await applyFile('023_session_gate_staff_cut', 'supabase/migrations/023_session_gate_staff_cut.sql', await sessionGateReady());
 
   // ── Verification ──────────────────────────────────────────────────────────
   const tables = await client.query(

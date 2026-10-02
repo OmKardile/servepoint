@@ -13,6 +13,7 @@ import {
   Printer,
   QrCode,
   RefreshCw,
+  Scissors,
   Smartphone,
   Users,
   X,
@@ -33,6 +34,7 @@ import {
   fetchOrders,
   fetchTableSessions,
   fetchTables,
+  revokeTableSession,
   subscribeTablesRealtime,
   updateTable,
   type DiningTable,
@@ -69,6 +71,15 @@ import type { Order, OrderItem } from '../../types';
  * clock-derived liveness (the DB keeps status='active' after ordinary
  * expiry — the UI trusts expires_at, not the column). The trail rides the
  * floor's refresh cycle, FAIL-SOFT: it can never take the board down.
+ *
+ * v5.24.0 gives the trail TEETH (migration 023): live rows carry a two-step
+ * CUT button — the staff ends the guest's open window. The write is the RLS-
+ * scoped revokeTableSession; migration 023's sp_verify_table_session lets the
+ * guest's phone re-verify its own session every 30s (server truth, not the
+ * client clock), so a cut locks the guest's menu — cart frozen, token dead
+ * for orders (sp_create_public_order's new optional p_session_token gate).
+ * Honest scope: a cut ends the WINDOW, not the table — the printed sticker's
+ * QR reopens a fresh one.
  */
 
 const esc = (s: string): string =>
@@ -401,11 +412,19 @@ function TableDrill({
   table,
   order,
   sessions,
+  cutArmId,
+  cutBusyId,
+  onCutArm,
+  onCut,
   onClose,
 }: {
   table: DiningTable;
   order: Order | undefined;
   sessions: TableSession[];
+  cutArmId: string | null;
+  cutBusyId: string | null;
+  onCutArm: (sessionId: string) => void;
+  onCut: (sessionId: string) => void;
   onClose: () => void;
 }): React.ReactElement {
   const meta = STATUS_META[table.status];
@@ -579,10 +598,12 @@ function TableDrill({
                   {sessions.slice(0, 6).map((s) => {
                     const st = sessionState(s);
                     const tone = SESSION_TONE[st];
+                    const armed = cutArmId === s.id;
+                    const cutting = cutBusyId === s.id;
                     return (
                       <li
                         key={s.id}
-                        className="flex items-center gap-2.5 rounded-xl bg-[#FBFBF9] px-3 py-2"
+                        className="flex items-center gap-2.5 rounded-xl bg-[#FBFBF9] px-3 py-2 transition-colors"
                         title={`Session ${s.id.slice(0, 8)} · ${tone.label}`}
                       >
                         <span
@@ -599,6 +620,32 @@ function TableDrill({
                         <span className="shrink-0 text-[10.5px] tabular-nums text-[#969696]">
                           {st === 'live' || st === 'expired' ? expiryRel(s.expires_at) : tone.label}
                         </span>
+                        {st === 'live' && (
+                          <button
+                            type="button"
+                            onClick={() => (armed ? onCut(s.id) : onCutArm(s.id))}
+                            disabled={cutting}
+                            aria-label={
+                              cutting
+                                ? 'Ending session'
+                                : armed
+                                  ? `Confirm cut for the session opened ${istHM(s.created_at)}`
+                                  : `Cut the session opened ${istHM(s.created_at)}`
+                            }
+                            className={`flex h-6 shrink-0 items-center gap-1 rounded-full px-2 text-[10.5px] font-bold transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[#B3261E] ${
+                              armed
+                                ? 'bg-[#B3261E] text-white shadow-sm'
+                                : 'text-[#969696] hover:bg-[#FDF3F2] hover:text-[#B3261E]'
+                            }`}
+                          >
+                            {cutting ? (
+                              <Loader2 size={11} className="animate-spin" aria-hidden />
+                            ) : (
+                              <Scissors size={11} aria-hidden />
+                            )}
+                            {armed ? 'Cut?' : ''}
+                          </button>
+                        )}
                       </li>
                     );
                   })}
@@ -610,7 +657,9 @@ function TableDrill({
                 )}
                 <p className="mt-2 border-t border-[#E3E7E0] pt-2 text-[10.5px] leading-relaxed text-[#969696]">
                   Each row is one scan of this table's QR — a fresh 10-minute menu session every time.
-                  The clock, not the stored status, decides live vs expired. Rides the floor's refresh.
+                  The clock, not the stored status, decides live vs expired. <span className="font-semibold text-[#B3261E]">Cut</span> ends the
+                  guest's open window — their menu locks and the token dies for orders; a new scan of the
+                  printed sticker reopens (the QR stays the table's key). Rides the floor's refresh.
                 </p>
               </>
             )}
@@ -708,6 +757,8 @@ export function FloorScreen(): React.ReactElement {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [confirmId, setConfirmId] = useState<string | null>(null);
+  const [cutArmId, setCutArmId] = useState<string | null>(null);
+  const [cutBusyId, setCutBusyId] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [drillId, setDrillId] = useState<string | null>(null);
   const [filter, setFilter] = useState<TableStatus | null>(null);
@@ -771,6 +822,32 @@ export function FloorScreen(): React.ReactElement {
     setConfirmId(id);
     window.setTimeout(() => setConfirmId((c) => (c === id ? null : c)), 3000);
   }, []);
+
+  /** Two-step arm for the session cut (own namespace — table confirms are separate). */
+  const armCut = useCallback((sessionId: string) => {
+    setCutArmId(sessionId);
+    window.setTimeout(() => setCutArmId((c) => (c === sessionId ? null : c)), 3000);
+  }, []);
+
+  /** Staff cut (v5.24.0): end the guest's live window. Optimistic flip so the
+   *  row shows the cut skin instantly; the resync afterwards is the truth. */
+  const cutSession = useCallback(
+    async (sessionId: string) => {
+      setCutArmId(null);
+      setCutBusyId(sessionId);
+      setActionError(null);
+      setSessions((prev) => prev.map((s) => (s.id === sessionId ? { ...s, status: 'revoked' } : s)));
+      try {
+        await revokeTableSession(sessionId);
+      } catch (err) {
+        setActionError(err instanceof Error ? err.message : 'Could not cut the session. Try again.');
+      } finally {
+        setCutBusyId(null);
+        void reload(); // the board resyncs — status, cards and the drill agree
+      }
+    },
+    [reload],
+  );
 
   const copyLink = useCallback(async (t: DiningTable) => {
     try {
@@ -1360,6 +1437,10 @@ export function FloorScreen(): React.ReactElement {
           table={drillTable}
           order={drillOrder}
           sessions={sessionsByTable.get(drillTable.id) ?? []}
+          cutArmId={cutArmId}
+          cutBusyId={cutBusyId}
+          onCutArm={armCut}
+          onCut={(id) => void cutSession(id)}
           onClose={() => setDrillId(null)}
         />
       )}
