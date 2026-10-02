@@ -4,6 +4,7 @@ import {
   BookOpenText,
   Check,
   ChevronDown,
+  ClipboardCheck,
   ClipboardList,
   Copy,
   Layers,
@@ -148,6 +149,7 @@ const InventoryInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
   const [editing, setEditing] = useState<InventoryItem | null>(null);
   const [restockFor, setRestockFor] = useState<{ item: InventoryItem; suggested: number | null } | null>(null);
   const [wasteFor, setWasteFor] = useState<InventoryItem | null>(null);
+  const [countOpen, setCountOpen] = useState(false);
   const [deleteArm, setDeleteArm] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -458,7 +460,7 @@ const InventoryInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
           role="tab"
           aria-selected={tab === 'stock'}
           onClick={() => setTab('stock')}
-          className={`flex h-9 items-center gap-1.5 rounded-full px-4 text-[12.5px] font-bold transition ${
+          className={`flex h-9 items-center gap-1.5 rounded-full px-4 text-[12.5px] font-bold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B88E2F]/50 ${
             tab === 'stock' ? 'bg-[#0F3D3E] text-white' : 'text-[#6B6B6B] hover:text-[#1A1A1A]'
           }`}
         >
@@ -469,7 +471,7 @@ const InventoryInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
           role="tab"
           aria-selected={tab === 'recipes'}
           onClick={() => setTab('recipes')}
-          className={`flex h-9 items-center gap-1.5 rounded-full px-4 text-[12.5px] font-bold transition ${
+          className={`flex h-9 items-center gap-1.5 rounded-full px-4 text-[12.5px] font-bold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B88E2F]/50 ${
             tab === 'recipes' ? 'bg-[#0F3D3E] text-white' : 'text-[#6B6B6B] hover:text-[#1A1A1A]'
           }`}
         >
@@ -480,7 +482,7 @@ const InventoryInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
           role="tab"
           aria-selected={tab === 'reorder'}
           onClick={() => setTab('reorder')}
-          className={`flex h-9 items-center gap-1.5 rounded-full px-4 text-[12.5px] font-bold transition ${
+          className={`flex h-9 items-center gap-1.5 rounded-full px-4 text-[12.5px] font-bold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B88E2F]/50 ${
             tab === 'reorder' ? 'bg-[#0F3D3E] text-white' : 'text-[#6B6B6B] hover:text-[#1A1A1A]'
           }`}
         >
@@ -509,7 +511,22 @@ const InventoryInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
               </p>
             </div>
           ) : (
-            <ul className="flex flex-col gap-2.5" aria-label="Ingredient stock list">
+            <>
+              {/* ── shelf toolbar — the count entry point ── */}
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-[11.5px] text-[#6B6B6B]">
+                  <span className="font-bold text-[#1A1A1A]">{items.length}</span>{' '}
+                  ingredient{items.length === 1 ? '' : 's'} on the shelf — every hand move lands in the diary
+                </p>
+                <button
+                  onClick={() => setCountOpen(true)}
+                  className="flex h-9 items-center gap-1.5 rounded-lg border border-[#E3E7E0] bg-white px-3 text-[11.5px] font-bold text-[#0F3D3E] transition hover:border-[#0F3D3E] disabled:opacity-50"
+                >
+                  <ClipboardCheck size={13} aria-hidden />
+                  Count shelf
+                </button>
+              </div>
+              <ul className="flex flex-col gap-2.5" aria-label="Ingredient stock list">
               {items.map((it) => {
                 const tone = levelTone(it.current_stock, it.reorder_point);
                 const max = Math.max(it.reorder_point * 2, it.current_stock, 1);
@@ -597,7 +614,8 @@ const InventoryInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
                   </li>
                 );
               })}
-            </ul>
+              </ul>
+            </>
           )}
 
           {/* ── stock diary — every move, on the record ── */}
@@ -713,6 +731,16 @@ const InventoryInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
           busy={busyId === wasteFor.id}
           onClose={() => setWasteFor(null)}
           onConfirm={(qty, reason, note) => doWaste(wasteFor, qty, reason, note)}
+        />
+      )}
+      {countOpen && (
+        <StocktakeDialog
+          items={items}
+          onClose={() => setCountOpen(false)}
+          onApplied={async () => {
+            setCountOpen(false);
+            await load();
+          }}
         />
       )}
     </div>
@@ -1339,6 +1367,151 @@ const WasteDialog: React.FC<{
             {busy || sending ? <Loader2 size={14} aria-hidden className="animate-spin" /> : <PackageMinus size={14} aria-hidden />}
             Record waste
           </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+/** Variance chip tone for the stocktake: surplus green, shortfall red, even gray. */
+function varianceTone(delta: number): { chip: string; label: string } {
+  if (delta === 0) return { chip: 'bg-[#EAF0EC] text-[#6B6B6B]', label: 'even' };
+  return delta > 0
+    ? { chip: 'bg-[#E7F1E8] text-[#2E7D32]', label: `+${fmtQty(delta)} surplus` }
+    : { chip: 'bg-[#FCEBEA] text-[#B3261E]', label: `${fmtQty(Math.abs(delta))} short` };
+}
+
+/** Stocktake — count the shelf, adjust the books. Each counted row whose
+ *  variance isn't zero becomes ONE correction adjustment through the 027 RPC
+ *  (row-locked, signed honestly both ways); blank rows skip, exact rows cost
+ *  nothing. A mid-batch refusal is reported honestly: how far it got. */
+const StocktakeDialog: React.FC<{
+  items: InventoryItem[];
+  onClose: () => void;
+  onApplied: () => Promise<void>;
+}> = ({ items, onClose, onApplied }) => {
+  const [counts, setCounts] = useState<Record<string, string>>({});
+  const [note, setNote] = useState('');
+  const [err, setErr] = useState<string | null>(null);
+  const [sending, setSending] = useState(false);
+
+  const rows = items.map((it) => {
+    const raw = counts[it.id]?.trim() ?? '';
+    const counted = raw === '' ? null : Number(raw);
+    const delta = counted == null || !Number.isFinite(counted) ? null : counted - Number(it.current_stock);
+    return { item: it, raw, counted, delta };
+  });
+  const corrections = rows.filter((r) => r.delta != null && r.delta !== 0);
+  const even = rows.filter((r) => r.delta === 0).length;
+  const skipped = rows.length - corrections.length - even;
+  const validCounts = rows.every((r) => r.counted == null || (Number.isFinite(r.counted) && r.counted >= 0));
+
+  const submit = async () => {
+    if (corrections.length === 0 || !validCounts) return;
+    setSending(true);
+    setErr(null);
+    const batchNote = note.trim() || `Stocktake — ${new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}`;
+    const applied: string[] = [];
+    try {
+      for (const r of corrections) {
+        await adjustStock(r.item.id, r.delta as number, 'correction', batchNote);
+        applied.push(r.item.name);
+      }
+      await onApplied();
+    } catch (e) {
+      setErr(
+        `${applied.length} of ${corrections.length} corrections landed before the refusal — ${wasteErrText(e)} The rest are still open; fix and re-apply.`,
+      );
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-[#0F3D3E]/45 p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Count the shelf"
+    >
+      <div className="flex max-h-[90vh] w-full max-w-lg flex-col rounded-2xl bg-white p-5 shadow-2xl">
+        <h2 className="text-[16px] font-bold text-[#1A1A1A]">Count the shelf</h2>
+        <p className="mt-0.5 text-[11.5px] text-[#6B6B6B]">
+          Type what's physically there — the difference becomes a{' '}
+          <span className="font-bold text-[#8A5A00]">Correction</span> on the diary. Blank rows skip; exact rows cost nothing.
+        </p>
+
+        <ul className="mt-4 flex min-h-0 flex-1 flex-col divide-y divide-[#E3E7E0] overflow-y-auto" aria-label="Stocktake rows">
+          {rows.map(({ item, raw, counted, delta }) => (
+            <li key={item.id} className="flex items-center gap-3 py-2.5">
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-[13px] font-semibold text-[#1A1A1A]">{item.name}</span>
+                <span className="block text-[11px] tabular-nums text-[#969696]">
+                  books: {fmtQty(item.current_stock)} {item.unit}
+                </span>
+              </span>
+              {delta != null && (
+                <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold ${varianceTone(delta).chip}`}>
+                  {varianceTone(delta).label}
+                </span>
+              )}
+              <span className="flex shrink-0 items-center gap-1.5">
+                <input
+                  value={raw}
+                  onChange={(e) => setCounts((c) => ({ ...c, [item.id]: e.target.value }))}
+                  type="number"
+                  min="0"
+                  step="any"
+                  inputMode="decimal"
+                  placeholder="counted"
+                  aria-label={`Counted quantity of ${item.name}`}
+                  className={`h-9 w-24 rounded-lg border bg-white px-2.5 text-right text-[12.5px] tabular-nums text-[#1A1A1A] placeholder:text-[#B9C4BE] focus:outline-none focus:ring-2 focus:ring-[#B88E2F]/25 ${
+                    counted != null && counted < 0 ? 'border-[#B3261E]' : 'border-[#E3E7E0] focus:border-[#B88E2F]'
+                  }`}
+                />
+                <span className="w-7 text-[11px] font-bold text-[#6B6B6B]">{item.unit}</span>
+              </span>
+            </li>
+          ))}
+        </ul>
+
+        <label className="mt-3 block">
+          <span className="mb-1 block text-[11px] font-bold uppercase tracking-[0.08em] text-[#969696]">
+            Diary note (optional)
+          </span>
+          <input
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            maxLength={280}
+            placeholder={`Stocktake — ${new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}`}
+            className="h-11 w-full rounded-xl border border-[#E3E7E0] bg-white px-3.5 text-[13px] text-[#1A1A1A] placeholder:text-[#B9C4BE] focus:border-[#B88E2F] focus:outline-none focus:ring-2 focus:ring-[#B88E2F]/25"
+          />
+        </label>
+
+        {err && <p className="mt-3 text-[12px] font-semibold text-[#B42318]">{err}</p>}
+
+        <div className="mt-4 flex items-center justify-between gap-2.5">
+          <p className="text-[11.5px] font-semibold text-[#6B6B6B]" aria-live="polite">
+            {corrections.length} correction{corrections.length === 1 ? '' : 's'}
+            {even > 0 ? ` · ${even} even` : ''}
+            {skipped > 0 ? ` · ${skipped} skipped` : ''}
+          </p>
+          <span className="flex gap-2.5">
+            <button
+              onClick={onClose}
+              className="h-11 rounded-full border border-[#E3E7E0] bg-white px-4 text-[12.5px] font-semibold text-[#1A1A1A] transition hover:border-[#B88E2F]"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => void submit()}
+              disabled={corrections.length === 0 || !validCounts || sending}
+              className="flex h-11 items-center gap-1.5 rounded-xl bg-[#0F3D3E] px-5 text-[12.5px] font-bold text-white transition hover:bg-[#0C3233] disabled:opacity-40"
+            >
+              {sending ? <Loader2 size={14} aria-hidden className="animate-spin" /> : <ClipboardCheck size={14} aria-hidden />}
+              Apply corrections
+            </button>
+          </span>
         </div>
       </div>
     </div>

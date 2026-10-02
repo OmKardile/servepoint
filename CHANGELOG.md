@@ -3,6 +3,16 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.37.0] — 2026-10-03 — Count the shelf: the stocktake closes the loop on the diary
+
+### Added — stocktake (variance → Correction, on the 027 rails)
+- The inventory story had three of four authors on the record — deliveries in (5.36.0), waste out (5.36.0), sales deducted by the engine (015) — but the oldest inventory ritual of all, **the weekly count**, still had no path. Stock tab grows a **Count shelf** entry ("4 ingredients on the shelf — every hand move lands in the diary") opening a count panel: every SKU on one row with its **books** quantity beside a blank **counted** input. The variance computes live as a chip — green **+50 surplus**, red **20 short**, gray **even** — and the footer tallies the batch honestly ("2 corrections · 1 even · 1 skipped"). Blank rows skip; exact rows cost nothing; a negative count turns its input red and holds the Apply.
+- Apply writes **one correction adjustment per divergent row** through the 5.36.0 `sp_adjust_stock` RPC (row-locked, signed honestly both ways, stamped with the operator's email), with a shared diary note defaulting to "Stocktake — 3 Oct". A mid-batch refusal is reported the honest way: *"1 of 2 corrections landed before the refusal — … The rest are still open; fix and re-apply."* — no silent partials, no fake success.
+- Tab pills gained visible keyboard focus rings (gold, `focus-visible` only — mouse clicks stay clean).
+
+### Verified
+- `tsc` 0 after every edit. **E2E through the real UI** (`scripts/qa76-stocktake.png`): Butter counted 5,050 → "+50 surplus"; Cheese counted 5,000 → "even"; Coffee beans counted 4,880 → "20 short"; Flour left blank → skipped; summary "2 corrections · 1 even · 1 skipped" → **Apply corrections** → diary top rows "Coffee beans · Correction · 'QA round 76 — tap count' · −20 g" and "Butter · Correction · +50 g", cards honestly at 5,050 / 4,880, stock value re-priced ₹18,809. DB truth (`scripts/qa76-stocktake.mjs`): exactly 2 correction rows, notes and `created_by_email` stamped, books = 5,050 / 4,880. Console: only the known stale-HMR reload lines from the edit session; zero live page errors. sw `5.37.0-r1`.
+
 ## [5.36.0] — 2026-10-03 — The shelf keeps its diary: waste on the record, restocks in the ledger, one honest feed
 
 ### Added — stock adjustments (migration 027) + the Stock diary

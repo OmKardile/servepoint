@@ -2144,3 +2144,24 @@ Stage Summary:
 - Remaining parked: drawer movements CSV (only if asked); CounterInbox bulk "Ok all" (risky); DS showcase links (owner OK pending); EOD Z-report logo (deliberate); URL write-back on in-app nav (deliberate non-goal); storage folder silting report (someday).
 - Watch items carried: DB password ROTATION (owner decision); #67/#68/#69/#96 active-unpaid QA-era leftovers (owner decision).
 - Crons: 15-min webDevReview (job 430321) + DAILY deep pass (job 431587, 09:00 IST).
+
+---
+Task ID: 76 (completion — 15-min webDevReview round, trace 202610030509)
+Agent: glm-5.3 (cron webDevReview round)
+Task: Post-5.36.0 orientation + QA sweep, then the round's pair: count the shelf (stocktake variance → Correction, closing the 027 story) + focus-visible tab rings.
+
+Work Log:
+- Orientation clean (HEAD 20cf083 = 5.36.0 pushed; tree clean; tsc 0; dev 200). QA sweep: 11/11 deep links land with h1s, 0 console/page errors. Inventory diary (5.36.0) rendering live with its first rows.
+- Focus rationale: the shelf's story had three of four authors on record — deliveries in, waste out (both 5.36.0), sales deducted (015) — but the weekly COUNT, the oldest inventory ritual, had no path. NOVA inventory arc completed with a stocktake built on the 027 correction rails (no new migration needed — the reason enum and RPC already carry it).
+- STOCKTAKE: Stock tab grows a toolbar ("N ingredients on the shelf — every hand move lands in the diary") with a Count shelf button → StocktakeDialog (max-w-lg, scrollable rows): every SKU shows its books qty beside a blank counted input; variance chips compute live (green +surplus / red short / gray even); footer tallies "N corrections · N even · N skipped" aria-live; shared note defaults to "Stocktake — 3 Oct"; negative counts redden the input and hold Apply. Apply = one sp_adjust_stock call per divergent row, sequential, each row-locked; mid-batch refusal reported honestly ("1 of 2 corrections landed before the refusal — … The rest are still open; fix and re-apply") — no silent partials.
+- [Mandatory styling]: the variance chip system (surplus green #E7F1E8/#2E7D32, short #FCEBEA/#B3261E, even #EAF0EC gray), books-vs-counted row typography (tabular-nums), live tally, negative-input red state — plus gold focus-visible rings on the three tab pills (a11y; mouse clicks stay clean).
+- E2E (real UI, no fixtures): Butter 5,050 → "+50 surplus"; Cheese 5,000 → "even"; Coffee beans 4,880 → "20 short"; Flour blank → skipped; tally "2 corrections · 1 even · 1 skipped"; note "QA round 76 — tap count" → Apply → dialog closed, diary top rows Correction −20 g / +50 g with note, cards honestly 5,050 / 4,880, stock value re-priced ₹18,809. DB truth (scripts/qa76-stocktake.mjs): exactly 2 correction rows, notes + created_by_email stamped. Screenshot scripts/qa76-stocktake.png. Cloud state: 2 permanent correction rows (honest operator history, net effect −20 g beans +50 g butter); 0 orphans.
+- Console noise triaged: 14 stale "[vite] Failed to reload" lines from the edit-time HMR session (known false-alarm class since Task 72); tsc 0 + all screens render + page errors empty → confirmed stale.
+- sw servepoint-v5.37.0-r1; CHANGELOG [5.37.0]; tsc 0 after every edit.
+
+Stage Summary:
+- 5.37.0 — count the shelf. Surfaces: src/components/inventory/InventoryScreen.tsx + public/sw.js + CHANGELOG.md + worklog.md + scripts/qa76-stocktake.mjs (+1 screenshot). No migration (rides 027), no API change (adjustStock reused), cloud state honest.
+- The inventory NOVA arc is now whole: engine deduction (015/5.4.0) → reorder burn-rate → diary + waste + atomic RPC (027/5.36.0) → stocktake variance (5.37.0).
+- Remaining parked: drawer movements CSV (only if asked); CounterInbox bulk "Ok all" (risky); DS showcase links (owner OK pending); EOD Z-report logo (deliberate); URL write-back (non-goal); storage folder silting report (someday).
+- Watch items carried: DB password ROTATION (owner decision); #67/#68/#69/#96 active-unpaid QA-era leftovers (owner decision).
+- Crons: 15-min webDevReview (job 430321) + DAILY deep pass (job 431587, 09:00 IST).
