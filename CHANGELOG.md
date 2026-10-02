@@ -3,6 +3,29 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.13.0] — 2026-10-02 — The drawer counts the cash (shifts & drawer — THE LAST UNBUILT NOVA ITEM)
+
+### Added — Migration 020: the `cash_drawer_sessions` ledger
+- **One session is one shift's physical drawer**: `cash_drawer_sessions` (tenant_id, opened_by_email, opened_at, opening_float ≥ 0, status `open`/`closed`, closed_by_email, closed_at, counted_cash, expected_cash, variance, closing_note ≤ 280) — and the bookkeeping rule that makes it trustworthy: **expected cash is computed SERVER-SIDE at close time** as `opening_float + Σ(cash payments while open)` read straight off the 007 payments ledger, and `variance = counted − expected` is **stored, never re-derived**, so a sealed shift is immutable evidence. A `card`/`upi` payment can never leak into the drawer math (the sum filters `method = 'cash'` — proven live: a ₹999.99 card fixture left expected untouched at ₹620.50).
+- **One open drawer per tenant**: a partial unique index (`WHERE status = 'open'`) is the hard guard — a cafe has one physical drawer; the RPC pre-checks it anyway to raise a stable `DRAWER_ALREADY_OPEN` instead of a raw constraint violation. Multi-location can extend by widening the index key later.
+- **RLS + grants, the established two-actor model**: member-only policy (`sp_tenant_member`) with zero anon paths; `sp_open_drawer(NUMERIC)` and `sp_close_drawer(UUID, NUMERIC, TEXT)` are SECURITY DEFINER with tenant from `current_tenant_id()`, stable P0001 codes (`BAD_FLOAT`, `BAD_COUNT`, `NOT_FOUND`, `ALREADY_CLOSED`, `TOO_LONG`, `NOT_A_MEMBER`) the UI maps to honest words. **Grant-hygiene bug caught by the migration's own DO-block**: `GRANT … TO authenticated` does not remove the default `PUBLIC` EXECUTE — anon inherited the RPC back until an explicit `REVOKE … FROM PUBLIC, anon` was added (the verification now fails the migration loudly if anon can ever execute). Realtime membership so a future multi-device counter mirrors drawer state. `db-setup.mjs` gains the 020 sentinel (001→020).
+- **DB E2E 26/26** (`scripts/qa-drawer-e2e.mjs`, self-cleaning): structure (table/RLS/1 policy/one-open index/2 RPCs/no-anon/realtime) + full RPC loop as the real owner via forged `request.jwt.claims` (a missing `email` claim in the first fixture run proved the RPCs read `auth.jwt()->>'email'` — fixed the harness, not the app) + anon lockout both ways + zero residue.
+
+### Added — Close-out: the Cash drawer card (today only)
+- **The live shift at a glance**: OPEN state (pulsing green chip) shows who opened it and when, plus three tiles — **Float** / **Cash in** (ledger truth since open, refreshed on the same 20s heartbeat as the day view) / **In drawer** (gold-tinted, `float + cash-in`, labelled "expected", never "counted"). Not-open state shows the last sealed shift's variance chip + note, or honest empty copy. **Recent shifts** folds open into a compact list (time range, float · counted, variance chip, note) of the last five sealed shifts.
+- **Count & close dialog**: the ledger already knows what to expect — the dialog shows the breakdown (float, cash-in since open, **Expected in drawer**) *before* asking for the recount, then the variance line **speaks as you type** (`aria-live`): `✓ right on the ledger` (green, exact), `+₹X vs expected · small slip — noted on the shift` (amber ≤ ₹20), `over/short — investigate` (red). Optional note with 280 counter, `TOO_LONG`-proof. Sealing shows a spinner; stable RPC codes map to human copy in a red `role="alert"` banner that never blocks retry.
+- **STYLE MANDATE**: the drawer card follows the day-summary language (rounded-2xl white card, `tabular-nums` money, uppercase micro-labels), with its own identity — dark-teal Coins badge, gold-tinted "In drawer" tile (the one number the count is about), brand focus rings on every input, `active:scale-[0.99]` buttons.
+
+### Added — Z-report: CASH DRAWER block
+- The printable Z-report gains a `CASH DRAWER` section whenever a shift actually touches the report day: an **open shift** prints `Opened · by / Float / Cash in (ledger) / IN DRAWER (expected)` — explicitly "(expected)", a Z-report never claims a count that didn't happen; a **shift sealed today** prints the stored truth `Closed · by / Float / Cash in (ledger) / Counted / VARIANCE`. Verified against the live DB through the iframe print spy: block matched row-for-row (`Closed 19:26 · Float ₹500.00 · Cash in ₹120.50 · Counted ₹630.50 · VARIANCE +₹10.00`) and the PAYMENTS section picked up the fixture's CASH ₹120.50 alongside UPI ₹703.50.
+
+### Fixed
+- **PostgREST `+00:00` timestamp pitfall** (caught by the browser E2E, not the DB suite): `fetchCashInSince` compared `created_at` against the raw `opened_at` PostgREST returns — whose `+00:00` timezone suffix corrupts the `gte` filter in the query string, silently returning ₹0.00 cash-in while every other number was right. Normalized through `new Date(...).toISOString()` (`Z`-form, the same reason EodScreen's day bounds never hit this). The card went ₹0.00 → ₹120.50 → ₹620.50 exactly on the DB math after the fix.
+
+### Verification
+- DB E2E 26/26 (structure + RPC loop + lockout + cleanup) and a full browser loop on the real cloud data: open ₹500 → cash lands → in-drawer ₹620.50 → count ₹630.50 with live `+₹10.00` variance → sealed → history + Z-report block row-for-row → cleanup back to a zero-row ledger with the card back on its honest empty state. Zero page errors on every surface touched. `tsc` clean; SW `5.13.0-r1`.
+
+
 ## [5.12.0] — 2026-10-02 — Guests rate the cafe ("how was everything?" — the last guest-side NOVA item)
 
 ### Added — Migration 019: the `order_feedback` ledger

@@ -1643,3 +1643,85 @@ export async function fetchFeedbackStats(tenantId: string): Promise<FeedbackStat
       : null,
   };
 }
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * Cash drawer sessions (migration 020 — shifts & drawer, NOVA).
+ * A drawer session is one shift's physical drawer: opened with a counted
+ * float, closed with a recount. Expected cash at close is computed
+ * SERVER-SIDE from the payments ledger (float + Σ cash while open); variance
+ * is stored, never re-derived. RLS scopes every read to the member's tenant.
+ * ────────────────────────────────────────────────────────────────────────── */
+
+export interface DrawerSession {
+  id: string;
+  opened_by_email: string;
+  opened_at: string;
+  opening_float: number;
+  status: 'open' | 'closed';
+  closed_by_email: string | null;
+  closed_at: string | null;
+  counted_cash: number | null;
+  expected_cash: number | null;
+  variance: number | null;
+  closing_note: string | null;
+}
+
+export async function fetchActiveDrawerSession(tenantId: string): Promise<DrawerSession | null> {
+  const { data, error } = await supabase
+    .from('cash_drawer_sessions')
+    .select('*')
+    .eq('tenant_id', tenantId)
+    .eq('status', 'open')
+    .order('opened_at', { ascending: false })
+    .limit(1);
+  if (error) throw error;
+  return ((data || []) as DrawerSession[])[0] || null;
+}
+
+export async function fetchDrawerHistory(tenantId: string, limit = 5): Promise<DrawerSession[]> {
+  const { data, error } = await supabase
+    .from('cash_drawer_sessions')
+    .select('*')
+    .eq('tenant_id', tenantId)
+    .eq('status', 'closed')
+    .order('closed_at', { ascending: false })
+    .limit(limit);
+  if (error) throw error;
+  return (data || []) as DrawerSession[];
+}
+
+/** Cash payments taken since a moment (the live "in drawer" math). */
+export async function fetchCashInSince(tenantId: string, openedAtIso: string): Promise<number> {
+  // normalize to Z-form: PostgREST row timestamps carry "+00:00" and a raw
+  // "+" in the query string corrupts the gte filter (space-encoding pitfall)
+  const sinceIso = new Date(openedAtIso).toISOString();
+  const { data, error } = await supabase
+    .from('payments')
+    .select('amount')
+    .eq('tenant_id', tenantId)
+    .eq('method', 'cash')
+    .gte('created_at', sinceIso);
+  if (error) throw error;
+  return ((data || []) as { amount: number }[]).reduce((s, r) => s + Number(r.amount || 0), 0);
+}
+
+/** Open a shift with a counted float. Throws the RPC's stable codes. */
+export async function openDrawerSession(openingFloat: number): Promise<void> {
+  const { error } = await supabase.rpc('sp_open_drawer', { p_opening_float: openingFloat });
+  if (error) throw error;
+}
+
+/** Count & close a shift; the server returns the sealed ledger truth. */
+export async function closeDrawerSession(
+  sessionId: string,
+  countedCash: number,
+  note: string,
+): Promise<{ cash_in: number; expected_cash: number; variance: number }> {
+  const { data, error } = await supabase.rpc('sp_close_drawer', {
+    p_session_id: sessionId,
+    p_counted_cash: countedCash,
+    p_note: note ? note : null,
+  });
+  if (error) throw error;
+  return data as { cash_in: number; expected_cash: number; variance: number };
+}

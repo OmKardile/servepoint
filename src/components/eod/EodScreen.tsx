@@ -2,17 +2,28 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle,
   CalendarDays,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Clock,
+  Coins,
   Flame,
+  LockKeyhole,
   MoonStar,
   Printer,
   RefreshCw,
   Wallet,
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
-import { fetchOrderCogs } from '../../lib/api';
+import {
+  closeDrawerSession,
+  fetchActiveDrawerSession,
+  fetchCashInSince,
+  fetchDrawerHistory,
+  fetchOrderCogs,
+  openDrawerSession,
+  type DrawerSession,
+} from '../../lib/api';
 import { formatMoney } from '../../lib/prefs';
 import { useTenant } from '../../lib/tenant';
 import { useSession } from '../../store/session';
@@ -190,6 +201,7 @@ interface ZReportOpts {
   mix: { method: string; amount: number }[];
   cancelled: number;
   printedBy: string;
+  drawer?: { title: string; rows: [string, string][]; strongLast?: boolean } | null;
 }
 
 function printZReport(opts: ZReportOpts): void {
@@ -199,6 +211,16 @@ function printZReport(opts: ZReportOpts): void {
     opts.mix.length > 0
       ? opts.mix.map((m) => row(m.method.toUpperCase(), formatMoney(m.amount))).join('')
       : row('—', 'no payments');
+  const drawerHtml = opts.drawer
+    ? `<div style="border-top:1px dashed #000;margin-top:8px;padding-top:6px;">
+    <div style="font-weight:800;padding-bottom:3px;">${opts.drawer.title}</div>
+    ${opts.drawer.rows
+      .map(([l, r], i) =>
+        row(l, r, opts.drawer?.strongLast && i === opts.drawer!.rows.length - 1),
+      )
+      .join('')}
+  </div>`
+    : '';
   const html = `<!doctype html><html><head><meta charset="utf-8"><title>Z-report ${opts.dateIso}</title></head>
 <body style="font-family:'Courier New',monospace;color:#000;margin:0;padding:16px 12px;width:300px;font-size:12px;">
   <div style="text-align:center;border-bottom:1px dashed #000;padding-bottom:8px;margin-bottom:8px;">
@@ -223,6 +245,7 @@ function printZReport(opts: ZReportOpts): void {
     <div style="font-weight:800;padding-bottom:3px;">PAYMENTS</div>
     ${methodRows}
   </div>
+  ${drawerHtml}
   <div style="border-top:1px dashed #000;margin-top:8px;padding-top:6px;text-align:center;color:#333;">
     <div>Printed ${new Intl.DateTimeFormat('en-IN', { timeZone: IST_TZ, hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date())} IST${opts.printedBy ? ` · ${opts.printedBy}` : ''}</div>
     <div style="margin-top:6px;letter-spacing:2px;">· · · z · close · · ·</div>
@@ -247,6 +270,332 @@ function printZReport(opts: ZReportOpts): void {
   setTimeout(() => document.body.removeChild(frame), 1500);
 }
 
+/* ─────────────────────────── cash drawer (020) ─────────────────────────── */
+
+/** Health voice for a closed shift's variance — stored ledger truth, spoken. */
+function varianceTone(v: number): { cls: string; chip: string; label: string } {
+  const abs = Math.abs(v);
+  if (abs < 0.005)
+    return {
+      cls: 'text-[#2E7D32]',
+      chip: 'bg-[#EAF0EC] text-[#2E7D32]',
+      label: 'matches the ledger',
+    };
+  if (abs <= 20)
+    return {
+      cls: 'text-[#8A5A00]',
+      chip: 'bg-[#FFF4DB] text-[#8A5A00]',
+      label: 'small slip — noted on the shift',
+    };
+  return {
+    cls: 'text-[#B3261E]',
+    chip: 'bg-[#FCEBEA] text-[#B3261E]',
+    label: v > 0 ? 'over — investigate' : 'short — investigate',
+  };
+}
+
+const signedMoney = (v: number) => `${v > 0 ? '+' : v < 0 ? '−' : ''}${formatMoney(Math.abs(v))}`;
+
+const VarianceChip: React.FC<{ v: number }> = ({ v }) => {
+  const t = varianceTone(v);
+  return (
+    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10.5px] font-bold tabular-nums ${t.chip}`}>
+      {signedMoney(v)}
+    </span>
+  );
+};
+
+/** Stable RPC codes → honest words (never a raw postgres message). */
+const DRAWER_ERR: Record<string, string> = {
+  DRAWER_ALREADY_OPEN: 'A drawer is already open — count and close it first.',
+  ALREADY_CLOSED: 'That shift is already sealed.',
+  NOT_FOUND: 'That drawer shift is not in this workspace.',
+  BAD_FLOAT: 'Opening float must be zero or more.',
+  BAD_COUNT: 'Counted cash must be zero or more.',
+  TOO_LONG: 'Note is over 280 characters.',
+  NOT_A_MEMBER: 'Your account is not linked to this workspace.',
+};
+const drawerErrText = (e: unknown): string => {
+  const msg = e instanceof Error ? e.message : '';
+  const code = DRAWER_ERR[msg] ? msg : Object.keys(DRAWER_ERR).find((k) => msg.includes(k));
+  return (code && DRAWER_ERR[code]) || 'Could not reach the drawer ledger — try again.';
+};
+
+/** Open (float) / count-and-close (recount + note) dialog — one body, two modes. */
+const DrawerDialog: React.FC<{
+  mode: 'open' | 'close';
+  active: DrawerSession | null;
+  cashIn: number;
+  busy: boolean;
+  onCancel: () => void;
+  onConfirm: (amount: number, note: string) => void;
+}> = ({ mode, active, cashIn, busy, onCancel, onConfirm }) => {
+  const [amount, setAmount] = useState('');
+  const [note, setNote] = useState('');
+  const expected = mode === 'close' && active ? Number(active.opening_float) + cashIn : 0;
+  const parsed = amount.trim() === '' ? null : Number(amount);
+  const valid = parsed !== null && Number.isFinite(parsed) && parsed >= 0;
+  const variance = mode === 'close' && valid ? Math.round((parsed! - expected) * 100) / 100 : null;
+  const tone = variance === null ? null : varianceTone(variance);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-[#0F3D3E]/45 p-4 backdrop-blur-[2px]"
+      role="dialog"
+      aria-modal="true"
+      aria-label={mode === 'open' ? 'Open cash drawer' : 'Count and close the drawer'}
+      onClick={(e) => e.target === e.currentTarget && !busy && onCancel()}
+    >
+      <div className="w-full max-w-sm rounded-2xl border border-[#E3E7E0] bg-white p-5 shadow-xl">
+        <div className="flex items-center gap-2.5">
+          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#0F3D3E] text-white">
+            {mode === 'open' ? <Coins size={17} aria-hidden /> : <LockKeyhole size={17} aria-hidden />}
+          </span>
+          <div>
+            <h3 className="text-[15px] font-extrabold tracking-tight text-[#0F3D3E]">
+              {mode === 'open' ? 'Open the drawer' : 'Count & close the drawer'}
+            </h3>
+            <p className="text-[11px] font-semibold text-[#8A938C]">
+              {mode === 'open'
+                ? 'count the float you are starting with'
+                : 'the ledger already knows what to expect'}
+            </p>
+          </div>
+        </div>
+
+        {mode === 'close' ? (
+          <div className="mt-4 rounded-xl bg-[#F7F8F6] px-3.5 py-3">
+            <div className="flex items-center justify-between text-[12px] font-semibold text-[#5F6B63]">
+              <span>Opening float</span>
+              <span className="tabular-nums">{formatMoney(Number(active?.opening_float || 0))}</span>
+            </div>
+            <div className="mt-1 flex items-center justify-between text-[12px] font-semibold text-[#5F6B63]">
+              <span>Cash payments since open</span>
+              <span className="tabular-nums">{formatMoney(cashIn)}</span>
+            </div>
+            <div className="mt-2 flex items-center justify-between border-t border-dashed border-[#D9DFD9] pt-2 text-[13.5px] font-extrabold text-[#0F3D3E]">
+              <span>Expected in drawer</span>
+              <span className="tabular-nums">{formatMoney(expected)}</span>
+            </div>
+          </div>
+        ) : null}
+
+        <label className="mt-4 block text-[11px] font-bold uppercase tracking-[0.08em] text-[#8A938C]">
+          {mode === 'open' ? 'Opening float (₹)' : 'Counted cash (₹)'}
+        </label>
+        <input
+          autoFocus
+          type="number"
+          inputMode="decimal"
+          min={0}
+          step="0.01"
+          value={amount}
+          onChange={(e) => setAmount(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && valid && !busy && onConfirm(parsed!, note)}
+          placeholder="0.00"
+          aria-label={mode === 'open' ? 'Opening float in rupees' : 'Counted cash in rupees'}
+          className="mt-1.5 w-full rounded-xl border border-[#E3E7E0] bg-white px-3.5 py-2.5 text-[15px] font-extrabold tabular-nums text-[#0F3D3E] outline-none transition-shadow placeholder:font-semibold placeholder:text-[#C8CFC9] focus:border-[#B88E2F] focus:ring-2 focus:ring-[#B88E2F]/25"
+        />
+
+        {mode === 'close' && tone ? (
+          <p className={`mt-2 text-[12px] font-bold tabular-nums ${tone.cls}`} aria-live="polite">
+            {variance === 0 ? '✓ ' : ''}
+            {variance === 0
+              ? 'right on the ledger'
+              : `${signedMoney(variance!)} vs expected · ${tone.label}`}
+          </p>
+        ) : null}
+
+        {mode === 'close' ? (
+          <>
+            <label className="mt-3 block text-[11px] font-bold uppercase tracking-[0.08em] text-[#8A938C]">
+              Note <span className="normal-case text-[#C8CFC9]">· optional</span>
+            </label>
+            <input
+              type="text"
+              maxLength={280}
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              placeholder="why the count differs, who counted…"
+              aria-label="Closing note"
+              className="mt-1.5 w-full rounded-xl border border-[#E3E7E0] bg-white px-3.5 py-2.5 text-[12.5px] font-semibold text-[#0F3D3E] outline-none transition-shadow placeholder:text-[#C8CFC9] focus:border-[#B88E2F] focus:ring-2 focus:ring-[#B88E2F]/25"
+            />
+            <p className="mt-1 text-right text-[10.5px] font-semibold tabular-nums text-[#C8CFC9]">
+              {note.length}/280
+            </p>
+          </>
+        ) : null}
+
+        <div className="mt-4 flex gap-2.5">
+          <button
+            onClick={onCancel}
+            disabled={busy}
+            className="min-h-[44px] flex-1 rounded-xl border border-[#E3E7E0] bg-white text-[13px] font-bold text-[#0F3D3E] transition-colors hover:bg-[#F0F2EF] disabled:opacity-40"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={() => valid && !busy && onConfirm(parsed!, note)}
+            disabled={!valid || busy}
+            className={`min-h-[44px] flex-1 rounded-xl text-[13px] font-extrabold text-white shadow-[0_1px_2px_rgba(15,61,62,0.15)] transition-all active:scale-[0.99] disabled:opacity-40 ${
+              mode === 'open' ? 'bg-[#0F3D3E] hover:bg-[#0C3233]' : 'bg-[#B88E2F] hover:bg-[#A57D27]'
+            }`}
+          >
+            {busy ? (
+              <span className="inline-flex items-center gap-2">
+                <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" aria-hidden />
+                sealing…
+              </span>
+            ) : mode === 'open' ? (
+              'Open drawer'
+            ) : (
+              'Seal the shift'
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+/** The live drawer card — today's shift at a glance + recent sealed shifts. */
+const DrawerCard: React.FC<{
+  active: DrawerSession | null;
+  history: DrawerSession[];
+  cashIn: number;
+  cashLoading: boolean;
+  onOpenFlow: () => void;
+  onCloseFlow: () => void;
+}> = ({ active, history, cashIn, cashLoading, onOpenFlow, onCloseFlow }) => {
+  const [histOpen, setHistOpen] = useState(false);
+  const expected = active ? Number(active.opening_float) + cashIn : 0;
+  const last = history[0];
+
+  return (
+    <section aria-label="Cash drawer" className="rounded-2xl border border-[#E3E7E0] bg-white p-4">
+      <div className="flex flex-wrap items-center gap-2.5">
+        <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#0F3D3E] text-white">
+          <Coins size={17} aria-hidden />
+        </span>
+        <h2 className="text-[13px] font-extrabold uppercase tracking-[0.06em] text-[#0F3D3E]">
+          Cash drawer
+        </h2>
+        {active ? (
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-[#EAF0EC] px-2.5 py-0.5 text-[10.5px] font-bold text-[#2E7D32]" role="status">
+            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#2E7D32]" aria-hidden />
+            OPEN
+          </span>
+        ) : (
+          <span className="inline-flex items-center rounded-full bg-[#F0F2EF] px-2.5 py-0.5 text-[10.5px] font-bold text-[#8A938C]">
+            not open
+          </span>
+        )}
+        <div className="ml-auto flex items-center gap-2">
+          {active ? (
+            <button
+              onClick={onCloseFlow}
+              className="flex min-h-[40px] items-center gap-2 rounded-xl bg-[#B88E2F] px-3.5 text-[12.5px] font-extrabold text-white shadow-[0_1px_2px_rgba(15,61,62,0.15)] transition-colors hover:bg-[#A57D27] active:scale-[0.99]"
+            >
+              <LockKeyhole size={14} aria-hidden />
+              Count &amp; close
+            </button>
+          ) : (
+            <button
+              onClick={onOpenFlow}
+              className="flex min-h-[40px] items-center gap-2 rounded-xl bg-[#0F3D3E] px-3.5 text-[12.5px] font-extrabold text-white transition-colors hover:bg-[#0C3233] active:scale-[0.99]"
+            >
+              <Coins size={14} aria-hidden />
+              Open drawer
+            </button>
+          )}
+        </div>
+      </div>
+
+      {active ? (
+        <>
+          <p className="mt-2.5 text-[11.5px] font-semibold text-[#8A938C]">
+            Opened {istTime(active.opened_at)} IST · {active.opened_by_email || 'counter'}
+          </p>
+          <div className="mt-3 grid grid-cols-3 gap-2.5">
+            <div className="rounded-xl bg-[#F7F8F6] px-3 py-2.5">
+              <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-[#8A938C]">Float</p>
+              <p className="text-[15px] font-extrabold tabular-nums text-[#0F3D3E]">
+                {formatMoney(Number(active.opening_float))}
+              </p>
+            </div>
+            <div className="rounded-xl bg-[#F7F8F6] px-3 py-2.5">
+              <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-[#8A938C]">Cash in</p>
+              <p className={`text-[15px] font-extrabold tabular-nums text-[#0F3D3E] ${cashLoading ? 'opacity-50' : ''}`}>
+                {formatMoney(cashIn)}
+              </p>
+            </div>
+            <div className="rounded-xl border border-[#B88E2F]/35 bg-[#FDF9F0] px-3 py-2.5">
+              <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-[#8A5A16]">In drawer</p>
+              <p className="text-[15px] font-extrabold tabular-nums text-[#8A5A16]">{formatMoney(expected)}</p>
+            </div>
+          </div>
+          <p className="mt-2 text-[10.5px] font-semibold text-[#8A938C]">
+            cash-in is ledger truth · every cash payment taken since the drawer opened
+          </p>
+        </>
+      ) : last ? (
+        <p className="mt-2.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] font-semibold text-[#5F6B63]">
+          <span>
+            Last shift closed {last.closed_at ? istTime(last.closed_at) : '—'}
+            {last.closed_by_email ? ` by ${last.closed_by_email}` : ''}
+          </span>
+          <VarianceChip v={Number(last.variance || 0)} />
+          {last.closing_note ? (
+            <span className="max-w-full truncate text-[11.5px] text-[#8A938C]" title={last.closing_note}>
+              “{last.closing_note}”
+            </span>
+          ) : null}
+        </p>
+      ) : (
+        <p className="mt-2.5 text-[12px] font-semibold text-[#8A938C]">
+          Open the drawer with a counted float — at close, the ledger does the math.
+        </p>
+      )}
+
+      {history.length > 0 ? (
+        <div className="mt-3 border-t border-[#F0F2EF] pt-2.5">
+          <button
+            onClick={() => setHistOpen((o) => !o)}
+            aria-expanded={histOpen}
+            className="flex min-h-[36px] items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.07em] text-[#5F6B63] transition-colors hover:text-[#0F3D3E]"
+          >
+            <ChevronDown size={14} className={`transition-transform ${histOpen ? 'rotate-180' : ''}`} aria-hidden />
+            Recent shifts · {history.length}
+          </button>
+          {histOpen ? (
+            <ul className="mt-1.5 flex flex-col gap-1.5">
+              {history.map((h) => (
+                <li
+                  key={h.id}
+                  className="flex flex-wrap items-center gap-x-2.5 gap-y-1 rounded-xl bg-[#F7F8F6] px-3 py-2 text-[11.5px] font-semibold text-[#5F6B63]"
+                >
+                  <span className="tabular-nums text-[#0F3D3E]">
+                    {istTime(h.opened_at)}–{h.closed_at ? istTime(h.closed_at) : '—'}
+                  </span>
+                  <span className="tabular-nums">
+                    float {formatMoney(Number(h.opening_float))} · counted {formatMoney(Number(h.counted_cash || 0))}
+                  </span>
+                  <VarianceChip v={Number(h.variance || 0)} />
+                  {h.closing_note ? (
+                    <span className="max-w-[220px] truncate text-[11px] text-[#8A938C]" title={h.closing_note}>
+                      “{h.closing_note}”
+                    </span>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </div>
+      ) : null}
+    </section>
+  );
+};
+
 /* ────────────────────────────── the screen ─────────────────────────────── */
 
 const EodScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }) => {
@@ -259,6 +608,15 @@ const EodScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshedAt, setRefreshedAt] = useState<Date | null>(null);
+
+  /* ── cash drawer (020) ── */
+  const [drawerActive, setDrawerActive] = useState<DrawerSession | null>(null);
+  const [drawerHistory, setDrawerHistory] = useState<DrawerSession[]>([]);
+  const [cashIn, setCashIn] = useState(0);
+  const [cashLoading, setCashLoading] = useState(false);
+  const [drawerDialog, setDrawerDialog] = useState<'open' | 'close' | null>(null);
+  const [drawerBusy, setDrawerBusy] = useState(false);
+  const [drawerError, setDrawerError] = useState<string | null>(null);
 
   const isToday = dateIso === istTodayIso();
 
@@ -310,6 +668,69 @@ const EodScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
   useEffect(() => {
     void load();
   }, [load]);
+
+  /* ── drawer ledger: active session + recent sealed shifts ── */
+  const loadDrawer = useCallback(async () => {
+    if (!tenantId) return;
+    try {
+      const [act, hist] = await Promise.all([
+        fetchActiveDrawerSession(tenantId),
+        fetchDrawerHistory(tenantId, 5),
+      ]);
+      setDrawerActive(act);
+      setDrawerHistory(hist);
+      if (act) {
+        setCashLoading(true);
+        setCashIn(await fetchCashInSince(tenantId, act.opened_at));
+      } else {
+        setCashIn(0);
+      }
+    } catch {
+      // drawer is fail-soft: the day's money view must never hard-fail on it
+    } finally {
+      setCashLoading(false);
+    }
+  }, [tenantId]);
+
+  useEffect(() => {
+    void loadDrawer();
+  }, [loadDrawer]);
+
+  /* live cash-in while a drawer is open — rides the same 20s heartbeat */
+  useEffect(() => {
+    if (!isToday || !drawerActive) return;
+    const t = setInterval(() => void loadDrawer(), 20000);
+    return () => clearInterval(t);
+  }, [isToday, drawerActive, loadDrawer]);
+
+  const confirmOpenDrawer = async (amount: number) => {
+    setDrawerBusy(true);
+    setDrawerError(null);
+    try {
+      await openDrawerSession(Math.round(amount * 100) / 100);
+      setDrawerDialog(null);
+      await loadDrawer();
+    } catch (e: unknown) {
+      setDrawerError(drawerErrText(e));
+    } finally {
+      setDrawerBusy(false);
+    }
+  };
+
+  const confirmCloseDrawer = async (amount: number, note: string) => {
+    if (!drawerActive) return;
+    setDrawerBusy(true);
+    setDrawerError(null);
+    try {
+      await closeDrawerSession(drawerActive.id, Math.round(amount * 100) / 100, note);
+      setDrawerDialog(null);
+      await loadDrawer();
+    } catch (e: unknown) {
+      setDrawerError(drawerErrText(e));
+    } finally {
+      setDrawerBusy(false);
+    }
+  };
 
   /* live mirror for the "Right now" strip (today only) — 20s while open */
   useEffect(() => {
@@ -389,6 +810,40 @@ const EodScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
   }, [orders, agg]);
 
   const printReport = () => {
+    /* CASH DRAWER block — only when a shift actually touches this day.
+       Open shift: float + ledger cash-in → expected (marked as such, never
+       counted). Sealed shifts CLOSED today: stored counted/variance. */
+    let drawer: ZReportOpts['drawer'] = null;
+    if (drawerActive) {
+      drawer = {
+        title: 'CASH DRAWER · OPEN SHIFT',
+        rows: [
+          [`Opened ${istTime(drawerActive.opened_at)} IST`, drawerActive.opened_by_email || 'counter'],
+          ['Float', formatMoney(Number(drawerActive.opening_float))],
+          ['Cash in (ledger)', formatMoney(cashIn)],
+          ['IN DRAWER (expected)', formatMoney(Number(drawerActive.opening_float) + cashIn)],
+        ],
+        strongLast: true,
+      };
+    } else if (drawerHistory.length > 0) {
+      const daySess = drawerHistory.find(
+        (h) => h.closed_at && h.closed_at >= istDayBounds(dateIso).startIso && h.closed_at < istDayBounds(dateIso).endIso,
+      );
+      if (daySess) {
+        const v = Number(daySess.variance || 0);
+        drawer = {
+          title: 'CASH DRAWER · LAST SHIFT',
+          rows: [
+            [`Closed ${daySess.closed_at ? istTime(daySess.closed_at) : '—'}`, daySess.closed_by_email || 'counter'],
+            ['Float', formatMoney(Number(daySess.opening_float))],
+            ['Cash in (ledger)', formatMoney(Number(daySess.expected_cash || 0) - Number(daySess.opening_float))],
+            ['Counted', formatMoney(Number(daySess.counted_cash || 0))],
+            ['VARIANCE', `${v > 0 ? '+' : v < 0 ? '-' : ''}${formatMoney(Math.abs(v))}`],
+          ],
+          strongLast: true,
+        };
+      }
+    }
     printZReport({
       storeName: tenant?.name || 'ServePoint store',
       dateIso,
@@ -403,6 +858,7 @@ const EodScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
       mix: agg.mix,
       cancelled: agg.cancelled,
       printedBy: session?.email || '',
+      drawer,
     });
   };
 
@@ -538,6 +994,34 @@ const EodScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
             </div>
           </div>
         </section>
+      ) : null}
+
+      {/* ── cash drawer (today only — the shift is a now thing) ── */}
+      {isToday ? (
+        <DrawerCard
+          active={drawerActive}
+          history={drawerHistory}
+          cashIn={cashIn}
+          cashLoading={cashLoading}
+          onOpenFlow={() => {
+            setDrawerError(null);
+            setDrawerDialog('open');
+          }}
+          onCloseFlow={() => {
+            setDrawerError(null);
+            setDrawerDialog('close');
+          }}
+        />
+      ) : null}
+
+      {drawerError ? (
+        <div
+          className="flex items-center gap-2.5 rounded-xl border border-[#F2D9D6] bg-[#FCEBEA] px-3.5 py-2.5"
+          role="alert"
+        >
+          <AlertTriangle size={15} className="shrink-0 text-[#B3261E]" aria-hidden />
+          <p className="text-[12px] font-semibold text-[#7A2E28]">{drawerError}</p>
+        </div>
       ) : null}
 
       {/* ── error ── */}
@@ -745,6 +1229,20 @@ const EodScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
           </section>
         </>
       )}
+
+      {/* ── drawer dialog (open float / count & close) ── */}
+      {drawerDialog ? (
+        <DrawerDialog
+          mode={drawerDialog}
+          active={drawerActive}
+          cashIn={cashIn}
+          busy={drawerBusy}
+          onCancel={() => setDrawerDialog(null)}
+          onConfirm={(amount, note) =>
+            void (drawerDialog === 'open' ? confirmOpenDrawer(amount) : confirmCloseDrawer(amount, note))
+          }
+        />
+      ) : null}
     </div>
   );
 };

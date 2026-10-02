@@ -1,4 +1,4 @@
-// Supabase provisioning script: applies ServePoint migrations 001-019 to the live
+// Supabase provisioning script: applies ServePoint migrations 001-020 to the live
 // Supabase project via the Supavisor session pooler (IPv4 path — direct
 // db.<ref>.supabase.co:5432 is IPv6-only on current projects), then verifies.
 // NOT part of the app bundle.
@@ -297,6 +297,43 @@ try {
     return table === true && rls === 1 && overloads === 1 && intSig === true && pagerExposes === true;
   };
   await applyFile('019_guest_feedback', 'supabase/migrations/019_guest_feedback.sql', await feedbackReady());
+
+  // 020 sentinel: cash drawer sessions — table + one-open-per-tenant partial
+  // unique index + both RPCs (exactly ONE overload each) + no anon EXECUTE +
+  // realtime + the member RLS policy.
+  const drawerReady = async () => {
+    const table = await scalar(
+      `SELECT to_regclass('public.cash_drawer_sessions') IS NOT NULL`
+    );
+    const rls = Number(
+      await scalar(
+        `SELECT relrowsecurity::int FROM pg_class WHERE oid='public.cash_drawer_sessions'::regclass`
+      )
+    );
+    const idx = Number(
+      await scalar(
+        `SELECT count(*) FROM pg_indexes WHERE indexname='uq_cash_drawer_one_open'`
+      )
+    );
+    const overloads = Number(
+      await scalar(
+        `SELECT count(*) FROM pg_proc WHERE pronamespace='public'::regnamespace
+          AND proname IN ('sp_open_drawer','sp_close_drawer')`
+      )
+    );
+    const anonExec = await scalar(
+      `SELECT has_function_privilege('anon','sp_open_drawer(numeric)','EXECUTE')
+        OR has_function_privilege('anon','sp_close_drawer(uuid,numeric,text)','EXECUTE')`
+    );
+    const pub = Number(
+      await scalar(
+        `SELECT count(*) FROM pg_publication_tables WHERE pubname='supabase_realtime'
+          AND tablename='cash_drawer_sessions'`
+      )
+    );
+    return table === true && rls === 1 && idx === 1 && overloads === 2 && anonExec === false && pub === 1;
+  };
+  await applyFile('020_cash_drawer', 'supabase/migrations/020_cash_drawer.sql', await drawerReady());
 
   // ── Verification ──────────────────────────────────────────────────────────
   const tables = await client.query(
