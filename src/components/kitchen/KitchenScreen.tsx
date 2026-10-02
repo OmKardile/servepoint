@@ -34,7 +34,7 @@ const STAGES: {
   title: string;
   pill: string; // header dot
 }[] = [
-  { key: 'new', title: 'New', pill: 'bg-[#B88E2F]' },
+  { key: 'new', title: 'Queued', pill: 'bg-[#B88E2F]' },
   { key: 'preparing', title: 'Preparing', pill: 'bg-[#C2571B]' },
   { key: 'ready', title: 'Ready to serve', pill: 'bg-[#2E7D32]' },
   { key: 'completed', title: 'Completed', pill: 'bg-[#0F3D3E]' },
@@ -48,11 +48,14 @@ const TYPE_LABEL: Record<string, string> = {
 
 function stageOf(status: string): StageKey | null {
   const s = String(status || '').toLowerCase();
-  if (s === 'new' || s === 'pending') return 'new';
+  // Counter-gate (v5.3.0): `new` tickets live in the counter inbox on New
+  // Sale — the KDS never sees them. The kitchen's first column is the QUEUE
+  // (`pending`): tickets the counter has Oked. Ok fires them here.
+  if (s === 'pending') return 'new';
   if (s === 'preparing') return 'preparing';
   if (s === 'ready') return 'ready';
   if (s === 'completed') return 'completed';
-  return null; // cancelled — hidden from the rail
+  return null; // `new` (counter inbox) + cancelled — hidden from the rail
 }
 
 function isSameLocalDay(iso: string): boolean {
@@ -255,7 +258,7 @@ const EmptyStage: React.FC<{ stage: StageKey }> = ({ stage }) => {
     completed: CheckCheck,
   };
   const copy: Record<StageKey, string> = {
-    new: 'No new orders — all caught up',
+    new: 'Queue is clear — all caught up',
     preparing: 'Nothing on the fire',
     ready: 'Nothing waiting to serve',
     completed: 'Nothing completed yet today',
@@ -332,7 +335,7 @@ export const KitchenScreen: React.FC = () => {
     };
   }, [tenantId, scheduleRefetch, refetch]);
 
-  /* chime when a NEW order id appears on the rail */
+  /* chime when an accepted ticket (pending) lands in the kitchen queue */
   const seenNewRef = useRef<Set<string> | null>(null);
   useEffect(() => {
     if (loading) return;

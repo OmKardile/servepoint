@@ -162,6 +162,19 @@ try {
     return tables === 4 && fns === 4 && col === 1 && idx === 1;
   };
   await applyFile('012_menu_variants_guest_qr', 'supabase/migrations/012_menu_variants_guest_qr.sql', await guestReady());
+  // 013 sentinel: counter-gate engine — inbox-Ok ladder (new→pending) + money-in-hand auto-advance
+  const counterGateReady = async () => {
+    const adv = String(
+      await scalar(`SELECT pg_get_functiondef('sp_advance_order(UUID,TEXT)'::regprocedure)`)
+    );
+    const pay = String(
+      await scalar(`SELECT pg_get_functiondef('sp_record_payment(UUID,TEXT,NUMERIC)'::regprocedure)`)
+    );
+    const okLadder = adv.includes("v_status = 'new' AND p_to_status IN ('pending'");
+    const autoAdvance = pay.includes("IF v_status IN ('new', 'pending') THEN");
+    return okLadder && autoAdvance;
+  };
+  await applyFile('013_counter_gate', 'supabase/migrations/013_counter_gate.sql', await counterGateReady());
 
   // ── Verification ──────────────────────────────────────────────────────────
   const tables = await client.query(

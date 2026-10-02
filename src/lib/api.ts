@@ -81,6 +81,23 @@ async function attachItems(orders: OrderRow[], tenantId: string): Promise<Order[
     .eq('tenant_id', tenantId)
     .in('order_id', ids);
   if (error) throw error;
+  // Add-on snapshots (migration 012) — frozen name+price per ticket line so
+  // the counter inbox aggregates the FULL guest ticket, extras included.
+  const itemIds = (items || []).map((it: any) => it.id).filter(Boolean);
+  const addonsByItem = new Map<string, { name: string; price: number }[]>();
+  if (itemIds.length > 0) {
+    const { data: addonRows, error: addonsErr } = await supabase
+      .from('order_item_addons')
+      .select('order_item_id, name, price')
+      .eq('tenant_id', tenantId)
+      .in('order_item_id', itemIds);
+    if (addonsErr) throw addonsErr;
+    (addonRows || []).forEach((a: any) => {
+      const list = addonsByItem.get(a.order_item_id) || [];
+      list.push({ name: a.name, price: Number(a.price) });
+      addonsByItem.set(a.order_item_id, list);
+    });
+  }
   const byOrder = new Map<string, OrderItem[]>();
   (items || []).forEach((it: any) => {
     const list = byOrder.get(it.order_id) || [];
@@ -94,6 +111,7 @@ async function attachItems(orders: OrderRow[], tenantId: string): Promise<Order[
       unit_price: Number(it.unit_price),
       item_total: Number(it.item_total),
       notes: it.notes,
+      addons: addonsByItem.get(it.id) || [],
     });
     byOrder.set(it.order_id, list);
   });

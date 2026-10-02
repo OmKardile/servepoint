@@ -17,6 +17,7 @@ import {
 import type { LucideIcon } from 'lucide-react';
 import type { Category, MenuItem, OrderType } from '../../types';
 import { createOrder, fetchCategories, fetchMenuItems, fetchTables, type DiningTable } from '../../lib/api';
+import { CounterInbox } from './CounterInbox';
 import { useTenant } from '../../lib/tenant';
 import { formatMoney } from '../../lib/prefs';
 import { useUi } from '../../store/session';
@@ -664,6 +665,12 @@ const FoodDrinksInner: React.FC<{ onRetry: () => void }> = ({ onRetry }) => {
       <h1 className="mb-5 text-[22px] font-bold text-[#1A1A1A]">
         {isItemsLevel ? activeCategoryName || 'Items' : 'Categories'}
       </h1>
+
+      {/* Counter gate (v5.3.0): fresh tickets wait HERE for an Ok — the KDS
+          never sees `new`. Self-contained band; vanishes when empty. */}
+      <div className="mb-5">
+        <CounterInbox />
+      </div>
 
       {!isItemsLevel && (
         <>

@@ -49,6 +49,7 @@ export interface OrderItem {
   item_total: number;
   notes?: string | null;
   image_url?: string | null;
+  addons?: { name: string; price: number }[];
 }
 
 export interface Order {
@@ -58,6 +59,7 @@ export interface Order {
   order_type: OrderType | string;
   status: OrderStatus | string;
   table_id?: string | null;
+  table_session_id?: string | null;
   table_label?: string | null;
   guest_count?: number | null;
   customer_name?: string | null;
