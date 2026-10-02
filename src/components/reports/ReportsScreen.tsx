@@ -4,8 +4,12 @@ import {
   BarChart,
   CartesianGrid,
   Cell,
+  ComposedChart,
+  Line,
+  LineChart,
   Pie,
   PieChart,
+  ReferenceLine,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -48,21 +52,27 @@ import type { Order } from '../../types';
  *
  *   1. Headline strip — gross, GST collected, net (ex-GST), orders (+
  *      cancelled sinkage), average ticket, items sold.
- *   2. Sales by hour — a bar chart of when the day actually earns (IST hours,
+ *   2. Trends — the shape of the range, day by day (IST calendar days):
+ *      gross bars + ticket line per day with the best day gold, and the
+ *      guest-rating average per day as a gold line with honest gaps.
+ *   3. Sales by hour — a bar chart of when the day actually earns (IST hours,
  *      whole range summed). The Dashboard only charts today; this is the trend.
- *   3. Payment mix — how money arrived (cash / UPI / card) + what's still out.
- *   4. Cost & margin — the inventory shelf prices the menu (018 views):
+ *   4. Payment mix — how money arrived (cash / UPI / card) + what's still out.
+ *   5. Cost & margin — the inventory shelf prices the menu (018 views):
  *      COGS, gross margin and margin-% on PAID tickets, with a revenue-split
  *      bar (what the shelf burned vs what the cafe keeps).
- *   5. Top items — best sellers by revenue with unit counts, share bars and
+ *   6. Top items — best sellers by revenue with unit counts, share bars and
  *      per-item margin chips, exportable as CSV.
- *   6. Service mix — dine-in / takeaway / delivery split.
- *   7. Guest satisfaction — the 019 order_feedback ledger read over the
+ *   7. Service mix — dine-in / takeaway / delivery split.
+ *   8. Guest satisfaction — the 019 order_feedback ledger read over the
  *      range: average rating with a health verdict, a spoken star histogram,
- *      the newest guest comments as quotes, exportable as CSV.
- *   8. Drawer honesty — the 020 cash_drawer_sessions ledger read over the
+ *      the newest guest comments as quotes, exportable as CSV — plus the
+ *      rating average per day as a gold trend line (honest gaps on
+ *      unrated days).
+ *   9. Drawer honesty — the 020 cash_drawer_sessions ledger read over the
  *      range: sealed shifts, net variance (server-stored, never re-derived),
- *      per-shift expected-vs-counted rows with the same health tones the
+ *      a shift-by-shift diverging variance mini-chart in the exact health
+ *      tones, per-shift expected-vs-counted rows with the same voice the
  *      Close-out dialog speaks.
  *
  * The two ledger sections load FAIL-SOFT (Task 53): a hiccup in feedback or
@@ -209,6 +219,43 @@ const IST_DT = new Intl.DateTimeFormat('en-IN', {
   minute: '2-digit',
   hour12: true,
 });
+
+/* ── IST day keys/labels for the trends buckets ────────────────────────── */
+
+const IST_DAY_KEY = new Intl.DateTimeFormat('en-CA', {
+  timeZone: IST_TZ,
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+});
+
+const IST_DAY_LABEL = new Intl.DateTimeFormat('en-IN', {
+  timeZone: IST_TZ,
+  day: 'numeric',
+  month: 'short',
+});
+
+const IST_CLOSE_LABEL = new Intl.DateTimeFormat('en-IN', {
+  timeZone: IST_TZ,
+  day: 'numeric',
+  month: 'short',
+  hour: 'numeric',
+  minute: '2-digit',
+  hour12: true,
+});
+
+/** YYYY-MM-DD in IST for an ISO timestamp — the trends bucket key. */
+function istDayKey(iso: string): string {
+  return IST_DAY_KEY.format(new Date(iso));
+}
+
+/** Drawer variance color — the exact health tones the Close-out voice uses. */
+function varianceColor(v: number): string {
+  const abs = Math.abs(v);
+  if (abs < 0.005) return '#2E7D32';
+  if (abs <= 20) return '#8A5A00';
+  return '#B3261E';
+}
 
 /* ─────────────────────────────── screen ────────────────────────────────── */
 
@@ -459,6 +506,117 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
     return { net, count: shiftsInRange.length };
   }, [shiftsInRange]);
 
+  /* ── trends — the shape of the range, IST day by day (2.0 section) ─────── */
+
+  const daily = useMemo(() => {
+    // Bucket orders into IST days — cancelled excluded, same as every money figure.
+    const byDay = new Map<string, { gross: number; tickets: number }>();
+    for (const o of inRange) {
+      if (String(o.status || '').toLowerCase() === 'cancelled') continue;
+      const key = istDayKey(o.created_at);
+      const cur = byDay.get(key) || { gross: 0, tickets: 0 };
+      cur.gross += Number(o.total ?? 0);
+      cur.tickets += 1;
+      byDay.set(key, cur);
+    }
+    // The window: filled calendar days for 7d/30d (gaps read as slow days),
+    // today's single day, or — for All time — the most recent 30 days that
+    // actually hold tickets, said honestly in the caption.
+    const { endMs } = rangeWindow(range);
+    let dayMs: number[] = [];
+    if (range === 'today') {
+      dayMs = [endMs - 24 * 3600 * 1000];
+    } else if (range === '7d' || range === '30d') {
+      const days = range === '7d' ? 7 : 30;
+      for (let t = endMs - days * 24 * 3600 * 1000; t < endMs; t += 24 * 3600 * 1000) dayMs.push(t);
+    } else {
+      dayMs = [...byDay.keys()]
+        .sort()
+        .slice(-30)
+        .map((k) => istDayStart(k));
+    }
+    return dayMs.map((ms) => {
+      const key = IST_DAY_KEY.format(new Date(ms));
+      const cur = byDay.get(key) || { gross: 0, tickets: 0 };
+      return {
+        key,
+        label: IST_DAY_LABEL.format(new Date(ms)),
+        gross: cur.gross,
+        tickets: cur.tickets,
+        avg: cur.tickets > 0 ? cur.gross / cur.tickets : 0,
+      };
+    });
+  }, [inRange, range]);
+
+  const bestDay = useMemo(() => {
+    let best: { label: string; gross: number } | null = null;
+    for (const d of daily) if (!best || d.gross > best.gross) best = { label: d.label, gross: d.gross };
+    return best && best.gross > 0 ? best : null;
+  }, [daily]);
+
+  const exportDaily = useCallback(() => {
+    if (daily.length === 0) return;
+    const rows: (string | number)[][] = [['Day (IST)', 'Gross (INR)', 'Tickets', 'Avg ticket (INR)']];
+    for (const d of daily) {
+      rows.push([d.label, d.gross.toFixed(2), d.tickets, d.tickets > 0 ? d.avg.toFixed(2) : '']);
+    }
+    downloadCsv(`servepoint-daily-sales-${istTodayIso()}.csv`, rows);
+  }, [daily]);
+
+  const fbDaily = useMemo(() => {
+    const byDay = new Map<string, { sum: number; n: number }>();
+    for (const f of fbInRange) {
+      const key = istDayKey(f.created_at);
+      const cur = byDay.get(key) || { sum: 0, n: 0 };
+      cur.sum += f.rating;
+      cur.n += 1;
+      byDay.set(key, cur);
+    }
+    if (range === '7d' || range === '30d') {
+      // Filled window: unrated days stay null so the line's gaps are honest.
+      const { endMs } = rangeWindow(range);
+      const days = range === '7d' ? 7 : 30;
+      const out: { label: string; avg: number | null; n: number }[] = [];
+      for (let t = endMs - days * 24 * 3600 * 1000; t < endMs; t += 24 * 3600 * 1000) {
+        const cur = byDay.get(IST_DAY_KEY.format(new Date(t)));
+        out.push({
+          label: IST_DAY_LABEL.format(new Date(t)),
+          avg: cur ? cur.sum / cur.n : null,
+          n: cur?.n ?? 0,
+        });
+      }
+      return out;
+    }
+    // Today / All time: only days that actually hold ratings.
+    return [...byDay.keys()]
+      .sort()
+      .map((k) => {
+        const cur = byDay.get(k)!;
+        return { label: IST_DAY_LABEL.format(new Date(istDayStart(k))), avg: cur.sum / cur.n, n: cur.n };
+      });
+  }, [fbInRange, range]);
+
+  const fbDailyTotals = useMemo(() => {
+    let ratings = 0;
+    let days = 0;
+    for (const d of fbDaily) {
+      if (d.avg !== null) days += 1;
+      ratings += d.n;
+    }
+    return { ratings, days };
+  }, [fbDaily]);
+
+  /** Diverging variance series for the Drawer honesty mini-chart. */
+  const varianceSeries = useMemo(
+    () =>
+      shiftsInRange.map((s) => ({
+        id: s.id,
+        short: s.closed_at ? IST_CLOSE_LABEL.format(new Date(s.closed_at)) : '—',
+        variance: Number(s.variance ?? 0),
+      })),
+    [shiftsInRange],
+  );
+
   const retry = useCallback(() => {
     setLoading(true);
     void load();
@@ -582,6 +740,212 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
         </div>
       ) : (
         <>
+          {/* ── row: trends — day by day + ratings over time ── */}
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+            <section className="sp-card p-5 xl:col-span-2" aria-label="Sales day by day">
+              <div className="mb-1 flex items-center justify-between gap-2">
+                <h2 className="text-[15px] font-bold text-[#1A1A1A]">Day by day</h2>
+                <div className="flex shrink-0 items-center gap-2">
+                  {daily.length > 0 && (
+                    <button
+                      onClick={exportDaily}
+                      className="inline-flex h-7 items-center rounded-lg border border-[#B88E2F]/45 bg-[#FDF9F0] px-2.5 text-[11px] font-bold text-[#8A5A00] transition hover:bg-[#B88E2F] hover:text-white active:scale-[0.97]"
+                    >
+                      CSV
+                    </button>
+                  )}
+                  <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#6B6B6B]">
+                    <CalendarRange size={11} aria-hidden /> IST days ·{' '}
+                    {RANGE_LABEL[range].toLowerCase()}
+                  </span>
+                </div>
+              </div>
+              {range === 'today' ? (
+                <div className="flex h-56 flex-col items-center justify-center gap-2 text-center">
+                  <TrendingUp size={22} className="text-[#969696]" aria-hidden />
+                  <p className="text-[12.5px] font-semibold text-[#1A1A1A]">
+                    One day can't show a shape
+                  </p>
+                  <p className="max-w-[250px] text-[11.5px] text-[#6B6B6B]">
+                    Today's story lives in Sales by hour below. Widen the range and this chart
+                    draws the week.
+                  </p>
+                  <button
+                    onClick={() => setRange('7d')}
+                    className="mt-1 inline-flex h-9 items-center rounded-lg bg-[#0F3D3E] px-3.5 text-[12px] font-bold text-white transition hover:bg-[#164f50] active:scale-[0.98]"
+                  >
+                    See last 7 days
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <p className="mb-3 text-[11.5px] text-[#969696]">
+                    Gross ₹ (bars) and tickets (line) per IST day — the shape of the range. Best
+                    day:{' '}
+                    <span className="font-bold text-[#8A5A00]">
+                      {bestDay ? `${bestDay.label} (${formatMoney(bestDay.gross)})` : '—'}
+                    </span>
+                    {range === 'all' ? ' · most recent 30 ticket days shown' : ''}
+                  </p>
+                  <div className="h-56" aria-hidden>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <ComposedChart data={daily} margin={{ top: 4, right: 4, bottom: 0, left: -18 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#E3E7E0" vertical={false} />
+                        <XAxis
+                          dataKey="label"
+                          tick={{ fontSize: 10, fill: '#6B6B6B' }}
+                          tickLine={false}
+                          axisLine={{ stroke: '#E3E7E0' }}
+                          interval="preserveStartEnd"
+                          minTickGap={14}
+                        />
+                        <YAxis
+                          yAxisId="rupees"
+                          tick={{ fontSize: 10, fill: '#969696' }}
+                          tickLine={false}
+                          axisLine={false}
+                          tickFormatter={(v: number) =>
+                            v >= 1000 ? `${Math.round(v / 1000)}k` : String(v)
+                          }
+                        />
+                        <YAxis
+                          yAxisId="tickets"
+                          orientation="right"
+                          tick={{ fontSize: 10, fill: '#B88E2F' }}
+                          tickLine={false}
+                          axisLine={false}
+                          allowDecimals={false}
+                        />
+                        <Tooltip
+                          cursor={{ fill: 'rgba(184,142,47,0.08)' }}
+                          contentStyle={{
+                            borderRadius: 12,
+                            border: '1px solid #E3E7E0',
+                            fontSize: 12,
+                            boxShadow: '0 4px 14px rgba(15,61,62,0.10)',
+                          }}
+                          formatter={(v: unknown, name: unknown) =>
+                            name === 'gross'
+                              ? [formatMoney(Number(v)), 'Gross']
+                              : [String(v), 'Tickets']
+                          }
+                        />
+                        <Bar yAxisId="rupees" dataKey="gross" radius={[4, 4, 0, 0]} maxBarSize={38}>
+                          {daily.map((d) => (
+                            <Cell
+                              key={d.key}
+                              fill={
+                                bestDay && d.gross > 0 && d.gross === bestDay.gross
+                                  ? '#B88E2F'
+                                  : '#0F3D3E'
+                              }
+                            />
+                          ))}
+                        </Bar>
+                        <Line
+                          yAxisId="tickets"
+                          type="monotone"
+                          dataKey="tickets"
+                          stroke="#B88E2F"
+                          strokeWidth={2}
+                          dot={{ r: 2.5, fill: '#B88E2F', strokeWidth: 0 }}
+                          activeDot={{ r: 4 }}
+                        />
+                      </ComposedChart>
+                    </ResponsiveContainer>
+                  </div>
+                </>
+              )}
+            </section>
+
+            <section className="sp-card p-5" aria-label="Ratings over time">
+              <h2 className="mb-1 text-[15px] font-bold text-[#1A1A1A]">Ratings over time</h2>
+              <p className="mb-3 text-[11.5px] text-[#969696]">
+                Average ★ per IST day — gaps are honest unrated days.{' '}
+                {fbDailyTotals.ratings > 0
+                  ? `${fbDailyTotals.ratings} rating${fbDailyTotals.ratings === 1 ? '' : 's'} · ${fbDailyTotals.days} day${fbDailyTotals.days === 1 ? '' : 's'} rated.`
+                  : ''}
+              </p>
+              {fbDailyTotals.ratings === 0 ? (
+                <div className="flex h-56 flex-col items-center justify-center gap-2 text-center">
+                  <Star size={22} className="text-[#969696]" aria-hidden />
+                  <p className="text-[12.5px] font-semibold text-[#1A1A1A]">
+                    No rated days in this range
+                  </p>
+                  <p className="max-w-[220px] text-[11.5px] text-[#969696]">
+                    Guests rate served tickets from their own phones — the daily line draws
+                    itself here.
+                  </p>
+                </div>
+              ) : (
+                <div
+                  className="h-56"
+                  role="img"
+                  aria-label={`Ratings trend: ${fbDailyTotals.ratings} ratings over ${fbDailyTotals.days} rated days in range`}
+                >
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={fbDaily} margin={{ top: 8, right: 8, bottom: 0, left: -22 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#E3E7E0" vertical={false} />
+                      <XAxis
+                        dataKey="label"
+                        tick={{ fontSize: 10, fill: '#6B6B6B' }}
+                        tickLine={false}
+                        axisLine={{ stroke: '#E3E7E0' }}
+                        interval="preserveStartEnd"
+                        minTickGap={14}
+                      />
+                      <YAxis
+                        domain={[1, 5]}
+                        ticks={[1, 2, 3, 4, 5]}
+                        allowDecimals={false}
+                        tick={{ fontSize: 10, fill: '#969696' }}
+                        tickLine={false}
+                        axisLine={false}
+                      />
+                      <Tooltip
+                        cursor={{ stroke: '#B88E2F', strokeWidth: 1, strokeDasharray: '3 3' }}
+                        contentStyle={{
+                          borderRadius: 12,
+                          border: '1px solid #E3E7E0',
+                          fontSize: 12,
+                          boxShadow: '0 4px 14px rgba(15,61,62,0.10)',
+                        }}
+                        formatter={(v: unknown) => [
+                          v === null || v === undefined ? '—' : `${Number(v).toFixed(1)}★`,
+                          'Avg rating',
+                        ]}
+                      />
+                      <Line
+                        type="monotone"
+                        dataKey="avg"
+                        stroke="#B88E2F"
+                        strokeWidth={2.5}
+                        connectNulls={false}
+                        dot={(props: { cx?: number; cy?: number; payload?: { avg: number | null; n: number } }) => {
+                          const { cx, cy, payload } = props;
+                          if (!payload || payload.avg === null || cx === undefined || cy === undefined)
+                            return <g key={`${cx}-${cy}`} />;
+                          return (
+                            <circle
+                              key={`${cx}-${cy}`}
+                              cx={cx}
+                              cy={cy}
+                              r={3 + Math.min(3, payload.n)}
+                              fill="#B88E2F"
+                              stroke="#fff"
+                              strokeWidth={1.5}
+                            />
+                          );
+                        }}
+                        activeDot={{ r: 5, stroke: '#fff', strokeWidth: 2 }}
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
+            </section>
+          </div>
+
           {/* ── row: sales by hour + payment mix ── */}
           <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
             <section className="sp-card p-5 xl:col-span-2" aria-label="Sales by hour of day">
@@ -1133,6 +1497,63 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
                       </p>
                     </div>
                   </div>
+                  {varianceSeries.length > 0 && (
+                    <div className="mt-4 border-t border-dashed border-[#E3E7E0] pt-3">
+                      <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.08em] text-[#969696]">
+                        Variance, shift by shift
+                      </p>
+                      <div
+                        className="h-28"
+                        role="img"
+                        aria-label={`Variance chart: ${varianceSeries.length} sealed shifts, net ${signedMoney(shiftAgg.net)}`}
+                      >
+                        <ResponsiveContainer width="100%" height="100%">
+                          <BarChart
+                            data={varianceSeries}
+                            margin={{ top: 4, right: 8, bottom: 0, left: -28 }}
+                          >
+                            <CartesianGrid strokeDasharray="3 3" stroke="#E3E7E0" vertical={false} />
+                            <XAxis
+                              dataKey="short"
+                              tick={{ fontSize: 9, fill: '#969696' }}
+                              tickLine={false}
+                              axisLine={{ stroke: '#E3E7E0' }}
+                              interval={0}
+                            />
+                            <YAxis
+                              tick={{ fontSize: 9, fill: '#969696' }}
+                              tickLine={false}
+                              axisLine={false}
+                              tickFormatter={(v: number) =>
+                                v === 0 ? '0' : `${v > 0 ? '+' : '−'}${Math.abs(Math.round(v))}`
+                              }
+                            />
+                            <Tooltip
+                              cursor={{ fill: 'rgba(184,142,47,0.08)' }}
+                              contentStyle={{
+                                borderRadius: 12,
+                                border: '1px solid #E3E7E0',
+                                fontSize: 12,
+                                boxShadow: '0 4px 14px rgba(15,61,62,0.10)',
+                              }}
+                              formatter={(v: unknown) => [signedMoney(Number(v)), 'Variance']}
+                            />
+                            <ReferenceLine y={0} stroke="#C9D2CB" />
+                            <Bar
+                              dataKey="variance"
+                              radius={[3, 3, 3, 3]}
+                              maxBarSize={26}
+                              aria-hidden
+                            >
+                              {varianceSeries.map((s) => (
+                                <Cell key={s.id} fill={varianceColor(s.variance)} />
+                              ))}
+                            </Bar>
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </div>
+                  )}
                   <ul className="mt-4 flex flex-col gap-2.5 border-t border-dashed border-[#E3E7E0] pt-3.5">
                     {shiftsInRange.slice(0, 5).map((s) => {
                       const v = Number(s.variance ?? 0);
@@ -1178,6 +1599,7 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
             Aggregated from the most recent 500 tickets in the cloud, IST calendar days. Cancelled
             tickets are excluded from every money figure; margin is computed on paid tickets only.
             Guest satisfaction reads the ratings ledger; drawer honesty reads sealed shifts only.
+            All-time day buckets show the most recent 30 ticket days.
           </p>
         </>
       )}

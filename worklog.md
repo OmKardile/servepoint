@@ -1620,3 +1620,29 @@ Stage Summary:
 - Ideas parked: satisfaction trend LINE over time (needs weekly buckets, not just range totals); comment sentiment flagging (complaint keywords → Notifications); drawer variance trends chart per week; export a full "owner pack" (all sections, one PDF).
 - Crons: 15-min webDevReview (job 430321).
 
+
+---
+Task ID: 54 (CLAIM — in progress)
+Agent: glm-5.3 (cron webDevReview round)
+Task: Claiming "the report learns to see time" — Trends in Reports (Task 53's parked trio): Day-by-day ComposedChart (gross bars + ticket line, IST-day buckets, best-day gold highlight, daily CSV), Ratings-over-time gold line (avg ★/day, honest gaps), Drawer honesty gains a shift-by-shift diverging variance mini-chart colored by the exact tone vocabulary. ReportsScreen.tsx is mine this round; no migration, read-only on all ledgers. Please don't touch ReportsScreen.tsx (guest/menu/KDS/inventory/Bills/EOD remain free).
+
+---
+Task ID: 54
+Agent: glm-5.3 (cron webDevReview round)
+Task: "The report learns to see time" — Trends in Reports (the parked Task 53 trio): Day-by-day ComposedChart (gross bars + tickets line, IST-day buckets, best-day gold, daily CSV), Ratings-over-time gold line (avg ★/day with honest gaps), Drawer honesty gains a shift-by-shift diverging variance mini-chart; no migration, read-only on all ledgers
+
+Work Log:
+- Health sweep clean (tsc 0 / dev 200 / tree at 391f3a2 5.15.0; dev.log HMR-only from the prior round). agent-browser QA sweep FIRST: Dashboard (₹703.50, margin ₹562/₹670 84%), Reports (satisfaction 4.3/5 + drawer −₹7.00 from 5.15.0), Close-out (drawer honest not-open state), guest QR menu (KN persisted, offers, cart) — ALL render, ZERO page errors. No bugs → stable phase → building the parked trends ideas. CLAIMED in this file BEFORE building.
+- ReportsScreen.tsx only (merge-surface discipline): new recharts imports (ComposedChart, Line, LineChart, ReferenceLine); module-level IST_DAY_KEY (en-CA YYYY-MM-DD) + IST_DAY_LABEL (en-IN "2 Oct") + IST_CLOSE_LABEL formatters + istDayKey() + varianceColor() (extracted hex twin of varianceTone's thresholds); new memos daily/bestDay/exportDaily/fbDaily/fbDailyTotals/varianceSeries; doc-comment sections renumbered 1–9.
+- Day by day (2col, first row under the headline strip): ComposedChart — gross ₹ teal bars (best day GOLD, radius tops, maxBarSize 38) + tickets gold line on a right-hand YAxis (allowDecimals false) + dual-series tooltip (Gross via formatMoney, Tickets raw). Window honesty: 7d/30d fill EVERY calendar day with true zeros; Today refuses to fake a shape — "One day can't show a shape" hint with a See-last-7-days button wired to the real setRange; All time buckets the most recent 30 ticket days, said in caption AND footer. CSV: Day (IST)/Gross/Tickets/Avg ticket — zero-ticket days leave avg EMPTY (no fake ₹0 averages).
+- Ratings over time (1col): gold line of avg ★/day, y-domain [1,5] integer ticks, connectNulls={false} so unrated days stay GAPS; custom dot renderer sizes dots by rating count (3+min(3,n)) and returns an empty <g> for null days; role=img aria "N ratings over M rated days"; honest empty state when the range holds no ratings.
+- Drawer honesty card gains "VARIANCE, SHIFT BY SHIFT": h-28 diverging BarChart under the tiles — one bar per sealed shift colored by varianceColor (exact green/≤20 amber/else red), ReferenceLine y=0, signed y-ticks (+/− prefix), aria summary with net; a sealed-exact shift honestly renders as NO bar. Tooltip via shared signedMoney.
+- STYLE MANDATE: charts ride the screen's chart conventions (dashed #E3E7E0 grid, 12px tooltips + teal shadow, gold cursor wash); CSV pill mirrors section buttons (gold outline, hover fill, active:scale-[0.97]); Today hint keeps h-56 so range switches never reflow; tabular-nums everywhere.
+- Browser E2E on real data, zero page errors throughout: 7d — bars hand-checked (29 Sept ₹231 · 30 Sept ₹462 · 2 Oct ₹703.50 gold; zeros 26–28 Sept + 1 Oct; line 1·1·2), ratings gap honesty PROVED by zoomed screenshot (5★→4★ segment, empty 1 Oct the line refuses to cross, isolated 2 Oct dot), variance chart −₹7.00 amber down-bar + invisible ₹0.00 shift; Today hint + button really flips the range (ratings card follows: 3→1 rated days); 30d + All time captions honest; hover tooltip verified live (29 Sept · Gross ₹231.00 · Tickets 1); daily CSV downloaded and byte-verified (BOM + 7 filled rows + 351.75 avg on 2 Oct + empty avg cells). Guest QR menu + Dashboard regression-clean.
+- sw.js VERSION 5.15.0-r1 → 5.16.0-r1 (shell-changing deploy discipline). tsc 0. CHANGELOG [5.16.0] written, heading-integrity grep clean (58 headings, 5.16.0 atop 5.15.0).
+
+Stage Summary:
+- Reports now SHOWS time, not just totals: the owner sees the week's shape first (best day gold, slow days honestly zero), the ratings line with gaps that refuse to lie about unrated days, and the drawer's variance drawn shift by shift in the same tones the close dialog speaks. All three of 5.15.0's parked trend ideas are closed in one section; no migration, read-only on orders/feedback/drawer ledgers.
+- For the parallel round: everything lives in ReportsScreen.tsx (one file, self-contained memos + JSX rows); if you touch the EOD/Close-out variance voice, keep varianceColor/varianceTone in sync — they are line-adjacent twins on purpose.
+- Ideas parked: weekly buckets for All time beyond 30 days; a "vs previous range" delta chip (up/down arrows vs the prior 7 days); ratings + variance on ONE combined owner timeline; export the whole report as a printable owner pack (Z-report style).
+- Crons: 15-min webDevReview (job 430321).
