@@ -1376,3 +1376,44 @@ export function subscribeCrmRealtime(
     void supabase.removeChannel(channel);
   };
 }
+
+/* ── COGS & margin (018 views) — the inventory shelf prices the menu ────── */
+
+/**
+ * Per-order ingredient cost, from `v_order_cogs` (018): Σ recipe_lines.
+ * qty_per_serve × order_items.qty × inventory_items.cost_per_unit over every
+ * non-null item line. Cost basis is CURRENT ingredient cost — no cost-history
+ * table exists, so a restock reprices history; the UI says so.
+ * Map key = order id; orders with no recipe lines read 0 (honest zero).
+ */
+export async function fetchOrderCogs(tenantId: string): Promise<Map<string, number>> {
+  requireCloud();
+  const { data, error } = await supabase
+    .from('v_order_cogs')
+    .select('order_id, cogs')
+    .eq('tenant_id', tenantId);
+  if (error) throw error;
+  const map = new Map<string, number>();
+  for (const row of (data || []) as { order_id: string; cogs: number }[]) {
+    map.set(row.order_id, Number(row.cogs ?? 0));
+  }
+  return map;
+}
+
+/**
+ * Ingredient cost of ONE serve per menu item, from `v_item_unit_cost` (018).
+ * Map key = menu item id; items without recipes are absent (treated as 0).
+ */
+export async function fetchItemUnitCosts(tenantId: string): Promise<Map<string, number>> {
+  requireCloud();
+  const { data, error } = await supabase
+    .from('v_item_unit_cost')
+    .select('menu_item_id, unit_cost')
+    .eq('tenant_id', tenantId);
+  if (error) throw error;
+  const map = new Map<string, number>();
+  for (const row of (data || []) as { menu_item_id: string; unit_cost: number }[]) {
+    map.set(row.menu_item_id, Number(row.unit_cost ?? 0));
+  }
+  return map;
+}

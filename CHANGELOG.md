@@ -3,6 +3,30 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.9.0] — 2026-10-02 — The menu knows what it costs (COGS & margin wire into Reports + Close-out)
+
+### Added — COGS views (migration `018_cogs_margin.sql`)
+- **The last NOVA-parity item is closed**: the inventory shelf (015) now talks to the money screens. Two read-only views, no new tables, no triggers — the deduction ledger stays the single write path (SINGLE-ENGINE RULE untouched):
+  - **`v_order_cogs`** — one row per order with its ingredient cost: Σ `recipe_lines.qty_per_serve × order_items.qty × inventory_items.cost_per_unit` over every non-null item line. Recipe-less items read an honest `0.00` (not null).
+  - **`v_item_unit_cost`** — what ONE serve of each menu item costs in ingredients; Reports joins it to item lines for per-item margin.
+  - Both views are `security_invoker = on` (same shape as `v_customer_stats` in 016) — every read flows through the caller's own tenant policies, no SECURITY DEFINER surface. Idempotent apply + verification DO-block (both views exist, both invoker-flagged).
+- **Honest money basis** (mirrored in the UI copy): margin is computed on **PAID, non-cancelled tickets only** — margin cannot be banked on money not collected. Gross margin = paid net (ex-GST, after discount) − COGS. Cost basis is CURRENT `cost_per_unit` (no cost-history table — a restock reprices history; the screens say so), and recipes model the BASE item only (variant sizes and add-ons are not priced yet — documented in both screens).
+
+### Added — Reports: "Cost & margin" section
+- Three stat tiles — **Ingredient cost** (gold on cream), **Gross margin** (health-colored), **Margin rate** with a plain-language verdict (`healthy for a cafe` ≥65% · `worth watching` 40–65% · `check your pricing` <40% — typical cafe economics).
+- **Revenue-split bar**: what the shelf burned (gold) vs what the cafe keeps (teal), animated width, color-dot legend, full `role="img"` aria description.
+- **Top items gain margin chips**: each ranked item shows a `NN% mgn` pill tinted by the same health tones, with a tooltip carrying the item's ingredient cost and margin rupees. The CSV export gains `Ingredient cost (INR)`, `Margin (INR)` and `Margin %` columns (8 columns total).
+- COGS loads ride along with the sales fetch (`Promise.all` — the maps can never drift from the orders).
+
+### Added — Close-out: cost & margin row + Z-report lines
+- The day summary grows a second strip: **Ingredient cost** (all LIVE tickets — the shelf burned for them, paid or not) · **Margin · paid** (paid net − paid COGS, red below 40%) · **"Where the paid money went"** split bar (gold/green on the grey panel, aria-described).
+- The **printed Z-report** gains a `COST & MARGIN · PAID TICKETS` block — `Ingredient cost` + `GROSS MARGIN` lines between the money block and PAYMENTS, so the paper trail carries the margin story too.
+
+### Verified
+- DB E2E `scripts/qa-cogs-e2e.mjs` **9/9 PASS** on the live cloud: `v_item_unit_cost` matches recipe math per item; `v_order_cogs` matches Σ `qty_per_serve×qty×cost` for every order; the demo tickets carry real COGS (#48 Maya ₹72.00 = 2 serves × 20g × ₹1.80, #55 Ira ₹36.00); margin math sane (#55: net ₹294.00 − ₹36.00 = ₹258.00, 88%); a self-cleaning fixture (temp recipe-less item + order) prices at exactly `0.00` and cascades away clean.
+- Browser E2E as owner: Reports `Cost & margin` shows ₹108.00 ingredients / ₹562.00 margin / **84%** (= 562/670 paid net — hand-verified against the DB), Top-items chip `86% mgn` (= (440+330−108)/770 item-level, pre-discount — both bases correct by design); Close-out strip shows the same ₹108/₹562/₹670 with the split bar; Z-report print path clean. Zero page errors on Reports + Close-out.
+- db-setup.mjs now carries sentinels for **017 AND 018** (017 had been applied out-of-band with no bootstrap path — a fresh environment would have missed guest-offer checkout); header updated 001-010 → 001-018. sw.js VERSION bumped `5.8.0-r1` → `5.9.0-r1` (shell-changing deploy discipline).
+
 ## [5.8.0] — 2026-10-02 — Guests redeem the offer (QR checkout joins the CRM loop) + shared csv lib
 
 ### Added — guest offer checkout (migration `017_guest_offer_checkout.sql`)

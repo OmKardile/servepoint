@@ -1,4 +1,4 @@
-// Supabase provisioning script: applies ServePoint migrations 001-010 to the live
+// Supabase provisioning script: applies ServePoint migrations 001-018 to the live
 // Supabase project via the Supavisor session pooler (IPv4 path — direct
 // db.<ref>.supabase.co:5432 is IPv6-only on current projects), then verifies.
 // NOT part of the app bundle.
@@ -232,6 +232,42 @@ try {
     return tables === 3 && view === 1 && trg === 2 && rpc === true && pub === 2;
   };
   await applyFile('016_customers_offers', 'supabase/migrations/016_customers_offers.sql', await crmReady());
+
+  // 017 sentinel: guest offer checkout — sp_create_public_order gains p_offer_id
+  // (exactly ONE overload — the 7-arg shadow must stay dropped — plus anon grants).
+  const guestOfferReady = async () => {
+    const overloads = Number(
+      await scalar(
+        `SELECT count(*) FROM pg_proc WHERE pronamespace='public'::regnamespace
+          AND proname='sp_create_public_order'`
+      )
+    );
+    const has8 = await scalar(
+      `SELECT to_regprocedure('public.sp_create_public_order(text,text,jsonb,text,text,text,text,uuid)') IS NOT NULL`
+    );
+    return overloads === 1 && has8 === true;
+  };
+  await applyFile('017_guest_offer_checkout', 'supabase/migrations/017_guest_offer_checkout.sql', await guestOfferReady());
+
+  // 018 sentinel: COGS/margin views — per-order ingredient cost + per-item unit
+  // cost, both security_invoker (016 view shape). Read-only, no engine surface.
+  const cogsReady = async () => {
+    const views = Number(
+      await scalar(
+        `SELECT count(*) FROM information_schema.views WHERE table_schema='public'
+          AND table_name IN ('v_order_cogs','v_item_unit_cost')`
+      )
+    );
+    const invoker = Number(
+      await scalar(
+        `SELECT count(*) FROM pg_class c JOIN pg_namespace s ON s.oid=c.relnamespace
+          WHERE s.nspname='public' AND c.relname IN ('v_order_cogs','v_item_unit_cost')
+          AND c.reloptions::text LIKE '%security_invoker=on%'`
+      )
+    );
+    return views === 2 && invoker === 2;
+  };
+  await applyFile('018_cogs_margin', 'supabase/migrations/018_cogs_margin.sql', await cogsReady());
 
   // ── Verification ──────────────────────────────────────────────────────────
   const tables = await client.query(

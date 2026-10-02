@@ -15,7 +15,7 @@
  * Release discipline: bump VERSION on every shell-changing deploy so old
  * caches are evicted on activate.
  */
-const VERSION = 'servepoint-v5.8.0-r1';
+const VERSION = 'servepoint-v5.9.0-r1';
 const SHELL_CACHE = `${VERSION}-shell`;
 const ASSET_CACHE = `${VERSION}-assets`;
 const FONT_CACHE = `${VERSION}-fonts`;

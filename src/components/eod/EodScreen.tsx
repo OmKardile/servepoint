@@ -12,6 +12,7 @@ import {
   Wallet,
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import { fetchOrderCogs } from '../../lib/api';
 import { formatMoney } from '../../lib/prefs';
 import { useTenant } from '../../lib/tenant';
 import { useSession } from '../../store/session';
@@ -20,17 +21,21 @@ import { useSession } from '../../store/session';
  * EOD Close-out (NOVA §4.3 — EOD reconciliation, /reconcile in the spec).
  *
  * Day stepper (Asia/Kolkata calendar days) → day summary (orders, gross,
- * paid, unpaid, average ticket) → payment mix (cash / UPI / card from the
- * payments ledger) → a compact one-line-per-ticket ledger → and a printable
- * z-report (receipt-style strip, hidden-iframe print — popup blockers can't
- * eat it).
+ * paid, unpaid, average ticket) → cost & margin (ingredient cost the shelf
+ * burned for the day's tickets, v_order_cogs view from migration 018; gross
+ * margin on PAID tickets) → payment mix (cash / UPI / card from the payments
+ * ledger) → a compact one-line-per-ticket ledger → and a printable z-report
+ * (receipt-style strip, hidden-iframe print — popup blockers can't eat it).
  *
  * The "Right now" strip (today only) mirrors the counter's live money view:
  * tickets in the kitchen, unpaid tickets · ₹, late prep (≥10 min — the KDS
  * amber SLA). It is a mirror only: all money actions live on Bills.
  *
  * Money truth: `payments` rows are the authoritative take for the day;
- * `orders.payment_status` only drives the unpaid tickets count.
+ * `orders.payment_status` only drives the unpaid tickets count. COGS truth:
+ * recipes × current ingredient cost (no cost-history — a restock reprices
+ * history); COGS counts every LIVE ticket (the shelf burned for them all)
+ * while margin banks on PAID tickets only.
  */
 
 /* ────────────────────────── IST day-window helpers ─────────────────────── */
@@ -106,6 +111,12 @@ interface DayPayment {
   created_at: string;
 }
 
+/** One row of v_order_cogs (018) — per-order ingredient cost. */
+interface DayCogs {
+  order_id: string;
+  cogs: number;
+}
+
 const LATE_PREP_MIN = 10; // KDS amber SLA — the EOD strip mirrors it
 
 /* ─────────────────────────── small view atoms ──────────────────────────── */
@@ -174,6 +185,8 @@ interface ZReportOpts {
   unpaid: number;
   unpaidTickets: number;
   gst: number;
+  cogs: number;
+  margin: number;
   mix: { method: string; amount: number }[];
   cancelled: number;
   printedBy: string;
@@ -200,6 +213,11 @@ function printZReport(opts: ZReportOpts): void {
     ${row('GST collected', formatMoney(opts.gst))}
     ${row('PAID', formatMoney(opts.paid), true)}
     ${row('UNPAID', `${formatMoney(opts.unpaid)} (${opts.unpaidTickets} tkt)`, true)}
+  </div>
+  <div style="border-top:1px dashed #000;margin-top:8px;padding-top:6px;">
+    <div style="font-weight:800;padding-bottom:3px;">COST &amp; MARGIN · PAID TICKETS</div>
+    ${row('Ingredient cost', formatMoney(opts.cogs))}
+    ${row('GROSS MARGIN', formatMoney(opts.margin), true)}
   </div>
   <div style="border-top:1px dashed #000;margin-top:8px;padding-top:6px;">
     <div style="font-weight:800;padding-bottom:3px;">PAYMENTS</div>
@@ -237,6 +255,7 @@ const EodScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
   const [dateIso, setDateIso] = useState<string>(() => istTodayIso());
   const [orders, setOrders] = useState<DayOrder[]>([]);
   const [payments, setPayments] = useState<DayPayment[]>([]);
+  const [cogsRows, setCogsRows] = useState<DayCogs[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshedAt, setRefreshedAt] = useState<Date | null>(null);
@@ -249,7 +268,7 @@ const EodScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
     setError(null);
     try {
       const { startIso, endIso } = istDayBounds(dateIso);
-      const [oRes, pRes] = await Promise.all([
+      const [oRes, pRes, cRes] = await Promise.all([
         supabase
           .from('orders')
           .select(
@@ -266,11 +285,20 @@ const EodScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
           .gte('created_at', startIso)
           .lt('created_at', endIso)
           .order('created_at', { ascending: true }),
+        // cost & margin for the day — 018 view, tenant-scoped by RLS,
+        // filtered client-side to this day's tickets by order_id
+        fetchOrderCogs(tenantId).then((m) =>
+          [...m.entries()].map(([order_id, cogs]) => ({ order_id, cogs })),
+        ),
       ]);
       if (oRes.error) throw oRes.error;
       if (pRes.error) throw pRes.error;
       setOrders((oRes.data || []) as DayOrder[]);
       setPayments((pRes.data || []) as DayPayment[]);
+      const ids = new Set(((oRes.data || []) as DayOrder[]).map((o) => o.id));
+      setCogsRows(
+        (cRes as unknown as DayCogs[]).filter((r) => ids.has(r.order_id)),
+      );
       setRefreshedAt(new Date());
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Could not load the day.');
@@ -313,8 +341,42 @@ const EodScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
     const paidOrderIds = new Set(payments.map((p) => p.order_id));
     const orphanPaid = live.filter((o) => o.payment_status === 'completed' && !paidOrderIds.has(o.id)).length;
 
-    return { live, cancelled, gross, gst, paid, unpaidOrders, unpaidAmt, avg, mix, orphanPaid };
-  }, [orders, payments]);
+    // ── cost & margin (018): v_order_cogs rows for THIS day's tickets ──
+    const cogsById = new Map(cogsRows.map((r) => [r.order_id, Number(r.cogs)]));
+    let dayCogs = 0; // the shelf burned for every live ticket (paid or not)
+    let paidCogs = 0; // …but margin banks on collected money only
+    let paidNet = 0;
+    let paidTickets = 0;
+    for (const o of live) {
+      const cost = cogsById.get(o.id) ?? 0;
+      dayCogs += cost;
+      if (o.payment_status === 'completed') {
+        paidTickets += 1;
+        // total − GST IS the discounted net (GST is computed on that base)
+        paidNet += Number(o.total || 0) - Number(o.tax_amount || 0);
+        paidCogs += cost;
+      }
+    }
+    const margin = paidNet - paidCogs;
+
+    return {
+      live,
+      cancelled,
+      gross,
+      gst,
+      paid,
+      unpaidOrders,
+      unpaidAmt,
+      avg,
+      mix,
+      orphanPaid,
+      dayCogs,
+      paidCogs,
+      paidNet,
+      margin,
+      paidTickets,
+    };
+  }, [orders, payments, cogsRows]);
 
   /* right-now strip (today) */
   const now = useMemo(() => {
@@ -336,6 +398,8 @@ const EodScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
       unpaid: agg.unpaidAmt,
       unpaidTickets: agg.unpaidOrders.length,
       gst: agg.gst,
+      cogs: agg.paidCogs,
+      margin: agg.margin,
       mix: agg.mix,
       cancelled: agg.cancelled,
       printedBy: session?.email || '',
@@ -514,6 +578,58 @@ const EodScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
               sub={`${agg.unpaidOrders.length} ${agg.unpaidOrders.length === 1 ? 'ticket' : 'tickets'} due`}
             />
             <StatCard label="Avg ticket" value={formatMoney(agg.avg)} sub="gross ÷ orders" />
+          </section>
+
+          {/* ── cost & margin: what the shelf burned vs what the cafe keeps ── */}
+          <section
+            aria-label="Cost and margin"
+            className="grid grid-cols-2 gap-3 rounded-2xl border border-[#E3E7E0] bg-white p-4 md:grid-cols-4"
+          >
+            <StatCard
+              label="Ingredient cost"
+              value={formatMoney(agg.dayCogs)}
+              sub="all live tickets · recipes × shelf cost"
+              tone="gold"
+            />
+            <StatCard
+              label="Margin · paid"
+              value={formatMoney(agg.margin)}
+              sub={`paid net ${formatMoney(agg.paidNet)} · ${agg.paidTickets} ${agg.paidTickets === 1 ? 'ticket' : 'tickets'}`}
+              tone={agg.paidNet > 0 && agg.margin / agg.paidNet < 0.4 ? 'red' : 'green'}
+            />
+            <div className="col-span-2 flex flex-col justify-center gap-2 rounded-2xl bg-[#F7F8F6] px-4 py-3">
+              <span className="text-[10.5px] font-bold uppercase tracking-[0.08em] text-[#8A938C]">
+                Where the paid money went
+              </span>
+              <div
+                className="flex h-3 w-full overflow-hidden rounded-full bg-[#EAF0EC]"
+                role="img"
+                aria-label={`Paid net ${formatMoney(agg.paidNet)}: ingredients ${formatMoney(agg.paidCogs)}, margin ${formatMoney(agg.margin)}`}
+              >
+                <div
+                  className="h-full bg-[#B88E2F] transition-all duration-700"
+                  style={{
+                    width: `${Math.max(agg.paidNet > 0 ? (agg.paidCogs / agg.paidNet) * 100 : 0, 1.5)}%`,
+                  }}
+                />
+                <div
+                  className="h-full bg-[#2E7D32] transition-all duration-700"
+                  style={{
+                    width: `${Math.max(agg.paidNet > 0 ? (agg.margin / agg.paidNet) * 100 : 0, 0)}%`,
+                  }}
+                />
+              </div>
+              <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-[10.5px] font-semibold text-[#5F6B63]">
+                <span className="inline-flex items-center gap-1.5">
+                  <span aria-hidden className="h-2 w-2 rounded-full bg-[#B88E2F]" />
+                  ingredients {formatMoney(agg.paidCogs)}
+                </span>
+                <span className="inline-flex items-center gap-1.5">
+                  <span aria-hidden className="h-2 w-2 rounded-full bg-[#2E7D32]" />
+                  the cafe keeps {formatMoney(agg.margin)}
+                </span>
+              </div>
+            </div>
           </section>
 
           {/* ── payment mix ── */}

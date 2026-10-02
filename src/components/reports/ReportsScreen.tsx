@@ -14,6 +14,7 @@ import {
 import {
   CalendarRange,
   Clock,
+  Coins,
   Download,
   Flame,
   QrCode,
@@ -22,7 +23,7 @@ import {
   TrendingUp,
   Wallet,
 } from 'lucide-react';
-import { fetchOrders } from '../../lib/api';
+import { fetchItemUnitCosts, fetchOrderCogs, fetchOrders } from '../../lib/api';
 import { formatMoney } from '../../lib/prefs';
 import { downloadCsv } from '../../lib/csv';
 import { useTenant } from '../../lib/tenant';
@@ -40,13 +41,19 @@ import type { Order } from '../../types';
  *   2. Sales by hour — a bar chart of when the day actually earns (IST hours,
  *      whole range summed). The Dashboard only charts today; this is the trend.
  *   3. Payment mix — how money arrived (cash / UPI / card) + what's still out.
- *   4. Top items — best sellers by revenue with unit counts and share bars,
- *      exportable as CSV.
- *   5. Service mix — dine-in / takeaway / delivery split.
+ *   4. Cost & margin — the inventory shelf prices the menu (018 views):
+ *      COGS, gross margin and margin-% on PAID tickets, with a revenue-split
+ *      bar (what the shelf burned vs what the cafe keeps).
+ *   5. Top items — best sellers by revenue with unit counts, share bars and
+ *      per-item margin chips, exportable as CSV.
+ *   6. Service mix — dine-in / takeaway / delivery split.
  *
- * Data truth: the orders + order_items tables, aggregated client-side. The
- * window scans at most the most recent 500 tickets (a cafe month) — stated
- * honestly in the footer, no silent truncation beyond that.
+ * Data truth: the orders + order_items tables, aggregated client-side; COGS
+ * comes from v_order_cogs / v_item_unit_cost (recipe_lines × current
+ * cost_per_unit — no cost-history table, so a restock reprices history; the
+ * section says so). Margin is computed on PAID tickets only — margin cannot
+ * be banked on money not collected. The window scans at most the most recent
+ * 500 tickets (a cafe month) — stated honestly in the footer.
  */
 
 type RangeKey = 'today' | '7d' | '30d' | 'all';
@@ -107,6 +114,7 @@ interface ItemRank {
   name: string;
   units: number;
   revenue: number;
+  cost: number;
 }
 
 const TYPE_LABEL: Record<string, string> = {
@@ -138,6 +146,8 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
   const { tenantId, loading: tenantLoading, error: tenantError } = useTenant();
   const [range, setRange] = useState<RangeKey>('7d');
   const [orders, setOrders] = useState<Order[]>([]);
+  const [cogsMap, setCogsMap] = useState<Map<string, number>>(new Map());
+  const [unitCosts, setUnitCosts] = useState<Map<string, number>>(new Map());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshedAt, setRefreshedAt] = useState<Date | null>(null);
@@ -147,8 +157,15 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
     setError(null);
     try {
       // Recent 500 tickets — a cafe month; the footer states the cap honestly.
-      const data = await fetchOrders(tenantId, 500);
+      // COGS rides along (018 views) so cost & margin never drift from sales.
+      const [data, cogs, unitCosts] = await Promise.all([
+        fetchOrders(tenantId, 500),
+        fetchOrderCogs(tenantId),
+        fetchItemUnitCosts(tenantId),
+      ]);
       setOrders(data);
+      setCogsMap(cogs);
+      setUnitCosts(unitCosts);
       setRefreshedAt(new Date());
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not load sales data from the cloud.');
@@ -179,6 +196,9 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
     let placed = 0;
     let cancelled = 0;
     let items = 0;
+    let paidNet = 0;
+    let cogs = 0;
+    let paidCount = 0;
     for (const o of inRange) {
       const st = String(o.status || '').toLowerCase();
       if (st === 'cancelled') {
@@ -190,10 +210,18 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
       gst += Number(o.tax_amount ?? 0);
       net += Number(o.subtotal ?? 0) - Number(o.discount_amount ?? 0);
       items += (o.items || []).reduce((n, it) => n + Number(it.qty ?? 0), 0);
+      // margin banks on COLLECTED money only
+      if (String(o.payment_status || '').toLowerCase() === 'completed') {
+        paidCount += 1;
+        paidNet += Number(o.subtotal ?? 0) - Number(o.discount_amount ?? 0);
+        cogs += cogsMap.get(o.id) ?? 0;
+      }
     }
     const avgTicket = placed > 0 ? gross / placed : 0;
-    return { gross, gst, net, placed, cancelled, items, avgTicket };
-  }, [inRange]);
+    const margin = paidNet - cogs;
+    const marginPct = paidNet > 0 ? (margin / paidNet) * 100 : 0;
+    return { gross, gst, net, placed, cancelled, items, avgTicket, paidNet, cogs, margin, marginPct, paidCount };
+  }, [inRange, cogsMap]);
 
   const hourly = useMemo(() => {
     const buckets = Array.from({ length: 24 }, (_, h) => ({ hour: h, label: hourLabel(h), gross: 0 }));
@@ -230,14 +258,16 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
     for (const o of inRange) {
       if (String(o.status || '').toLowerCase() === 'cancelled') continue;
       for (const it of o.items || []) {
-        const cur = byName.get(it.name) || { name: it.name, units: 0, revenue: 0 };
+        const cur = byName.get(it.name) || { name: it.name, units: 0, revenue: 0, cost: 0 };
         cur.units += Number(it.qty ?? 0);
         cur.revenue += Number(it.item_total ?? Number(it.unit_price ?? 0) * Number(it.qty ?? 0));
+        // base-recipe ingredient cost for the units sold (variants/add-ons not priced)
+        cur.cost += (unitCosts.get(it.menu_item_id ?? '') ?? 0) * Number(it.qty ?? 0);
         byName.set(it.name, cur);
       }
     }
     return [...byName.values()].sort((a, b) => b.revenue - a.revenue);
-  }, [inRange]);
+  }, [inRange, unitCosts]);
 
   const typeMix = useMemo(() => {
     const m = new Map<string, { count: number; total: number }>();
@@ -257,15 +287,20 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
   const exportRanking = useCallback(() => {
     if (topItems.length === 0) return;
     const rows: (string | number)[][] = [
-      ['Rank', 'Item', 'Units sold', 'Revenue (INR)', 'Share of item revenue %'],
+      ['Rank', 'Item', 'Units sold', 'Revenue (INR)', 'Ingredient cost (INR)', 'Margin (INR)', 'Margin %', 'Share of item revenue %'],
     ];
     const total = topItems.reduce((n, it) => n + it.revenue, 0) || 1;
     topItems.forEach((it, i) => {
+      const margin = it.revenue - it.cost;
+      const marginPct = it.revenue > 0 ? (margin / it.revenue) * 100 : 0;
       rows.push([
         i + 1,
         it.name,
         it.units,
         it.revenue.toFixed(2),
+        it.cost.toFixed(2),
+        margin.toFixed(2),
+        marginPct.toFixed(1),
         ((it.revenue / total) * 100).toFixed(1),
       ]);
     });
@@ -534,6 +569,92 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
             </section>
           </div>
 
+          {/* ── cost & margin: the shelf prices the menu (018 views) ── */}
+          <section className="sp-card p-5" aria-label="Cost and margin">
+            <div className="mb-1 flex items-center justify-between gap-2">
+              <h2 className="text-[15px] font-bold text-[#1A1A1A]">Cost &amp; margin</h2>
+              <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#6B6B6B]">
+                <Coins size={11} aria-hidden /> paid tickets only
+              </span>
+            </div>
+            <p className="mb-4 text-[11.5px] text-[#969696]">
+              Ingredients priced from recipes × current shelf cost (a restock reprices history;
+              variant sizes and add-ons are not priced yet). Margin banks on collected money only.
+            </p>
+            {agg.paidCount === 0 ? (
+              <p className="py-6 text-center text-[12.5px] text-[#969696]">
+                No paid tickets in this range yet — charge bills on Bills and the margin lands here.
+              </p>
+            ) : (
+              <>
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="rounded-xl border border-[#E3E7E0] bg-[#FFFBF2] px-3.5 py-3">
+                    <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-[#8A5A00]">
+                      Ingredient cost
+                    </p>
+                    <p className="mt-1 truncate text-[18px] font-extrabold tabular-nums leading-tight text-[#8A5A00]">
+                      {formatMoney(agg.cogs)}
+                    </p>
+                    <p className="mt-0.5 text-[10px] font-semibold text-[#969696]">
+                      {agg.paidCount} paid {agg.paidCount === 1 ? 'ticket' : 'tickets'}
+                    </p>
+                  </div>
+                  <div className="rounded-xl border border-[#E3E7E0] bg-white px-3.5 py-3">
+                    <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-[#969696]">
+                      Gross margin
+                    </p>
+                    <p
+                      className="mt-1 truncate text-[18px] font-extrabold tabular-nums leading-tight"
+                      style={{ color: marginTone(agg.marginPct) }}
+                    >
+                      {formatMoney(agg.margin)}
+                    </p>
+                    <p className="mt-0.5 text-[10px] font-semibold text-[#969696]">
+                      paid net {formatMoney(agg.paidNet)}
+                    </p>
+                  </div>
+                  <div className="rounded-xl border border-[#E3E7E0] bg-white px-3.5 py-3">
+                    <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-[#969696]">
+                      Margin rate
+                    </p>
+                    <p
+                      className="mt-1 truncate text-[18px] font-extrabold tabular-nums leading-tight"
+                      style={{ color: marginTone(agg.marginPct) }}
+                    >
+                      {agg.marginPct.toFixed(0)}%
+                    </p>
+                    <p className="mt-0.5 text-[10px] font-semibold text-[#969696]">
+                      {marginWord(agg.marginPct)}
+                    </p>
+                  </div>
+                </div>
+                {/* revenue split — what the shelf burned vs what the cafe keeps */}
+                <div className="mt-4" role="img" aria-label={`Revenue split: ingredient cost ${formatMoney(agg.cogs)}, gross margin ${formatMoney(agg.margin)}`}>
+                  <div className="flex h-3.5 w-full overflow-hidden rounded-full bg-[#EAF0EC]" aria-hidden>
+                    <div
+                      className="h-full bg-[#B88E2F] transition-all duration-700"
+                      style={{ width: `${Math.min(100, Math.max(agg.paidNet > 0 ? (agg.cogs / agg.paidNet) * 100 : 0, 1.5))}%` }}
+                    />
+                    <div
+                      className="h-full bg-[#0F3D3E] transition-all duration-700"
+                      style={{ width: `${Math.min(100, Math.max(agg.paidNet > 0 ? (agg.margin / agg.paidNet) * 100 : 0, 0))}%` }}
+                    />
+                  </div>
+                  <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-[10.5px] font-semibold text-[#6B6B6B]">
+                    <span className="inline-flex items-center gap-1.5">
+                      <span aria-hidden className="h-2 w-2 rounded-full bg-[#B88E2F]" />
+                      ingredients {formatMoney(agg.cogs)}
+                    </span>
+                    <span className="inline-flex items-center gap-1.5">
+                      <span aria-hidden className="h-2 w-2 rounded-full bg-[#0F3D3E]" />
+                      the cafe keeps {formatMoney(agg.margin)}
+                    </span>
+                  </div>
+                </div>
+              </>
+            )}
+          </section>
+
           {/* ── row: top items + service mix ── */}
           <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
             <section className="sp-card p-5 xl:col-span-2" aria-label="Top selling items">
@@ -580,8 +701,22 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
                         </span>
                         <div className="min-w-0 flex-1">
                           <div className="flex items-baseline justify-between gap-2">
-                            <span className="truncate text-[13px] font-bold text-[#1A1A1A]">
-                              {it.name}
+                            <span className="flex min-w-0 items-center gap-1.5">
+                              <span className="truncate text-[13px] font-bold text-[#1A1A1A]">
+                                {it.name}
+                              </span>
+                              {it.revenue > 0 && (
+                                <span
+                                  className="shrink-0 rounded-full px-1.5 py-0.5 text-[9.5px] font-extrabold tabular-nums"
+                                  style={{
+                                    color: marginTone(((it.revenue - it.cost) / it.revenue) * 100),
+                                    backgroundColor: `${marginTone(((it.revenue - it.cost) / it.revenue) * 100)}14`,
+                                  }}
+                                  title={`Ingredient cost ${formatMoney(it.cost)} · margin ${formatMoney(it.revenue - it.cost)}`}
+                                >
+                                  {(((it.revenue - it.cost) / it.revenue) * 100).toFixed(0)}% mgn
+                                </span>
+                              )}
                             </span>
                             <span className="shrink-0 text-[12px] font-bold tabular-nums text-[#0F3D3E]">
                               {formatMoney(it.revenue)}
@@ -670,7 +805,7 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
 
           <p className="px-1 text-[10.5px] text-[#969696]">
             Aggregated from the most recent 500 tickets in the cloud, IST calendar days. Cancelled
-            tickets are excluded from every money figure.
+            tickets are excluded from every money figure; margin is computed on paid tickets only.
           </p>
         </>
       )}
@@ -679,6 +814,19 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
 };
 
 /* ─────────────────────────── small pieces ─────────────────────────────── */
+
+/** Margin health — typical cafe economics: ≥65% healthy, 40–65% watch, <40% alarm. */
+function marginTone(pct: number): string {
+  if (pct >= 65) return '#2E7D32';
+  if (pct >= 40) return '#8A5A00';
+  return '#B3261E';
+}
+
+function marginWord(pct: number): string {
+  if (pct >= 65) return 'healthy for a cafe';
+  if (pct >= 40) return 'worth watching';
+  return 'check your pricing';
+}
 
 function peakHourLabel(hourly: { hour: number; gross: number }[]): string {
   let best = -1;
