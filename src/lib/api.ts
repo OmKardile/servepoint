@@ -1417,3 +1417,79 @@ export async function fetchItemUnitCosts(tenantId: string): Promise<Map<string, 
   }
   return map;
 }
+
+/**
+ * Deduction-ledger window — every stock movement of the last `days` days
+ * (the burn-rate basis for the Inventory Reorder tab). The 12-row feed fetch
+ * (fetchRecentDeductions) is for the audit strip; this one aggregates.
+ */
+export async function fetchDeductionWindow(tenantId: string, days = 14): Promise<StockDeduction[]> {
+  requireCloud();
+  const since = new Date(Date.now() - days * 24 * 3600 * 1000).toISOString();
+  const { data, error } = await supabase
+    .from('stock_deductions')
+    .select('*')
+    .eq('tenant_id', tenantId)
+    .gte('created_at', since)
+    .order('created_at', { ascending: false })
+    .limit(500);
+  if (error) throw error;
+  return (data || []) as StockDeduction[];
+}
+
+export interface TodayCostMargin {
+  /** ingredient cost burned by EVERY live ticket today (paid or not) */
+  dayCogs: number;
+  /** paid net revenue (total − GST = the discounted base GST sits on) */
+  paidNet: number;
+  /** ingredient cost inside the PAID tickets */
+  paidCogs: number;
+  /** paid net − paid COGS (margin banks on collected money only) */
+  margin: number;
+  paidTickets: number;
+}
+
+/**
+ * Today's cost & margin for the Dashboard "right now" view — one query on
+ * v_order_cogs (018) bounded to the IST calendar day, same money basis as
+ * Reports/Close-out: margin on PAID, non-cancelled tickets only.
+ */
+export async function fetchTodayCostMargin(tenantId: string): Promise<TodayCostMargin> {
+  requireCloud();
+  // IST calendar-day bounds (same math as Reports/Close-out)
+  const todayIso = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Kolkata',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date());
+  const start = new Date(`${todayIso}T00:00:00+05:30`);
+  const end = new Date(start.getTime() + 24 * 3600 * 1000);
+  const { data, error } = await supabase
+    .from('v_order_cogs')
+    .select('status, payment_status, total, tax_amount, cogs')
+    .eq('tenant_id', tenantId)
+    .gte('created_at', start.toISOString())
+    .lt('created_at', end.toISOString());
+  if (error) throw error;
+  let dayCogs = 0;
+  let paidNet = 0;
+  let paidCogs = 0;
+  let paidTickets = 0;
+  for (const r of (data || []) as {
+    status: string;
+    payment_status: string | null;
+    total: number;
+    tax_amount: number;
+    cogs: number;
+  }[]) {
+    if (String(r.status || '').toLowerCase() === 'cancelled') continue;
+    dayCogs += Number(r.cogs ?? 0);
+    if (String(r.payment_status || '').toLowerCase() === 'completed') {
+      paidTickets += 1;
+      paidNet += Number(r.total ?? 0) - Number(r.tax_amount ?? 0);
+      paidCogs += Number(r.cogs ?? 0);
+    }
+  }
+  return { dayCogs, paidNet, paidCogs, margin: paidNet - paidCogs, paidTickets };
+}

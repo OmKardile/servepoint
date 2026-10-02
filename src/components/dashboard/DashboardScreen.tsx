@@ -3,6 +3,7 @@ import {
   AlertTriangle,
   CalendarClock,
   ChevronDown,
+  Coins,
   ReceiptText,
   ShoppingBag,
   TrendingDown,
@@ -21,7 +22,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { fetchDashboard } from '../../lib/api';
+import { fetchDashboard, fetchTodayCostMargin, type TodayCostMargin } from '../../lib/api';
 import { formatMoney } from '../../lib/prefs';
 import { useTenant } from '../../lib/tenant';
 import { useUi } from '../../store/session';
@@ -295,6 +296,69 @@ const StatCard: React.FC<{
   </section>
 );
 
+/**
+ * Today's margin (5.10.0) — the "right now" screen learns what the day COSTS.
+ * Same money basis as Reports/Close-out (v_order_cogs, PAID tickets only):
+ * split bar = ingredients (gold) vs what the cafe keeps (teal) out of the
+ * paid net. Fails soft — a failed load just hides the card.
+ */
+const TodayMarginCard: React.FC<{ m: TodayCostMargin }> = ({ m }) => {
+  const pct = m.paidNet > 0 ? (m.paidCogs / m.paidNet) * 100 : 0;
+  const marginPct = m.paidNet > 0 ? (m.margin / m.paidNet) * 100 : 0;
+  return (
+    <section className="sp-card p-5" aria-label="Today's margin">
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="text-[15px] font-semibold text-[#1A1A1A]">Today&apos;s margin</h2>
+        <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#6B6B6B]">
+          <Coins size={11} aria-hidden /> paid tickets
+        </span>
+      </div>
+      <div className="mt-3 flex items-end justify-between gap-3">
+        <div>
+          <p
+            className="text-[26px] font-bold leading-none text-[#1A1A1A]"
+            style={{ color: m.paidNet > 0 && marginPct < 40 ? '#B3261E' : undefined }}
+          >
+            {formatMoney(m.margin)}
+          </p>
+          <p className="mt-1.5 text-[11.5px] font-semibold text-[#6B6B6B]">
+            of {formatMoney(m.paidNet)} paid net · {m.paidTickets}{' '}
+            {m.paidTickets === 1 ? 'ticket' : 'tickets'}
+          </p>
+        </div>
+        <span
+          className="rounded-full px-2.5 py-1 text-[12px] font-extrabold tabular-nums"
+          style={{
+            color: marginPct >= 65 ? '#2E7D32' : marginPct >= 40 ? '#8A5A00' : '#B3261E',
+            backgroundColor:
+              (marginPct >= 65 ? '#2E7D32' : marginPct >= 40 ? '#8A5A00' : '#B3261E') + '14',
+          }}
+        >
+          {marginPct.toFixed(0)}% margin
+        </span>
+      </div>
+      <div
+        className="mt-4 flex h-2 w-full overflow-hidden rounded-full bg-[#EAF0EC]"
+        role="img"
+        aria-label={`Paid net ${formatMoney(m.paidNet)}: ingredients ${formatMoney(m.paidCogs)}, margin ${formatMoney(m.margin)}`}
+      >
+        <div
+          className="h-full bg-[#B88E2F] transition-all duration-700"
+          style={{ width: `${Math.max(pct, m.paidCogs > 0 ? 1.5 : 0)}%` }}
+        />
+        <div
+          className="h-full bg-[#0F3D3E] transition-all duration-700"
+          style={{ width: `${Math.max(m.paidNet > 0 ? (m.margin / m.paidNet) * 100 : 0, 0)}%` }}
+        />
+      </div>
+      <p className="mt-2 text-[11px] font-semibold text-[#969696]">
+        ingredients {formatMoney(m.paidCogs)}
+        {m.dayCogs > m.paidCogs ? ` · +${formatMoney(m.dayCogs - m.paidCogs)} burned on unpaid tickets` : ''}
+      </p>
+    </section>
+  );
+};
+
 const BestEmployeesCard: React.FC<{ data: DashboardData }> = ({ data }) => {
   const [range, setRange] = useState<Range>('today');
   return (
@@ -461,7 +525,10 @@ const EmptySales: React.FC = () => (
 
 /* ───────────────────────────── Data plumbing ───────────────────────────── */
 
-const DashboardContent: React.FC<{ data: DashboardData }> = ({ data }) => (
+const DashboardContent: React.FC<{ data: DashboardData; margin: TodayCostMargin | null }> = ({
+  data,
+  margin,
+}) => (
   <>
     <div className="mt-5 grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
       <DailySalesCard data={data} />
@@ -485,9 +552,10 @@ const DashboardContent: React.FC<{ data: DashboardData }> = ({ data }) => (
         />
       </div>
     </div>
-    <div className="mt-5 grid grid-cols-1 gap-5 md:grid-cols-2">
+    <div className="mt-5 grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
       <BestEmployeesCard data={data} />
       <TrendingDishesCard data={data} />
+      {margin && <TodayMarginCard m={margin} />}
     </div>
   </>
 );
@@ -496,19 +564,26 @@ interface DashState {
   loading: boolean;
   error: string | null;
   data: DashboardData | null;
+  margin: TodayCostMargin | null;
 }
 
 const DashboardInner: React.FC<{ onRetry: () => void }> = ({ onRetry }) => {
   const { loading: tenantLoading, error: tenantError, tenantId } = useTenant();
-  const [dash, setDash] = useState<DashState>({ loading: true, error: null, data: null });
+  const [dash, setDash] = useState<DashState>({ loading: true, error: null, data: null, margin: null });
 
   useEffect(() => {
     if (!tenantId) return;
     let alive = true;
-    setDash({ loading: true, error: null, data: null });
+    setDash({ loading: true, error: null, data: null, margin: null });
     fetchDashboard(tenantId)
       .then((data) => {
-        if (alive) setDash({ loading: false, error: null, data });
+        if (alive) setDash({ loading: false, error: null, data, margin: null });
+        // margin rides AFTER the main load — a failure here only hides the card
+        fetchTodayCostMargin(tenantId)
+          .then((margin) => {
+            if (alive) setDash((s) => ({ ...s, margin }));
+          })
+          .catch(() => {});
       })
       .catch((err: Error) => {
         if (alive)
@@ -516,6 +591,7 @@ const DashboardInner: React.FC<{ onRetry: () => void }> = ({ onRetry }) => {
             loading: false,
             error: err.message || 'Failed to load dashboard data.',
             data: null,
+            margin: null,
           });
       });
     return () => {
@@ -545,7 +621,7 @@ const DashboardInner: React.FC<{ onRetry: () => void }> = ({ onRetry }) => {
   const d = dash.data;
   const empty = d.totalRevenue === 0 && d.totalOrders === 0 && d.newCustomers === 0;
   if (empty) return <EmptySales />;
-  return <DashboardContent data={d} />;
+  return <DashboardContent data={d} margin={dash.margin} />;
 };
 
 /* ───────────────────────────── Screen export ───────────────────────────── */

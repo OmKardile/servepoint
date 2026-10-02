@@ -3,6 +3,25 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.10.0] — 2026-10-02 — The shelf asks to be refilled (burn-rate reorder list + today's margin on the Dashboard)
+
+### Added — Inventory gains the Reorder tab
+- **Burn-rate reorder suggestions, ledger-driven and read-only**: `fetchDeductionWindow(tenantId, days)` pulls the last 14 days of `stock_deductions` (the 015 ledger — no new write path, no migration), and a pure client-side engine converts burn into buying:
+  - `burn/day` = Σ ledger qty per SKU ÷ 14;
+  - `days left` = current stock ÷ burn (color-coded: red < 3d, amber < 7d, green ≥ 7d, "no burn yet" for silent SKUs);
+  - `suggested qty` = ⌈burn × 7 − stock⌉ (**7 days of cover**), editable right in the BUY input;
+  - `est cost` = qty × current `cost_per_unit`, with the list's **est total** in the footer.
+- **On the list when it counts**: a SKU joins the shopping list when it burns AND (stock ≤ reorder point OR fewer than 7 days of cover remain) — the first condition catches the shelf that's simply low, the second the fast-burner that isn't low yet. Burning-but-covered SKUs appear in a muted **"Watching"** list (days left + burn/day) instead of vanishing.
+- **Actions that match a delivery day**: **Copy** (clipboard text with per-line estimated cost, 1.6s "Copied!" feedback) and **CSV** (`servepoint-shopping-list-<IST date>.csv`, 9 columns incl. burn/day and days-left) — plus a per-row **Restock** button that opens the existing restock dialog **prefilled with the suggested quantity** (`RestockDialog` gains an optional `suggestedQty` prop; the dialog also shows a dotted "Suggested: N unit (7-day cover)" button that re-applies it; the Stock tab's plain restock path is unchanged, empty input).
+- Honest empty state: no burn history ⇒ "Nothing to buy yet — place a few tickets and the ledger will price your shopping list"; burn but covered ⇒ "The shelf covers the week" + the Watching list.
+
+### Added — Dashboard "Today's margin" card
+- The "right now" screen learns what the day COSTS: a third card beside Best Employees / Trending Dishes shows **today's margin** on the SAME money basis as Reports & Close-out (one query on `v_order_cogs` bounded to the IST day, paid non-cancelled tickets only): big margin number, `NN% margin` pill tinted by the shared health tones, gold/teal split bar (ingredients vs what the cafe keeps), and an honest sub-line that surfaces stock burned on UNPAID tickets (`+₹X burned on unpaid tickets`) when the numbers differ.
+- Loads AFTER the main dashboard fetch and **fails soft** — a failed margin query only hides the card, never the dashboard.
+
+### Verified
+- Browser E2E as owner with a single-row fixture (beans stock temporarily 20g, restored to 4,900g after — recipe and margin numbers untouched): buy list shows Coffee beans `burn 4.286 g/day` (= 60g ledger ÷ 14), `4.7d left` (20 ÷ 4.286), BUY prefilled `10 g` (= ⌈4.286×7 − 20⌉), est `₹18.00` (= 10 × ₹1.80), est total ₹18.00; restock dialog opens prefilled with the "Suggested: 10 g (7-day cover)" affordance; **real CSV download checked byte-for-byte** (UTF-8 BOM, 9 columns, correct row); Copy → "Copied!". After restore: "The shelf covers the week" + Watching row `1143.3d` (= 4,900 ÷ 4.286). Dashboard card: ₹562.00 of ₹670.00 paid net · 2 tickets · 84% margin — hand-verified against the DB. Stock-tab restock dialog and the guest QR menu regression-clean. tsc 0; zero page errors on every surface touched.
+
 ## [5.9.0] — 2026-10-02 — The menu knows what it costs (COGS & margin wire into Reports + Close-out)
 
 ### Added — COGS views (migration `018_cogs_margin.sql`)

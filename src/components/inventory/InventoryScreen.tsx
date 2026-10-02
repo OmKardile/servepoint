@@ -5,6 +5,7 @@ import {
   Check,
   ChevronDown,
   ClipboardList,
+  Copy,
   Layers,
   Loader2,
   Minus,
@@ -13,6 +14,7 @@ import {
   Pencil,
   Plus,
   RefreshCw,
+  ShoppingBasket,
   Trash2,
   Wifi,
   WifiOff,
@@ -21,6 +23,7 @@ import {
 import {
   createInventoryItem,
   deleteInventoryItem,
+  fetchDeductionWindow,
   fetchInventory,
   fetchMenuItems,
   fetchRecentDeductions,
@@ -35,18 +38,22 @@ import {
   type StockDeduction,
 } from '../../lib/api';
 import { formatMoney } from '../../lib/prefs';
+import { downloadCsv } from '../../lib/csv';
 import { useTenant } from '../../lib/tenant';
 import type { MenuItem } from '../../types';
 
 /**
  * Inventory (v5.4.0 — NOVA stock parity, migration 015 engine).
  *
- * The board answers three questions at a glance:
+ * The board answers four questions at a glance:
  *   1. STOCK — what's on the shelf (level bars vs reorder point), with
  *      restock / edit / delete and the recent-deduction audit feed.
  *   2. RECIPES — what one serve of each menu item consumes. No recipe ⇒
  *      that item moves no stock (stated honestly in the UI).
- *   3. LIVE — the engine deducts the moment a ticket hits `preparing`
+ *   3. REORDER — what to buy this week: the stock_deductions ledger prices
+ *      each SKU's burn per day (last 14 days), converts to days-left meters
+ *      and a 7-day-cover shopping list with estimated cost (copy/CSV).
+ *   4. LIVE — the engine deducts the moment a ticket hits `preparing`
  *      (single-engine rule: trg_orders_deduct_stock is THE deduction path);
  *      realtime keeps this board moving while tickets fire.
  *
@@ -54,7 +61,12 @@ import type { MenuItem } from '../../types';
  * Stock going negative is allowed (real cafes oversell) — rendered red.
  */
 
-type TabKey = 'stock' | 'recipes';
+type TabKey = 'stock' | 'recipes' | 'reorder';
+
+/** Burn-rate window for reorder suggestions (ledger days). */
+const REORDER_WINDOW_DAYS = 14;
+/** Days of cover the shopping list buys (suggested = burn × this − stock). */
+const REORDER_COVER_DAYS = 7;
 
 const UNITS = ['g', 'kg', 'ml', 'l', 'pc'] as const;
 
@@ -91,6 +103,7 @@ const InventoryInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [recipes, setRecipes] = useState<RecipeLine[]>([]);
   const [deductions, setDeductions] = useState<StockDeduction[]>([]);
+  const [dedWindow, setDedWindow] = useState<StockDeduction[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [rt, setRt] = useState<RealtimeState>('connecting');
@@ -99,23 +112,25 @@ const InventoryInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
   // dialog state
   const [editorOpen, setEditorOpen] = useState(false);
   const [editing, setEditing] = useState<InventoryItem | null>(null);
-  const [restockFor, setRestockFor] = useState<InventoryItem | null>(null);
+  const [restockFor, setRestockFor] = useState<{ item: InventoryItem; suggested: number | null } | null>(null);
   const [deleteArm, setDeleteArm] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!tenantId) return;
     setError(null);
     try {
-      const [inv, mi, rl, sd] = await Promise.all([
+      const [inv, mi, rl, sd, sdw] = await Promise.all([
         fetchInventory(tenantId),
         fetchMenuItems(tenantId),
         fetchRecipeLines(tenantId),
         fetchRecentDeductions(tenantId, 12),
+        fetchDeductionWindow(tenantId, REORDER_WINDOW_DAYS),
       ]);
       setItems(inv);
       setMenuItems(mi);
       setRecipes(rl);
       setDeductions(sd);
+      setDedWindow(sdw);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not load inventory from the cloud.');
     } finally {
@@ -381,6 +396,17 @@ const InventoryInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
           <BookOpenText size={13} aria-hidden />
           Recipes
         </button>
+        <button
+          role="tab"
+          aria-selected={tab === 'reorder'}
+          onClick={() => setTab('reorder')}
+          className={`flex h-9 items-center gap-1.5 rounded-full px-4 text-[12.5px] font-bold transition ${
+            tab === 'reorder' ? 'bg-[#0F3D3E] text-white' : 'text-[#6B6B6B] hover:text-[#1A1A1A]'
+          }`}
+        >
+          <ShoppingBasket size={13} aria-hidden />
+          Reorder
+        </button>
       </div>
 
       {loading && items.length === 0 ? (
@@ -444,7 +470,7 @@ const InventoryInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
                         {it.cost_per_unit != null ? `${formatMoney(Number(it.cost_per_unit))}/${it.unit}` : 'no cost set'}
                       </span>
                       <button
-                        onClick={() => setRestockFor(it)}
+                        onClick={() => setRestockFor({ item: it, suggested: null })}
                         disabled={busy}
                         aria-label={`Restock ${it.name}`}
                         className="flex h-9 items-center gap-1 rounded-lg border border-[#E3E7E0] bg-white px-2.5 text-[11.5px] font-bold text-[#0F3D3E] transition hover:border-[#2E7D32] hover:text-[#2E7D32] disabled:opacity-50"
@@ -516,12 +542,18 @@ const InventoryInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
             </section>
           )}
         </>
-      ) : (
+      ) : tab === 'recipes' ? (
         <RecipeBoard
           items={items}
           menuItems={menuItems}
           recipes={recipes}
           onSave={saveRecipe}
+        />
+      ) : (
+        <ReorderBoard
+          items={items}
+          deductions={dedWindow}
+          onRestock={(item, suggested) => setRestockFor({ item, suggested })}
         />
       )}
 
@@ -538,10 +570,11 @@ const InventoryInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
       )}
       {restockFor && (
         <RestockDialog
-          item={restockFor}
-          busy={busyId === restockFor.id}
+          item={restockFor.item}
+          suggestedQty={restockFor.suggested}
+          busy={busyId === restockFor.item.id}
           onClose={() => setRestockFor(null)}
-          onConfirm={(qty) => void doRestock(restockFor, qty)}
+          onConfirm={(qty) => void doRestock(restockFor.item, qty)}
         />
       )}
     </div>
@@ -948,11 +981,12 @@ const IngredientDialog: React.FC<{
 
 const RestockDialog: React.FC<{
   item: InventoryItem;
+  suggestedQty?: number | null;
   busy: boolean;
   onClose: () => void;
   onConfirm: (qty: number) => void;
-}> = ({ item, busy, onClose, onConfirm }) => {
-  const [qty, setQty] = useState('');
+}> = ({ item, suggestedQty = null, busy, onClose, onConfirm }) => {
+  const [qty, setQty] = useState(suggestedQty != null && suggestedQty > 0 ? String(suggestedQty) : '');
   const valid = Number(qty) > 0;
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0F3D3E]/45 p-4" role="dialog" aria-modal="true" aria-label={`Restock ${item.name}`}>
@@ -964,6 +998,20 @@ const RestockDialog: React.FC<{
             {fmtQty(item.current_stock)} {item.unit}
           </span>{' '}
           — delivery adds to it.
+          {suggestedQty != null && suggestedQty > 0 && (
+            <>
+              {' '}
+              Suggested:{' '}
+              <button
+                type="button"
+                onClick={() => setQty(String(suggestedQty))}
+                className="font-bold text-[#8A5A00] underline decoration-dotted underline-offset-2"
+              >
+                {fmtQty(suggestedQty)} {item.unit}
+              </button>{' '}
+              (7-day cover)
+            </>
+          )}
         </p>
         <label className="mt-4 block">
           <span className="mb-1 block text-[11px] font-bold uppercase tracking-[0.08em] text-[#969696]">
@@ -1002,6 +1050,285 @@ const RestockDialog: React.FC<{
           </button>
         </div>
       </div>
+    </div>
+  );
+};
+
+/* ─────────────────────────── reorder board ────────────────────────────── */
+
+interface ReorderRow {
+  item: InventoryItem;
+  /** ledger burn per day across the window (qty units/day) */
+  burnPerDay: number;
+  /** days until the shelf runs dry at this burn — null when nothing burns */
+  daysLeft: number | null;
+  /** suggested purchase for 7-day cover, ceil'd — 0 when nothing burns */
+  suggested: number;
+  /** suggested × current cost_per_unit */
+  estCost: number;
+  /** on the shopping list: burning AND (at/below reorder OR under 7 days of cover) */
+  needsBuy: boolean;
+}
+
+/** Pure burn-rate math over the stock_deductions ledger — read-only, no engine. */
+function buildReorderRows(items: InventoryItem[], deductions: StockDeduction[]): ReorderRow[] {
+  const burn = new Map<string, number>();
+  for (const d of deductions) {
+    burn.set(d.inventory_item_id, (burn.get(d.inventory_item_id) ?? 0) + Number(d.qty ?? 0));
+  }
+  return items
+    .map((item) => {
+      const burnPerDay = (burn.get(item.id) ?? 0) / REORDER_WINDOW_DAYS;
+      const daysLeft = burnPerDay > 0 ? Number(item.current_stock) / burnPerDay : null;
+      const suggested =
+        burnPerDay > 0
+          ? Math.max(0, Math.ceil(burnPerDay * REORDER_COVER_DAYS - Number(item.current_stock)))
+          : 0;
+      const estCost = suggested * Number(item.cost_per_unit ?? 0);
+      const needsBuy =
+        burnPerDay > 0 &&
+        (Number(item.current_stock) <= Number(item.reorder_point) ||
+          (daysLeft ?? Infinity) < REORDER_COVER_DAYS);
+      return { item, burnPerDay, daysLeft, suggested, estCost, needsBuy };
+    })
+    .sort(
+      (a, b) =>
+        Number(b.needsBuy) - Number(a.needsBuy) ||
+        (a.daysLeft ?? 1e9) - (b.daysLeft ?? 1e9) ||
+        b.burnPerDay - a.burnPerDay,
+    );
+}
+
+function daysTone(daysLeft: number | null): { text: string; bar: string; label: string } {
+  if (daysLeft == null) return { text: 'text-[#6B6B6B]', bar: '#C8CFC9', label: 'no burn yet' };
+  if (daysLeft < 3) return { text: 'text-[#B3261E]', bar: '#B3261E', label: 'critical' };
+  if (daysLeft < REORDER_COVER_DAYS) return { text: 'text-[#8A5A00]', bar: '#B88E2F', label: 'running low' };
+  return { text: 'text-[#2E7D32]', bar: '#2E7D32', label: 'covered' };
+}
+
+const ReorderBoard: React.FC<{
+  items: InventoryItem[];
+  deductions: StockDeduction[];
+  onRestock: (item: InventoryItem, suggested: number) => void;
+}> = ({ items, deductions, onRestock }) => {
+  const rows = useMemo(() => buildReorderRows(items, deductions), [items, deductions]);
+  const [edits, setEdits] = useState<Record<string, string>>({});
+  const [copied, setCopied] = useState(false);
+
+  const buyRows = rows.filter((r) => r.needsBuy);
+  const watchRows = rows.filter((r) => !r.needsBuy && r.burnPerDay > 0);
+
+  const effectiveQty = (r: ReorderRow): number => {
+    const raw = edits[r.item.id];
+    if (raw != null) {
+      const n = Number(raw);
+      if (Number.isFinite(n) && n >= 0) return Math.ceil(n);
+    }
+    return r.suggested;
+  };
+
+  const listCost = buyRows.reduce((s, r) => s + effectiveQty(r) * Number(r.item.cost_per_unit ?? 0), 0);
+
+  const copyList = useCallback(() => {
+    if (buyRows.length === 0) return;
+    const lines = buyRows.map((r) => {
+      const q = effectiveQty(r);
+      const cost = q * Number(r.item.cost_per_unit ?? 0);
+      return `${r.item.name} × ${fmtQty(q)} ${r.item.unit} — est ${formatMoney(cost)}`;
+    });
+    void navigator.clipboard
+      .writeText(`ServePoint shopping list (7-day cover):\n${lines.join('\n')}`)
+      .then(() => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1600);
+      })
+      .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [buyRows, edits]);
+
+  const exportList = useCallback(() => {
+    if (buyRows.length === 0) return;
+    const todayIso = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date());
+    const out: (string | number)[][] = [
+      ['Item', 'On shelf', 'Unit', 'Reorder point', 'Burn/day', 'Days left', 'Suggested qty', 'Cost/unit', 'Est cost'],
+    ];
+    for (const r of buyRows) {
+      const q = effectiveQty(r);
+      out.push([
+        r.item.name,
+        Number(r.item.current_stock),
+        r.item.unit,
+        Number(r.item.reorder_point),
+        r.burnPerDay.toFixed(3),
+        r.daysLeft == null ? '' : r.daysLeft.toFixed(1),
+        q,
+        Number(r.item.cost_per_unit ?? 0).toFixed(2),
+        (q * Number(r.item.cost_per_unit ?? 0)).toFixed(2),
+      ]);
+    }
+    downloadCsv(`servepoint-shopping-list-${todayIso}.csv`, out);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [buyRows, edits]);
+
+  if (rows.every((r) => r.burnPerDay <= 0)) {
+    return (
+      <div className="sp-card flex flex-col items-center justify-center gap-2 px-4 py-14 text-center">
+        <span className="flex h-16 w-16 items-center justify-center rounded-full bg-[#D9E2DD]">
+          <ShoppingBasket size={26} className="text-[#0F3D3E]" aria-hidden />
+        </span>
+        <h2 className="mt-1 text-[15px] font-bold text-[#1A1A1A]">Nothing to buy yet</h2>
+        <p className="max-w-sm text-[12.5px] text-[#6B6B6B]">
+          Reorder suggestions need burn history — place a few tickets and the ledger will price your
+          shopping list automatically. No recipes yet? Link ingredients to menu items under Recipes.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      {/* ── shopping list ── */}
+      <section className="sp-card p-5" aria-label="Shopping list">
+        <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h2 className="text-[15px] font-bold text-[#1A1A1A]">Shopping list</h2>
+            <p className="text-[11.5px] text-[#969696]">
+              Burn rates from the last {REORDER_WINDOW_DAYS} days of the deductions ledger · the list
+              buys {REORDER_COVER_DAYS} days of cover
+            </p>
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            <button
+              onClick={copyList}
+              disabled={buyRows.length === 0}
+              aria-label="Copy shopping list to clipboard"
+              className="flex h-11 items-center gap-1.5 rounded-xl border border-[#E3E7E0] bg-white px-3 text-[12.5px] font-bold text-[#0F3D3E] transition hover:border-[#B88E2F] hover:text-[#B88E2F] disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {copied ? <Check size={14} aria-hidden /> : <Copy size={14} aria-hidden />}
+              {copied ? 'Copied!' : 'Copy'}
+            </button>
+            <button
+              onClick={exportList}
+              disabled={buyRows.length === 0}
+              aria-label="Export shopping list as CSV"
+              className="flex h-11 items-center gap-1.5 rounded-xl border border-[#E3E7E0] bg-white px-3 text-[12.5px] font-bold text-[#0F3D3E] transition hover:border-[#B88E2F] hover:text-[#B88E2F] disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              CSV
+            </button>
+          </div>
+        </div>
+
+        {buyRows.length === 0 ? (
+          <div className="flex flex-col items-center gap-2 py-10 text-center">
+            <span className="flex h-14 w-14 items-center justify-center rounded-full bg-[#EAF0EC]">
+              <Check size={22} className="text-[#2E7D32]" aria-hidden />
+            </span>
+            <p className="text-[13.5px] font-bold text-[#1A1A1A]">The shelf covers the week</p>
+            <p className="max-w-xs text-[12px] font-semibold text-[#8A938C]">
+              Every burning SKU has {REORDER_COVER_DAYS}+ days of stock. Watch this space — the list
+              rebuilds itself after each service.
+            </p>
+          </div>
+        ) : (
+          <>
+            <ul className="mt-3 flex flex-col divide-y divide-[#E3E7E0]">
+              {buyRows.map((r) => {
+                const tone = daysTone(r.daysLeft);
+                const q = effectiveQty(r);
+                const cost = q * Number(r.item.cost_per_unit ?? 0);
+                const meterPct = r.daysLeft == null ? 100 : Math.min(100, (r.daysLeft / REORDER_WINDOW_DAYS) * 100);
+                return (
+                  <li key={r.item.id} className="flex flex-wrap items-center gap-3 py-3" aria-label={`${r.item.name} shopping list row`}>
+                    <div className="min-w-0 flex-1 basis-56">
+                      <div className="flex items-center gap-2">
+                        <h3 className="truncate text-[13.5px] font-bold text-[#1A1A1A]">{r.item.name}</h3>
+                        <span className="shrink-0 rounded-full bg-[#EAF0EC] px-2 py-0.5 text-[10.5px] font-bold text-[#0F3D3E]">
+                          {r.item.unit}
+                        </span>
+                        <span className={`shrink-0 text-[10.5px] font-bold ${tone.text}`}>{tone.label}</span>
+                      </div>
+                      <div className="mt-1.5 flex items-center gap-2">
+                        <div className="h-2 min-w-0 flex-1 overflow-hidden rounded-full bg-[#EAF0EC]" aria-hidden>
+                          <div className="h-full rounded-full transition-all duration-700" style={{ width: `${Math.max(2, meterPct)}%`, backgroundColor: tone.bar }} />
+                        </div>
+                        <span className={`shrink-0 text-[11px] tabular-nums font-bold ${tone.text}`}>
+                          {r.daysLeft == null ? '—' : `${r.daysLeft.toFixed(1)}d left`}
+                        </span>
+                      </div>
+                      <p className="mt-1 text-[10.5px] font-semibold text-[#969696]">
+                        burn {fmtQty(r.burnPerDay)} {r.item.unit}/day · shelf {fmtQty(Number(r.item.current_stock))}{' '}
+                        {r.item.unit} · reorder at {fmtQty(Number(r.item.reorder_point))} {r.item.unit}
+                      </p>
+                    </div>
+                    <label className="flex shrink-0 items-center gap-2">
+                      <span className="text-[10.5px] font-bold uppercase tracking-[0.06em] text-[#969696]">Buy</span>
+                      <input
+                        value={edits[r.item.id] ?? String(r.suggested)}
+                        onChange={(e) => setEdits((m) => ({ ...m, [r.item.id]: e.target.value }))}
+                        type="number"
+                        min="0"
+                        step="any"
+                        aria-label={`Quantity of ${r.item.name} to buy (${r.item.unit})`}
+                        className="h-10 w-24 rounded-xl border border-[#E3E7E0] bg-white px-3 text-right text-[12.5px] tabular-nums text-[#1A1A1A] focus:border-[#B88E2F] focus:outline-none focus:ring-2 focus:ring-[#B88E2F]/25"
+                      />
+                    </label>
+                    <span className="w-20 shrink-0 text-right text-[12.5px] font-extrabold tabular-nums text-[#8A5A00]">
+                      {formatMoney(cost)}
+                    </span>
+                    <button
+                      onClick={() => onRestock(r.item, q)}
+                      aria-label={`Restock ${r.item.name} with the suggested quantity`}
+                      className="flex h-9 shrink-0 items-center gap-1 rounded-lg border border-[#E3E7E0] bg-white px-2.5 text-[11.5px] font-bold text-[#0F3D3E] transition hover:border-[#2E7D32] hover:text-[#2E7D32]"
+                    >
+                      <PackagePlus size={12} aria-hidden />
+                      Restock
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+            <div className="mt-3 flex items-center justify-between gap-3 border-t border-[#E3E7E0] pt-3">
+              <p className="text-[11.5px] font-semibold text-[#6B6B6B]">
+                {buyRows.length} ingredient{buyRows.length === 1 ? '' : 's'} to buy · delivery day, one bill
+              </p>
+              <p className="text-[13px] font-extrabold tabular-nums text-[#0F3D3E]">
+                Est total <span className="text-[15px] text-[#8A5A00]">{formatMoney(listCost)}</span>
+              </p>
+            </div>
+          </>
+        )}
+      </section>
+
+      {/* ── watching (burning, but covered) ── */}
+      {watchRows.length > 0 && (
+        <section className="sp-card p-5" aria-label="Covered SKUs being watched">
+          <div className="mb-2 flex items-center gap-2">
+            <h2 className="text-[14px] font-bold text-[#1A1A1A]">Watching</h2>
+            <span className="text-[11px] text-[#969696]">burning, but the shelf covers the week</span>
+          </div>
+          <ul className="flex flex-col divide-y divide-[#E3E7E0]">
+            {watchRows.map((r) => {
+              const tone = daysTone(r.daysLeft);
+              return (
+                <li key={r.item.id} className="flex items-center justify-between gap-3 py-2">
+                  <span className="flex min-w-0 items-center gap-2">
+                    <span className="truncate text-[12.5px] font-semibold text-[#1A1A1A]">{r.item.name}</span>
+                    <span className="shrink-0 rounded-full bg-[#EAF0EC] px-1.5 py-0.5 text-[10px] font-bold text-[#0F3D3E]">
+                      {r.item.unit}
+                    </span>
+                  </span>
+                  <span className="shrink-0 text-[11.5px] tabular-nums text-[#6B6B6B]">
+                    <span className={`font-bold ${tone.text}`}>
+                      {r.daysLeft == null ? '—' : `${r.daysLeft.toFixed(1)}d`}
+                    </span>{' '}
+                    · {fmtQty(r.burnPerDay)} {r.item.unit}/day
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      )}
     </div>
   );
 };
