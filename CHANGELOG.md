@@ -3,6 +3,20 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.28.0] — 2026-10-03 — The brand travels: logo on the printed sticker sheet and the guest's ticket
+
+### Added — sticker sheet carries the café's face (Floor → Print stickers)
+- The A4 cut-line sticker sheet (`buildStickerSheetHtml`) now prints the owner-set logo (migration 024's `logo_url`) **twice**: a 42px head tile above the sheet title, and a 30px tile on **every sticker card** — the card is what guests see on the table, so the brand travels with the QR. Absent/NULL logo renders the sheet byte-identical to pre-5.28 (no tile, no placeholder — the builder's 2-arg call signature still works for E2E assertions).
+- **Print-timing honesty**: `print()` does not wait for remote images, so a cold logo could lose the race and print a blank tile. `preloadLogo()` warms the URL in the HTTP cache before the iframe prints (2.5s timeout, non-fatal), and every printed `<img>` carries its own `onerror` self-hide — a dead or half-warmed URL can never render a broken glyph, it just prints the pre-5.28 sheet.
+
+### Added — the ticket says whose ticket it is (migration 025)
+- `sp_get_public_order` replaced (same signature, SECURITY DEFINER + `search_path=public` preserved, replace-in-place keeps 012's anon EXECUTE) to join the order's tenant and return a sibling `tenant` payload `{name, logo_url}` next to `order`. Applied via `scripts/apply-025.mjs` with 5 SQL proofs: tenant payload shape + order keys intact / join correctness against the live ledger / NOT_FOUND leaks no tenant / anon EXECUTE survived / exactly 1 signature, SECURITY DEFINER.
+- The guest `/track/:orderId` header now opens with a compact brand row — the café's **name** on every ticket, plus a 36px logo tile (white backing, object-contain, onError self-hide) when the owner set one. No brand in the payload → exactly the pre-5.28 header. The ticket page previously showed no café identity at all; even a logo-less café now signs its tickets.
+
+### Verified
+- Midnight-flip honesty sweep (00:00 IST Oct 3, the carried watch item): Reports **Today** honestly zeroed to ₹0.00 across all chips with the "No sales in this range" empty state the instant the calendar rolled; 7d window slid to include 3 Oct in Day-by-day (best day still 2 Oct, ₹5,046.30); Floor rhythm 7d held peak 8p (8 tickets) with Oct 2 still in range — all honest recomputes, zero page errors across Dashboard/Floor/Reports/KDS/Bills/Close-out.
+- Sticker builder E2E: 2-arg call → no logo markup; 3-arg with logo → head tile + one `cardlogo` per card; QR Flow Cafe order's `/track/` page renders the brand row (name + logo tile, real pixels) while a CheeseBurg order (no logo set) renders the name-only header honestly. `tsc` 0; sw `5.28.0-r1`.
+
 ## [5.27.0] — 2026-10-03 — The café's own face: tenant logo on the guest menu
 
 ### Added — Settings → Café brand (owner-only, migration 024)

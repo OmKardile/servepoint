@@ -35,6 +35,7 @@ import {
   type GuestAddon,
   type GuestMenuItem,
   type GuestOrderSummary,
+  type GuestTenantBrand,
   type GuestVariant,
   type PublicMenu,
   type PublicOffer,
@@ -1263,6 +1264,9 @@ export function GuestTrackPage({ orderId }: { orderId: string }): React.ReactEle
   const { t } = useGuestLang();
   const uuidLike = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(orderId);
   const [order, setOrder] = useState<GuestOrderSummary | null>(null);
+  const [tenant, setTenant] = useState<GuestTenantBrand | null>(null);
+  const [logoBroken, setLogoBroken] = useState(false);
+  useEffect(() => setLogoBroken(false), [tenant?.logo_url]);
   const [state, setState] = useState<'loading' | 'ready' | 'bad' | 'net'>('loading');
   const [muted, setMuted] = useState(() => localStorage.getItem('sp.guest.chime') === 'off');
   const [copied, setCopied] = useState(false);
@@ -1277,6 +1281,7 @@ export function GuestTrackPage({ orderId }: { orderId: string }): React.ReactEle
     if (res.order) {
       setState('ready');
       setOrder(res.order);
+      setTenant(res.tenant || null); // v5.28.0 — whose ticket this is
       if (prevStatus.current && prevStatus.current !== 'ready' && res.order.status === 'ready' && !muted) {
         twoToneChime();
       }
@@ -1329,6 +1334,27 @@ export function GuestTrackPage({ orderId }: { orderId: string }): React.ReactEle
   return (
     <div className="flex min-h-screen flex-col bg-[#F6F5F2]">
       <header className="px-4 pb-4 pt-5" style={{ background: `linear-gradient(160deg, ${brand.teal} 0%, #14514f 100%)` }}>
+        {/* v5.28.0 (migration 025) — whose ticket this is: the café's name on
+            every ticket, the logo tile when the owner set one. No brand in
+            the payload → exactly the pre-5.28 header. A dead URL hides its
+            own tile; the name never breaks. */}
+        {tenant && (tenant.logo_url || tenant.name) && (
+          <div className="mx-auto mb-3 flex max-w-xl items-center gap-2.5">
+            {tenant.logo_url && !logoBroken && (
+              <img
+                src={tenant.logo_url}
+                alt=""
+                onError={() => setLogoBroken(true)}
+                className="h-9 w-9 shrink-0 rounded-xl bg-white/95 object-contain p-1 shadow-sm"
+              />
+            )}
+            {tenant.name && (
+              <span className="truncate text-[12.5px] font-semibold tracking-[0.02em] text-white/85">
+                {tenant.name}
+              </span>
+            )}
+          </div>
+        )}
         <div className="mx-auto flex max-w-xl items-center justify-between">
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#E7C878]">{t('yourTicket')}</p>

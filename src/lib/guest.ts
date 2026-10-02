@@ -22,6 +22,15 @@ export interface GuestTenantInfo {
   logo_url?: string | null;
 }
 
+/** The café brand a guest sees on their ticket page (migration 025): name on
+ *  every order, logo tile only when the owner set one. Name is nullable in
+ *  the payload for NULL-safety (an order always has a tenant row, but the
+ *  LEFT JOIN keeps the projection never-failing). */
+export interface GuestTenantBrand {
+  name: string | null;
+  logo_url: string | null;
+}
+
 export interface GuestVariant {
   id: string;
   name: string;
@@ -325,18 +334,27 @@ export async function createPublicOrder(input: {
   };
 }
 
-/** Tracking pager projection — safe to poll every 10s from a no-login phone. */
+/** Tracking pager projection — safe to poll every 10s from a no-login phone.
+ *  v5.28.0: the payload also carries the café's brand ({name, logo_url},
+ *  migration 025) so the ticket page can say whose ticket it is. */
 export async function fetchPublicOrder(orderId: string): Promise<{
   is_valid: boolean;
   error?: string;
   message?: string;
   order?: GuestOrderSummary;
+  tenant?: GuestTenantBrand;
 }> {
   const { data, error } = await supabase.rpc('sp_get_public_order', { p_order_id: orderId });
   if (error) {
     return { is_valid: false, error: 'NETWORK', message: 'Could not reach the cafe. Retrying…' };
   }
-  return data as { is_valid: boolean; error?: string; message?: string; order?: GuestOrderSummary };
+  return data as {
+    is_valid: boolean;
+    error?: string;
+    message?: string;
+    order?: GuestOrderSummary;
+    tenant?: GuestTenantBrand;
+  };
 }
 
 /* ── feedback (migration 019) ──────────────────────────────────────────────── */

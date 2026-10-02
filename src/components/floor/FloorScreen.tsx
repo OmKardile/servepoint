@@ -43,6 +43,7 @@ import {
   type TableStatus,
 } from '../../lib/api';
 import { useTenant } from '../../lib/tenant';
+import { printHiddenFrame } from '../../lib/printFrame';
 import { formatMoney } from '../../lib/prefs';
 import { useUi } from '../../store/session';
 import { useCart } from '../../store/cart';
@@ -160,14 +161,22 @@ interface StickerSpec {
   section: string;
   url: string;
   qr: string;
+  /** v5.28.0 — the café's face (migration 024's logo_url) on the sheet head
+   *  and every card. NULL/absent → byte-compatible with the pre-5.28 sheet:
+   *  no tile, no placeholder. A dead URL hides its own tile at print time. */
+  logo?: string | null;
 }
 
-/** A4 cut-line sticker sheet — pure builder (exported for E2E assertions). */
-export function buildStickerSheetHtml(cafeName: string, stickers: StickerSpec[]): string {
+/** A4 cut-line sticker sheet — pure builder (exported for E2E assertions).
+ *  v5.28.0: optional `cafeLogo` (third arg) prints a head tile + one tile on
+ *  EVERY sticker card — the card is what guests see on the table, so the
+ *  brand travels with the QR. Absent/NULL logo → identical to the old sheet. */
+export function buildStickerSheetHtml(cafeName: string, stickers: StickerSpec[], cafeLogo?: string | null): string {
   const cards = stickers
     .map(
       (s) => `
     <div class="sticker">
+      ${s.logo ? `<img class="cardlogo" src="${esc(s.logo)}" alt="" onerror="this.style.display='none'"/>` : ''}
       <div class="cafe">${esc(cafeName)}</div>
       <div class="table">${esc(s.tableNumber)}</div>
       ${s.section ? `<div class="section">${esc(s.section)}</div>` : ''}
@@ -191,8 +200,10 @@ export function buildStickerSheetHtml(cafeName: string, stickers: StickerSpec[])
   .head { text-align: center; margin-bottom: 10px; }
   .head .t { font-size: 14px; font-weight: 800; }
   .head .s { font-size: 10px; color: #6B6B6B; margin-top: 2px; }
+  .headlogo { width: 42px; height: 42px; object-fit: contain; margin: 0 auto 4px; display: block; background: #fff; border: 1px solid #E3E7E0; border-radius: 8px; padding: 3px; }
   .grid { display: flex; flex-wrap: wrap; gap: 8px; }
   .sticker { width: calc(50% - 4px); border: 1.5px dashed #B88E2F; border-radius: 12px; padding: 12px 10px; text-align: center; page-break-inside: avoid; }
+  .cardlogo { width: 30px; height: 30px; object-fit: contain; margin: 0 auto 3px; display: block; background: #fff; border: 1px solid #E3E7E0; border-radius: 6px; padding: 2px; }
   .cafe { font-size: 12px; font-weight: 700; color: #0F3D3E; }
   .table { font-size: 22px; font-weight: 800; margin-top: 2px; }
   .section { font-size: 9.5px; color: #6B6B6B; }
@@ -200,30 +211,37 @@ export function buildStickerSheetHtml(cafeName: string, stickers: StickerSpec[])
   .hint { font-size: 10px; font-weight: 600; color: #0F3D3E; }
   .url { font-size: 7.5px; color: #8A8A8A; word-break: break-all; margin-top: 3px; font-family: monospace; }
 </style></head><body>
-<div class="head"><div class="t">${esc(cafeName)} — table QR stickers</div><div class="s">Printed ${esc(today)} IST &middot; cut on the dashed lines &middot; one sticker per table &middot; ServePoint smartPOS</div></div>
+<div class="head">${cafeLogo ? `<img class="headlogo" src="${esc(cafeLogo)}" alt="" onerror="this.style.display='none'"/>` : ''}<div class="t">${esc(cafeName)} — table QR stickers</div><div class="s">Printed ${esc(today)} IST &middot; cut on the dashed lines &middot; one sticker per table &middot; ServePoint smartPOS</div></div>
 <div class="grid">${cards}</div>
 </body></html>`;
 }
 
-/** Hidden-iframe print — same engine path as the receipt / Z-report. */
-function printQrStickers(cafeName: string, stickers: StickerSpec[]): void {
-  const html = buildStickerSheetHtml(cafeName, stickers);
-  const frame = document.createElement('iframe');
-  frame.style.position = 'fixed';
-  frame.style.right = '0';
-  frame.style.bottom = '0';
-  frame.style.width = '0';
-  frame.style.height = '0';
-  frame.style.border = '0';
-  document.body.appendChild(frame);
-  const doc = frame.contentWindow?.document;
-  if (!doc) return;
-  doc.open();
-  doc.write(html);
-  doc.close();
-  frame.contentWindow?.focus();
-  frame.contentWindow?.print();
-  setTimeout(() => document.body.removeChild(frame), 1500);
+/** v5.28.0 — warm the café logo in the HTTP cache BEFORE the print iframe
+ *  renders: print() does not wait for remote images, so a cold logo can lose
+ *  the race and print a blank tile. Resolves false on failure/timeout — the
+ *  sheet then prints honestly without tiles (the img's own onerror also
+ *  self-hides, so a half-warmed logo can never render broken). */
+function preloadLogo(url: string, timeoutMs = 2500): Promise<boolean> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    const timer = window.setTimeout(() => resolve(false), timeoutMs);
+    img.onload = () => {
+      window.clearTimeout(timer);
+      resolve(true);
+    };
+    img.onerror = () => {
+      window.clearTimeout(timer);
+      resolve(false);
+    };
+    img.src = url;
+  });
+}
+
+/** Hidden-iframe print — rides the shared printFrame engine (v5.27.1's
+ * afterprint-driven removal; the blind 1500ms removeChild could abort or
+ * blank a job in engines whose print() doesn't block). */
+function printQrStickers(cafeName: string, stickers: StickerSpec[], cafeLogo?: string | null): void {
+  printHiddenFrame(buildStickerSheetHtml(cafeName, stickers, cafeLogo));
 }
 
 const STATUS_META: Record<TableStatus, { label: string; bg: string; fg: string; dot: string }> = {
@@ -957,15 +975,18 @@ export function FloorScreen(): React.ReactElement {
     setStickerBusy(true);
     setActionError(null);
     try {
+      const logo = tenant?.logo_url || null;
+      if (logo) await preloadLogo(logo); // print() won't wait for a cold remote image
       const specs = await Promise.all(
         list.map(async (t) => ({
           tableNumber: t.table_number,
           section: t.section || '',
           url: guestUrlOf(t),
           qr: await qrDataUrl(guestUrlOf(t)),
+          logo,
         })),
       );
-      printQrStickers(tenant?.name || 'ServePoint', specs);
+      printQrStickers(tenant?.name || 'ServePoint', specs, logo);
     } catch (err) {
       setActionError(err instanceof Error ? err.message : 'Could not render the stickers.');
     } finally {
