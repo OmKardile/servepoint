@@ -13,10 +13,13 @@ import {
 import {
   advanceOrder,
   fetchOrderHistory,
+  fetchOrderOfferTitle,
+  fetchOrderPayment,
   fetchOrders,
   recordPayment,
 } from '../../lib/api';
-import type { OrderStatusEvent, PaymentMethod } from '../../lib/api';
+import type { OrderStatusEvent, PaymentMethod, ReceiptPayment } from '../../lib/api';
+import { printReceipt } from './ReceiptPrint';
 import { formatMoney, getPrefs } from '../../lib/prefs';
 import { downloadCsv } from '../../lib/csv';
 import { useTenant } from '../../lib/tenant';
@@ -240,7 +243,7 @@ const ErrorCard: React.FC<{ message: string; onRetry: () => void }> = ({ message
 /* ─────────────────────────────── Main screen ───────────────────────────── */
 
 const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }) => {
-  const { loading: tenantLoading, error: tenantError, tenantId } = useTenant();
+  const { loading: tenantLoading, error: tenantError, tenantId, tenant } = useTenant();
 
   const [orders, setOrders] = useState<Order[]>([]);
   const [ordersLoading, setOrdersLoading] = useState(true);
@@ -271,6 +274,39 @@ const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRet
   useEffect(() => {
     ordersRef.current = orders;
   }, [orders]);
+
+  /** Receipt metadata (Task 49) — lazy per-order lookups, both fail soft. */
+  const [receiptMeta, setReceiptMeta] = useState<{
+    offerTitle: string | null;
+    payment: ReceiptPayment | null;
+  } | null>(null);
+  useEffect(() => {
+    if (!selectedId || !tenantId) {
+      setReceiptMeta(null);
+      return;
+    }
+    const selected = orders.find((o) => o.id === selectedId) || null;
+    const wantsOffer = Number(selected?.discount_amount ?? 0) > 0;
+    const wantsPayment = String(selected?.payment_status || '').toLowerCase() === 'completed';
+    if (!wantsOffer && !wantsPayment) {
+      setReceiptMeta(null);
+      return;
+    }
+    let alive = true;
+    Promise.all([
+      wantsOffer ? fetchOrderOfferTitle(tenantId, selectedId) : Promise.resolve(null),
+      wantsPayment ? fetchOrderPayment(tenantId, selectedId) : Promise.resolve(null),
+    ])
+      .then(([offerTitle, payment]) => {
+        if (alive) setReceiptMeta({ offerTitle, payment });
+      })
+      .catch(() => {
+        if (alive) setReceiptMeta({ offerTitle: null, payment: null });
+      });
+    return () => {
+      alive = false;
+    };
+  }, [selectedId, tenantId, orders]);
 
   /** Append-only status trail of the selected order (migration 007). */
   const [trail, setTrail] = useState<OrderStatusEvent[]>([]);
@@ -637,12 +673,18 @@ const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRet
                       onClick={() => setSelectedId(o.id)}
                       aria-pressed={isSelected}
                       aria-label={`Order ${o.order_number}, ${STATUS_LABEL[status] || status}, ${formatMoney(o.total)}`}
-                      className={`w-full rounded-xl border-2 p-3.5 text-left transition ${
+                      className={`relative w-full rounded-xl border-2 p-3.5 text-left transition ${
                         isSelected
                           ? 'border-[#B88E2F] bg-[#F3E8CF]'
                           : 'border-transparent bg-[#EAF0EC] hover:border-[#D9E2DD]'
                       }`}
                     >
+                      {/* Status accent bar — scan the column by color, not by reading */}
+                      <span
+                        aria-hidden
+                        className="absolute left-0 top-1/2 h-9 w-[3px] -translate-y-1/2 rounded-r-full"
+                        style={{ backgroundColor: STATUS_DOT[status] || '#969696' }}
+                      />
                       <div className="flex items-center justify-between gap-3">
                         <div className="min-w-0">
                           <div className="flex items-center gap-2">
@@ -658,15 +700,20 @@ const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRet
                               {STATUS_LABEL[status] || status}
                             </span>
                           </div>
-                          <p className="mt-1 truncate text-[12.5px] text-[#6B6B6B]">
+                          <p className="mt-1 flex items-center gap-1.5 truncate text-[12.5px] text-[#6B6B6B]">
                             {rowSubline(o)}
+                            {Number(o.discount_amount ?? 0) > 0 && (
+                              <span className="inline-flex shrink-0 items-center rounded bg-[#E8F5EC] px-1.5 py-px text-[10px] font-bold text-[#2E7D32]">
+                                −₹{Number(o.discount_amount).toFixed(0)} off
+                              </span>
+                            )}
                           </p>
                         </div>
                         <div className="shrink-0 text-right">
-                          <p className="text-[14.5px] font-bold text-[#1A1A1A]">
+                          <p className="text-[14.5px] font-bold tabular-nums text-[#1A1A1A]">
                             {formatMoney(o.total)}
                           </p>
-                          <p className="mt-0.5 text-[11.5px] text-[#969696]">
+                          <p className="mt-0.5 text-[11.5px] tabular-nums text-[#969696]">
                             {hhmm(o.created_at)}
                           </p>
                         </div>
@@ -893,7 +940,7 @@ const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRet
                       )}
                     </div>
                     <span className="shrink-0 text-[13px] font-semibold text-[#1A1A1A]">
-                      {formatMoney(it.unit_price)}
+                      {formatMoney(it.item_total ?? it.unit_price * it.qty)}
                     </span>
                   </div>
                 ))}
@@ -967,13 +1014,92 @@ const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRet
                 </div>
               )}
 
+              {/* Money breakdown (Task 49) — every figure is a stored column,
+                  never recomputed; discount line appears only when the ledger says so. */}
+              <div className="mt-4 space-y-1.5 border-t border-dashed border-[#E3E7E0] pt-3">
+                <div className="flex items-center justify-between text-[12.5px] text-[#6B6B6B]">
+                  <span>Subtotal</span>
+                  <span className="font-medium tabular-nums text-[#1A1A1A]">
+                    {formatMoney(selected.subtotal)}
+                  </span>
+                </div>
+                {Number(selected.discount_amount ?? 0) > 0 && (
+                  <div className="flex items-center justify-between text-[12.5px]">
+                    <span className="inline-flex items-center gap-1.5 text-[#2E7D32]">
+                      <span className="rounded bg-[#E8F5EC] px-1.5 py-0.5 text-[10px] font-bold tracking-wide text-[#2E7D32]">
+                        OFFER
+                      </span>
+                      {receiptMeta?.offerTitle || 'Discount'}
+                    </span>
+                    <span className="font-semibold tabular-nums text-[#2E7D32]">
+                      -{formatMoney(Number(selected.discount_amount ?? 0))}
+                    </span>
+                  </div>
+                )}
+                {Number(selected.tax_amount ?? 0) > 0 && (
+                  <div className="flex items-center justify-between text-[12.5px] text-[#6B6B6B]">
+                    <span>GST (5% · CGST+SGST)</span>
+                    <span className="font-medium tabular-nums text-[#1A1A1A]">
+                      {formatMoney(selected.tax_amount)}
+                    </span>
+                  </div>
+                )}
+              </div>
+
               {/* Total (uses order.total as stored — never recomputed) */}
-              <div className="mt-4 flex items-center justify-between border-t border-[#E3E7E0] pt-4">
+              <div className="mt-3 flex items-center justify-between border-t border-[#E3E7E0] pt-3">
                 <span className="text-[16px] font-bold text-[#1A1A1A]">Total</span>
-                <span className="text-[20px] font-bold text-[#1A1A1A]">
+                <span className="text-[20px] font-bold tabular-nums text-[#1A1A1A]">
                   {formatMoney(selected.total)}
                 </span>
               </div>
+
+              {/* Customer receipt (Task 49) — thermal 80mm print for any live ticket */}
+              {displayStatus(selected) !== 'cancelled' && (
+                <button
+                  onClick={() =>
+                    printReceipt({
+                      storeName: tenant?.name || 'ServePoint store',
+                      orderNumber: selected.order_number,
+                      orderType: String(selected.order_type || ''),
+                      tableLabel: selected.table_label,
+                      customerName: selected.customer_name,
+                      createdAt: selected.created_at,
+                      items: (selected.items || []).map((it) => ({
+                        name: it.name,
+                        qty: it.qty,
+                        variantName: it.variant_name,
+                        notes: it.notes,
+                        addons: it.addons,
+                        lineTotal: it.item_total ?? it.unit_price * it.qty,
+                      })),
+                      subtotal: selected.subtotal,
+                      discount: selected.discount_amount,
+                      offerTitle: receiptMeta?.offerTitle || null,
+                      tax: selected.tax_amount,
+                      total: selected.total,
+                      paymentLabel:
+                        (receiptMeta?.payment?.method &&
+                          (METHOD_LABEL[receiptMeta.payment.method as MethodKey] ||
+                            receiptMeta.payment.method)) ||
+                        (selected.payment_method
+                          ? METHOD_LABEL[selected.payment_method as MethodKey] || null
+                          : null),
+                      paidAt:
+                        receiptMeta?.payment?.paidAt ||
+                        (displayStatus(selected) === 'paid'
+                          ? [...trail].reverse().find((ev) => displayStatus({ status: ev.to_status, payment_status: '' }) === 'paid')?.created_at || null
+                          : null),
+                      isPaid: displayStatus(selected) === 'paid',
+                      printedBy: null,
+                    })
+                  }
+                  className="mt-4 flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-[#B88E2F]/45 bg-[#FDF9F0] text-[12.5px] font-semibold text-[#8A6A20] transition hover:border-[#B88E2F] hover:bg-[#F8EFDB] active:scale-[0.99]"
+                >
+                  <Receipt size={15} aria-hidden />
+                  Print receipt
+                </button>
+              )}
             </>
           )}
         </div>

@@ -3,6 +3,24 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.11.0] — 2026-10-02 — The counter can print the bill (customer receipts + money-honest Bills detail)
+
+### Added — Printable customer receipt (thermal 80mm)
+- **Bills gains the receipt the counter was missing**: every live (non-cancelled) ticket in the Bills detail pane gets a full-width gold **"Print receipt"** button. It renders a thermal-80mm (302px, Courier) receipt through the same hidden-iframe print engine as the EOD Z-report — cafe name, `CUSTOMER RECEIPT`, order #, order type, table, customer, IST timestamp; item lines with variant and `+ add-on` sub-lines and frozen line totals; then **Subtotal → DISCOUNT (with the offer's real title) → CGST 2.5% → SGST 2.5% → TOTAL → PAID · method → paid-at time**; footer thank-you + printed-at + servepoint sign-off.
+- **Money honesty is structural**: every rupee on the receipt is a *stored* column (`subtotal`, `discount_amount`, `tax_amount`, `total`) — never recomputed. The CGST/SGST split is a display-only halving of the stored `tax_amount` that sums back exactly (India restaurant convention: 5% GST prints as 2.5% + 2.5%).
+- **Two new lazy, fail-soft API helpers** (`src/lib/api.ts`, appended at file end): `fetchOrderOfferTitle` (offer title via the 016 redemption ledger — prints even for offers paused after the sale) and `fetchOrderPayment` (payments-ledger row from 007: method, amount, paid-at; legacy orders without a ledger row fall back to `orders.payment_method` and the status trail). Both return `null` on any miss so a receipt never hard-fails on a nice-to-have.
+- **`buildReceiptHtml` is exported and pure** — the receipt is assertable without a printer: browser E2E captured the REAL iframe HTML for orders #48 and #55 and verified every figure against DB truth (440 − 50 + 19.50 = 409.50; 330 − 50 + 14 = 294), offer titles from the ledger, `PAID · UPI` with the ledger's paid-time, and variant/add-on sub-lines (`Large`, `+ Extra shot`).
+
+### Added — Bills detail: money breakdown (the QA gap this round found and fixed)
+- The detail pane used to show items ₹330.00 vs a total ₹294.00 with **no explanation** — the ₹50 offer discount and GST were invisible. A new dashed-rule breakdown block above the Total now prints **Subtotal → OFFER badge + offer title + −₹ (green) → GST (5% · CGST+SGST)**, all stored figures, appearing only when the ledger says the order actually has a discount/tax.
+- Item rows now show the **frozen line total** (`item_total`, add-ons included) instead of the bare unit price — a 2× line with extras reads the full ticket amount.
+
+### Changed — Bills list polish
+- Each order row carries a **status accent bar** on its left edge (gold = active, green = paid, red = cancelled) so the column scans by color, and discounted tickets show a small green **"−₹50 off"** chip right on the row; row totals/times are now `tabular-nums` aligned.
+
+### Verified
+- tsc 0, lint clean; zero page errors on Bills, guest QR menu, Inventory Reorder, Dashboard (agent-browser sweep, start → finish). Receipt print path proven in-browser twice (iframe captured, `contentDocument` read back, print window focused) — #48: `DISCOUNT · ₹50 off over ₹300 −₹50.00`, `CGST ₹9.75 + SGST ₹9.75`, `TOTAL ₹409.50`, `PAID · UPI 16:27`; #55 adds `Large` + `+ Extra shot` sub-lines. Ledger method label normalized through `METHOD_LABEL` (raw `upi` → `UPI`). OFFER-row hide-logic exercised via the exported builder (discount = 0 ⇒ no discount row). Guest QR menu regression-clean after the api.ts additions.
+
 ## [5.10.0] — 2026-10-02 — The shelf asks to be refilled (burn-rate reorder list + today's margin on the Dashboard)
 
 ### Added — Inventory gains the Reorder tab

@@ -1493,3 +1493,63 @@ export async function fetchTodayCostMargin(tenantId: string): Promise<TodayCostM
   }
   return { dayCogs, paidNet, paidCogs, margin: paidNet - paidCogs, paidTickets };
 }
+
+/* ── Receipt metadata (Task 49) — lazy per-order lookups for the Bills receipt ──
+ * Both helpers fail SOFT (return null) on purpose: a receipt must never hard-fail
+ * because a nice-to-have is missing (paused offer title, legacy order without a
+ * payments-ledger row). The receipt itself prints from stored order fields. */
+
+/** The offer title redeemed on an order, if any (offer_redemptions × offers, migration 016). */
+export async function fetchOrderOfferTitle(
+  tenantId: string,
+  orderId: string,
+): Promise<string | null> {
+  requireCloud();
+  const { data, error } = await supabase
+    .from('offer_redemptions')
+    .select('offers(title)')
+    .eq('tenant_id', tenantId)
+    .eq('order_id', orderId)
+    .maybeSingle();
+  if (error || !data) return null;
+  const nested = (data as { offers?: { title?: string } | null }).offers;
+  return nested?.title ?? null;
+}
+
+export interface ReceiptPayment {
+  method: string;
+  amount: number;
+  paidAt: string;
+  confirmedByEmail: string | null;
+}
+
+/** The payments-ledger row for an order (migration 007). Latest wins; legacy
+ * orders paid before 007 have no row here — the caller falls back to
+ * orders.payment_method. */
+export async function fetchOrderPayment(
+  tenantId: string,
+  orderId: string,
+): Promise<ReceiptPayment | null> {
+  requireCloud();
+  const { data, error } = await supabase
+    .from('payments')
+    .select('method, amount, confirmed_by_email, created_at')
+    .eq('tenant_id', tenantId)
+    .eq('order_id', orderId)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error || !data) return null;
+  const row = data as {
+    method: string;
+    amount: number;
+    confirmed_by_email: string | null;
+    created_at: string;
+  };
+  return {
+    method: String(row.method || ''),
+    amount: Number(row.amount ?? 0),
+    paidAt: String(row.created_at || ''),
+    confirmedByEmail: row.confirmed_by_email ?? null,
+  };
+}
