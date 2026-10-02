@@ -3,6 +3,22 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.26.0] — 2026-10-03 — One scan, one window; a ledger that answers back
+
+### Fixed — the guest gate was minting phantom windows (latent bug, caught live)
+- **The bug**: every visit to the guest gate (`/t/{token}`) created **two** `table_sessions` — rows landing 2–12 ms apart (in the trail: 15:03 ×2, 15:19 ×2, 18:00 ×2; every pre-fix scan doubled). The gate's `run()` callback is recreated whenever the language context's `t` identity churns (and again under StrictMode remount), and its effect re-fired the `issue_ephemeral_table_session` RPC with no guard — one scan, two windows, an inflated trail and a phantom "leak" the floor never caused.
+- **The fix (one scan, one window)**: `openTableSession` keeps a module-level in-flight promise per qrToken — a second concurrent call rides the first's RPC instead of issuing its own; the entry is removed the moment the RPC settles, so a later re-scan still opens a genuinely fresh window. Verified live: the post-fix gate visit minted exactly **one** row (`f93f7a2e…`) and redirected clean.
+
+### Added — Floor: cut all live windows in one tap (the leaked-QR scenario)
+- A photo of a table's sticker can be many phones. When a table's drill panel shows **two or more clock-live windows**, a red "Cut all live" band appears with the honest count ("3 live windows open — one photo of this sticker could be many phones"), the same two-step arm→confirm grammar as the row cut (arm flips the button to "Cut N live?" for 3 s), one `Promise.allSettled` revoke across every live id so one failed write can't strand the rest, honest partial-failure copy ("N of M cuts failed — the list shows what actually held"), and the board resync as truth. With exactly one live window the band stays hidden — the row's own cut is the honest tool for that case.
+
+### Added — Bills: search that matches what the card prints (WYSIWYG hay)
+- **The bug (found by the parked Task-63 eyeball)**: the search hay held the bare table number ("T2"), but every card prints "Table T2" — typing the literal string on screen matched nothing (verified live: "96" → 1 hit, "T2" → hits, "Table T2" → zero).
+- **The fix**: the hay is now the row's own visible subline (`rowSubline(o)` — "Table T2 · 2 guests", "Takeaway · Meera") plus order number and customer name, case-insensitive. While searching, a match-count legibility line (aria-live polite) says plainly how much of the ledger the term captured — "**12** of 35 bills match 'Table T2'" — with a count badge and a one-tap clear button.
+
+### Verified
+- E2E, zero page errors: Bills "Table T2" → 12 of 35 hits (was 0), "table t2" identical, count line + clear behave; Floor drill at 3 live windows → arm → confirm → all three sessions `revoked` in SQL, no error banner, rows re-label honestly; at 1 live window the bulk band stays hidden; post-fix gate scan mints exactly ONE session ("menu open" in the trail); `tsc` 0; sw `5.26.0-r1`.
+
 ## [5.25.0] — 2026-10-03 — Legibility passes: the runner sees WHERE, the owner sees the shape
 
 ### Fixed — the table was invisible everywhere it mattered (latent bug, found by audit)

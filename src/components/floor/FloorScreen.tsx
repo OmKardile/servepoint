@@ -49,7 +49,7 @@ import { useCart } from '../../store/cart';
 import type { Order, OrderItem } from '../../types';
 
 /**
- * Floor (v5.22.0) — the counter's table cockpit. dining_tables stream over
+ * Floor (v5.26.0) — the counter's table cockpit. dining_tables stream over
  * realtime (migration 011); orders hold/release tables automatically through
  * the trg_orders_sync_table trigger, so this board mirrors reality without
  * anyone having to remember to update it. Every card carries the table's
@@ -80,6 +80,13 @@ import type { Order, OrderItem } from '../../types';
  * for orders (sp_create_public_order's new optional p_session_token gate).
  * Honest scope: a cut ends the WINDOW, not the table — the printed sticker's
  * QR reopens a fresh one.
+ *
+ * v5.26.0 adds the BULK CUT: when two or more windows are open on the same
+ * table (the leaked-QR scenario — a photo of the sticker circulating), the
+ * drill panel offers "Cut all live", one armed tap that ends every live
+ * window at once. Same clock-derived liveness, same RLS revoke path,
+ * allSettled so one failed write can't strand the rest, honest partial-
+ * failure copy. One live window still belongs to the row's own cut.
  */
 
 const esc = (s: string): string =>
@@ -416,6 +423,8 @@ function TableDrill({
   cutBusyId,
   onCutArm,
   onCut,
+  bulkCutBusy,
+  onCutAll,
   onClose,
 }: {
   table: DiningTable;
@@ -425,14 +434,29 @@ function TableDrill({
   cutBusyId: string | null;
   onCutArm: (sessionId: string) => void;
   onCut: (sessionId: string) => void;
+  bulkCutBusy: boolean;
+  onCutAll: (sessionIds: string[]) => void;
   onClose: () => void;
 }): React.ReactElement {
   const meta = STATUS_META[table.status];
   const [qr, setQr] = useState<string | null>(null);
   const [copied, setCopied] = useState<'link' | 'token' | null>(null);
   const [shown, setShown] = useState(false);
+  const [bulkArm, setBulkArm] = useState(false);
   const url = guestUrlOf(table);
   const isLive = table.status === 'occupied' || table.status === 'billing';
+
+  /* Live windows on THIS table (clock-derived, same rule as the rows). Two or
+     more earns the bulk cut — with one, the row's own cut is the honest tool. */
+  const liveIds = useMemo(
+    () => sessions.filter((s) => sessionState(s) === 'live').map((s) => s.id),
+    [sessions],
+  );
+  useEffect(() => {
+    if (!bulkArm) return;
+    const t = window.setTimeout(() => setBulkArm(false), 3000);
+    return () => window.clearTimeout(t);
+  }, [bulkArm]);
 
   useEffect(() => {
     const raf = requestAnimationFrame(() => setShown(true));
@@ -588,6 +612,46 @@ function TableDrill({
                 </span>
               )}
             </div>
+            {/* Bulk cut (v5.26.0) — one tap ends EVERY live window on this table
+                (the leaked-QR scenario: a photo of the sticker circulating).
+                Same two-step arm→confirm grammar as the row cut; only appears
+                when two or more windows are actually open. */}
+            {liveIds.length >= 2 && (
+              <div
+                className={`mt-1 flex items-center justify-between gap-2 rounded-xl px-3 py-2 ${
+                  bulkArm ? 'bg-[#FDF3F2] ring-1 ring-[#B3261E]/30' : 'bg-[#FBFBF9]'
+                }`}
+              >
+                <p className="min-w-0 text-[11.5px] leading-snug text-[#6B6B6B]">
+                  <span className="font-bold tabular-nums text-[#B3261E]">{liveIds.length} live windows</span>{' '}
+                  open — one photo of this sticker could be many phones.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => (bulkArm ? onCutAll(liveIds) : setBulkArm(true))}
+                  disabled={bulkCutBusy}
+                  aria-label={
+                    bulkCutBusy
+                      ? 'Cutting all live sessions'
+                      : bulkArm
+                        ? `Confirm cutting all ${liveIds.length} live sessions on table ${table.table_number}`
+                        : `Cut all ${liveIds.length} live sessions on table ${table.table_number}`
+                  }
+                  className={`flex h-7 shrink-0 items-center gap-1.5 rounded-full px-3 text-[11px] font-bold transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[#B3261E] ${
+                    bulkArm
+                      ? 'bg-[#B3261E] text-white shadow-sm'
+                      : 'border border-[#F0C4BE] text-[#B3261E] hover:bg-[#FDF3F2]'
+                  }`}
+                >
+                  {bulkCutBusy ? (
+                    <Loader2 size={12} className="animate-spin" aria-hidden />
+                  ) : (
+                    <Scissors size={12} aria-hidden />
+                  )}
+                  {bulkCutBusy ? 'Cutting…' : bulkArm ? `Cut ${liveIds.length} live?` : 'Cut all live'}
+                </button>
+              </div>
+            )}
             {sessions.length === 0 ? (
               <p className="rounded-xl bg-[#FBFBF9] px-3 py-3 text-[12.5px] text-[#6B6B6B]">
                 No guest has scanned this table's QR yet — the session trail appears here the moment someone opens the menu.
@@ -659,7 +723,8 @@ function TableDrill({
                   Each row is one scan of this table's QR — a fresh 10-minute menu session every time.
                   The clock, not the stored status, decides live vs expired. <span className="font-semibold text-[#B3261E]">Cut</span> ends the
                   guest's open window — their menu locks and the token dies for orders; a new scan of the
-                  printed sticker reopens (the QR stays the table's key). Rides the floor's refresh.
+                  printed sticker reopens (the QR stays the table's key). <span className="font-semibold text-[#B3261E]">Cut all live</span> does
+                  every open window at once. Rides the floor's refresh.
                 </p>
               </>
             )}
@@ -759,6 +824,7 @@ export function FloorScreen(): React.ReactElement {
   const [confirmId, setConfirmId] = useState<string | null>(null);
   const [cutArmId, setCutArmId] = useState<string | null>(null);
   const [cutBusyId, setCutBusyId] = useState<string | null>(null);
+  const [bulkCutBusy, setBulkCutBusy] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [drillId, setDrillId] = useState<string | null>(null);
   const [filter, setFilter] = useState<TableStatus | null>(null);
@@ -845,6 +911,31 @@ export function FloorScreen(): React.ReactElement {
         setCutBusyId(null);
         void reload(); // the board resyncs — status, cards and the drill agree
       }
+    },
+    [reload],
+  );
+
+  /** Bulk cut (v5.26.0): end EVERY live window on one table — the leaked-QR
+   *  scenario (a photo of the sticker circulating) needs one tap, not N
+   *  two-step cuts. Optimistic flip for all ids, allSettled so one RLS hiccup
+   *  can't strand the rest, honest partial-failure message, resync as truth. */
+  const cutAllSessions = useCallback(
+    async (tableId: string, sessionIds: string[]) => {
+      setActionError(null);
+      setBulkCutBusy(tableId);
+      const ids = new Set(sessionIds);
+      setSessions((prev) => prev.map((s) => (ids.has(s.id) ? { ...s, status: 'revoked' } : s)));
+      const results = await Promise.allSettled(sessionIds.map((id) => revokeTableSession(id)));
+      const failed = results.filter((r) => r.status === 'rejected').length;
+      if (failed > 0) {
+        setActionError(
+          failed === sessionIds.length
+            ? 'Could not cut the sessions. Try again.'
+            : `${failed} of ${sessionIds.length} cuts failed — the list shows what actually held.`,
+        );
+      }
+      setBulkCutBusy(null);
+      void reload(); // the board resyncs — status, cards and the drill agree
     },
     [reload],
   );
@@ -1441,6 +1532,8 @@ export function FloorScreen(): React.ReactElement {
           cutBusyId={cutBusyId}
           onCutArm={armCut}
           onCut={(id) => void cutSession(id)}
+          bulkCutBusy={bulkCutBusy === drillTable.id}
+          onCutAll={(ids) => void cutAllSessions(drillTable.id, ids)}
           onClose={() => setDrillId(null)}
         />
       )}

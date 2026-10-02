@@ -9,6 +9,7 @@ import {
   Receipt,
   RefreshCw,
   Search,
+  X,
 } from 'lucide-react';
 import {
   advanceOrder,
@@ -366,7 +367,12 @@ const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRet
       if (dateFilter === 'today' && !isSameLocalDay(o.created_at)) return false;
       if (dateFilter === '7d' && new Date(o.created_at).getTime() < weekAgo) return false;
       if (q) {
-        const hay = `${o.order_number} ${o.customer_name || ''} ${o.table_label || ''}`.toLowerCase();
+        /* WYSIWYG hay (5.26.0): search matches what the card actually prints —
+           the visible subline ("Table T2 · 2 guests", "Takeaway · Meera") — not
+           just raw internals. Before this, typing the literal string on every
+           table card ("Table T2") matched nothing: the hay held the bare
+           table number only. Customer name stays searchable too. */
+        const hay = `${o.order_number} ${o.customer_name || ''} ${rowSubline(o)}`.toLowerCase();
         if (!hay.includes(q)) return false;
       }
       return true;
@@ -650,6 +656,29 @@ const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRet
               Retry
             </button>
           </div>
+        )}
+
+        {/* Match-count legibility line (5.26.0): while searching, say plainly
+            how much of the ledger the term captured — announced politely. */}
+        {!ordersLoading && search.trim() && (
+          <p
+            aria-live="polite"
+            className="mt-3 flex items-center gap-2 text-[12px] font-medium text-[#0F3D3E]"
+          >
+            <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[#0F3D3E] px-1.5 text-[10.5px] font-bold tabular-nums text-white">
+              {visible.length}
+            </span>
+            <span className="text-[#6B6B6B]">
+              of {orders.length} bills match “{search.trim()}”
+            </span>
+            <button
+              onClick={() => setSearch('')}
+              aria-label="Clear search"
+              className="ml-auto flex h-6 w-6 items-center justify-center rounded-full text-[#969696] transition hover:bg-[#F6F5F2] hover:text-[#1A1A1A]"
+            >
+              <X size={13} aria-hidden />
+            </button>
+          </p>
         )}
 
         {/* Scrollable order list */}

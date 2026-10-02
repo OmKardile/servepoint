@@ -173,8 +173,18 @@ export async function resolveTableQr(qrToken: string): Promise<ResolvedTable> {
  * Open (or reuse) the table's ephemeral session via 002's RPC. The RPC also
  * flips the table to occupied — a seated guest is a busy table even before
  * the first order.
+ *
+ * v5.26.0 — ONE SCAN, ONE WINDOW: the gate's effect can legally fire twice
+ * (StrictMode remount, language-context identity churn) and both invocations
+ * used to hit `issue_ephemeral_table_session`, leaving two live windows from
+ * a single scan (seen live: two rows created 12ms apart on one visit). An
+ * in-flight promise per token makes the second call ride the first; it is
+ * removed the moment the RPC settles, so a later RE-scan still opens a
+ * genuinely fresh window.
  */
-export async function openTableSession(input: {
+const inflightOpens = new Map<string, Promise<{ ok: boolean; session?: TableSession; message?: string }>>();
+
+export function openTableSession(input: {
   slug: string;
   tableNumber: string;
   qrToken: string;
@@ -183,29 +193,38 @@ export async function openTableSession(input: {
   if (cached && Date.now() - cached.resolvedAt < 8 * 60 * 1000) {
     // reuse within 8 minutes — the RPC itself refuses dead sessions server-side
     const stillValid = new Date(cached.session.expires_at).getTime() - Date.now() > 30 * 1000;
-    if (stillValid) return { ok: true, session: cached.session };
+    if (stillValid) return Promise.resolve({ ok: true, session: cached.session });
     sessionStorage.removeItem(SESSION_KEY(input.qrToken));
   }
 
-  const { data, error } = await supabase.rpc('issue_ephemeral_table_session', {
-    p_tenant_slug: input.slug,
-    p_table_number: input.tableNumber,
-    p_permanent_token: input.qrToken,
-  });
-  if (error) {
-    return { ok: false, message: 'Could not open this table. Scan the QR sticker again.' };
-  }
-  const res = data as { is_valid: boolean; session_token?: string; expires_at?: string; message?: string; expires_in_seconds?: number };
-  if (!res?.is_valid || !res.session_token || !res.expires_at) {
-    return { ok: false, message: res?.message || 'This table could not be opened. Ask our staff for help.' };
-  }
-  const session: TableSession = {
-    session_token: res.session_token,
-    expires_at: res.expires_at,
-    expires_in_seconds: res.expires_in_seconds ?? 600,
-  };
-  cacheJson(SESSION_KEY(input.qrToken), { session, resolvedAt: Date.now() });
-  return { ok: true, session };
+  const existing = inflightOpens.get(input.qrToken);
+  if (existing) return existing;
+
+  const open = (async (): Promise<{ ok: boolean; session?: TableSession; message?: string }> => {
+    const { data, error } = await supabase.rpc('issue_ephemeral_table_session', {
+      p_tenant_slug: input.slug,
+      p_table_number: input.tableNumber,
+      p_permanent_token: input.qrToken,
+    });
+    if (error) {
+      return { ok: false, message: 'Could not open this table. Scan the QR sticker again.' };
+    }
+    const res = data as { is_valid: boolean; session_token?: string; expires_at?: string; message?: string; expires_in_seconds?: number };
+    if (!res?.is_valid || !res.session_token || !res.expires_at) {
+      return { ok: false, message: res?.message || 'This table could not be opened. Ask our staff for help.' };
+    }
+    const session: TableSession = {
+      session_token: res.session_token,
+      expires_at: res.expires_at,
+      expires_in_seconds: res.expires_in_seconds ?? 600,
+    };
+    cacheJson(SESSION_KEY(input.qrToken), { session, resolvedAt: Date.now() });
+    return { ok: true, session };
+  })();
+
+  inflightOpens.set(input.qrToken, open);
+  void open.finally(() => inflightOpens.delete(input.qrToken));
+  return open;
 }
 
 /**
