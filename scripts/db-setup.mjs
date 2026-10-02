@@ -1,4 +1,4 @@
-// Supabase provisioning script: applies ServePoint migrations 001-021 to the live
+// Supabase provisioning script: applies ServePoint migrations 001-022 to the live
 // Supabase project via the Supavisor session pooler (IPv4 path — direct
 // db.<ref>.supabase.co:5432 is IPv6-only on current projects), then verifies.
 // NOT part of the app bundle.
@@ -366,6 +366,29 @@ try {
     return table === true && rls === 1 && moveRpc === true && closeNets === true && anonExec === false && pub === 1;
   };
   await applyFile('021_cash_movements', 'supabase/migrations/021_cash_movements.sql', await drawerMovementsReady());
+
+  // 022 sentinel: the offerless-order crash fix — sp_create_public_order must
+  // carry the offer title in v_offer_title (NULL-safe) and NOT hold the eager
+  // `THEN v_offer.title` reference that crashed every offerless checkout.
+  const offerlessFixReady = async () => {
+    const src = await scalar(
+      `SELECT prosrc FROM pg_proc WHERE pronamespace='public'::regnamespace
+        AND proname='sp_create_public_order' LIMIT 1`
+    );
+    const body = String(src || '');
+    const overloads = Number(
+      await scalar(
+        `SELECT count(*) FROM pg_proc WHERE pronamespace='public'::regnamespace
+          AND proname='sp_create_public_order'`
+      )
+    );
+    const anonExec = await scalar(
+      `SELECT has_function_privilege('anon',
+        'sp_create_public_order(TEXT,TEXT,JSONB,TEXT,TEXT,TEXT,TEXT,UUID)','EXECUTE')`
+    );
+    return overloads === 1 && body.includes('v_offer_title') && !body.includes('THEN v_offer.title') && anonExec === true;
+  };
+  await applyFile('022_public_order_offer_fix', 'supabase/migrations/022_public_order_offer_fix.sql', await offerlessFixReady());
 
   // ── Verification ──────────────────────────────────────────────────────────
   const tables = await client.query(
