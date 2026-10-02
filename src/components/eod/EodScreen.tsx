@@ -32,6 +32,7 @@ import {
   type DrawerSession,
 } from '../../lib/api';
 import { formatMoney } from '../../lib/prefs';
+import { printHiddenFrame } from '../../lib/printFrame';
 import { useTenant } from '../../lib/tenant';
 import { useSession } from '../../store/session';
 

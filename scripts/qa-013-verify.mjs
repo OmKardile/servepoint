@@ -1,11 +1,12 @@
 // QA verify: 013 applied live? counter-gate engine + table release trigger
 import { Client } from 'pg';
+import { dbPassword } from './db-creds.mjs';
 
 const client = new Client({
   host: 'aws-0-ap-northeast-2.pooler.supabase.com',
   port: 5432,
   user: 'postgres.gehjsxopcowmotgrrcgc',
-  password: 'gen.narumii@protonmail.comA1',
+  password: dbPassword(),
   database: 'postgres',
 });
 

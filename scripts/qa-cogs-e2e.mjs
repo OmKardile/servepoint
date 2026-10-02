@@ -3,13 +3,14 @@
 // computed from recipe_lines × order_items × cost_per_unit.
 // Run: node scripts/qa-cogs-e2e.mjs
 import pg from 'pg';
+import { dbPassword } from './db-creds.mjs';
 
 const REF = 'gehjsxopcowmotgrrcgc';
 const c = new pg.Client({
   host: 'aws-0-ap-northeast-2.pooler.supabase.com',
   port: 5432,
   user: `postgres.${REF}`,
-  password: 'gen.narumii@protonmail.comA1',
+  password: dbPassword(),
   database: 'postgres',
   ssl: { rejectUnauthorized: false },
 });

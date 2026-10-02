@@ -13,6 +13,7 @@
 // active_order_id = NEW.id matches 0 rows — live T1/T2 state is untouched
 // (verified before/after below).
 import pg from 'pg';
+import { dbPassword } from './db-creds.mjs';
 
 const REF = 'gehjsxopcowmotgrrcgc';
 const TENANT = 'd207be19-e86f-4780-befb-3968831a38fe';
@@ -24,7 +25,7 @@ const c = new pg.Client({
   host: 'aws-0-ap-northeast-2.pooler.supabase.com',
   port: 5432,
   user: `postgres.${REF}`,
-  password: 'gen.narumii@protonmail.comA1',
+  password: dbPassword(),
   database: 'postgres',
   ssl: { rejectUnauthorized: false },
 });

@@ -4,6 +4,7 @@
 // current_tenant_id() falls back to tenant_users by auth.uid(), so sub alone
 // suffices) + anon lockout proof + self-cleaning fixture.
 import pg from 'pg';
+import { dbPassword } from './db-creds.mjs';
 
 const REF = 'gehjsxopcowmotgrrcgc';
 const OWNER_EMAIL = 'qrowner@qrflowcafe.in';
@@ -13,7 +14,7 @@ const c = new pg.Client({
   host: 'aws-0-ap-northeast-2.pooler.supabase.com',
   port: 5432,
   user: `postgres.${REF}`,
-  password: 'gen.narumii@protonmail.comA1',
+  password: dbPassword(),
   database: 'postgres',
   ssl: { rejectUnauthorized: false },
 });

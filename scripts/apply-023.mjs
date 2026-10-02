@@ -2,13 +2,14 @@
 // Run: node scripts/apply-023.mjs
 import { readFileSync } from 'node:fs';
 import pg from 'pg';
+import { dbPassword } from './db-creds.mjs';
 
 const REF = 'gehjsxopcowmotgrrcgc';
 const c = new pg.Client({
   host: 'aws-0-ap-northeast-2.pooler.supabase.com',
   port: 5432,
   user: `postgres.${REF}`,
-  password: 'gen.narumii@protonmail.comA1',
+  password: dbPassword(),
   database: 'postgres',
   ssl: { rejectUnauthorized: false },
 });

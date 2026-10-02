@@ -1,4 +1,5 @@
 import { formatMoney } from '../../lib/prefs';
+import { printHiddenFrame } from '../../lib/printFrame';
 
 /**
  * Customer receipt — thermal 80mm print view (Task 49).
@@ -150,23 +151,8 @@ export function buildReceiptHtml(opts: ReceiptOpts): string {
 </body></html>`;
 }
 
-/** Hidden-iframe print — same engine path as the EOD Z-report. */
+/** Hidden-iframe print — same engine path as the EOD Z-report and the
+ *  floor's QR sticker sheet (shared afterprint-safe lifecycle). */
 export function printReceipt(opts: ReceiptOpts): void {
-  const html = buildReceiptHtml(opts);
-  const frame = document.createElement('iframe');
-  frame.style.position = 'fixed';
-  frame.style.right = '0';
-  frame.style.bottom = '0';
-  frame.style.width = '0';
-  frame.style.height = '0';
-  frame.style.border = '0';
-  document.body.appendChild(frame);
-  const doc = frame.contentWindow?.document;
-  if (!doc) return;
-  doc.open();
-  doc.write(html);
-  doc.close();
-  frame.contentWindow?.focus();
-  frame.contentWindow?.print();
-  setTimeout(() => document.body.removeChild(frame), 1500);
+  printHiddenFrame(buildReceiptHtml(opts));
 }

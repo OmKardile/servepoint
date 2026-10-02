@@ -3,6 +3,7 @@
 // The core assertion: sp_close_drawer expected = float + cash-in − movements.
 // Owner loop via forged claims (Task 51 pattern), self-cleaning.
 import pg from 'pg';
+import { dbPassword } from './db-creds.mjs';
 
 const REF = 'gehjsxopcowmotgrrcgc';
 const OWNER_EMAIL = 'qrowner@qrflowcafe.in';
@@ -12,7 +13,7 @@ const c = new pg.Client({
   host: 'aws-0-ap-northeast-2.pooler.supabase.com',
   port: 5432,
   user: `postgres.${REF}`,
-  password: 'gen.narumii@protonmail.comA1',
+  password: dbPassword(),
   database: 'postgres',
   ssl: { rejectUnauthorized: false },
 });

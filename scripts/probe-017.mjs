@@ -1,10 +1,11 @@
 // Task 46 — probe pg_proc for sp_create_public_order overloads.
 import pg from 'pg';
+import { dbPassword } from './db-creds.mjs';
 const c = new pg.Client({
   host: 'aws-0-ap-northeast-2.pooler.supabase.com',
   port: 5432,
   user: 'postgres.gehjsxopcowmotgrrcgc',
-  password: 'gen.narumii@protonmail.comA1',
+  password: dbPassword(),
   database: 'postgres',
   ssl: { rejectUnauthorized: false },
 });
