@@ -1553,3 +1553,93 @@ export async function fetchOrderPayment(
     confirmedByEmail: row.confirmed_by_email ?? null,
   };
 }
+
+/* ── Guest feedback (migration 019, Task 50) ───────────────────────────────── */
+
+export interface FeedbackStats {
+  /** all-time average rating (null until the first rating arrives) */
+  avgOverall: number | null;
+  countOverall: number;
+  /** ratings that landed in the IST "today" window */
+  countToday: number;
+  avgToday: number | null;
+  /** 1–5 star histogram */
+  stars: { one: number; two: number; three: number; four: number; five: number };
+  /** the newest rating — the Dashboard card quotes it */
+  latest: {
+    rating: number;
+    comment: string | null;
+    orderNumber: number;
+    createdAt: string;
+  } | null;
+}
+
+/**
+ * Guest-love stats straight off the order_feedback ledger (019). Read-only —
+ * ratings are written by the guests themselves through the SECURITY DEFINER
+ * RPC. RLS on order_feedback scopes every row to this tenant.
+ */
+export async function fetchFeedbackStats(tenantId: string): Promise<FeedbackStats> {
+  requireCloud();
+  const { data, error } = await supabase
+    .from('order_feedback')
+    .select('rating, comment, created_at, orders(order_number)')
+    .eq('tenant_id', tenantId)
+    .order('created_at', { ascending: false })
+    .limit(500);
+  if (error) throw error;
+  const rows = (data || []) as {
+    rating: number;
+    comment: string | null;
+    created_at: string;
+    orders?: { order_number?: number } | null;
+  }[];
+
+  const todayKey = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Kolkata',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date());
+  const isToday = (iso: string) =>
+    new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Kolkata',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(new Date(iso)) === todayKey;
+
+  const stars = { one: 0, two: 0, three: 0, four: 0, five: 0 };
+  let sum = 0;
+  let todaySum = 0;
+  let todayN = 0;
+  for (const r of rows) {
+    sum += r.rating;
+    const idx = Math.min(5, Math.max(1, Math.round(r.rating)));
+    if (idx === 1) stars.one += 1;
+    else if (idx === 2) stars.two += 1;
+    else if (idx === 3) stars.three += 1;
+    else if (idx === 4) stars.four += 1;
+    else stars.five += 1;
+    if (isToday(r.created_at)) {
+      todaySum += r.rating;
+      todayN += 1;
+    }
+  }
+  const latestRow = rows[0];
+  return {
+    avgOverall: rows.length > 0 ? sum / rows.length : null,
+    countOverall: rows.length,
+    countToday: todayN,
+    avgToday: todayN > 0 ? todaySum / todayN : null,
+    stars,
+    latest: latestRow
+      ? {
+          rating: latestRow.rating,
+          comment: latestRow.comment,
+          orderNumber: latestRow.orders?.order_number ?? 0,
+          createdAt: latestRow.created_at,
+        }
+      : null,
+  };
+}

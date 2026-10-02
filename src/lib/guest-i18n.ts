@@ -134,6 +134,20 @@ const EN: Dict = {
   copyLink: 'Copy tracking link',
   copied: 'Copied!',
   goHome: 'ServePoint home',
+  // feedback (019)
+  fbTitle: 'How was everything?',
+  fbSub: 'Tap the stars — it helps the cafe a lot.',
+  fbStarsAria: 'Rate from 1 to 5 stars',
+  fbStarN: 'Rate {n} star{plural}',
+  fbCommentLabel: 'Anything to add? (optional)',
+  fbCommentPlaceholder: 'The filter coffee was the best part…',
+  fbSubmit: 'Send rating',
+  fbSending: 'Sending…',
+  fbThanksTitle: 'Thank you!',
+  fbThanksSub: 'Your rating reached the counter — they read every one.',
+  fbRatedAria: 'You rated this order {n} out of 5 stars',
+  fbErr: 'Could not send your rating. Try again.',
+  fbAlready: 'You already rated this order — thank you!',
 };
 
 const HI: Dict = {
@@ -239,6 +253,20 @@ const HI: Dict = {
   copyLink: 'ट्रैकिंग लिंक कॉपी करें',
   copied: 'कॉपी हो गया!',
   goHome: 'ServePoint होम',
+  // feedback (019)
+  fbTitle: 'सब कैसा लगा?',
+  fbSub: 'सितारे दबाएँ — इससे कैफ़े को बहुत मदद मिलती है।',
+  fbStarsAria: '1 से 5 सितारों तक रेट करें',
+  fbStarN: '{n} सितारा{plural} दें',
+  fbCommentLabel: 'कुछ और बताना चाहेंगे? (वैकल्पिक)',
+  fbCommentPlaceholder: 'फ़िल्टर कॉफ़ी सबसे अच्छी थी…',
+  fbSubmit: 'रेटिंग भेजें',
+  fbSending: 'भेज रहे हैं…',
+  fbThanksTitle: 'धन्यवाद!',
+  fbThanksSub: 'आपकी रेटिंग काउंटर तक पहुँच गई — वे हर एक पढ़ते हैं।',
+  fbRatedAria: 'आपने इस ऑर्डर को 5 में से {n} सितारों पर रेट किया',
+  fbErr: 'आपकी रेटिंग नहीं भेजी जा सकी। फिर कोशिश करें।',
+  fbAlready: 'आप इस ऑर्डर को रेट कर चुके हैं — धन्यवाद!',
 };
 
 const KN: Dict = {
@@ -344,6 +372,20 @@ const KN: Dict = {
   copyLink: 'ಟ್ರ್ಯಾಕಿಂಗ್ ಲಿಂಕ್ ನಕಲಿಸಿ',
   copied: 'ನಕಲಾಗಿದೆ!',
   goHome: 'ServePoint ಮುಖಪುಟ',
+  // feedback (019)
+  fbTitle: 'ಎಲ್ಲವೂ ಹೇಗಿತ್ತು?',
+  fbSub: 'ನಕ್ಷತ್ರಗಳನ್ನು ಒತ್ತಿ — ಇದು ಕೆಫೆಗೆ ಬಹಳ ಸಹಾಯ ಮಾಡುತ್ತದೆ.',
+  fbStarsAria: '1 ರಿಂದ 5 ನಕ್ಷತ್ರಗಳವರೆಗೆ ರೇಟ್ ಮಾಡಿ',
+  fbStarN: '{n} ನಕ್ಷತ್ರ{plural} ನೀಡಿ',
+  fbCommentLabel: 'ಬೇರೆ ಏನಾದರೂ ಹೇಳಬೇಕೇ? (ಐಚ್ಛಿಕ)',
+  fbCommentPlaceholder: 'ಫಿಲ್ಟರ್ ಕಾಫಿ ಅತ್ಯುತ್ತಮವಾಗಿತ್ತು…',
+  fbSubmit: 'ರೇಟಿಂಗ್ ಕಳುಹಿಸಿ',
+  fbSending: 'ಕಳುಹಿಸಲಾಗುತ್ತಿದೆ…',
+  fbThanksTitle: 'ಧನ್ಯವಾದಗಳು!',
+  fbThanksSub: 'ನಿಮ್ಮ ರೇಟಿಂಗ್ ಕೌಂಟರ್ ತಲುಪಿದೆ — ಅವರು ಪ್ರತಿಯೊಂದನ್ನೂ ಓದುತ್ತಾರೆ.',
+  fbRatedAria: 'ನೀವು ಈ ಆರ್ಡರ್ ಅನ್ನು 5 ರಲ್ಲಿ {n} ನಕ್ಷತ್ರಗಳಿಗೆ ರೇಟ್ ಮಾಡಿದ್ದೀರಿ',
+  fbErr: 'ನಿಮ್ಮ ರೇಟಿಂಗ್ ಕಳುಹಿಸಲಾಗಲಿಲ್ಲ. ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.',
+  fbAlready: 'ನೀವು ಈ ಆರ್ಡರ್ ಅನ್ನು ರೇಟ್ ಮಾಡಿರುವಿರಿ — ಧನ್ಯವಾದಗಳು!',
 };
 
 const DICTS: Record<GuestLang, Dict> = { en: EN, hi: HI, kn: KN };

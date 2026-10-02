@@ -6,6 +6,7 @@ import {
   CircleAlert,
   Clock,
   Copy,
+  HeartHandshake,
   Minus,
   Plus,
   QrCode,
@@ -13,6 +14,7 @@ import {
   RefreshCw,
   Search,
   ShoppingBag,
+  Star,
   UtensilsCrossed,
   Volume2,
   VolumeX,
@@ -26,6 +28,7 @@ import {
   fetchPublicOrder,
   openTableSession,
   resolveTableQr,
+  submitPublicFeedback,
   type GuestAddon,
   type GuestMenuItem,
   type GuestOrderSummary,
@@ -1000,6 +1003,180 @@ const OT_KEYS: Record<string, string> = {
   delivery: 'otDelivery',
 };
 
+/* ── feedback (019) — "how was everything?" ────────────────────────────────── */
+
+const FB_MAX_COMMENT = 280;
+
+function StarRow({
+  value,
+  interactive,
+  onPick,
+  onHover,
+}: {
+  value: number;
+  interactive: boolean;
+  onPick?: (n: number) => void;
+  onHover?: (n: number) => void;
+}): React.ReactElement {
+  const { t } = useGuestLang();
+  return (
+    <div className="flex items-center gap-1.5" role={interactive ? 'radiogroup' : undefined} aria-label={interactive ? t('fbStarsAria') : undefined}>
+      {[1, 2, 3, 4, 5].map((n) => {
+        const on = n <= value;
+        const star = (
+          <Star
+            size={interactive ? 34 : 17}
+            className={interactive ? 'transition-transform duration-150' : ''}
+            aria-hidden
+            fill={on ? brand.gold : 'transparent'}
+            stroke={on ? brand.gold : '#C9CFC9'}
+            strokeWidth={1.6}
+          />
+        );
+        if (!interactive) return <span key={n}>{star}</span>;
+        return (
+          <button
+            key={n}
+            type="button"
+            role="radio"
+            aria-checked={value === n}
+            aria-label={t('fbStarN', { n: String(n), plural: n === 1 ? '' : 's' })}
+            onClick={() => onPick?.(n)}
+            onMouseEnter={() => onHover?.(n)}
+            onMouseLeave={() => onHover?.(0)}
+            onFocus={() => onHover?.(n)}
+            onBlur={() => onHover?.(0)}
+            className="rounded-full p-0.5 outline-none focus-visible:ring-2 focus-visible:ring-[#B88E2F]/60 active:scale-90"
+            style={{ animation: `spStarPop 360ms cubic-bezier(0.34,1.56,0.64,1) both`, animationDelay: `${n * 55}ms` }}
+          >
+            {star}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function FeedbackCard({
+  order,
+  onRated,
+}: {
+  order: GuestOrderSummary;
+  onRated: (n: number) => void;
+}): React.ReactElement {
+  const { t } = useGuestLang();
+  const rated = order.feedback_rating; // server truth — survives reloads
+  const [hoverN, setHoverN] = useState(0);
+  const [picked, setPicked] = useState(0);
+  const [comment, setComment] = useState('');
+  const [sending, setSending] = useState(false);
+  const [err, setErr] = useState(false);
+
+  const shown = hoverN || picked;
+
+  const submit = async () => {
+    if (!picked || sending) return;
+    setSending(true);
+    setErr(false);
+    const res = await submitPublicFeedback(order.id, picked, comment.trim() || null);
+    setSending(false);
+    if (res.is_valid) {
+      onRated(picked); // the parent refreshes the pager → thank-you from server truth
+    } else {
+      setErr(true);
+    }
+  };
+
+  if (rated != null && rated > 0) {
+    return (
+      <section
+        className="mt-4 rounded-3xl border border-[#E3E7E0] bg-white p-5 shadow-sm"
+        aria-label={t('fbRatedAria', { n: String(rated) })}
+        style={{ animation: 'spThanksRise 320ms ease-out both' }}
+      >
+        <div className="flex items-center gap-2.5">
+          <span className="flex h-8 w-8 items-center justify-center rounded-full" style={{ background: '#EAF4EC' }}>
+            <HeartHandshake size={16} className="text-[#2E7D32]" aria-hidden />
+          </span>
+          <div>
+            <h2 className="text-[14.5px] font-bold text-[#1A1A1A]">{t('fbThanksTitle')}</h2>
+            <p className="text-[11.5px] text-[#6B6B6B]">{t('fbThanksSub')}</p>
+          </div>
+        </div>
+        <div className="mt-3 flex items-center gap-2 rounded-2xl bg-[#FBF9F4] px-3.5 py-2.5">
+          <StarRow value={rated} interactive={false} />
+          <span className="ml-auto text-[12px] font-semibold text-[#8A5A16] tabular-nums">{rated}/5</span>
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <section
+      className="mt-4 rounded-3xl border border-[#E3E7E0] bg-white p-5 shadow-sm"
+      aria-label={t('fbTitle')}
+      style={{ animation: 'spThanksRise 320ms ease-out both' }}
+    >
+      <div className="flex items-center gap-2.5">
+        <span className="flex h-8 w-8 items-center justify-center rounded-full" style={{ background: '#FBF3E4' }}>
+          <Star size={15} fill={brand.gold} stroke={brand.gold} aria-hidden />
+        </span>
+        <div>
+          <h2 className="text-[14.5px] font-bold text-[#1A1A1A]">{t('fbTitle')}</h2>
+          <p className="text-[11.5px] text-[#6B6B6B]">{t('fbSub')}</p>
+        </div>
+      </div>
+
+      <div className="mt-3.5 flex justify-center py-1">
+        <StarRow value={shown} interactive onPick={setPicked} onHover={setHoverN} />
+      </div>
+
+      {picked > 0 && (
+        <div className="mt-3" style={{ animation: 'spFadeIn 240ms ease-out both' }}>
+          <label htmlFor="fb-comment" className="text-[11.5px] font-semibold text-[#6B6B6B]">
+            {t('fbCommentLabel')}
+          </label>
+          <textarea
+            id="fb-comment"
+            rows={2}
+            maxLength={FB_MAX_COMMENT}
+            value={comment}
+            onChange={(e) => setComment(e.target.value)}
+            placeholder={t('fbCommentPlaceholder')}
+            className="mt-1.5 w-full resize-none rounded-2xl border border-[#E3E7E0] bg-[#FBF9F4] px-3.5 py-2.5 text-[13px] text-[#1A1A1A] placeholder:text-[#9A9A9A] focus:border-[#B88E2F] focus:outline-none focus:ring-2 focus:ring-[#B88E2F]/25"
+          />
+          <p className="mt-1 text-right text-[10.5px] tabular-nums text-[#9A9A9A]" aria-hidden>
+            {comment.length}/{FB_MAX_COMMENT}
+          </p>
+        </div>
+      )}
+
+      {err && (
+        <p className="mt-2.5 rounded-xl bg-[#FBEDEB] px-3 py-2 text-[12.5px] font-medium text-[#B4483C]" role="alert" style={{ animation: 'spFadeIn 240ms ease-out both' }}>
+          {t('fbErr')}
+        </p>
+      )}
+
+      <button
+        type="button"
+        disabled={picked === 0 || sending}
+        onClick={() => void submit()}
+        className="mt-1 flex w-full items-center justify-center gap-2 rounded-2xl px-4 py-3 text-[13.5px] font-bold text-white transition-all active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-45"
+        style={{ background: brand.teal }}
+      >
+        {sending ? (
+          <>
+            <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/40 border-t-white" aria-hidden />
+            {t('fbSending')}
+          </>
+        ) : (
+          t('fbSubmit')
+        )}
+      </button>
+    </section>
+  );
+}
+
 export function GuestTrackPage({ orderId }: { orderId: string }): React.ReactElement {
   const { t } = useGuestLang();
   const uuidLike = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(orderId);
@@ -1120,13 +1297,15 @@ export function GuestTrackPage({ orderId }: { orderId: string }): React.ReactEle
                 {FLOW.map((f, i) => {
                   const done = i < step;
                   const now = i === step;
+                  const servedNow = now && order.status === 'completed'; // the last node, gold on serve
                   return (
                     <li key={f.key} className="relative pl-6">
                       <span
                         className="absolute -left-[13px] flex h-6 w-6 items-center justify-center rounded-full border-2"
                         style={{
-                          background: done || now ? brand.teal : '#FFFFFF',
-                          borderColor: done || now ? brand.teal : '#E3E7E0',
+                          background: done || now ? (servedNow ? brand.gold : brand.teal) : '#FFFFFF',
+                          borderColor: done || now ? (servedNow ? brand.gold : brand.teal) : '#E3E7E0',
+                          boxShadow: servedNow ? '0 0 0 4px rgba(184,142,47,0.18)' : undefined,
                         }}
                       >
                         {done && <Check size={12} className="text-white" aria-hidden />}
@@ -1134,7 +1313,7 @@ export function GuestTrackPage({ orderId }: { orderId: string }): React.ReactEle
                       </span>
                       <p className={`text-[14.5px] font-bold ${now ? 'text-[#0F3D3E]' : done ? 'text-[#1A1A1A]' : 'text-[#9A9A9A]'}`}>
                         {t(f.labelKey)}
-                        {now && <span className="ml-2 inline-block h-2 w-2 animate-pulse rounded-full" style={{ background: brand.gold }} aria-hidden />}
+                        {now && !servedNow && <span className="ml-2 inline-block h-2 w-2 animate-pulse rounded-full" style={{ background: brand.gold }} aria-hidden />}
                       </p>
                       <p className="text-[12px] text-[#6B6B6B]">{now ? t(f.hintKey) : done ? t('done') : t('waiting')}</p>
                     </li>
@@ -1201,6 +1380,14 @@ export function GuestTrackPage({ orderId }: { orderId: string }): React.ReactEle
                 )}
               </div>
             </div>
+
+            {/* rate your visit — appears once the cafe marks the ticket served */}
+            {order.status === 'completed' && (
+              <FeedbackCard
+                order={order}
+                onRated={(n) => setOrder((o) => (o ? { ...o, feedback_rating: n } : o))}
+              />
+            )}
 
             <p className="mt-4 flex items-center justify-center gap-1.5 text-[11.5px] text-[#6B6B6B]">
               <RefreshCw size={11} aria-hidden /> {t('autoUpdate')}

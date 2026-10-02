@@ -4,8 +4,10 @@ import {
   CalendarClock,
   ChevronDown,
   Coins,
+  Heart,
   ReceiptText,
   ShoppingBag,
+  Star,
   TrendingDown,
   TrendingUp,
   UserPlus,
@@ -22,7 +24,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { fetchDashboard, fetchTodayCostMargin, type TodayCostMargin } from '../../lib/api';
+import { fetchDashboard, fetchFeedbackStats, fetchTodayCostMargin, type FeedbackStats, type TodayCostMargin } from '../../lib/api';
 import { formatMoney } from '../../lib/prefs';
 import { useTenant } from '../../lib/tenant';
 import { useUi } from '../../store/session';
@@ -359,6 +361,90 @@ const TodayMarginCard: React.FC<{ m: TodayCostMargin }> = ({ m }) => {
   );
 };
 
+/**
+ * Guest love (5.12.0) — the "right now" screen hears the guest's voice.
+ * Reads the order_feedback ledger (019) — ratings guests left from their own
+ * phone through the QR link. Health tones: ≥4.5 loved (green), ≥3.5 good
+ * (gold), <3.5 listen up (red). Fails soft — a failed load just hides the card.
+ */
+const GuestLoveCard: React.FC<{ s: FeedbackStats }> = ({ s }) => {
+  const avg = s.avgOverall;
+  const tone =
+    avg == null ? { color: '#6B6B6B', bg: '#EFEFEF', word: 'no ratings yet' }
+    : avg >= 4.5 ? { color: '#2E7D32', bg: '#2E7D3214', word: 'guests love it' }
+    : avg >= 3.5 ? { color: '#8A5A00', bg: '#8A5A0014', word: 'good — keep going' }
+    : { color: '#B3261E', bg: '#B3261E14', word: 'listen up — guests are not happy' };
+  const maxStar = Math.max(1, s.stars.five, s.stars.four, s.stars.three, s.stars.two, s.stars.one);
+  const hist = [s.stars.one, s.stars.two, s.stars.three, s.stars.four, s.stars.five];
+  return (
+    <section className="sp-card p-5" aria-label="Guest love">
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="text-[15px] font-semibold text-[#1A1A1A]">Guest love</h2>
+        <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#6B6B6B]">
+          <Heart size={11} aria-hidden /> QR ratings
+        </span>
+      </div>
+      <div className="mt-3 flex items-end justify-between gap-3">
+        <div>
+          <p className="text-[26px] font-bold leading-none text-[#1A1A1A]">
+            {avg == null ? '—' : avg.toFixed(1)}
+            {avg != null && <span className="text-[14px] font-semibold text-[#969696]"> / 5</span>}
+          </p>
+          <p className="mt-1.5 text-[11.5px] font-semibold text-[#6B6B6B]">
+            {s.countOverall} {s.countOverall === 1 ? 'rating' : 'ratings'}
+            {s.countToday > 0 ? ` · ${s.countToday} today` : ''}
+          </p>
+        </div>
+        <span
+          className="rounded-full px-2.5 py-1 text-[11.5px] font-extrabold"
+          style={{ color: tone.color, backgroundColor: tone.bg }}
+        >
+          {tone.word}
+        </span>
+      </div>
+      {avg != null && (
+        <div className="mt-3 flex items-center gap-1" aria-hidden>
+          {[1, 2, 3, 4, 5].map((n) => (
+            <Star
+              key={n}
+              size={15}
+              fill={n <= Math.round(avg) ? '#B88E2F' : 'transparent'}
+              stroke={n <= Math.round(avg) ? '#B88E2F' : '#C9CFC9'}
+              strokeWidth={1.6}
+            />
+          ))}
+        </div>
+      )}
+      {s.countOverall > 0 && (
+        <div className="mt-3 flex items-end gap-1.5" role="img" aria-label={`Ratings histogram: 1 star ${hist[0]}, 2 stars ${hist[1]}, 3 stars ${hist[2]}, 4 stars ${hist[3]}, 5 stars ${hist[4]}`}>
+          {hist.map((n, i) => (
+            <div key={i} className="flex flex-1 flex-col items-center gap-1">
+              <div
+                className="w-full rounded-t-md transition-all duration-700"
+                style={{ height: `${n === 0 ? 3 : Math.max((n / maxStar) * 34, 6)}px`, background: i + 1 >= 4 ? '#2E7D32' : i + 1 === 3 ? '#B88E2F' : '#B4483C', opacity: n === 0 ? 0.25 : 1 }}
+              />
+              <span className="text-[9.5px] font-semibold tabular-nums text-[#969696]">{i + 1}★</span>
+            </div>
+          ))}
+        </div>
+      )}
+      {s.latest && (
+        <blockquote
+          className="mt-3 border-l-2 border-[#B88E2F]/50 pl-3"
+          style={{ animation: 'spFadeIn 400ms ease-out both' }}
+        >
+          <p className="line-clamp-2 text-[12px] italic text-[#1A1A1A]">
+            “{s.latest.comment || `rated ${s.latest.rating}/5`}”
+          </p>
+          <footer className="mt-0.5 text-[10.5px] font-semibold text-[#969696]">
+            #{s.latest.orderNumber} · {s.latest.rating}★
+          </footer>
+        </blockquote>
+      )}
+    </section>
+  );
+};
+
 const BestEmployeesCard: React.FC<{ data: DashboardData }> = ({ data }) => {
   const [range, setRange] = useState<Range>('today');
   return (
@@ -525,9 +611,10 @@ const EmptySales: React.FC = () => (
 
 /* ───────────────────────────── Data plumbing ───────────────────────────── */
 
-const DashboardContent: React.FC<{ data: DashboardData; margin: TodayCostMargin | null }> = ({
+const DashboardContent: React.FC<{ data: DashboardData; margin: TodayCostMargin | null; love: FeedbackStats | null }> = ({
   data,
   margin,
+  love,
 }) => (
   <>
     <div className="mt-5 grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
@@ -556,6 +643,7 @@ const DashboardContent: React.FC<{ data: DashboardData; margin: TodayCostMargin 
       <BestEmployeesCard data={data} />
       <TrendingDishesCard data={data} />
       {margin && <TodayMarginCard m={margin} />}
+      {love && <GuestLoveCard s={love} />}
     </div>
   </>
 );
@@ -565,23 +653,30 @@ interface DashState {
   error: string | null;
   data: DashboardData | null;
   margin: TodayCostMargin | null;
+  love: FeedbackStats | null;
 }
 
 const DashboardInner: React.FC<{ onRetry: () => void }> = ({ onRetry }) => {
   const { loading: tenantLoading, error: tenantError, tenantId } = useTenant();
-  const [dash, setDash] = useState<DashState>({ loading: true, error: null, data: null, margin: null });
+  const [dash, setDash] = useState<DashState>({ loading: true, error: null, data: null, margin: null, love: null });
 
   useEffect(() => {
     if (!tenantId) return;
     let alive = true;
-    setDash({ loading: true, error: null, data: null, margin: null });
+    setDash({ loading: true, error: null, data: null, margin: null, love: null });
     fetchDashboard(tenantId)
       .then((data) => {
-        if (alive) setDash({ loading: false, error: null, data, margin: null });
+        if (alive) setDash({ loading: false, error: null, data, margin: null, love: null });
         // margin rides AFTER the main load — a failure here only hides the card
         fetchTodayCostMargin(tenantId)
           .then((margin) => {
             if (alive) setDash((s) => ({ ...s, margin }));
+          })
+          .catch(() => {});
+        // guest love rides too — a fresh table (no ratings) just leaves it out
+        fetchFeedbackStats(tenantId)
+          .then((love) => {
+            if (alive) setDash((s) => ({ ...s, love }));
           })
           .catch(() => {});
       })
@@ -592,6 +687,7 @@ const DashboardInner: React.FC<{ onRetry: () => void }> = ({ onRetry }) => {
             error: err.message || 'Failed to load dashboard data.',
             data: null,
             margin: null,
+            love: null,
           });
       });
     return () => {
@@ -621,7 +717,7 @@ const DashboardInner: React.FC<{ onRetry: () => void }> = ({ onRetry }) => {
   const d = dash.data;
   const empty = d.totalRevenue === 0 && d.totalOrders === 0 && d.newCustomers === 0;
   if (empty) return <EmptySales />;
-  return <DashboardContent data={d} margin={dash.margin} />;
+  return <DashboardContent data={d} margin={dash.margin} love={dash.love} />;
 };
 
 /* ───────────────────────────── Screen export ───────────────────────────── */

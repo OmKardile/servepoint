@@ -1,4 +1,4 @@
-// Supabase provisioning script: applies ServePoint migrations 001-018 to the live
+// Supabase provisioning script: applies ServePoint migrations 001-019 to the live
 // Supabase project via the Supavisor session pooler (IPv4 path — direct
 // db.<ref>.supabase.co:5432 is IPv6-only on current projects), then verifies.
 // NOT part of the app bundle.
@@ -268,6 +268,35 @@ try {
     return views === 2 && invoker === 2;
   };
   await applyFile('018_cogs_margin', 'supabase/migrations/018_cogs_margin.sql', await cogsReady());
+
+  // 019 sentinel: guest feedback — order_feedback ledger (UNIQUE(order_id)) +
+  // sp_submit_public_feedback (exactly ONE overload, INTEGER rating) + the
+  // pager projection exposing feedback_rating + realtime + both RLS policies.
+  const feedbackReady = async () => {
+    const table = await scalar(
+      `SELECT to_regclass('public.order_feedback') IS NOT NULL`
+    );
+    const rls = Number(
+      await scalar(
+        `SELECT relrowsecurity::int FROM pg_class WHERE oid='public.order_feedback'::regclass`
+      )
+    );
+    const overloads = Number(
+      await scalar(
+        `SELECT count(*) FROM pg_proc WHERE pronamespace='public'::regnamespace
+          AND proname='sp_submit_public_feedback'`
+      )
+    );
+    const intSig = await scalar(
+      `SELECT to_regprocedure('public.sp_submit_public_feedback(uuid,integer,text)') IS NOT NULL`
+    );
+    const pagerExposes = await scalar(
+      `SELECT position('feedback_rating' in prosrc) > 0 FROM pg_proc
+        WHERE pronamespace='public'::regnamespace AND proname='sp_get_public_order'`
+    );
+    return table === true && rls === 1 && overloads === 1 && intSig === true && pagerExposes === true;
+  };
+  await applyFile('019_guest_feedback', 'supabase/migrations/019_guest_feedback.sql', await feedbackReady());
 
   // ── Verification ──────────────────────────────────────────────────────────
   const tables = await client.query(

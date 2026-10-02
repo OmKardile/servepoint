@@ -117,6 +117,8 @@ export interface GuestOrderSummary {
   table_number: string | null;
   created_at: string;
   updated_at: string;
+  /** 1–5 once the guest has rated this order (019), null before — server truth. */
+  feedback_rating: number | null;
   items: {
     name: string;
     variant_name: string | null;
@@ -280,4 +282,33 @@ export async function fetchPublicOrder(orderId: string): Promise<{
     return { is_valid: false, error: 'NETWORK', message: 'Could not reach the cafe. Retrying…' };
   }
   return data as { is_valid: boolean; error?: string; message?: string; order?: GuestOrderSummary };
+}
+
+/* ── feedback (migration 019) ──────────────────────────────────────────────── */
+
+/**
+ * Rate a served order. The order UUID doubles as the capability (same trust
+ * model as the track page itself): exactly one rating per order, ever — the
+ * server answers ALREADY on replays and the UNIQUE(order_id) constraint is
+ * the hard guard. A failed network call surfaces as NOT_VALID; the guest can
+ * retry and the server's replay guard keeps it honest.
+ */
+export async function submitPublicFeedback(
+  orderId: string,
+  rating: number,
+  comment?: string | null,
+): Promise<{ is_valid: boolean; error?: string; message?: string; rating?: number }> {
+  try {
+    const { data, error } = await supabase.rpc('sp_submit_public_feedback', {
+      p_order_id: orderId,
+      p_rating: rating,
+      p_comment: comment ?? null,
+    });
+    if (error) {
+      return { is_valid: false, error: 'NETWORK', message: 'Could not send your rating. Try again.' };
+    }
+    return data as { is_valid: boolean; error?: string; message?: string; rating?: number };
+  } catch {
+    return { is_valid: false, error: 'NETWORK', message: 'Could not send your rating. Try again.' };
+  }
 }

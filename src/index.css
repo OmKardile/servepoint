@@ -142,3 +142,17 @@ body {
   [style*="spDrawerIn"], [style*="spFadeIn"] { animation: none !important; }
 }
 
+/* ── Guest feedback (v5.12.0): star pop-in + thank-you rise ─────────────── */
+@keyframes spStarPop {
+  0% { opacity: 0; transform: scale(0.3) rotate(-12deg); }
+  70% { opacity: 1; transform: scale(1.12) rotate(3deg); }
+  100% { opacity: 1; transform: scale(1) rotate(0deg); }
+}
+@keyframes spThanksRise {
+  from { opacity: 0; transform: translateY(10px) scale(0.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  [style*="spStarPop"], [style*="spThanksRise"] { animation: none !important; }
+}
+
