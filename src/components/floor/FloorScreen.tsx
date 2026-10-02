@@ -18,6 +18,16 @@ import {
 } from 'lucide-react';
 import QRCode from 'qrcode';
 import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts';
+import {
   createTable,
   fetchOrders,
   fetchTables,
@@ -34,7 +44,7 @@ import { useCart } from '../../store/cart';
 import type { Order, OrderItem } from '../../types';
 
 /**
- * Floor (v5.17.0) — the counter's table cockpit. dining_tables stream over
+ * Floor (v5.22.0) — the counter's table cockpit. dining_tables stream over
  * realtime (migration 011); orders hold/release tables automatically through
  * the trg_orders_sync_table trigger, so this board mirrors reality without
  * anyone having to remember to update it. Every card carries the table's
@@ -42,6 +52,13 @@ import type { Order, OrderItem } from '../../types';
  * order (items, totals, payment state) for occupied/billing tables, or a big
  * scannable QR for open ones. Print stickers renders every table's QR into a
  * cut-line A4 sheet (same hidden-iframe engine as the 5.11.0 receipt).
+ *
+ * v5.22.0 adds the FLOOR RHYTHM strip: table-bound tickets per IST hour over
+ * the last 7 days — when the seats actually fill. It derives from the same
+ * orders ledger Reports reads (the board's own fetch), counts only tickets
+ * that hold a table (walk-in counter tickets stay out), and is honest about
+ * being a count of rounds, not of unique guests. Hour bucketing mirrors
+ * Reports' Sales-by-hour IST math exactly.
  */
 
 const esc = (s: string): string =>
@@ -53,6 +70,59 @@ const esc = (s: string): string =>
     .replace(/'/g, '&#39;');
 
 const guestUrlOf = (t: DiningTable): string => `${window.location.origin}/t/${t.qr_token}`;
+
+/* ── IST hour math for the floor rhythm strip (v5.22.0) — same calendar
+   math as Reports' Sales-by-hour: Asia/Kolkata hours on real IST days. ── */
+const IST_TZ = 'Asia/Kolkata';
+
+function istHour(iso: string): number {
+  const h = new Intl.DateTimeFormat('en-GB', {
+    timeZone: IST_TZ,
+    hour: '2-digit',
+    hour12: false,
+  }).format(new Date(iso));
+  return Number(h) % 24;
+}
+
+/** YYYY-MM-DD of an ISO instant, in IST. */
+function istDateKey(iso: string): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: IST_TZ,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date(iso));
+}
+
+/** Today's date (YYYY-MM-DD) in IST. */
+function istTodayIsoFloor(): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: IST_TZ,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date());
+}
+
+/** UTC-ms of IST midnight for a YYYY-MM-DD day key. */
+function istDayStartFloor(dateIso: string): number {
+  return new Date(`${dateIso}T00:00:00+05:30`).getTime();
+}
+
+function hourLabel(h: number): string {
+  if (h === 0) return '12a';
+  if (h === 12) return '12p';
+  return h < 12 ? `${h}a` : `${h - 12}p`;
+}
+
+/** "2 Oct" style day label for the busiest-day chip. */
+function istDayPretty(dateKey: string): string {
+  return new Intl.DateTimeFormat('en-IN', {
+    timeZone: 'UTC',
+    day: 'numeric',
+    month: 'short',
+  }).format(new Date(`${dateKey}T00:00:00Z`));
+}
 
 const qrDataUrl = (url: string): Promise<string> =>
   QRCode.toDataURL(url, { margin: 1, width: 360, color: { dark: '#0F3D3E', light: '#FFFFFF' } });
@@ -665,6 +735,38 @@ export function FloorScreen(): React.ReactElement {
     [sections, filter, tables],
   );
 
+  /* Floor rhythm (v5.22.0) — table-bound tickets per IST hour, last 7 IST days.
+     Derives from the same orders array the board already fetched (rides
+     reload()); counts every non-cancelled ticket that holds a table, so
+     walk-in counter tickets stay out of the floor's rhythm. No chart at all
+     when the ledger has nothing table-bound in the window. */
+  const rhythm = useMemo(() => {
+    const endMs = istDayStartFloor(istTodayIsoFloor()) + 24 * 3600 * 1000; // end of today (IST)
+    const startMs = endMs - 7 * 24 * 3600 * 1000; // last 7 IST calendar days
+    const rows = orders.filter(
+      (o) =>
+        o.table_id &&
+        o.status !== 'cancelled' &&
+        new Date(o.created_at).getTime() >= startMs &&
+        new Date(o.created_at).getTime() < endMs,
+    );
+    const buckets = new Array<number>(24).fill(0);
+    const byDay = new Map<string, number>();
+    for (const o of rows) {
+      buckets[istHour(o.created_at)] += 1;
+      const d = istDateKey(o.created_at);
+      byDay.set(d, (byDay.get(d) || 0) + 1);
+    }
+    const data = buckets.map((n, hour) => ({ hour, n, label: hourLabel(hour) }));
+    const max = buckets.reduce((a, b) => Math.max(a, b), 0);
+    const peakHour = max > 0 ? buckets.indexOf(max) : -1;
+    let busiest: { label: string; n: number } | null = null;
+    for (const [d, n] of byDay) {
+      if (!busiest || n > busiest.n) busiest = { label: istDayPretty(d), n };
+    }
+    return { data, max, peakHour, total: rows.length, busiest };
+  }, [orders]);
+
   if (loading) {
     return (
       <div className="flex h-full items-center justify-center p-4 lg:p-5">
@@ -766,6 +868,95 @@ export function FloorScreen(): React.ReactElement {
           </p>
         </div>
       )}
+
+      {/* floor rhythm (v5.22.0) — table tickets per IST hour, last 7 days */}
+      <section className="sp-card p-5" aria-label="Floor rhythm">
+        <div className="mb-1 flex items-center justify-between gap-2">
+          <h2 className="text-[15px] font-bold text-[#1A1A1A]">Floor rhythm</h2>
+          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#6B6B6B]">
+            <Clock size={11} aria-hidden /> IST hours · last 7 days
+          </span>
+        </div>
+        <p className="mb-3 text-[11.5px] text-[#969696]">
+          Table tickets seated per hour of day — when the floor actually fills.
+          {rhythm.peakHour >= 0 && (
+            <>
+              {' '}Peak hour: <span className="font-bold text-[#8A5A00]">{hourLabel(rhythm.peakHour)} ({rhythm.max} tickets)</span>
+            </>
+          )}
+        </p>
+        {rhythm.total === 0 ? (
+          <div className="flex h-40 flex-col items-center justify-center gap-2 text-center">
+            <Armchair size={22} className="text-[#969696]" aria-hidden />
+            <p className="text-[12.5px] font-semibold text-[#1A1A1A]">No table tickets in the last 7 days</p>
+            <p className="max-w-[250px] text-[11.5px] text-[#6B6B6B]">
+              Seat a table from this board — the rhythm builds itself as rounds land.
+            </p>
+          </div>
+        ) : (
+          <>
+            <div className="mb-3 grid grid-cols-3 gap-2">
+              <div className="rounded-2xl border border-[#E3E7E0] bg-white px-3 py-2">
+                <p className="text-[10.5px] font-semibold uppercase tracking-wide text-[#6B6B6B]">Seated rounds · 7d</p>
+                <p className="mt-0.5 text-[18px] font-bold tabular-nums text-[#1A1A1A]">{rhythm.total}</p>
+              </div>
+              <div className="rounded-2xl border border-[#E3E7E0] bg-white px-3 py-2">
+                <p className="text-[10.5px] font-semibold uppercase tracking-wide text-[#6B6B6B]">Peak hour</p>
+                <p className="mt-0.5 text-[18px] font-bold tabular-nums text-[#8A5A00]">
+                  {hourLabel(rhythm.peakHour)} <span className="text-[12px] font-semibold text-[#6B6B6B]">· {rhythm.max} tickets</span>
+                </p>
+              </div>
+              <div className="rounded-2xl border border-[#E3E7E0] bg-white px-3 py-2">
+                <p className="text-[10.5px] font-semibold uppercase tracking-wide text-[#6B6B6B]">Busiest day</p>
+                <p className="mt-0.5 text-[18px] font-bold tabular-nums text-[#0F3D3E]">
+                  {rhythm.busiest ? rhythm.busiest.label : '—'}{' '}
+                  <span className="text-[12px] font-semibold text-[#6B6B6B]">{rhythm.busiest ? `· ${rhythm.busiest.n}` : ''}</span>
+                </p>
+              </div>
+            </div>
+            <div className="h-48" aria-hidden>
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={rhythm.data} margin={{ top: 4, right: 8, bottom: 0, left: -30 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#E3E7E0" vertical={false} />
+                  <XAxis
+                    dataKey="label"
+                    tick={{ fontSize: 10, fill: '#6B6B6B' }}
+                    tickLine={false}
+                    axisLine={{ stroke: '#E3E7E0' }}
+                    interval={2}
+                  />
+                  <YAxis
+                    allowDecimals={false}
+                    tick={{ fontSize: 10, fill: '#969696' }}
+                    tickLine={false}
+                    axisLine={false}
+                  />
+                  <Tooltip
+                    cursor={{ fill: 'rgba(184,142,47,0.08)' }}
+                    contentStyle={{
+                      borderRadius: 12,
+                      border: '1px solid #E3E7E0',
+                      fontSize: 12,
+                      boxShadow: '0 4px 14px rgba(15,61,62,0.10)',
+                    }}
+                    formatter={(v: unknown) => [`${v} ticket${Number(v) === 1 ? '' : 's'}`, 'Seated']}
+                  />
+                  <Bar dataKey="n" radius={[4, 4, 0, 0]}>
+                    {rhythm.data.map((h) => (
+                      <Cell key={h.hour} fill={h.n >= rhythm.max && h.n > 0 ? '#B88E2F' : '#0F3D3E'} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+            <p className="mt-2 text-[11px] leading-relaxed text-[#969696]">
+              Counts every non-cancelled ticket that holds a table, by its IST hour — the same ledger Reports reads.
+              Walk-in counter tickets don't hold a table, so they stay out of the rhythm. A round is a ticket, not a headcount.
+              Rides the floor's refresh.
+            </p>
+          </>
+        )}
+      </section>
 
       {(loadError || actionError) && (
         <div className="flex items-center justify-between rounded-2xl border border-[#F0D9D5] bg-[#FDF3F2] px-4 py-3">

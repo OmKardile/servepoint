@@ -3,6 +3,17 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.22.0] — 2026-10-03 — The floor learns its rhythm (per-hour seat demand on the board)
+
+### Added — Floor: FLOOR RHYTHM strip (table tickets per IST hour, last 7 days)
+- **The gap**: the floor cockpit showed the seats' state right NOW (x/x busy) but never answered the planning question behind it — "when does the floor actually fill?" Parked since Task 56, the hourly capacity heatmap ships: a **Floor rhythm** card on the board with all 24 IST hours drawn as bars (teal, peak gold — the same visual language as Reports' Sales-by-hour), a three-chip stat row (**Seated rounds · 7d**, **Peak hour**, **Busiest day**), and a caption that states exactly what a bar is.
+- **Honest derivation, no new fetch**: the strip derives from the SAME orders array the board already loads (rides `reload()` + the realtime/poll cycle — no parallel API path to drift). Only **table-bound, non-cancelled** tickets count: a walk-in counter ticket holds no table, so it stays out of the floor's rhythm; a round is a ticket, not a headcount (the ledger has no guests column — the caption says so instead of faking seats). Hour bucketing mirrors Reports' IST math line-for-line (`Asia/Kolkata`, 7 calendar IST days).
+- **Honest empties**: zero table-bound tickets in the window renders a real empty state ("Seat a table from this board — the rhythm builds itself as rounds land") — never a flat line pretending to be data.
+- **Demo seed for the curve** (`scripts/seed-floor-rhythm.mjs`, idempotent via `demo:floor-rhythm` marker, 5/5 self-verifying): 21 marked table-bound dine-in tickets across Sep 27–30 + Oct 2 shaped like a real cafe day (8a×1 9a×2 11a×1 12p×2 1p×3 2p×1 4p×2 5p×1 7p×3 8p×4 9p×1). **Oct 1 deliberately left empty** — it is the prior-day window behind Reports' today chips, which must keep honestly reading "new". Trigger safety proven, not assumed: migration-011's release branch (`active_order_id = NEW.id`) matches zero rows on these inserts, verified before/after — live T1/T2 state untouched.
+
+### Verified
+- E2E on real data: strip shows peak **8p · 8 tickets** (4 seeded + 4 live rounds that evening), 26 seated rounds in 7 days, busiest day 2 Oct; hour bars match the seed's SQL verify (5/5 PASS); tooltips read "N tickets"; T1/T2 still occupied with their real active orders after seeding; Reports windows recomputed around the seeds with today's chips still "new" (Oct 1 untouched); `tsc` 0; zero page errors; sw `5.22.0-r1`.
+
 ## [5.21.0] — 2026-10-03 — The Z-report learns its sections (per-category subtotals + a real menu to sell)
 
 ### Added — Close-out: SECTION MIX, on screen and on the printed z-report
