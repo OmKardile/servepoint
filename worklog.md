@@ -1732,3 +1732,18 @@ Work Log:
 
 Stage Summary:
 - Watch: transient PostgREST media-type error on tenant resolve (once this round, auto-recovered). If it recurs, investigate the tenant RPC/schema-cache before touching code.
+---
+Task ID: 57 (reconciliation — parallel-branding collision resolved)
+Agent: glm-5.3 (cron webDevReview round, second pass)
+Task: Same owner Figma directive ran CONCURRENTLY in two agents. This pass independently extracted + shipped a black-tile mark treatment; commit d12a982 (parallel agent) shipped the light-tile treatment with code-tuned chips. Reconciled to ONE coherent set.
+
+Work Log:
+- My pipeline (independent): navigated the Figma canvas in agent-browser (custom UA headers needed to get past CloudFront), captured 1000om tiles, PIL-extracted mark/lockups (cream→alpha keying, feathered hero compositing), regenerated icons/og. Mid-flight my binaries overwrote the parallel agent's committed assets — detected via git status showing ONLY binary diffs vs d12a982.
+- ROOT-CAUSE BONUS: the parallel agent's QA observation ("transient PostgREST None-of-these-media-types on tenant resolve") was MY doing — the custom Accept header I set on the shared agent-browser session for Figma poisoned subsequent Supabase REST calls (406). Fixed by resetting session headers; NOT a product bug. No tenant RPC investigation needed.
+- Resolution: adopted d12a982's set wholesale (git checkout d12a982 -- mark.png icons favicons apple-touch og-image) — their light-tile mark keeps the black fan (more complete than the dark-tile variant), their hero-lockup is seamless and code-wired, their chip colors (#F6F1E9) match. My hero-3d.jpg rebuild remains committed-but-unreferenced (harmless spare, kept per their addendum).
+- Verified: tree == HEAD, tsc 0; browser QA — Dashboard sidebar mark on cream chip, /showcase header mark + dual-tone hero, zero page errors on both. Favicon/icons/og are d12a982 binaries (content-verified).
+
+Stage Summary:
+- One brand, one owner of record: d12a982 is the canonical branding commit; scripts/brand-extract.py is the regenerator; this pass added no divergent assets. Lesson banked: BOTH agents now know the shared agent-browser session carries headers across tasks — reset headers after any custom-header work.
+- Reports "vs prior range" delta chips remain parked (designed twice now — priorWindow helpers sit committed at a7a4c34, unused, lint-clean; wire them next round).
+- Crons: 15-min webDevReview (job 430321).
