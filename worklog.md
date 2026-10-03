@@ -2546,3 +2546,28 @@ Stage Summary:
 - Remaining parked: drawer movements CSV (only if asked); CounterInbox bulk "Ok all" (risky); DS showcase links (owner OK pending); EOD Z-report logo (deliberate); URL write-back (non-goal); storage folder silting report (someday); KDS bump-back recall (deliberate); chat→bell pings (deliberate, 031); notifications digest/quiet hours (someday — still no push channel to quiet); POS variant selection (order_items carry variant_name but the POS modal never offers variants — the guest side does; someday, needs cart-line variant semantics).
 - Watch items carried: DB password ROTATION (owner decision); #67/#68/#69/#96 active-unpaid QA-era leftovers (owner decision).
 - Crons: 15-min webDevReview (job 430321) + DAILY deep pass (job 431587, 09:00 IST).
+
+---
+Task ID: 94 (completion — 15-min webDevReview round, trace 202610030945)
+Agent: glm-5.3 (cron webDevReview round)
+Task: Post-5.54.0 orientation + QA sweep, then the round's fix-feature: the counter sells the whole dish (variants + add-ons finally reach the POS — the option gap nobody could see).
+
+Work Log:
+- Orientation clean (origin/main = 97b1024 = 5.54.0, fetch-verified; tsc 0; dev 200). Task 93 confirmed fully closed. QA sweep: 14/14 screens, 0 errors. Stable round.
+- Focus rationale: picked up Task 93's parked seed "POS variant selection". Audit turned it from enhancement into BUG FIX: FoodDrinksScreen fetched ONLY categories + menu_items — fetchMenuVariants/fetchAddons/fetchMenuItemAddonIds were Menu-screen-only, so item.addons/variants were ALWAYS undefined on POS → the modal's option sections never rendered once in production. The counter could not sell a "Large" or an "Extra shot" its own QR menu sells daily. Zero migration: menu_variants/addons/menu_item_addons exist since 012, and createOrder is a DIRECT insert (not RPC) so order_items.variant_name just needed writing.
+- Data (FoodDrinksScreen): load fetches variants + addons + allow-list, enriches items client-side (Menu screen's pattern); FAIL-SOFT — option read failure sells the menu bare (options are an enhancement, never a gate).
+- Modal (ItemDetailModal): variantId state (null = "As served", the guest customizer's optional-pick rule); pill row with per-variant delta (tabular mono, ± grammar); RUNNING unit price under the name (base + delta + live add-ons) so the cashier never does delta math; handleAdd passes variant {name, priceDelta}.
+- Cart (store/cart.ts): CartLine.variantName; lineKey grows variant (Large and Regular NEVER merge); unitPrice folds delta at add; add() grows optional variant param.
+- Placement (api.ts): NewOrderInput.items grows variantName; createOrder writes order_items.variant_name (both doors finally write the column attachItems always read).
+- DELIBERATE FIX: the Figma "addons rest at 1x" initializer was never live (the section never rendered); enabling it as-was would silently reprice every ticket (+₹60 per Flat White). Resting state → 0x, the guest customizer's rule and the only honest grammar once reachable. Logged as a deliberate divergence from the dormant mockup.
+- [Mandatory styling]: pills wear the drawer's committed tone (dark teal fill/white text) vs hairline gray resters; deltas #967221 gold tabular; drawer variant chip mirrors the SOLD-OUT pill geometry in neutral gray (option, not alarm); running price keeps the gold money voice.
+- E2E (real UI): Flat White modal shows "As served | Large +₹50" + Extra shot at 0x (scripts/qa93b-modal-options.png) → Large + Extra shot → running ₹330.00 → Add → pill "1 item · ₹330.00" → drawer: mark + "Flat White" + Large chip + "Extra shot" + ₹330.00, GST ₹16.50, total ₹346.50 exact (scripts/qa93b-drawer-variant.png) → emptied via stepper → pill gone. No placement.
+- TOOLING LESSON (carried): pill refs race toast renders — re-snapshot after each surface hop (modal CTA → toast+pill are separate commits).
+- 14/14 screens, tsc 0, zero page errors. Cloud truth (read-only): orders 36 / menu 3 / bells 3 / chat 5 / bucket 0 — ZERO cloud writes (the E2E stops one step before placement, same discipline as Task 93).
+
+Stage Summary:
+- 5.55.0 — the counter sells the whole dish. Surfaces: src/types.ts (MenuItemVariant + MenuItem.variants) + src/lib/api.ts (variant_name write) + src/store/cart.ts (variant line semantics) + src/components/food/FoodDrinksScreen.tsx (enrichment + chip + placement) + src/components/food/ItemDetailModal.tsx (pills + running price + 0x addons) + src/components/customers/CustomersScreen.tsx (repeat carries variant) + public/sw.js + CHANGELOG.md + worklog.md (+2 screenshots). No migration, no schema change, zero cloud writes.
+- The option arc is closed BOTH ways: owner declares options (5.3.0) → guests pick them (024 RPCs) → the counter picks them too (5.55.0) → the ledger stores them either way (variant_name written by both doors) → receipts/repeats read them back.
+- Remaining parked: drawer movements CSV (only if asked); CounterInbox bulk "Ok all" (risky); DS showcase links (owner OK pending); EOD Z-report logo (deliberate); URL write-back (non-goal); storage folder silting report (someday); KDS bump-back recall (deliberate); chat→bell pings (deliberate, 031); notifications digest/quiet hours (someday — still no push channel to quiet).
+- Watch items carried: DB password ROTATION (owner decision); #67/#68/#69/#96 active-unpaid QA-era leftovers (owner decision).
+- Crons: 15-min webDevReview (job 430321) + DAILY deep pass (job 431587, 09:00 IST).

@@ -5,6 +5,8 @@ import { useCart } from '../../store/cart';
 import { formatMoney } from '../../lib/prefs';
 import { VegMark } from '../shell/VegMark';
 
+const round2 = (n: number) => Math.round(n * 100) / 100;
+
 /**
  * Item detail modal (Figma Frame_30_219-30083):
  * sage photo header, name + weight/description, gold price, per-item quantity
@@ -22,15 +24,23 @@ const MAX_QTY = 99;
 
 export const ItemDetailModal: React.FC<ItemDetailModalProps> = ({ item, onClose, onAdded }) => {
   const [qty, setQty] = useState(1);
-  // Frame shows every add-on row resting at "1x" — the − button removes it.
+  /* v5.55.0 — add-ons rest at 0x. The old "Frame shows every add-on row
+     resting at 1x" initializer was never live (the POS never loaded addons,
+     so this section never rendered); enabling the section now must not
+     silently reprice every ticket — the guest customizer starts at 0 too,
+     and one grammar across both ends beats a dormant mockup. */
   const [addonQty, setAddonQty] = useState<Record<string, number>>(() => {
     const init: Record<string, number> = {};
     (item.addons || []).forEach((a) => {
-      init[a.id] = 1;
+      init[a.id] = 0;
     });
     return init;
   });
   const [imgFailed, setImgFailed] = useState(false);
+  /* v5.55.0 — the chosen size/option. null = "As served" (base price), the
+     same optional-pick rule the guest customizer has always spoken. */
+  const [variantId, setVariantId] = useState<string | null>(null);
+  const variant = (item.variants || []).find((v) => v.id === variantId) || null;
   const panelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -56,7 +66,7 @@ export const ItemDetailModal: React.FC<ItemDetailModalProps> = ({ item, onClose,
       const n = addonQty[a.id] || 0;
       for (let i = 0; i < n; i += 1) selected.push(a);
     });
-    useCart.getState().add(item, qty, selected);
+    useCart.getState().add(item, qty, selected, variant ? { name: variant.name, priceDelta: Number(variant.price_delta) } : null);
     onAdded?.({ name: item.name, qty });
     onClose();
   };
@@ -115,7 +125,17 @@ export const ItemDetailModal: React.FC<ItemDetailModalProps> = ({ item, onClose,
               {item.name}
             </h2>
             {detail && <p className="mt-0.5 truncate text-xs text-[#969696]">{detail}</p>}
-            <p className="mt-1.5 text-xl font-bold text-[#B88E2F]">{formatMoney(item.price)}</p>
+            {/* Running unit price (v5.55.0) — base + chosen variant + live
+                add-ons; the cashier never does delta math in their head. */}
+            <p className="mt-1.5 text-xl font-bold text-[#B88E2F]">
+              {formatMoney(
+                round2(
+                  item.price +
+                    (variant ? Number(variant.price_delta) : 0) +
+                    (item.addons || []).reduce((s, a) => s + (addonQty[a.id] || 0) * Number(a.price), 0),
+                ),
+              )}
+            </p>
 
             {/* Main quantity stepper */}
             <div className="mt-3 flex items-center justify-center gap-2">
@@ -141,6 +161,59 @@ export const ItemDetailModal: React.FC<ItemDetailModalProps> = ({ item, onClose,
               </button>
             </div>
           </div>
+
+          {/* Size / option pills (v5.55.0) — the counter sells the whole dish.
+              Optional by the same rule as the guest customizer: no pick = as
+              served at the base price; the price row below always shows the
+              running unit so the cashier never does delta math in their head. */}
+          {(item.variants || []).length > 0 && (
+            <div className="mt-4 border-t border-[#E3E7E0] px-5 py-4">
+              <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#6B6B6B]">
+                Choose one · optional
+              </h3>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => setVariantId(null)}
+                  aria-pressed={variantId === null}
+                  className={`h-9 rounded-full border px-3.5 text-[12.5px] font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[#967221] ${
+                    variantId === null
+                      ? 'border-transparent bg-[#0F3D3E] text-white shadow-sm'
+                      : 'border-[#E3E7E0] bg-white text-[#6B6B6B] hover:border-[#0F3D3E]'
+                  }`}
+                >
+                  As served
+                </button>
+                {(item.variants || []).map((v) => {
+                  const active = variantId === v.id;
+                  return (
+                    <button
+                      key={v.id}
+                      type="button"
+                      onClick={() => setVariantId(v.id)}
+                      aria-pressed={active}
+                      className={`flex h-9 items-center gap-1.5 rounded-full border px-3.5 text-[12.5px] font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[#967221] ${
+                        active
+                          ? 'border-transparent bg-[#0F3D3E] text-white shadow-sm'
+                          : 'border-[#E3E7E0] bg-white text-[#1A1A1A] hover:border-[#0F3D3E]'
+                      }`}
+                    >
+                      {v.name}
+                      <span
+                        className={`text-[11px] font-bold tabular-nums ${active ? 'text-white/85' : 'text-[#967221]'}`}
+                      >
+                        {v.price_delta > 0
+                          ? `+₹${Number(v.price_delta) % 1 === 0 ? Number(v.price_delta) : Number(v.price_delta).toFixed(2)}`
+                          : v.price_delta < 0
+                            ? `−₹${Number(-v.price_delta) % 1 === 0 ? Number(-v.price_delta) : Number(-v.price_delta).toFixed(2)}`
+                            : '±₹0'}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {/* Add-ons (hidden when the item has none) */}
           {(item.addons || []).length > 0 && (

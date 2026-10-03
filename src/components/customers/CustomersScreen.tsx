@@ -1041,6 +1041,9 @@ const GuestDetailDrawer: React.FC<{
         { id: it.menu_item_id as string, name: it.name, price: Number(it.unit_price), image_url: null, is_veg: null },
         it.qty,
         [],
+        /* v5.55.0 — the ledger froze the FULL unit price (variant included),
+           so the name rides for display/keying with delta 0. */
+        it.variant_name ? { name: it.variant_name, priceDelta: 0 } : null,
       );
     }
     cart.setCustomerName(customer.name || '');

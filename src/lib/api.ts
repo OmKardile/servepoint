@@ -166,7 +166,7 @@ export interface NewOrderInput {
   /** Offer applied — a 016 redemption ledger row is written with the order. */
   offerId?: string | null;
   notes?: string | null;
-  items: { name: string; qty: number; unitPrice: number; menuItemId?: string | null; notes?: string }[];
+  items: { name: string; qty: number; unitPrice: number; menuItemId?: string | null; variantName?: string | null; notes?: string }[];
 }
 
 /** Returns the tenant's first location, creating a placeholder counter if none exists yet. */
@@ -255,6 +255,10 @@ export async function createOrder(tenantId: string, input: NewOrderInput): Promi
     qty: it.qty,
     unit_price: it.unitPrice,
     item_total: Math.round(it.qty * it.unitPrice * 100) / 100,
+    // v5.55.0 — the counter finally writes the column the guest side always
+    // did (direct insert, no RPC change — order_items.variant_name exists
+    // since migration 001's lineage and attachItems already reads it back).
+    variant_name: it.variantName || null,
     notes: it.notes || null,
   }));
   const { error: itemsErr } = await supabase.from('order_items').insert(rows);

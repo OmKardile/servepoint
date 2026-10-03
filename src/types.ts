@@ -24,6 +24,13 @@ export interface MenuItemAddon {
   price: number;
 }
 
+/** Size/option pill (migration 012) — POS now loads them like the guest menu always has. */
+export interface MenuItemVariant {
+  id: string;
+  name: string;
+  price_delta: number;
+}
+
 export interface MenuItem {
   id: string;
   tenant_id: string;
@@ -36,6 +43,8 @@ export interface MenuItem {
   is_available: boolean | null;
   /** Optional add-on groups rendered in the item detail modal (Frame_30). */
   addons?: MenuItemAddon[] | null;
+  /** Size/option pills (v5.55.0) — the counter sells the whole dish. */
+  variants?: MenuItemVariant[] | null;
 }
 
 export interface OrderItem {

@@ -17,8 +17,8 @@ import {
   X,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
-import type { Category, MenuItem, Offer, OrderType } from '../../types';
-import { createOrder, fetchCategories, fetchMenuItems, fetchOffers, fetchTables, type DiningTable } from '../../lib/api';
+import type { Category, MenuItem, MenuItemVariant, Offer, OrderType } from '../../types';
+import { createOrder, fetchAddons, fetchCategories, fetchMenuItemAddonIds, fetchMenuItems, fetchMenuVariants, fetchOffers, fetchTables, type DiningTable } from '../../lib/api';
 import { CounterInbox } from './CounterInbox';
 import { useTenant } from '../../lib/tenant';
 import { formatMoney } from '../../lib/prefs';
@@ -336,6 +336,7 @@ const OrderDrawer: React.FC<{
           qty: l.qty,
           unitPrice: l.unitPrice,
           menuItemId: l.menuItemId,
+          variantName: l.variantName || null,
         })),
       });
       useCart.getState().clear();
@@ -491,6 +492,11 @@ const OrderDrawer: React.FC<{
                       <p className="flex items-center gap-1.5 truncate text-[13.5px] font-semibold text-[#1A1A1A]">
                         <VegMark veg={l.isVeg} size={13} />
                         {l.name}
+                        {l.variantName && (
+                          <span className="shrink-0 rounded-full bg-[#F6F5F2] px-1.5 py-px text-[10.5px] font-bold text-[#6B6B6B]">
+                            {l.variantName}
+                          </span>
+                        )}
                       </p>
                       {l.addonNames.length > 0 && (
                         <p className="mt-0.5 truncate text-[11.5px] text-[#969696]">
@@ -670,17 +676,55 @@ const FoodDrinksInner: React.FC<{ onRetry: () => void }> = ({ onRetry }) => {
     setSelectedId(null);
   }, [activeCategoryName]);
 
-  /* Production data load — no mocks, honest errors. */
+  /* Production data load — no mocks, honest errors. v5.55.0 also loads the
+     option surfaces (variants + allowed add-ons) the guest menu has always
+     embedded — until now the counter modal could never sell a "Large" or
+     an "Extra shot" the QR menu sells every day. */
   useEffect(() => {
     if (!tenantId) return;
     let alive = true;
     setDataLoading(true);
     setDataError(null);
     Promise.all([fetchCategories(tenantId), fetchMenuItems(tenantId)])
-      .then(([cats, its]) => {
+      .then(async ([cats, its]) => {
+        if (!alive) return;
+        try {
+          const [variantRows, addonRows, allowed] = await Promise.all([
+            fetchMenuVariants(tenantId),
+            fetchAddons(tenantId),
+            fetchMenuItemAddonIds(its.map((i) => i.id)),
+          ]);
+          const variantsByItem = new Map<string, MenuItemVariant[]>();
+          for (const v of variantRows) {
+            const list = variantsByItem.get(v.menu_item_id) || [];
+            list.push({ id: v.id, name: v.name, price_delta: Number(v.price_delta) });
+            variantsByItem.set(v.menu_item_id, list);
+          }
+          const addonById = new Map(addonRows.map((a) => [a.id, { id: a.id, name: a.name, price: Number(a.price) }]));
+          const addonsByItem = new Map<string, { id: string; name: string; price: number }[]>();
+          for (const link of allowed) {
+            const addon = addonById.get(link.addon_id);
+            if (!addon) continue;
+            const list = addonsByItem.get(link.menu_item_id) || [];
+            list.push(addon);
+            addonsByItem.set(link.menu_item_id, list);
+          }
+          if (!alive) return;
+          setItems(
+            its.map((i) => ({
+              ...i,
+              variants: variantsByItem.get(i.id) || [],
+              addons: addonsByItem.get(i.id) || [],
+            })),
+          );
+        } catch {
+          /* options are an enhancement, never a gate — the menu sells bare
+             if the option read fails (fail-soft, the Menu screen's rule) */
+          if (!alive) return;
+          setItems(its.map((i) => ({ ...i, variants: [], addons: [] })));
+        }
         if (!alive) return;
         setCategories(cats);
-        setItems(its);
       })
       .catch((err: Error) => {
         if (!alive) return;

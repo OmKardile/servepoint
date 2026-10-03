@@ -3,6 +3,23 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.55.0] — 2026-10-03 — The counter sells the whole dish: variants + add-ons finally reach the POS
+
+### Fixed — the option gap nobody could see (no migration, no API schema change)
+- The guest QR menu could order a "Large Flat White + Extra shot" every day; the cashier's own POS could never build that ticket. The option tables have existed since migration 012 (`menu_variants`, `addons`, `menu_item_addons`), the owner has managed them in Menu since 5.3.0, the guest RPCs have embedded them since 024 — but the POS data load fetched ONLY categories + menu_items, so the item-detail modal's option sections never had anything to render. The counter was blind to every option its own guests could pick. The round closes it end to end:
+  - **Data (FoodDrinksScreen)**: the load now also fetches variants + addons + the per-item allow-list and enriches each item client-side (the Menu screen's exact pattern). Fail-soft: if the option read fails the menu still sells bare — options are an enhancement, never a gate.
+  - **Modal (ItemDetailModal)**: a "Choose one · optional" pill row — "As served" resting state plus one pill per variant with its delta (`+₹50`, `−₹x`, tabular mono); picking one fills dark-teal, aria-pressed throughout. The gold price under the name becomes the RUNNING unit (base + delta + live add-ons) — the cashier never does delta math in their head. Add-to-Order passes the variant into the cart.
+  - **Cart (store/cart.ts)**: `CartLine.variantName` rides the line; the line key grows the variant name so Large and Regular of the same item NEVER merge into one stepper; `unitPrice = base + delta + addons` folded at add time. `add()` grows an optional variant param; the repeat path passes the ledger's frozen variant name with delta 0 (the snapshot price already includes it).
+  - **Placement (api.ts)**: `createOrder`'s direct order_items insert now writes `variant_name` — the column `attachItems` has always read back, finally written by BOTH doors. Drawer lines show the variant as a quiet gray chip after the name.
+- **Deliberate fix inside the modal**: the Figma-derived "every add-on rests at 1x" initializer was never live (addons never rendered on POS, so the resting state never fired). Enabling the section with 1x-resting would have silently repriced EVERY ticket (+₹60 on every Flat White until manually removed). Add-ons now rest at 0x — the guest customizer's rule, and the only honest grammar once the section is actually reachable.
+
+### Styling — options that speak the house
+- Variant pills wear the drawer's committed-tone (dark teal fill, white text, shadow) against hairline gray resters with teal hover invitations; deltas are `#967221` gold in tabular numerals so a hand-keyed total can be checked at a glance. The drawer's variant chip mirrors the SOLD OUT pill's geometry (rounded-full, 10.5px bold) in neutral gray — option, not alarm. The running price keeps the gold-bold money voice.
+
+### Verified
+- E2E (real UI, owner session): Flat White's modal now renders "As served | Large +₹50" and the Extra shot row resting at 0x (`scripts/qa93b-modal-options.png`) → picked Large + one Extra shot → running price ₹330.00 live → Add to Order → pill "1 item · ₹330.00" → drawer line: green mark + "Flat White" + Large chip + "Extra shot" + ₹330.00, subtotal ₹330.00 / GST ₹16.50 / total ₹346.50 exact (`scripts/qa93b-drawer-variant.png`) → cart emptied through its own stepper → pill gone. No order placed; zero cloud writes (orders 36 / menu 3 / bells 3 / chat 5 / bucket 0).
+- 14/14 screens, tsc 0, zero page errors. The repeat flow (5.54.0) now carries variant names back into the cart by code path (no live order carries a variant yet — first variant ticket will exercise it; the guest side's variant tickets already do).
+
 ## [5.54.0] — 2026-10-03 — The regular's round: "Repeat this order" walks a past ticket into today's cart
 
 ### Added — the counter-speed feature Indian cafés actually live on (no migration, no API change)

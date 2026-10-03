@@ -14,6 +14,10 @@ export interface CartLine {
      the cards show. Absent for repeat-loaded lines (order_items carry no
      veg claim) — the mark stays silent rather than inventing one. */
   isVeg?: boolean | null;
+  /* v5.55.0 — the size/option the line was sold as ('Large'). Rides the key
+     so Large and Regular never merge, and the drawer/receipt say what the
+     guest actually chose. priceDelta is folded into unitPrice at add time. */
+  variantName?: string | null;
 }
 
 interface CartState {
@@ -37,7 +41,11 @@ interface CartState {
       is_veg?: boolean | null;
     },
     qty: number,
-    addons: { id: string; name: string; price: number }[]
+    addons: { id: string; name: string; price: number }[],
+    /* v5.55.0 — chosen size/option. priceDelta joins the unit price here;
+       the repeat path passes delta 0 because the ledger's unit_price is
+       already the frozen full price. */
+    variant?: { name: string; priceDelta: number } | null
   ) => void;
   increment: (key: string) => void;
   decrement: (key: string) => void;
@@ -52,8 +60,8 @@ interface CartState {
   clear: () => void;
 }
 
-const lineKey = (menuItemId: string, addonNames: string[]) =>
-  `${menuItemId}::${[...addonNames].sort().join('|')}`;
+const lineKey = (menuItemId: string, addonNames: string[], variantName?: string | null) =>
+  `${menuItemId}::${variantName || 'base'}::${[...addonNames].sort().join('|')}`;
 
 export const useCart = create<CartState>((set, get) => ({
   lines: [],
@@ -64,10 +72,10 @@ export const useCart = create<CartState>((set, get) => ({
   customerName: '',
   customerPhone: '',
   offer: null,
-  add: (item, qty, addons) => {
+  add: (item, qty, addons, variant) => {
     const addonNames = addons.map((a) => a.name);
     const addonTotal = addons.reduce((s, a) => s + a.price, 0);
-    const key = lineKey(item.id, addonNames);
+    const key = lineKey(item.id, addonNames, variant?.name);
     const lines = [...get().lines];
     const idx = lines.findIndex((l) => l.key === key);
     if (idx >= 0) {
@@ -78,11 +86,12 @@ export const useCart = create<CartState>((set, get) => ({
         menuItemId: item.id,
         name: item.name,
         qty,
-        unitPrice: item.price + addonTotal,
+        unitPrice: item.price + (variant?.priceDelta || 0) + addonTotal,
         image_url: item.image_url,
         addonNames,
         addonTotal,
         isVeg: item.is_veg ?? null,
+        variantName: variant?.name ?? null,
       });
     }
     set({ lines });
