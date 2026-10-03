@@ -3,6 +3,19 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.56.0] — 2026-10-03 — The ticket remembers the extras: counter add-ons reach the ledger, the kitchen reads them back
+
+### Fixed — the write gap one layer under 5.55.0 (no migration, no API schema change)
+- 5.55.0 let the counter SELL an "Extra shot" — but `createOrder`'s direct insert dropped it. The cart priced it (₹ folded into `unit_price`), the drawer showed it, and then placement forgot it: `order_item_addons` — the frozen name+price snapshot table the guest RPC door has written since migration 017 — received NOTHING from a counter-placed ticket. The money was right; the dish spec was lost. The kitchen ticket read "Flat White · Large" and never learned about the Extra shot; bills/receipts/floor/track/repeat all read the same blind ledger. The round closes it both ways:
+  - **Cart (store/cart.ts)**: `CartLine.addons` now rides as a frozen `{id, name, price}[]` snapshot — the live menu's ids from the modal, `id: null` for repeat-synthesized lines (`addon_id` is ON DELETE SET NULL by design: a snapshot needs no living addon row). `addonNames` stays in sync for the line key and drawer renders.
+  - **Placement (api.ts)**: `NewOrderInput.items` grows `addons`; `createOrder` re-selects the inserted `order_items` ids and bulk-writes `order_item_addons` rows in the guest door's exact shape (`tenant_id, order_item_id, addon_id, name, price`). A ticket without extras is byte-identical to the pre-5.56.0 path; a mismatched insert return throws before any partial write.
+  - **KDS (KitchenScreen)**: ticket lines now speak the extras — `+ Extra shot` in the warm `#5F6B63` after the variant chip, same `+` grammar as the counter inbox and receipts; the fire checkbox's aria-label restates them ("Mark 1× Flat White (Large) + Extra shot as fired").
+  - **Repeat (CustomersScreen)**: 5.54.0's "their usual" no longer degrades a "Large + Extra shot" into a bare Large. The ledger froze `unit_price` WITH the extras (017: price + delta + Σ addons), so the repeat reconstructs the base by subtracting the snapshot back out and lets `cart.add` re-fold the same extras into the exact same total — the new ticket's ledger rows carry real per-extra prices again, not zeros.
+- **Verified end to end against the ledger** (read-only `scripts/qa95-truth.mjs`): counter-placed order #109 — line `Flat White · Large @ ₹330.00` (frozen FULL price), one `order_item_addons` row `Extra shot @ ₹60.00` with the real `addon_id` FK, subtotal 330.00 + GST 16.50 = total 346.50 exact; then cancelled through the UI for a clean exit. Counter Inbox aggregated the extra straight from the ledger; the KDS read it back after the fire; a repeat of #109 rebuilt the cart at exactly ₹330.00/₹346.50. 7/7 assertions pass; guests census back to 1 after the duplicate raw-phone key (pre-existing 016 behavior) was removed through the UI.
+
+### Styling — one extras grammar everywhere
+- The extras voice is now the same animal on every surface: drawer lines render `+ Extra shot` per-extra (the receipt's grammar) in `#5F6B63` instead of a bare comma list in `#969696`; the KDS uses the identical tone, so "Extra shot" reads at arm's length before the cup leaves; variant chips stay neutral gray, notes stay orange-italic — three voices, three meanings, no overlap.
+
 ## [5.55.0] — 2026-10-03 — The counter sells the whole dish: variants + add-ons finally reach the POS
 
 ### Fixed — the option gap nobody could see (no migration, no API schema change)

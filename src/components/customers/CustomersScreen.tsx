@@ -1037,12 +1037,26 @@ const GuestDetailDrawer: React.FC<{
   const repeatOrder = (o: Order) => {
     const cart = useCart.getState();
     for (const it of o.items || []) {
+      /* v5.56.0 — the ledger's frozen extras repeat too (a guest-placed
+         "Large + Extra shot" no longer degrades to a bare Large). The RPC
+         froze unit_price WITH the add-ons (017: price + delta + Σ addons),
+         so the base is reconstructed by subtracting the snapshot back out —
+         cart.add then re-folds the same extras into the exact same total.
+         The snapshot's addon_id is not in the read payload, so id rides
+         null — the column is SET NULL by design, a snapshot needs no
+         living row. The variant keeps 5.54/5.55's delta-0 rule for the
+         same reason. */
+      const addonSnap = (it.addons || []).map((a) => ({
+        id: null as string | null,
+        name: a.name,
+        price: Number(a.price),
+      }));
+      const addonSum = Math.round(addonSnap.reduce((s, a) => s + a.price, 0) * 100) / 100;
+      const basePrice = Math.round((Number(it.unit_price) - addonSum) * 100) / 100;
       cart.add(
-        { id: it.menu_item_id as string, name: it.name, price: Number(it.unit_price), image_url: null, is_veg: null },
+        { id: it.menu_item_id as string, name: it.name, price: basePrice, image_url: null, is_veg: null },
         it.qty,
-        [],
-        /* v5.55.0 — the ledger froze the FULL unit price (variant included),
-           so the name rides for display/keying with delta 0. */
+        addonSnap,
         it.variant_name ? { name: it.variant_name, priceDelta: 0 } : null,
       );
     }

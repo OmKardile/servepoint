@@ -274,6 +274,12 @@ const KdsCard: React.FC<{
                   {it.name}
                 </span>
                 {it.variant_name && <span className="text-[#969696]"> · {it.variant_name}</span>}
+                {/* v5.56.0 — the extras speak on the line (same `+` grammar as
+                   the counter inbox / receipts, in the warm #5F6B63 so the
+                   barista's eye catches "Extra shot" before the cup leaves). */}
+                {it.addons && it.addons.length > 0 && (
+                  <span className="text-[#5F6B63]"> + {it.addons.map((a) => a.name).join(', ')}</span>
+                )}
                 {it.notes && <span className="block text-[11.5px] italic text-[#C2571B]">↳ {it.notes}</span>}
               </span>
             </>
@@ -285,7 +291,7 @@ const KdsCard: React.FC<{
                   type="button"
                   role="checkbox"
                   aria-checked={done}
-                  aria-label={`${done ? 'Un-mark' : 'Mark'} ${it.qty}× ${it.name}${it.variant_name ? ` (${it.variant_name})` : ''} as fired`}
+                  aria-label={`${done ? 'Un-mark' : 'Mark'} ${it.qty}× ${it.name}${it.variant_name ? ` (${it.variant_name})` : ''}${it.addons && it.addons.length > 0 ? ` + ${it.addons.map((a) => a.name).join(', ')}` : ''} as fired`}
                   onClick={() => onToggleItem(order.id, it.id!, !done, it.checked_at)}
                   title={done ? 'Tap to put back on the line' : 'Tap when it fires'}
                   className={`flex w-full items-baseline gap-2 rounded-lg px-1 py-0.5 text-left transition hover:bg-[#F6F5F2] ${

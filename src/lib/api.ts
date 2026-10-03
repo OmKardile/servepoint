@@ -166,7 +166,19 @@ export interface NewOrderInput {
   /** Offer applied — a 016 redemption ledger row is written with the order. */
   offerId?: string | null;
   notes?: string | null;
-  items: { name: string; qty: number; unitPrice: number; menuItemId?: string | null; variantName?: string | null; notes?: string }[];
+  items: {
+    name: string;
+    qty: number;
+    unitPrice: number;
+    menuItemId?: string | null;
+    variantName?: string | null;
+    notes?: string;
+    /* v5.56.0 — frozen extras for this line. The counter door finally writes
+       order_item_addons (the guest RPC door has since 017). id is the live
+       menu FK when known; repeat-synthesized lines pass null (the column is
+       ON DELETE SET NULL — a snapshot needs no living addon row). */
+    addons?: { id?: string | null; name: string; price: number }[];
+  }[];
 }
 
 /** Returns the tenant's first location, creating a placeholder counter if none exists yet. */
@@ -261,8 +273,36 @@ export async function createOrder(tenantId: string, input: NewOrderInput): Promi
     variant_name: it.variantName || null,
     notes: it.notes || null,
   }));
-  const { error: itemsErr } = await supabase.from('order_items').insert(rows);
+  // .select('id') — v5.56.0 needs the generated order_items ids to hang the
+  // add-on snapshots on (same rows in the same insertion order).
+  const { data: insertedItems, error: itemsErr } = await supabase
+    .from('order_items')
+    .insert(rows)
+    .select('id');
   if (itemsErr) throw itemsErr;
+
+  // v5.56.0 — the counter's extras reach the ledger. order_item_addons is
+  // the frozen name+price snapshot the guest RPC door has written since
+  // migration 017; every reader (KDS would-be, receipts, bills, counter
+  // inbox, floor cards, track page, repeat) already knows how to read it.
+  // One bulk insert, only when extras exist; a ticket without extras is
+  // byte-identical to the pre-5.56.0 path.
+  const addonRows = input.items.flatMap((it, i) =>
+    (it.addons || []).map((a) => ({
+      tenant_id: tenantId,
+      order_item_id: insertedItems?.[i]?.id,
+      addon_id: a.id || null,
+      name: a.name,
+      price: a.price,
+    })),
+  );
+  if (addonRows.length > 0) {
+    if (!insertedItems || insertedItems.length !== rows.length) {
+      throw new Error('Order items were written but the extras could not be attached. Please retry the ticket.');
+    }
+    const { error: addonsErr } = await supabase.from('order_item_addons').insert(addonRows);
+    if (addonsErr) throw addonsErr;
+  }
 
   // Offer redemption — the 016 ledger row is the ONLY thing that bumps
   // usage_count (trigger). UNIQUE(order_id) makes a retry harmless.

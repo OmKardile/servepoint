@@ -18,6 +18,12 @@ export interface CartLine {
      so Large and Regular never merge, and the drawer/receipt say what the
      guest actually chose. priceDelta is folded into unitPrice at add time. */
   variantName?: string | null;
+  /* v5.56.0 — the extras the line was sold with, as a frozen snapshot. The
+     modal passes the live menu's {id,name,price}; the repeat path passes
+     ledger rows whose addon_id is gone (id: null). Rides to createOrder so
+     the counter's extras reach order_item_addons — the same rows the guest
+     door has always written — and the kitchen/receipt/track read them back. */
+  addons: { id: string | null; name: string; price: number }[];
 }
 
 interface CartState {
@@ -41,7 +47,9 @@ interface CartState {
       is_veg?: boolean | null;
     },
     qty: number,
-    addons: { id: string; name: string; price: number }[],
+    /* v5.56.0 — id rides null for repeat-synthesized lines (the ledger read
+       doesn't carry addon_id); live-menu adds pass the real FK. */
+    addons: { id: string | null; name: string; price: number }[],
     /* v5.55.0 — chosen size/option. priceDelta joins the unit price here;
        the repeat path passes delta 0 because the ledger's unit_price is
        already the frozen full price. */
@@ -92,6 +100,7 @@ export const useCart = create<CartState>((set, get) => ({
         addonTotal,
         isVeg: item.is_veg ?? null,
         variantName: variant?.name ?? null,
+        addons: addons.map((a) => ({ id: a.id || null, name: a.name, price: a.price })),
       });
     }
     set({ lines });

@@ -337,6 +337,9 @@ const OrderDrawer: React.FC<{
           unitPrice: l.unitPrice,
           menuItemId: l.menuItemId,
           variantName: l.variantName || null,
+          // v5.56.0 — the extras ride to the ledger; receipts/KDS/track read
+          // them back the same way they do for guest-placed tickets.
+          addons: l.addons,
         })),
       });
       useCart.getState().clear();
@@ -499,8 +502,10 @@ const OrderDrawer: React.FC<{
                         )}
                       </p>
                       {l.addonNames.length > 0 && (
-                        <p className="mt-0.5 truncate text-[11.5px] text-[#969696]">
-                          {l.addonNames.join(', ')}
+                        <p className="mt-0.5 truncate text-[11.5px] text-[#5F6B63]">
+                          {/* the receipt's per-extra `+` grammar, one voice
+                             across drawer / KDS / counter inbox / paper */}
+                          + {l.addonNames.join(', + ')}
                         </p>
                       )}
                       <span className="mt-1.5 flex items-center gap-1.5">
