@@ -5,6 +5,7 @@ import { useDialogA11y } from '../../lib/useDialogA11y';
 import { useSession, useUi } from '../../store/session';
 import { Sidebar } from './Sidebar';
 import { Header } from './Header';
+import { SubscriptionBand } from './SubscriptionBand';
 
 /** ServePoint app shell — teal sidebar + breadcrumb header + canvas content. */
 export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -43,6 +44,10 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
       <Sidebar />
       <div className="flex min-w-0 flex-1 flex-col">
         <Header />
+        {/* v5.126.0 — the subscription band: the owner's money-clock lives
+            above their work. It speaks only for a trial it can date (see
+            SubscriptionBand's contract); silence for every other state. */}
+        <SubscriptionBand />
         {/* tabIndex={-1} makes the landmark focusable for the skip link only —
             Tab skips it. outline-none: the UA ring a keyboard-adjacent
             programmatic focus can paint around the whole content area is

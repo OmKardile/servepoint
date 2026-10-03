@@ -3,6 +3,27 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.126.0] — 2026-10-04 — The clock crosses over
+
+### Added — the tenant sees their own trial
+
+- **The gap**: 5.125.0 taught the *Platform console* to speak the trial clock, but the owner who lives inside the trial never heard it. Migration 005 has always carried **"Tenant read access on own subscription"** (RLS: `tenant_id = current_tenant_id()`), and the app simply never asked — a QR Flow owner had no way to know their trial ends 16 Oct 2026, or that no charge is scheduled.
+- **The subscription band** (`src/components/shell/SubscriptionBand.tsx`, wired into the tenant AppShell between header and content): once per session it reads the RLS-scoped row (`fetchOwnSubscription`, any failure → silence) and speaks only a trial it can date — no row, no `trial_end`, or an unworded status renders nothing. Absence is silence, not a lie.
+- **The words, tenant-voiced**: "Your **Starter** trial **ends 16 Oct 2026** — **13 days left** · no charge yet." Day grammar matches the Platform cell exactly (calendar-day, midnight-to-midnight; "ends today"/"ends tomorrow" land on their days). Past the window it says what happened and stops: "Your Starter trial ended on 16 Oct 2026 · no charge was made." — no promised doors (no self-serve billing exists), no invented grace period.
+
+### Styled — the ramp of urgency is the house palette
+
+- Four visual registers by truth: **calm >7 days** — sage `#EAF0EC`/teal; **soon ≤7** — gold tint `#F3E8CF`; **last ≤3** — deep gold `#E9D9AF` (Platform's amber kin); **ended** — canvas recess with hairline. Dates and day counts set in `tabular-nums`; one `Hourglass` mark; polite `role="status"`; 160 ms fade. Not dismissible — it is time-boxed (14 days at provision), slim, and it is the operator's own money-clock.
+
+### Refactored — one clock for both sides of the console
+
+- PlatformScreen's private `daysUntil` + `formatDate` and the billing cell's words moved into **`src/lib/billing.ts`** (`daysUntil`, `formatBillingDate`, `trialBucket`, `planLabel`, `subscriptionWords`) — the MarkHit (5.120.0) / EmptyState (5.121.0) arc again: private becomes shared the moment a second surface needs the same truth. The Platform cell is now a thin projection; zero visual delta on the console.
+
+### Verified
+
+- Live (device clock UTC): QR Flow band renders "Your Starter trial ends 16 Oct 2026 — 13 days left · no charge yet" (calm sage, 13 > 7); CheeseBurg (active) renders no band by design. Platform Subscriptions unchanged after the lib extraction. tsc EXIT=0; console delta ZERO; screenshots. READ-ONLY round — zero cloud writes (one RLS-scoped SELECT per tenant session).
+
+
 ## [5.125.0] — 2026-10-04 — The trial clock shows
 
 ### Added — the Subscriptions row answers "when does money move?"

@@ -18,6 +18,8 @@ import {
   TrendingUp,
 } from 'lucide-react';
 import { fetchAuditLogs, fetchSubscriptions, fetchTenants } from '../../lib/api';
+import { subscriptionWords } from '../../lib/billing';
+import { formatBillingDate as formatDate } from '../../lib/billing';
 import { isSupabaseConfigured } from '../../lib/supabase';
 import { authService } from '../../lib/authService';
 import { formatMoney, timeAgo } from '../../lib/prefs';
@@ -55,13 +57,6 @@ function errorMessage(err: unknown): string {
   if (err instanceof Error) return err.message;
   if (typeof err === 'string') return err;
   return 'Unknown error.';
-}
-
-function formatDate(iso: string | null | undefined): string {
-  if (!iso) return '—';
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '—';
-  return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
 function shortId(id: string): string {
@@ -163,40 +158,11 @@ const SlugChip: React.FC<{ slug: string }> = ({ slug }) => (
  * answers "Trial ends 16 Oct 2026" with days remaining (amber inside 3 days,
  * no charge yet); an active one answers with the next charge date in the
  * house date grammar; an unknown stays "—" — no invented dates.
- * Day-window math is calendar-day based (midnight-to-midnight), not 24h
- * blocks, so "ends today" lands on the day itself. */
-const DAY_MS = 86400000;
+ * v5.126.0 — the clock and the words moved into lib/billing.ts (one grammar
+ * for both sides of the console); this cell is a thin projection of it. */
 
-function daysUntil(iso: string): number {
-  const target = new Date(iso);
-  const now = new Date();
-  if (Number.isNaN(target.getTime())) return NaN;
-  target.setHours(0, 0, 0, 0);
-  now.setHours(0, 0, 0, 0);
-  return Math.round((target.getTime() - now.getTime()) / DAY_MS);
-}
-
-function billingCell(s: Subscription): {
-  primary: string;
-  secondary?: string;
-  urgent: boolean;
-} {
-  if (s.status === 'trialing' || s.status === 'trial') {
-    if (!s.trial_end) return { primary: '—', urgent: false };
-    const d = daysUntil(s.trial_end);
-    if (Number.isNaN(d)) return { primary: '—', urgent: false };
-    const rel =
-      d === 0 ? 'ends today' : d === 1 ? '1 day left' : d > 1 ? `${d} days left` : 'window passed';
-    return {
-      primary: `Trial ends ${formatDate(s.trial_end)}`,
-      secondary: d >= 0 ? `${rel} · no charge yet` : rel,
-      urgent: d >= 0 && d <= 3,
-    };
-  }
-  return {
-    primary: s.next_billing_at ? formatDate(s.next_billing_at) : '—',
-    urgent: false,
-  };
+function billingCell(s: Subscription) {
+  return subscriptionWords(s);
 }
 
 const SageChipIcon: React.FC<{ icon: React.ElementType }> = ({ icon: Icon }) => (

@@ -1745,6 +1745,17 @@ export async function fetchSubscriptions(): Promise<Subscription[]> {
   return (data || []) as Subscription[];
 }
 
+/* v5.126.0 — the tenant's own subscription, for the shell band. RLS does the
+ * scoping ("Tenant read access on own subscription", migration 005) — the
+ * query just asks for one row. Any failure resolves to null: the band treats
+ * absence as silence, and a broken clock never invents urgency. */
+export async function fetchOwnSubscription(): Promise<Subscription | null> {
+  requireCloud();
+  const { data, error } = await supabase.from('subscriptions').select('*').limit(1);
+  if (error) return null;
+  return (data?.[0] as Subscription) ?? null;
+}
+
 export async function fetchAuditLogs(limit = 50): Promise<AuditLogEntry[]> {
   requireCloud();
   const { data, error } = await supabase
