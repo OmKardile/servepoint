@@ -3,6 +3,21 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.54.0] — 2026-10-03 — The regular's round: "Repeat this order" walks a past ticket into today's cart
+
+### Added — the counter-speed feature Indian cafés actually live on (no migration, no API change)
+- Chai-and-toastie regulars order the same thing daily; until now the cashier re-keyed it from memory while the guest's whole history sat one tap away doing nothing. The guests drawer (v5.5.0) already fetched each phone's last 8 tickets WITH full item snapshots (`attachItems` carries menu_item_id, name, qty and the addon-inclusive unit_price the ledger froze) — the round turns that payload into a door:
+  - **Guests → guest drawer → "Repeat this order"** on every ticket: pushes each line into the LIVE cart additively (cart.add merges by item+addons key, so repeating over an in-flight cart is "another round", not a clobber), pre-fills the drawer's customer name + phone from the CRM card (the repeat IS for this guest — the ticket books itself again), closes the drawer and walks the cashier to Food & Drinks. A toast names the arrival: "Order #N loaded into the current order" — the gold pill at the corner is never a mystery. `goSection`'s dormant hint channel (`consumeSectionHint`) carries the order number; Food & Drinks consumes it on mount (the same grammar Bills' 'unpaid' hint speaks).
+  - **Honest guard**: a ticket repeats only when EVERY line still points at a living menu item — a ticket whose item was de-listed renders a gray "Items changed since this ticket — repeat unavailable" chip with the reason in its title, never a button that fails at placement time (order_items.menu_item_id is the FK createOrder needs).
+- **Cart lines carry the leaf** (5.53.0's own parked seed — "cart lines are flattened and carry no is_veg; revisit if the line payload ever grows"): `CartLine.isVeg` rides the line (client-only state), `cart.add`'s signature widens to the structural minimum (id/name/price + image_url/is_veg) so both the modal's full MenuItem and the repeat's synthesized snapshot satisfy it, and the review drawer prints the same FSSAI mark beside every line name. Repeat-loaded lines stay silent (order_items carry no veg claim) — the mark never invents a dietary fact the kitchen didn't give.
+
+### Styling — the repeat affordance and the marked line
+- "Repeat this order" wears the house ghost-pill grammar: h-7 full-width, hairline `#E3E7E0` border, `#967221` text with the Repeat icon, gold border + `#FBF7EC` fill on hover, gold focus ring — a quiet secondary action under the ticket's money row that turns gold the moment the pointer intends it. The unavailable chip mirrors the sold-out pill's gray. Drawer lines get the 13px mark with a 1.5 gap that never lets the leaf crowd the name.
+
+### Verified
+- E2E (real UI, owner session): Maya Iyer's drawer showed "Repeat this order" on ticket #48 (`scripts/qa93-drawer-repeat.png`) → click landed on Food & Drinks with the "Order #48 loaded" toast and the pill "Review order, 2 items, ₹440.00" → drawer showed Flat White 2× ₹440 with customer name + phone prefilled (`scripts/qa93-cart-loaded.png`) → modal-added line showed the green mark beside its name (`scripts/qa93-drawer-vegmark.png`) → cart emptied through the drawer's own stepper (no order placed) → pill gone.
+- 14/14 screens, tsc 0, zero page errors. Cloud truth (read-only): orders 36 / menu 3 / bells 3 / chat 5 / bucket 0 — the round's payload is client-side state; the cloud was never written (placement is the cashier's explicit act, and the E2E deliberately stops one step short of it).
+
 ## [5.53.0] — 2026-10-03 — The menu respects the leaf: veg-only filter on the guest phone and the counter
 
 ### Added — the dietary filter India actually asks for (no migration, no API change — `is_veg` already rode every payload)

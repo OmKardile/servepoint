@@ -2522,3 +2522,27 @@ Stage Summary:
 - Remaining parked: drawer movements CSV (only if asked); CounterInbox bulk "Ok all" (risky); DS showcase links (owner OK pending); EOD Z-report logo (deliberate); URL write-back (non-goal); storage folder silting report (someday); KDS bump-back recall (deliberate); chat→bell pings (deliberate, 031); notifications digest/quiet hours (someday — still no push channel to quiet); veg mark in cart drawer lines (deliberate — cart lines are flattened and carry no is_veg; revisit if the line payload ever grows).
 - Watch items carried: DB password ROTATION (owner decision); #67/#68/#69/#96 active-unpaid QA-era leftovers (owner decision).
 - Crons: 15-min webDevReview (job 430321) + DAILY deep pass (job 431587, 09:00 IST).
+
+---
+Task ID: 93 (completion — 15-min webDevReview round, trace 202610030933)
+Agent: glm-5.3 (cron webDevReview round)
+Task: Post-5.53.0 orientation + QA sweep, then the round's pair: the regular's round ("Repeat this order" from the guests drawer walks a past ticket into today's cart) + cart lines carry the leaf (5.53.0's own parked seed).
+
+Work Log:
+- Orientation clean (origin/main = 2699557 = 5.53.0, fetch-verified; tsc 0; dev 200). Task 92 confirmed fully closed. QA sweep (nav-button click-through per Task 92's lesson): all 14 screens, correct titles, 0 page errors. Stable round.
+- Focus rationale: audited candidates — bookings ("the book" v5.38 exists), KDS aging (green→amber→red exists), inventory (adjustments+deductions+reasons exist), payment flow (sp_record_payment via Bills exists), split payment (not present but schema-less guesswork — skipped), offline queue (risky, parked). The real gap: the guests drawer fetches each phone's last 8 tickets WITH full item snapshots and does NOTHING actionable with them — an Indian café regular re-keys their usual daily while their history sits inert. Counter-speed feature, zero migration, zero API: attachItems already carries menu_item_id/name/qty/unit_price.
+- Cart (store/cart.ts): CartLine grows isVeg (client-only); add() signature widens to the structural minimum (Pick<MenuItem,'id'|'name'|'price'> & {image_url?, is_veg?}) so the modal's full MenuItem AND the repeat's synthesized snapshot both satisfy it; add() captures item.is_veg.
+- UI guests (CustomersScreen.tsx): repeatable() guard (every line must still point at a living menu_item_id — else a gray "Items changed since this ticket — repeat unavailable" chip with the reason in its title); repeatOrder() pushes each line into the LIVE cart additively (cart.add merges by key → repeating over an in-flight cart is "another round"), pre-fills customerName/Phone from the CRM card, closes the drawer, goSection('food', …, `repeat:#N`) via the dormant hint channel.
+- UI food (FoodDrinksScreen.tsx): consumes the repeat hint on mount → toast "Order #N loaded into the current order" (kind 'repeated' with the Repeat icon); drawer line names wear VegMark size 13.
+- [Mandatory styling]: repeat pill = house ghost grammar (h-7 full-width, hairline border, #967221 text + Repeat icon, gold border + #FBF7EC fill hover, gold focus ring); unavailable chip mirrors the sold-out gray; 13px mark + 1.5 gap in drawer lines never crowds the name.
+- E2E (real UI, owner session): Maya Iyer drawer showed "Repeat this order" on #48 (scripts/qa93-drawer-repeat.png) → click landed on Food & Drinks, toast + pill "2 items, ₹440.00" → drawer: Flat White 2× ₹440 with Maya Iyer / 98765 43210 prefilled (scripts/qa93-cart-loaded.png) → modal-added line shows the green mark (scripts/qa93-drawer-vegmark.png) → cart emptied via the drawer's own stepper → pill gone. No order placed — placement is the cashier's explicit act and the E2E deliberately stops one step short.
+- TOOLING LESSONS (carried): lucide imports — adding Repeat via a second `import {Plus, Repeat}` line collides with the existing destructure (TS2300) — extend the existing import list instead; agent-browser chains that click a ref captured BEFORE an intervening render silently no-op — re-snapshot after each modal hop (card → select → modal Add → CTA are four separate renders).
+- 14/14 screens, tsc 0, zero page errors on fresh reloads.
+- Cloud truth (read-only): orders 36 / menu 3 / bells 3 / chat 5 / bucket 0 — ZERO cloud writes this round (the payload is client-side cart state).
+
+Stage Summary:
+- 5.54.0 — the regular's round. Surfaces: src/store/cart.ts + src/components/customers/CustomersScreen.tsx + src/components/food/FoodDrinksScreen.tsx + public/sw.js + CHANGELOG.md + worklog.md (+3 screenshots). No migration, no API change, zero cloud writes.
+- The guests drawer stops being a read-only museum: the ledger's past is now the counter's present — one tap from "their history" to "their usual, in the cart, ready to place".
+- Remaining parked: drawer movements CSV (only if asked); CounterInbox bulk "Ok all" (risky); DS showcase links (owner OK pending); EOD Z-report logo (deliberate); URL write-back (non-goal); storage folder silting report (someday); KDS bump-back recall (deliberate); chat→bell pings (deliberate, 031); notifications digest/quiet hours (someday — still no push channel to quiet); POS variant selection (order_items carry variant_name but the POS modal never offers variants — the guest side does; someday, needs cart-line variant semantics).
+- Watch items carried: DB password ROTATION (owner decision); #67/#68/#69/#96 active-unpaid QA-era leftovers (owner decision).
+- Crons: 15-min webDevReview (job 430321) + DAILY deep pass (job 431587, 09:00 IST).

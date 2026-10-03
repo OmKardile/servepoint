@@ -8,6 +8,7 @@ import {
   Phone,
   Plus,
   RefreshCw,
+  Repeat,
   Search,
   Sparkles,
   Trash2,
@@ -34,6 +35,8 @@ import {
 } from '../../lib/api';
 import { formatMoney } from '../../lib/prefs';
 import { useTenant } from '../../lib/tenant';
+import { useCart } from '../../store/cart';
+import { useUi } from '../../store/session';
 import type { Customer, CustomerStats, Offer, Order } from '../../types';
 
 /**
@@ -1022,6 +1025,30 @@ const GuestDetailDrawer: React.FC<{
   const spent = Number(stats?.total_spent ?? 0);
   const placed = stats?.orders_placed ?? 0;
 
+  /* "Their usual" (v5.54.0) — a regular's past ticket becomes today's cart:
+     every line (qty + the addon-inclusive unit price the ledger froze) rides
+     into the LIVE cart additively, the guest's identity pre-fills the
+     drawer, and the cashier lands on Food & Drinks to review and place.
+     Guard: every line must still point at a living menu item — a ticket
+     whose item was de-listed cannot be repeated, and says so honestly. */
+  const repeatable = (o: Order): boolean =>
+    (o.items || []).length > 0 && (o.items || []).every((it) => Boolean(it.menu_item_id));
+
+  const repeatOrder = (o: Order) => {
+    const cart = useCart.getState();
+    for (const it of o.items || []) {
+      cart.add(
+        { id: it.menu_item_id as string, name: it.name, price: Number(it.unit_price), image_url: null, is_veg: null },
+        it.qty,
+        [],
+      );
+    }
+    cart.setCustomerName(customer.name || '');
+    cart.setCustomerPhone(customer.phone);
+    onClose();
+    useUi.getState().goSection('food', ['Food & Drinks'], `repeat:${o.order_number}`);
+  };
+
   return (
     <div className="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label={`Guest ${customer.name || customer.phone}`}>
       <button type="button" aria-label="Close" onClick={onClose} className="absolute inset-0 h-full w-full cursor-default bg-[#0F3D3E]/45" />
@@ -1106,6 +1133,25 @@ const GuestDetailDrawer: React.FC<{
                       {formatMoney(Number(o.total))}
                     </span>
                   </div>
+                  {repeatable(o) ? (
+                    <button
+                      type="button"
+                      onClick={() => repeatOrder(o)}
+                      aria-label={`Repeat order #${o.order_number} into the current order`}
+                      title={`Repeat order #${o.order_number} into the current order`}
+                      className="mt-2 flex h-7 w-full items-center justify-center gap-1.5 rounded-full border border-[#E3E7E0] text-[11.5px] font-semibold text-[#967221] transition-colors hover:border-[#B88E2F] hover:bg-[#FBF7EC] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[#B88E2F]"
+                    >
+                      <Repeat size={12} aria-hidden />
+                      Repeat this order
+                    </button>
+                  ) : (
+                    <p
+                      className="mt-2 rounded-full bg-[#F6F5F2] px-2.5 py-1 text-center text-[10.5px] text-[#969696]"
+                      title="This ticket's items are no longer all on the menu, so it cannot be repeated."
+                    >
+                      Items changed since this ticket — repeat unavailable
+                    </p>
+                  )}
                 </li>
               ))}
             </ul>

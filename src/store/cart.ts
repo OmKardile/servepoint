@@ -10,6 +10,10 @@ export interface CartLine {
   image_url?: string | null;
   addonNames: string[];
   addonTotal: number;
+  /* v5.54.0 — the leaf rides the line: the drawer shows the same FSSAI mark
+     the cards show. Absent for repeat-loaded lines (order_items carry no
+     veg claim) — the mark stays silent rather than inventing one. */
+  isVeg?: boolean | null;
 }
 
 interface CartState {
@@ -25,7 +29,13 @@ interface CartState {
   /** Offer picked in the drawer; discount is computed at render, ledger written on place. */
   offer: Offer | null;
   add: (
-    item: MenuItem,
+    /* Structural minimum (v5.54.0): the modal passes the full MenuItem, the
+       guests drawer's "their usual" repeat passes a synthesized snapshot —
+       both only ever need these five fields to become a line. */
+    item: Pick<MenuItem, 'id' | 'name' | 'price'> & {
+      image_url?: string | null;
+      is_veg?: boolean | null;
+    },
     qty: number,
     addons: { id: string; name: string; price: number }[]
   ) => void;
@@ -72,6 +82,7 @@ export const useCart = create<CartState>((set, get) => ({
         image_url: item.image_url,
         addonNames,
         addonTotal,
+        isVeg: item.is_veg ?? null,
       });
     }
     set({ lines });

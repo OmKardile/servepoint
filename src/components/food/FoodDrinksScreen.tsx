@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Repeat } from 'lucide-react';
 import {
   Armchair,
   Coffee,
@@ -487,7 +488,10 @@ const OrderDrawer: React.FC<{
                 {cart.lines.map((l) => (
                   <li key={l.key} className="flex items-start justify-between gap-3 py-3">
                     <div className="min-w-0">
-                      <p className="truncate text-[13.5px] font-semibold text-[#1A1A1A]">{l.name}</p>
+                      <p className="flex items-center gap-1.5 truncate text-[13.5px] font-semibold text-[#1A1A1A]">
+                        <VegMark veg={l.isVeg} size={13} />
+                        {l.name}
+                      </p>
                       {l.addonNames.length > 0 && (
                         <p className="mt-0.5 truncate text-[11.5px] text-[#969696]">
                           {l.addonNames.join(', ')}
@@ -633,7 +637,18 @@ const FoodDrinksInner: React.FC<{ onRetry: () => void }> = ({ onRetry }) => {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detailItem, setDetailItem] = useState<MenuItem | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [toast, setToast] = useState<{ kind: 'added' | 'placed'; message: string; orderNumber?: number } | null>(null);
+  const [toast, setToast] = useState<{ kind: 'added' | 'placed' | 'repeated'; message: string; orderNumber?: number } | null>(null);
+
+  /* "Their usual" landing (v5.54.0) — the guests drawer's Repeat drops the
+     ticket into the live cart and walks the cashier here; the hint names
+     which order arrived so the pill at the corner is never a mystery. */
+  useEffect(() => {
+    const hint = useUi.getState().consumeSectionHint();
+    if (hint && hint.startsWith('repeat:')) {
+      const n = hint.slice('repeat:'.length);
+      setToast({ kind: 'repeated', message: `Order #${n} loaded into the current order` });
+    }
+  }, []);
 
   /* Breadcrumb contract: categories → ['Food & Drinks', 'Categories'];
      items → ['Food & Drinks', 'Categories', <CategoryName>] (frames 30044/29357). */
@@ -940,7 +955,7 @@ const FoodDrinksInner: React.FC<{ onRetry: () => void }> = ({ onRetry }) => {
             aria-hidden
             className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#B88E2F] text-white"
           >
-            {toast.kind === 'placed' ? <ShoppingBag size={14} /> : <Plus size={14} />}
+            {toast.kind === 'placed' ? <ShoppingBag size={14} /> : toast.kind === 'repeated' ? <Repeat size={14} /> : <Plus size={14} />}
           </span>
           <span className="whitespace-nowrap text-[13px] font-medium text-[#1A1A1A]">{toast.message}</span>
           {toast.kind === 'placed' && (
