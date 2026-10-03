@@ -1749,11 +1749,19 @@ export async function fetchSubscriptions(): Promise<Subscription[]> {
  * scoping ("Tenant read access on own subscription", migration 005) — the
  * query just asks for one row. Any failure resolves to null: the band treats
  * absence as silence, and a broken clock never invents urgency. */
-export async function fetchOwnSubscription(): Promise<Subscription | null> {
+/* v5.127.0 — split into two contracts over ONE query: the strict variant
+ * throws on failure and returns null ONLY for a genuine absence (the
+ * Settings panel must not read an RLS error as "no record"); the band's
+ * wrapper keeps its silence-on-any-failure contract. */
+export async function fetchOwnSubscriptionStrict(): Promise<Subscription | null> {
   requireCloud();
   const { data, error } = await supabase.from('subscriptions').select('*').limit(1);
-  if (error) return null;
+  if (error) throw error;
   return (data?.[0] as Subscription) ?? null;
+}
+
+export async function fetchOwnSubscription(): Promise<Subscription | null> {
+  return fetchOwnSubscriptionStrict().catch(() => null);
 }
 
 export async function fetchAuditLogs(limit = 50): Promise<AuditLogEntry[]> {

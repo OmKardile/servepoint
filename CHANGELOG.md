@@ -3,6 +3,24 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.127.0] — 2026-10-04 — The record hands over whole
+
+### Added — Plan & billing, the calm record behind the clock
+
+- **The gap**: 5.126.0 gave the tenant the trial *clock* (the band), but the full *record* — plan, cycle, price, every date — was still readable only by the Platform console. Active tenants had nowhere to see their next charge (deliberately not as a permanent band); a trialing tenant saw the countdown but not the arithmetic behind it.
+- **Plan & billing section in Settings** (`src/components/settings/BillingSection.tsx`, owner-gated like Café brand / Business profile — staff run tickets; the plan is the owner's business): one RLS-scoped read renders the whole row — plan name, status chip (Trialing = gold tint / Active = sage / unknown = neutral), billing cycle, monthly price, trial window dates, next charge, on-board date — with `tabular-nums` right-aligned values in the Platform's money grammar, and a secondary line that speaks the one fact the row is about ("13 days left · no charge yet" / "Next charge 31 Oct 2026" / "No charge scheduled on record").
+- **Three states, three truths, no collapses**: *no record* says "No subscription on record… nothing is being charged, and nothing is scheduled to be" with a real door to Support (`goSection`); *failed read* says "Couldn't read your subscription" with the error hint and a **Try again** button — `fetchOwnSubscriptionStrict` (api.ts) now throws on failure so an RLS error can never be read as "no record", while the band's silence-on-failure contract stays intact over the same query.
+- **Every door is real**: the Support door lands on the actual Support screen (verified live); rows the row can't answer (e.g. "Next charge" on a trial) simply don't render — no invented dashes.
+
+### Styled — the record in the house grammar
+
+- Record card in the sage panel idiom (matches Appearance's locked-theme card), white `dl` inset with hairline row dividers, right-aligned `tabular-nums` values, icon chip (Hourglass for trials, CreditCard for paid plans), status chips in the house palette, hover-tint Support door. Mobile 390px: all five rows wrap-free, zero horizontal overflow.
+
+### Verified
+
+- Live as the QR Flow owner: nav shows Plan & billing between Business profile and Notification; panel reads "Starter plan / Trialing / Monthly / ₹0.00 / Trial started 02 Oct 2026 / Trial ends 16 Oct 2026 / On board since 02 Oct 2026" (matches server truth: provisioned 02 Oct +14d trial); secondary line "13 days left · no charge yet" agrees with the band; Support door navigates; active-tenant and no-row paths are code-verified (no CheeseBurg operator credentials held). tsc EXIT=0; build EXIT=0; console delta ZERO. READ-ONLY round — zero cloud writes.
+
+
 ## [5.126.0] — 2026-10-04 — The clock crosses over
 
 ### Added — the tenant sees their own trial

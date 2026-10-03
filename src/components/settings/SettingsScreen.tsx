@@ -6,6 +6,7 @@ import {
   ChevronDown,
   CookingPot,
   Copy,
+  CreditCard,
   Eye,
   EyeOff,
   Glasses,
@@ -33,6 +34,7 @@ import type { SpPrefs } from '../../lib/prefs';
 import { useTenant } from '../../lib/tenant';
 import { useSession, useUi } from '../../store/session';
 import { useCart } from '../../store/cart';
+import { BillingSection } from './BillingSection';
 import type { Employee } from '../../types';
 
 /**
@@ -60,7 +62,8 @@ type SettingsSection =
   | 'checkout'
   | 'security'
   | 'language'
-  | 'staff';
+  | 'staff'
+  | 'billing';
 
 const SECTION_TITLES: Record<SettingsSection, string> = {
   profile: 'Profile',
@@ -72,6 +75,7 @@ const SECTION_TITLES: Record<SettingsSection, string> = {
   security: 'Security',
   language: 'Language & Region',
   staff: 'Staff accounts',
+  billing: 'Plan & billing',
 };
 
 /** Timed confirmation flag ("Saved", "Cleared", "Copied") with cleanup. */
@@ -1678,12 +1682,16 @@ export const SettingsScreen: React.FC = () => {
   if (isTenantOwner) items.splice(1, 0, { id: 'brand', label: 'Café brand', icon: ImagePlus });
   // Business profile (Task 90) — the legal twin of brand, same owner gate.
   if (isTenantOwner) items.splice(2, 0, { id: 'business', label: 'Business profile', icon: Building2 });
+  // Plan & billing (v5.127.0) — the subscription record, owner-gated like the
+  // decisions it sits beside: staff run tickets; the plan is the owner's.
+  if (isTenantOwner) items.splice(3, 0, { id: 'billing', label: 'Plan & billing', icon: CreditCard });
   if (canManageStaff) items.push({ id: 'staff', label: 'Staff accounts', icon: Users });
 
   const effective: SettingsSection =
     (active === 'staff' && !canManageStaff) ||
     (active === 'brand' && !isTenantOwner) ||
-    (active === 'business' && !isTenantOwner)
+    (active === 'business' && !isTenantOwner) ||
+    (active === 'billing' && !isTenantOwner)
       ? 'checkout'
       : active;
 
@@ -1724,6 +1732,7 @@ export const SettingsScreen: React.FC = () => {
           {effective === 'profile' && <ProfileSection />}
           {effective === 'brand' && <CafeBrandSection />}
           {effective === 'business' && <BusinessProfileSection />}
+          {effective === 'billing' && <BillingSection />}
           {effective === 'notification' && <NotificationSection />}
           {effective === 'appearance' && <AppearanceSection />}
           {effective === 'checkout' && <CheckoutSection />}
