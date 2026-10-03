@@ -159,6 +159,46 @@ const SlugChip: React.FC<{ slug: string }> = ({ slug }) => (
   </span>
 );
 
+/* v5.125.0 — the billing cell speaks the row's truth: a trialing subscription
+ * answers "Trial ends 16 Oct 2026" with days remaining (amber inside 3 days,
+ * no charge yet); an active one answers with the next charge date in the
+ * house date grammar; an unknown stays "—" — no invented dates.
+ * Day-window math is calendar-day based (midnight-to-midnight), not 24h
+ * blocks, so "ends today" lands on the day itself. */
+const DAY_MS = 86400000;
+
+function daysUntil(iso: string): number {
+  const target = new Date(iso);
+  const now = new Date();
+  if (Number.isNaN(target.getTime())) return NaN;
+  target.setHours(0, 0, 0, 0);
+  now.setHours(0, 0, 0, 0);
+  return Math.round((target.getTime() - now.getTime()) / DAY_MS);
+}
+
+function billingCell(s: Subscription): {
+  primary: string;
+  secondary?: string;
+  urgent: boolean;
+} {
+  if (s.status === 'trialing' || s.status === 'trial') {
+    if (!s.trial_end) return { primary: '—', urgent: false };
+    const d = daysUntil(s.trial_end);
+    if (Number.isNaN(d)) return { primary: '—', urgent: false };
+    const rel =
+      d === 0 ? 'ends today' : d === 1 ? '1 day left' : d > 1 ? `${d} days left` : 'window passed';
+    return {
+      primary: `Trial ends ${formatDate(s.trial_end)}`,
+      secondary: d >= 0 ? `${rel} · no charge yet` : rel,
+      urgent: d >= 0 && d <= 3,
+    };
+  }
+  return {
+    primary: s.next_billing_at ? formatDate(s.next_billing_at) : '—',
+    urgent: false,
+  };
+}
+
 const SageChipIcon: React.FC<{ icon: React.ElementType }> = ({ icon: Icon }) => (
   <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#D9E2DD] text-[#0F3D3E]">
     <Icon size={18} strokeWidth={2} aria-hidden />
@@ -758,10 +798,10 @@ export const PlatformScreen: React.FC = () => {
                     <th scope="col" className="px-4 py-3 font-medium">Business</th>
                     <th scope="col" className="px-4 py-3 font-medium">Plan</th>
                     <th scope="col" className="px-4 py-3 font-medium">Billing cycle</th>
-                    <th scope="col" className="px-4 py-3 font-medium">Monthly price</th>
-                    <th scope="col" className="px-4 py-3 font-medium">Final rate</th>
+                    <th scope="col" className="px-4 py-3 text-right font-medium">Monthly price</th>
+                    <th scope="col" className="px-4 py-3 text-right font-medium">Final rate</th>
                     <th scope="col" className="px-4 py-3 font-medium">Status</th>
-                    <th scope="col" className="px-4 py-3 font-medium">Next billing</th>
+                    <th scope="col" className="px-4 py-3 text-right font-medium">Next charge</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -772,15 +812,29 @@ export const PlatformScreen: React.FC = () => {
                       </td>
                       <td className="px-4 py-3.5 capitalize text-[#6B6B6B]">{s.plan_id}</td>
                       <td className="px-4 py-3.5 capitalize text-[#6B6B6B]">{s.billing_cycle}</td>
-                      <td className="px-4 py-3.5 text-[#6B6B6B]">{formatMoney(s.monthly_price)}</td>
-                      <td className="px-4 py-3.5 font-bold text-[#0F3D3E]">
+                      <td className="px-4 py-3.5 text-right tabular-nums text-[#6B6B6B]">{formatMoney(s.monthly_price)}</td>
+                      <td className="px-4 py-3.5 text-right font-bold tabular-nums text-[#0F3D3E]">
                         {formatMoney(s.final_monthly_rate ?? s.monthly_price ?? 0)}
                       </td>
                       <td className="px-4 py-3.5">
                         <StatusChip status={s.status} />
                       </td>
-                      <td className="whitespace-nowrap px-4 py-3.5 text-[#6B6B6B]">
-                        {s.next_billing_at ? new Date(s.next_billing_at).toDateString() : '—'}
+                      <td className="whitespace-nowrap px-4 py-3.5 text-right align-top">
+                        {(() => {
+                          const cell = billingCell(s);
+                          return (
+                            <>
+                              <p className={cell.urgent ? 'font-semibold text-[#B42318]' : 'text-[#6B6B6B]'}>
+                                {cell.primary}
+                              </p>
+                              {cell.secondary && (
+                                <p className={`text-[11px] ${cell.urgent ? 'font-medium text-[#B42318]' : 'text-[#969696]'}`}>
+                                  {cell.secondary}
+                                </p>
+                              )}
+                            </>
+                          );
+                        })()}
                       </td>
                     </tr>
                   ))}
@@ -809,18 +863,32 @@ export const PlatformScreen: React.FC = () => {
                     </div>
                     <div className="flex justify-between gap-3">
                       <dt className="text-[#969696]">Monthly price</dt>
-                      <dd className="text-[#1A1A1A]">{formatMoney(s.monthly_price)}</dd>
+                      <dd className="tabular-nums text-[#1A1A1A]">{formatMoney(s.monthly_price)}</dd>
                     </div>
                     <div className="flex justify-between gap-3">
                       <dt className="text-[#969696]">Final rate</dt>
-                      <dd className="font-bold text-[#0F3D3E]">
+                      <dd className="font-bold tabular-nums text-[#0F3D3E]">
                         {formatMoney(s.final_monthly_rate ?? s.monthly_price ?? 0)}
                       </dd>
                     </div>
                     <div className="flex justify-between gap-3">
-                      <dt className="text-[#969696]">Next billing</dt>
+                      <dt className="text-[#969696]">Next charge</dt>
                       <dd className="text-right text-[#1A1A1A]">
-                        {s.next_billing_at ? new Date(s.next_billing_at).toDateString() : '—'}
+                        {(() => {
+                          const cell = billingCell(s);
+                          return (
+                            <>
+                              <span className={`block ${cell.urgent ? 'font-semibold text-[#B42318]' : ''}`}>
+                                {cell.primary}
+                              </span>
+                              {cell.secondary && (
+                                <span className={`block text-[11px] ${cell.urgent ? 'font-medium text-[#B42318]' : 'text-[#969696]'}`}>
+                                  {cell.secondary}
+                                </span>
+                              )}
+                            </>
+                          );
+                        })()}
                       </dd>
                     </div>
                   </dl>

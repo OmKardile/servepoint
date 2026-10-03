@@ -182,6 +182,12 @@ export interface Subscription {
   final_monthly_rate: number | null;
   status: string;
   next_billing_at?: string | null;
+  /* v5.125.0 — the trial clock: the wire already carries these (select('*')),
+   * the operator just never saw them. A trialing row without a trial_end
+   * stays "—" — no invented dates. */
+  trial_start?: string | null;
+  trial_end?: string | null;
+  current_period_end?: string | null;
   created_at: string;
 }
 

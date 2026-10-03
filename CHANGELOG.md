@@ -3,6 +3,24 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.125.0] — 2026-10-04 — The trial clock shows
+
+### Added — the Subscriptions row answers "when does money move?"
+
+- **The gap**: the subscriptions table's `select('*')` always carried `trial_end` / `current_period_end` / `trial_start` (the provisioning wizard even writes `trial_end = +14d` for trials), but the client type and the UI never surfaced them — a trialing business sat in the ledger with a bare **"—"** under Next billing, and the operator had to do date arithmetic to know when the trial runs out (or that a charge is even coming).
+- **The billing cell speaks the row's truth**: a trialing subscription now answers **"Trial ends 16 Oct 2026"** with a secondary line **"13 days left · no charge yet"** (calendar-day math, midnight-to-midnight — "ends today" lands on the day itself); inside 3 days the cell turns amber. An active subscription answers with its next charge in the house date grammar. An unknown stays **"—"** — no invented dates.
+- **Column renamed to "Next charge"** so the header stays truthful over cells that answer "no charge yet"; mobile card shares the same words and the same helper.
+
+### Styled — money reads like money
+
+- **Monthly price / Final rate columns are right-aligned with `tabular-nums`** (desktop table + mobile dl) — rupee amounts now align on the decimal instead of trailing ragged.
+- **Date grammar unified**: the subscriptions table used raw `toDateString()` ("Sat Oct 31 2026") while Businesses used the house `formatDate` ("01 Oct 2026"); every date on the Platform console now speaks one grammar.
+
+### Verified
+
+- Live (device clock UTC): QR Flow Cafe (trialing) → "Trial ends 16 Oct 2026" + "13 days left · no charge yet" (16 Oct − 3 Oct = 13 ✓); CheeseBurg (active) → "31 Oct 2026" ✓; money columns aligned; MRR chip unchanged (₹4,999.00). tsc EXIT=0; console delta ZERO errors; screenshot qa164-trial-clock.png. READ-ONLY round — zero cloud writes.
+
+
 ## [5.124.0] — 2026-10-04 — The reset, the recovery, and the panel that hands over whole
 
 ### Fixed — the provisioning wizard can no longer save a business "locally only"
