@@ -642,6 +642,80 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
     downloadCsv(`servepoint-daily-sales-${istTodayIso()}.csv`, rows);
   }, [daily]);
 
+  /* ── 5.50.0 — the other five sections speak CSV too. Reports had exits for
+     daily sales, item ranking and guest ratings since 5.3.x; the hour shape,
+     the money's arrival, the margin, the service mix and the drawer's honesty
+     were chart-only. An owner carrying the week's numbers to an accountant
+     should not have to read them off a screen. Same lib, same escape rules,
+     one file per section — the spreadsheet owns the formatting. */
+
+  const exportHourly = useCallback(() => {
+    // All 24 buckets, zeros included — the gaps ARE the quiet hours; a
+    // spreadsheet should see the whole day the chart draws.
+    const rows: (string | number)[][] = [['Hour (IST)', 'Gross (INR)']];
+    for (const h of hourly) rows.push([h.label, h.gross.toFixed(2)]);
+    downloadCsv(`servepoint-sales-by-hour-${istTodayIso()}.csv`, rows);
+  }, [hourly]);
+
+  const exportPayMix = useCallback(() => {
+    const rows: (string | number)[][] = [['Method', 'Tickets', 'Total (INR)']];
+    for (const m of payMix.paid) rows.push([m.method, m.count, m.total.toFixed(2)]);
+    if (payMix.unpaid > 0) rows.push(['Unpaid — money still out', payMix.unpaid, payMix.unpaidAmt.toFixed(2)]);
+    if (rows.length === 1) return;
+    downloadCsv(`servepoint-payment-mix-${istTodayIso()}.csv`, rows);
+  }, [payMix]);
+
+  const exportMargin = useCallback(() => {
+    if (agg.paidCount === 0) return;
+    const rows: (string | number)[][] = [
+      ['Metric', 'Value'],
+      ['Range', RANGE_LABEL[range]],
+      ['Paid tickets', agg.paidCount],
+      ['Paid net (INR)', agg.paidNet.toFixed(2)],
+      ['Ingredient cost (INR)', agg.cogs.toFixed(2)],
+      ['Gross margin (INR)', agg.margin.toFixed(2)],
+      ['Margin rate (%)', agg.marginPct.toFixed(1)],
+      ['', ''],
+      ['Note', 'Recipes × current shelf cost — a restock reprices history; variants/add-ons not priced.'],
+    ];
+    downloadCsv(`servepoint-cost-margin-${istTodayIso()}.csv`, rows);
+  }, [agg, range]);
+
+  const exportTypeMix = useCallback(() => {
+    if (typeMix.length === 0) return;
+    const rows: (string | number)[][] = [['Service', 'Tickets', 'Total (INR)', 'Share of orders %']];
+    for (const [t, v] of typeMix) {
+      const share = agg.placed > 0 ? (v.count / agg.placed) * 100 : 0;
+      rows.push([TYPE_LABEL[t] || t, v.count, v.total.toFixed(2), share.toFixed(1)]);
+    }
+    downloadCsv(`servepoint-service-mix-${istTodayIso()}.csv`, rows);
+  }, [typeMix, agg.placed]);
+
+  const exportShifts = useCallback(() => {
+    if (shiftAgg.count === 0) return;
+    const rows: (string | number)[][] = [
+      ['Closed (IST)', 'Expected (INR)', 'Counted (INR)', 'Variance (INR)', 'Closed by', 'Note'],
+    ];
+    let sumExp = 0;
+    let sumCnt = 0;
+    for (const s of shiftsInRange) {
+      const exp = Number(s.expected_cash ?? 0);
+      const cnt = Number(s.counted_cash ?? 0);
+      sumExp += exp;
+      sumCnt += cnt;
+      rows.push([
+        s.closed_at ? IST_CLOSE_LABEL.format(new Date(s.closed_at)) : '—',
+        s.expected_cash === null ? '' : exp.toFixed(2),
+        s.counted_cash === null ? '' : cnt.toFixed(2),
+        s.variance === null ? '' : Number(s.variance).toFixed(2),
+        s.closed_by_email || '',
+        s.closing_note || '',
+      ]);
+    }
+    rows.push(['NET', sumExp.toFixed(2), sumCnt.toFixed(2), shiftAgg.net.toFixed(2), '', '']);
+    downloadCsv(`servepoint-drawer-shifts-${istTodayIso()}.csv`, rows);
+  }, [shiftsInRange, shiftAgg]);
+
   const fbDaily = useMemo(() => {
     const byDay = new Map<string, { sum: number; n: number }>();
     for (const f of fbInRange) {
@@ -867,6 +941,8 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
                   {daily.length > 0 && (
                     <button
                       onClick={exportDaily}
+                      aria-label="Export daily sales as CSV"
+                      title="Export the day-by-day gross as CSV"
                       className="inline-flex h-7 items-center rounded-lg border border-[#B88E2F]/45 bg-[#FDF9F0] px-2.5 text-[11px] font-bold text-[#8A5A00] transition hover:bg-[#B88E2F] hover:text-white active:scale-[0.97]"
                     >
                       CSV
@@ -1069,9 +1145,19 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
             <section className="sp-card p-5 xl:col-span-2" aria-label="Sales by hour of day">
               <div className="mb-1 flex items-center justify-between gap-2">
                 <h2 className="text-[15px] font-bold text-[#1A1A1A]">Sales by hour</h2>
-                <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#6B6B6B]">
-                  <Clock size={11} aria-hidden /> IST hours · {RANGE_LABEL[range].toLowerCase()}
-                </span>
+                <div className="flex shrink-0 items-center gap-2">
+                  <button
+                    onClick={exportHourly}
+                    aria-label="Export sales by hour as CSV"
+                    title="Export the hour-by-hour gross as CSV"
+                    className="inline-flex h-7 items-center rounded-lg border border-[#B88E2F]/45 bg-[#FDF9F0] px-2.5 text-[11px] font-bold text-[#8A5A00] transition hover:bg-[#B88E2F] hover:text-white active:scale-[0.97]"
+                  >
+                    CSV
+                  </button>
+                  <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#6B6B6B]">
+                    <Clock size={11} aria-hidden /> IST hours · {RANGE_LABEL[range].toLowerCase()}
+                  </span>
+                </div>
               </div>
               <p className="mb-3 text-[11.5px] text-[#969696]">
                 Gross ₹ per hour of day — when the cafe actually earns. Peak hour:{' '}
@@ -1120,7 +1206,19 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
             </section>
 
             <section className="sp-card p-5" aria-label="Payment mix">
-              <h2 className="mb-1 text-[15px] font-bold text-[#1A1A1A]">How money arrived</h2>
+              <div className="mb-1 flex items-center justify-between gap-2">
+                <h2 className="text-[15px] font-bold text-[#1A1A1A]">How money arrived</h2>
+                {payMix.paid.length > 0 && (
+                  <button
+                    onClick={exportPayMix}
+                    aria-label="Export payment mix as CSV"
+                    title="Export the method split — including money still out — as CSV"
+                    className="inline-flex h-7 items-center rounded-lg border border-[#B88E2F]/45 bg-[#FDF9F0] px-2.5 text-[11px] font-bold text-[#8A5A00] transition hover:bg-[#B88E2F] hover:text-white active:scale-[0.97]"
+                  >
+                    CSV
+                  </button>
+                )}
+              </div>
               <p className="mb-2 text-[11.5px] text-[#969696]">
                 Paid tickets by method{payMix.unpaid > 0 ? ' — plus what is still out' : ''}
               </p>
@@ -1218,9 +1316,21 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
           <section className="sp-card p-5" aria-label="Cost and margin">
             <div className="mb-1 flex items-center justify-between gap-2">
               <h2 className="text-[15px] font-bold text-[#1A1A1A]">Cost &amp; margin</h2>
-              <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#6B6B6B]">
-                <Coins size={11} aria-hidden /> paid tickets only
-              </span>
+              <div className="flex shrink-0 items-center gap-2">
+                {agg.paidCount > 0 && (
+                  <button
+                    onClick={exportMargin}
+                    aria-label="Export cost and margin as CSV"
+                    title="Export the range's margin summary as CSV"
+                    className="inline-flex h-7 items-center rounded-lg border border-[#B88E2F]/45 bg-[#FDF9F0] px-2.5 text-[11px] font-bold text-[#8A5A00] transition hover:bg-[#B88E2F] hover:text-white active:scale-[0.97]"
+                  >
+                    CSV
+                  </button>
+                )}
+                <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#6B6B6B]">
+                  <Coins size={11} aria-hidden /> paid tickets only
+                </span>
+              </div>
             </div>
             <p className="mb-4 text-[11.5px] text-[#969696]">
               Ingredients priced from recipes × current shelf cost (a restock reprices history;
@@ -1395,7 +1505,19 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
             </section>
 
             <section className="sp-card p-5" aria-label="Order type mix">
-              <h2 className="mb-1 text-[15px] font-bold text-[#1A1A1A]">Service mix</h2>
+              <div className="mb-1 flex items-center justify-between gap-2">
+                <h2 className="text-[15px] font-bold text-[#1A1A1A]">Service mix</h2>
+                {typeMix.length > 0 && (
+                  <button
+                    onClick={exportTypeMix}
+                    aria-label="Export service mix as CSV"
+                    title="Export the order-type split as CSV"
+                    className="inline-flex h-7 items-center rounded-lg border border-[#B88E2F]/45 bg-[#FDF9F0] px-2.5 text-[11px] font-bold text-[#8A5A00] transition hover:bg-[#B88E2F] hover:text-white active:scale-[0.97]"
+                  >
+                    CSV
+                  </button>
+                )}
+              </div>
               <p className="mb-4 text-[11.5px] text-[#969696]">
                 Where tickets come from — table service vs counter vs delivery
               </p>
@@ -1573,7 +1695,19 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
             </section>
 
             <section className="sp-card p-5" aria-label="Drawer honesty">
-              <h2 className="mb-1 text-[15px] font-bold text-[#1A1A1A]">Drawer honesty</h2>
+              <div className="mb-1 flex items-center justify-between gap-2">
+                <h2 className="text-[15px] font-bold text-[#1A1A1A]">Drawer honesty</h2>
+                {shiftAgg.count > 0 && (
+                  <button
+                    onClick={exportShifts}
+                    aria-label="Export drawer shifts as CSV"
+                    title="Export the sealed shifts — expected, counted, variance — as CSV"
+                    className="inline-flex h-7 items-center rounded-lg border border-[#B88E2F]/45 bg-[#FDF9F0] px-2.5 text-[11px] font-bold text-[#8A5A00] transition hover:bg-[#B88E2F] hover:text-white active:scale-[0.97]"
+                  >
+                    CSV
+                  </button>
+                )}
+              </div>
               <p className="mb-4 text-[11.5px] text-[#969696]">
                 Sealed shifts only — expected is the ledger's math, variance is stored, never
                 re-derived. {RANGE_LABEL[range].toLowerCase()}.

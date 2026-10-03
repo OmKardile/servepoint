@@ -3,6 +3,21 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.50.0] — 2026-10-03 — Every section speaks CSV: the numbers can leave the building
+
+### Added — the five chart-only sections get their exit (no migration, no API change)
+- Reports had CSV exits for three of its nine sections since the 5.3.x days (daily sales, item ranking, guest ratings) — but five sections were chart-only: **Sales by hour, How money arrived (payment mix), Cost & margin, Service mix, Drawer honesty**. An owner carrying the week's numbers to an accountant had to read them off a screen. Each now wears the same gold CSV pill its siblings have, driven by the same `lib/csv.ts` (OWASP formula-guard, UTF-8 BOM, spreadsheet owns the formatting):
+  - **Sales by hour** — all 24 IST buckets, zeros included: the gaps ARE the quiet hours, so the spreadsheet sees the whole day the chart draws.
+  - **Payment mix** — one row per paid method (tickets + total), plus an honest `Unpaid — money still out` row when money is out, so the export and the section's red footer never disagree.
+  - **Cost & margin** — a self-describing summary block (Range, paid tickets, paid net, ingredient cost, gross margin, margin rate) with the shelf-cost caveat carried along as a Note row, because a number without its definition travels badly.
+  - **Service mix** — dine-in/takeaway/etc. with tickets, totals and share of orders.
+  - **Drawer honesty** — sealed shift by sealed shift: expected vs counted vs the STORED variance (never re-derived, same rule the section speaks), closed-by and the closing note, with a NET row summing the ledger.
+- Buttons are gated on their section having data (no CSV pill on an empty chart — an empty download is a lie), and each carries an `aria-label` + `title` naming the section. The two older pills that lacked them (Day by day) got the same aria backfill — one button grammar, one file.
+
+### Verified
+- E2E (real UI, blob-intercepted): all 8 CSV pills render on `/reports` (5 new + 3 existing). On Last 30 days: payment-mix rows match the pie to the paisa (UPI ×19 ₹6,205.50, Cash ×10 ₹3,276.00, Unpaid ×5 ₹1,801.80 — the same honest money-still-out the morning mirror and Bills speak); cost-&-margin matches the chips (29 paid, ₹1,515 cost, ₹7,515 margin, 83.2%); service mix 31/3; drawer CSV carries both sealed shifts with stored variances (−7.00, 0.00) + NET row — and the export shows the OWASP guard live (`'-7.00`: a leading minus never becomes a formula); sales-by-hour holds 13 earning hours with the 8p peak ₹2,956.80 the chart draws. Screenshot `scripts/qa89-reports-csv.png`. 13/13 routes, 0 console errors, tsc 0.
+- Cloud truth: pure-UI round — zero writes anywhere; orders 36 / bells 3 / chat 5 / menu-photos bucket 0, exactly as found.
+
 ## [5.49.0] — 2026-10-03 — The guest sees the face: QR menu photos go live
 
 ### Added — the fifth surface, and the one that mattered (no migration)

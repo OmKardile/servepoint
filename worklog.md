@@ -2434,3 +2434,23 @@ Stage Summary:
 - Remaining parked: drawer movements CSV (only if asked); CounterInbox bulk "Ok all" (risky); DS showcase links (owner OK pending); EOD Z-report logo (deliberate); URL write-back (non-goal); storage folder silting report (someday); KDS bump-back recall (deliberate); chat→bell pings (deliberate, 031); notifications digest/quiet hours (someday).
 - Watch items carried: DB password ROTATION (owner decision); #67/#68/#69/#96 active-unpaid QA-era leftovers (owner decision).
 - Crons: 15-min webDevReview (job 430321) + DAILY deep pass (job 431587, 09:00 IST).
+
+---
+Task ID: 89 (completion — 15-min webDevReview round, trace 202610030824)
+Agent: glm-5.3 (cron webDevReview round)
+Task: Post-5.49.0 orientation + QA sweep, then the round's pair: every Reports section speaks CSV (the five chart-only sections get their exit) + one button grammar across all nine.
+
+Work Log:
+- Orientation clean (origin/main = 1cba04e = 5.49.0; tsc 0; dev 200). Task 88 confirmed fully closed. QA sweep: 13/13 routes, correct titles, 0 console/page errors. Stable round.
+- Focus rationale: audited exit paths — Inventory has the shopping-list CSV, EOD the day-ledger CSV, and Reports three of nine sections (daily sales, item ranking, guest ratings — since 5.3.x). Five sections were chart-only: Sales by hour, Payment mix, Cost & margin, Service mix, Drawer honesty. An owner carrying the week to an accountant read them off a screen. (Also checked: inventory auto-deduction ALREADY exists — 015 burns at completion, not placement; KDS chime has a mute; quiet hours stays parked — no push channel to quiet.) Pure UI, zero schema, zero API.
+- UI (ReportsScreen.tsx): five export callbacks over the EXISTING aggregations (hourly, payMix, agg, typeMix, shiftsInRange) — no recompute, the CSV cannot disagree with the chart it mirrors. exportHourly keeps all 24 buckets (the gaps ARE the quiet hours); exportPayMix appends the honest Unpaid row only when money is out; exportMargin is a self-describing Metric/Value block with the range + the shelf-cost caveat as a Note row (a number without its definition travels badly); exportTypeMix carries share-of-orders; exportShifts rows carry expected/counted/STORED variance/closed-by/note + a NET row. Buttons gated on data (no pill on an empty chart — an empty download is a lie).
+- [Mandatory styling]: all five wear the Day-by-day pill grammar verbatim (h-7, gold border/45, #FDF9F0 → solid gold hover, 0.97 press), each with aria-label + title naming the section; backfilled the same aria/title onto the older exportDaily pill (ranking/ratings already had theirs) — nine sections, one button voice.
+- E2E (real UI, blob-intercept via URL.createObjectURL patch): all 8 pills render on /reports. Last 30 days: payment CSV matches the pie to the paisa (UPI ×19 ₹6,205.50 / Cash ×10 ₹3,276.00 / Unpaid ×5 ₹1,801.80 — the same money-still-out Bills and the morning mirror speak); margin CSV matches the chips (29 paid, ₹1,515, ₹7,515, 83.2%); service 31/3; drawer CSV carries both sealed shifts (stored −7.00 and 0.00) + NET — with the OWASP formula-guard visible live ('-7.00); hourly CSV holds 13 earning hours, 8p peak ₹2,956.80 = the chart's drawn peak. One verification stumble was MINE, not the code's: parseFloat('"0.00"') is NaN — the first hourly check read every row as zero until re-parsed. Screenshot scripts/qa89-reports-csv.png. 13/13 routes, 0 errors, tsc 0.
+- Cloud truth: pure-UI round, zero writes — orders 36 / bells 3 / chat 5 / bucket 0, exactly as found. No truth script needed beyond the read-only census.
+
+Stage Summary:
+- 5.50.0 — every section speaks CSV. Surfaces: src/components/reports/ReportsScreen.tsx (5 exports + 5 pills + aria backfill) + public/sw.js + CHANGELOG.md + worklog.md (+1 screenshot). No migration, no API change, zero cloud writes.
+- The export arc is closed: every money/quality/honesty number the app shows can now leave the building through one shared, injection-safe door.
+- Remaining parked: drawer movements CSV (only if asked — note: drawer SHIFTS now export; the movements ledger is the parked sibling); CounterInbox bulk "Ok all" (risky); DS showcase links (owner OK pending); EOD Z-report logo (deliberate); URL write-back (non-goal); storage folder silting report (someday); KDS bump-back recall (deliberate); chat→bell pings (deliberate, 031); notifications digest/quiet hours (someday — still no push channel to quiet).
+- Watch items carried: DB password ROTATION (owner decision); #67/#68/#69/#96 active-unpaid QA-era leftovers (owner decision) — now exported honestly in the payment-mix CSV's Unpaid row too.
+- Crons: 15-min webDevReview (job 430321) + DAILY deep pass (job 431587, 09:00 IST).
