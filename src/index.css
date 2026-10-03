@@ -51,6 +51,25 @@ body {
 .sp-cta:focus-visible { outline: 2px solid var(--sp-gold-deep); outline-offset: 2px; }
 .sp-cta:disabled { opacity: 0.55; cursor: not-allowed; }
 
+/* v5.107.0 — the keyboard default ring. The sweep found the room half
+   invisible to the keyboard: the header chrome (go-back, the bell, order
+   history), every Bills row card, the floor's book actions, Reports' range
+   tabs — all Tab-reachable, none showing where focus landed. Every control
+   answers the Tab key with the gold ring now. The rule lives in @layer
+   base (unlayered author CSS would override even Tailwind's utilities,
+   flattening the rail pill's outline-none double-ring treatment), and
+   :where() keeps it at zero specificity INSIDE the layer — so any
+   per-button utility still wins untouched: the utility rings (Bills' CSV,
+   the inventory exports), .sp-cta's gold-deep, and the rail's ring-offset
+   pair that keeps its gold pill from melting into its own ring. Mouse
+   users never see it; the keyboard can see the whole room. */
+@layer base {
+  :where(button, a, [role='button'], [role='tab'], [role='switch'], [role='combobox'], [role='option'], select, summary):focus-visible {
+    outline: 2px solid var(--sp-gold);
+    outline-offset: 2px;
+  }
+}
+
 .sp-teal-btn {
   background-color: var(--sp-teal);
   color: #FFFFFF;
@@ -154,5 +173,88 @@ body {
 }
 @media (prefers-reduced-motion: reduce) {
   [style*="spStarPop"], [style*="spThanksRise"] { animation: none !important; }
+}
+
+/* v5.111.0 — the badge pop: one-shot scale when the count changes (the span
+   remounts via key={badge}). Uses the standalone `scale` property so the
+   keyframe never fights the parent's positioning translate. RM-stilled via
+   the block below — news arrives, nothing jumps. */
+@keyframes sp-badge-pop {
+  0% { scale: 0.6; }
+  60% { scale: 1.25; }
+  100% { scale: 1; }
+}
+.sp-badge-pop {
+  animation: sp-badge-pop 320ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* ── v5.109.0 — the still room: motion answers the OS, not the stylesheet ──
+   The audit counted the room's motion: 11 keyframes, and only the inline-style
+   family above ever answered prefers-reduced-motion. The class-driven half —
+   the skeleton shimmer (sp-shimmer, ~50 loading states) and the Tailwind
+   attention loops (animate-ping, animate-pulse, animate-bounce) — kept moving
+   for users whose OS asks for stillness. This block sits UNLAYERED on purpose
+   (the 5.107 law: unlayered author CSS beats the whole utilities layer), so a
+   plain class selector wins the cascade without a specificity fight; the
+   existing three blocks keep their !important against inline styles.
+   .animate-spin deliberately stays alive everywhere: a loading spinner IS the
+   state — frozen, it lies — and WCAG's concern is decorative motion, not
+   functional feedback. Under RM the skeletons stand still (still visible as
+   loading affordances), the pings and pulses sit as solid dots (Floor's
+   occupied dots, EOD's live dot, Messages' fresh row all still read), the
+   typing indicator holds its three dots. The room goes still; nothing goes
+   dark. */
+@media (prefers-reduced-motion: reduce) {
+  .sp-skeleton,
+  .sp-badge-pop,
+  .animate-ping,
+  .animate-pulse,
+  .animate-bounce {
+    animation: none !important;
+  }
+}
+
+/* ── v5.109.0 — the shortcut: the first Tab offers the way in ──────────────
+   The rail is 15 pills, the header a few more; a keyboard user tabbed through
+   ALL of it every screen change to reach the room. The first Tab now offers
+   the skip link — hidden until focused, then a gold chip on the teal rail.
+   It carries its OWN unlayered class instead of sr-only + focus:not-sr-only:
+   the custom .sr-only above is unlayered too, and it would beat Tailwind's
+   layered not-sr-only EVEN ON FOCUS — the same cascade law 5.107 learned,
+   working against us this time. The white ring (not gold) so the chip can't
+   melt into its own ring on the teal rail. Activation moves focus to #sp-main;
+   main takes tabIndex={-1} and outline-none (the whole-content UA ring that a
+   keyboard-adjacent programmatic focus can trigger is noise, not signal). */
+.sp-skip-link {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+.sp-skip-link:focus {
+  position: fixed;
+  top: 14px;
+  left: 14px;
+  z-index: 80;
+  width: auto;
+  height: auto;
+  margin: 0;
+  overflow: visible;
+  clip: auto;
+  background-color: var(--sp-gold);
+  color: #FFFFFF;
+  font-weight: 600;
+  font-size: 13.5px;
+  line-height: 1;
+  padding: 12px 18px;
+  border-radius: 12px;
+  box-shadow: 0 12px 28px rgba(15, 61, 62, 0.28);
+  outline: 2px solid #FFFFFF;
+  outline-offset: 2px;
 }
 

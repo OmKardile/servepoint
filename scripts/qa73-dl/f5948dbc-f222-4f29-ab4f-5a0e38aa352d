@@ -1,0 +1,13 @@
+﻿"Kitchen speed (fire → ready, IST)",""
+"Tickets timed","1"
+"Average","1h 16m"
+"Median","1h 16m"
+"Slowest","#55 · 1h 16m"
+"Over the 10-minute SLA","1"
+
+"Ticket","Fired (IST)","Ready (IST)","Duration","SLA"
+"#55","2 Oct, 5:45 pm","2 Oct, 7:01 pm","1h 16m","over"
+
+"The slow dish — fire-to-ready span of every timed ticket the dish rode on"
+"Item","Tickets timed","Average","Slowest ticket span","Own-clock average","Own-clock slowest","Own-clock tickets"
+"Flat White · Large","1","1h 16m","1h 16m","","",""

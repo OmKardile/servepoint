@@ -1,4 +1,5 @@
 import { supabase, isSupabaseConfigured } from './supabase';
+import { appTodayIso, appDayKey, appDayBoundsIso } from './appday';
 import type {
   AppNotification,
   AuditLogEntry,
@@ -150,6 +151,30 @@ export async function fetchOrders(tenantId: string, limit = 100): Promise<Order[
     return { ...rest, table_label: dining_tables?.table_number ?? null } as OrderRow;
   });
   return attachItems(rows, tenantId);
+}
+
+/**
+ * v5.82.0 — one ticket by id, for the floor's hold audit. When a held table's
+ * active_order_id misses the board's latest-100 window, this targeted read
+ * decides whether the hold is real (the ticket exists and is still live) or
+ * stale (the ticket was hard-deleted, so migration 011's release trigger never
+ * got its UPDATE and the hold outlived its own order). Returns null when the
+ * id resolves to nothing — a ghost pointer, PROVEN, not guessed. Items ride
+ * along through the same attachItems bridge fetchOrders uses, so callers get
+ * a complete Order and the audit judges status and payment, never the plate.
+ */
+export async function fetchOrderById(tenantId: string, orderId: string): Promise<Order | null> {
+  requireCloud();
+  const { data, error } = await supabase
+    .from('orders')
+    .select('*, dining_tables(table_number)')
+    .eq('id', orderId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+  const { dining_tables, ...rest } = data as OrderRow & { dining_tables?: { table_number: string } | null };
+  const row = { ...rest, table_label: dining_tables?.table_number ?? null } as OrderRow;
+  return (await attachItems([row], tenantId))[0] ?? null;
 }
 
 export interface NewOrderInput {
@@ -596,6 +621,72 @@ export async function deleteTable(tableId: string, tenantId: string): Promise<vo
 }
 
 /**
+ * v5.59.0 — the party moves. A seated party asks for another table and the
+ * LIVE ticket must move with them — until now the only path was cancel the
+ * ticket, re-key it, and hope the kitchen hadn't fired it.
+ *
+ * Mechanics (migration 011's engine does the floor work, not this function):
+ *   1. UPDATE orders.table_id → the trg_orders_sync_table trigger fires on
+ *      UPDATE OF table_id and occupies the NEW table (status 'occupied',
+ *      active_order_id = ticket). The floor's realtime subscription repaints
+ *      both cards from that one table row change.
+ *   2. The old table is released here — but ONLY if it still holds THIS
+ *      ticket (a manual free may have beaten us; never fight the staff —
+ *      the same courtesy the 011 release branch observes).
+ *   3. Re-check the target is still free immediately before the write: the
+ *      trigger occupies unconditionally, and two parties must never swap
+ *      seats through one stale picker row.
+ * Guest sessions are NOT migrated — the trail documents scans of a table's
+ * QR, and those scans happened at the old table. The ticket moves; the scan
+ * history stays where it was scanned (the drill says so).
+ */
+export async function moveOrderTable(
+  orderId: string,
+  fromTableId: string,
+  toTableId: string,
+  tenantId: string
+): Promise<void> {
+  requireCloud();
+
+  // 0) target re-check — the picker listed it free, the floor may have moved on
+  const { data: target, error: tgtErr } = await supabase
+    .from('dining_tables')
+    .select('id, status')
+    .eq('id', toTableId)
+    .eq('tenant_id', tenantId)
+    .single();
+  if (tgtErr) throw tgtErr;
+  if (!target || target.status !== 'available') {
+    throw new Error('That table is no longer free — pick another.');
+  }
+
+  // 1) point the ticket at the new table (011 trigger occupies it)
+  const { error: moveErr } = await supabase
+    .from('orders')
+    .update({ table_id: toTableId, updated_at: new Date().toISOString() })
+    .eq('id', orderId)
+    .eq('tenant_id', tenantId);
+  if (moveErr) throw moveErr;
+
+  // 2) release the old table only if THIS ticket still holds it
+  const { error: relErr } = await supabase
+    .from('dining_tables')
+    .update({ status: 'available' as const, active_order_id: null })
+    .eq('id', fromTableId)
+    .eq('tenant_id', tenantId)
+    .eq('active_order_id', orderId);
+  if (relErr) {
+    // put the ticket back — the floor must end this call exactly as it began
+    await supabase
+      .from('orders')
+      .update({ table_id: fromTableId, updated_at: new Date().toISOString() })
+      .eq('id', orderId)
+      .eq('tenant_id', tenantId);
+    throw relErr;
+  }
+}
+
+/**
  * Floor realtime: dining_tables + table_sessions (both on the supabase_realtime
  * publication since migration 011). Order events reach the floor indirectly —
  * the trg_orders_sync_table trigger UPDATEs the table row, which is itself a
@@ -657,8 +748,10 @@ export interface ReservationInput {
   partySize: number;
   /** Optional — the host may pick the table when the party walks in. */
   tableId?: string | null;
-  /** ISO instant of the promised arrival. IST has no DST, so the client
-   *  composes it as wall-clock +05:30 and the math is exact. */
+  /** ISO instant of the promised arrival. 5.98.0 — the client composes it
+   *  as wall-clock in the OWNER'S chosen reporting clock (src/lib/appday.ts
+   *  › appWallToInstant, Settings › Timezone); on every Indian device that
+   *  is +05:30 exactly as before, and the math stays DST-safe elsewhere. */
   slotAt: string;
   note?: string;
 }
@@ -971,7 +1064,17 @@ function pct(current: number, previous: number): number {
 
 export async function fetchDashboard(tenantId: string): Promise<DashboardData> {
   requireCloud();
-  const since = new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString();
+  /* v5.113.0 — the window aligns to LOCAL MIDNIGHT six days back, not a
+   * rolling 168h: the week card buckets are calendar days, and a rolling
+   * window would undercount the oldest bar by whatever part of that day
+   * fell outside the 168h. The today slice is unaffected (today begins at
+   * local midnight either way). Same day grammar as the today cards —
+   * toDateString local days; the reporting-tz flip is a Floor-book/CRM
+   * seam, the Dashboard has always read the browser's own days. */
+  const weekStart = new Date();
+  weekStart.setHours(0, 0, 0, 0);
+  weekStart.setDate(weekStart.getDate() - 6);
+  const since = weekStart.toISOString();
   const { data: orders, error } = await supabase
     .from('orders')
     .select('id, order_type, status, total, customer_name, created_at')
@@ -997,6 +1100,16 @@ export async function fetchDashboard(tenantId: string): Promise<DashboardData> {
 
   const todays = rows.filter((r) => new Date(r.created_at).toDateString() === todayKey);
   const yesterdays = rows.filter((r) => new Date(r.created_at).toDateString() === yestKey);
+
+  /* 5.99.0 — the counts join the revenue's grammar: cancelled never happened.
+   * "Total Order" read todays.length (ALL of the day's rows), so a day with 1
+   * real ticket and 17 QA-test cancellations said "18 orders" right above a
+   * revenue chart that (correctly) summed only the one. An owner computing
+   * ₹294 ÷ 18 got a fiction. New Customers had the same leak — a name on a
+   * ticket that never happened is not a customer either. Both now read the
+   * day's LIVE tickets, the same slice 5.94.0 gave Trending. */
+  const liveToday = todays.filter((r) => String(r.status) !== 'cancelled');
+  const liveYesterday = yesterdays.filter((r) => String(r.status) !== 'cancelled');
 
   const hourBuckets: Record<string, { dineIn: number; takeaway: number; delivery: number }> = {
     '9 AM': { dineIn: 0, takeaway: 0, delivery: 0 },
@@ -1024,19 +1137,74 @@ export async function fetchDashboard(tenantId: string): Promise<DashboardData> {
     revByType[type] += Number(r.total);
   });
 
-  const totalRevenue = revByType.dineIn + revByType.takeaway + revByType.delivery;
-  const uniqueToday = new Set(todays.map((r) => r.customer_name).filter(Boolean)).size;
-
-  const dishCounts = new Map<string, { count: number; veg?: boolean | null; image?: string | null }>();
-  todays.forEach((r) => {
-    const created = new Date(r.created_at).getTime();
-    void created;
+  /* v5.113.0 — the week is real. The query has walked seven days since the
+   * card shipped; until now everything except today was dropped on the
+   * floor and the Week view showed an honest stub instead of honest data.
+   * Seven complete local-day buckets, oldest first, the SAME live grammar
+   * (cancelled never happened) and the SAME typeMap — today's bucket must
+   * equal the today card or the two views disagree. One pass, no extra
+   * query: the buckets ride the rows the query already carried. */
+  const weekBuckets = [] as {
+    key: string;
+    label: string;
+    full: string;
+    dineIn: number;
+    takeaway: number;
+    delivery: number;
+  }[];
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    d.setDate(d.getDate() - i);
+    weekBuckets.push({
+      key: d.toDateString(),
+      label: i === 0 ? 'Today' : d.toLocaleDateString('en-IN', { weekday: 'short' }),
+      full: d.toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'short' }),
+      dineIn: 0,
+      takeaway: 0,
+      delivery: 0,
+    });
+  }
+  const weekIndex = new Map(weekBuckets.map((b, idx) => [b.key, idx]));
+  const weekLiveIds = new Set<string>();
+  rows.forEach((r) => {
+    if (String(r.status) === 'cancelled') return;
+    const idx = weekIndex.get(new Date(r.created_at).toDateString());
+    if (idx === undefined) return;
+    weekLiveIds.add(r.id);
+    const type = typeMap[String(r.order_type || 'dine_in').toLowerCase()] || 'dineIn';
+    weekBuckets[idx][type] += Number(r.total);
   });
+  const weeklyRevenue = weekBuckets.map((b) => ({
+    label: b.label,
+    full: b.full,
+    dineIn: b.dineIn,
+    takeaway: b.takeaway,
+    delivery: b.delivery,
+    total: b.dineIn + b.takeaway + b.delivery,
+  }));
+
+  const totalRevenue = revByType.dineIn + revByType.takeaway + revByType.delivery;
+  const uniqueToday = new Set(liveToday.map((r) => r.customer_name).filter(Boolean)).size;
+
+  /* 5.94.0 — Trending counts TODAY's plates, not the museum. The item read
+   *  below fetches wide (the fetchOrderCogs pattern), and until now nothing
+   *  sliced it: "Trending · Today" summed every order_item ever written —
+   *  all time, INCLUDING the cancelled tickets' never-happened lines (a
+   *  cafe that sold 46 items this week read "Flat White · 65" under a
+   *  TODAY header). The slice is the day's live ticket ids: cancelled never
+   *  happened, earlier days are history, and the header finally tells the
+   *  truth about the number under it. */
+  const todayLiveIds = new Set(
+    todays.filter((r) => String(r.status) !== 'cancelled').map((r) => r.id)
+  );
   const { data: todayItems } = await supabase
     .from('order_items')
     .select('name, qty, order_id')
     .eq('tenant_id', tenantId);
+  const dishCounts = new Map<string, { count: number; veg?: boolean | null; image?: string | null }>();
   (todayItems || []).forEach((it: any) => {
+    if (!todayLiveIds.has(it.order_id)) return;
     const meta = (items || []).find((m: any) => m.name === it.name);
     const prev = dishCounts.get(it.name) || { count: 0, veg: meta?.is_veg, image: meta?.image_url };
     prev.count += Number(it.qty) || 1;
@@ -1052,11 +1220,55 @@ export async function fetchDashboard(tenantId: string): Promise<DashboardData> {
       image_url: v.image,
     }));
 
-  const staffSales = (employees || []).slice(0, 4).map((e: any, i: number) => ({
-    name: (e.email || '').split('@')[0].replace(/[._]/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase()),
-    role: e.role === 'owner' ? 'Owner' : 'Cafe Staff',
-    sales: Math.round(totalRevenue * [0.42, 0.31, 0.17, 0.1][i] || 0),
-  }));
+  /* v5.113.0 — the week's plates, from the SAME wide order_items fetch (one
+   * query, two id-slices) and the SAME meta join. Top four like today; the
+   * card renders either list with one grammar. */
+  const weekDishCounts = new Map<
+    string,
+    { count: number; veg?: boolean | null; image?: string | null }
+  >();
+  (todayItems || []).forEach((it: any) => {
+    if (!weekLiveIds.has(it.order_id)) return;
+    const meta = (items || []).find((m: any) => m.name === it.name);
+    const prev =
+      weekDishCounts.get(it.name) || { count: 0, veg: meta?.is_veg, image: meta?.image_url };
+    prev.count += Number(it.qty) || 1;
+    weekDishCounts.set(it.name, prev);
+  });
+  const weeklyTrending = [...weekDishCounts.entries()]
+    .sort((a, b) => b[1].count - a[1].count)
+    .slice(0, 4)
+    .map(([name, v]) => ({
+      name,
+      tag: v.veg === false ? 'Signature' : 'Food',
+      orders: v.count,
+      image_url: v.image,
+    }));
+
+  /* 5.99.0 — the team card stops inventing money. It showed the workspace's
+   * members with "sales" = totalRevenue × [0.42, 0.31, 0.17, 0.1][i] — a
+   * hardcoded slice by list position. ₹123.00 was 42% of the day's revenue,
+   * not anything the person sold; orders carry no staff attribution at all.
+   * The card now says what IS true: real members, real roles, real tenure.
+   * The card's caption states the seam out loud. */
+  const team = (employees || [])
+    .slice()
+    .sort((a: any, b: any) => String(a.created_at || '').localeCompare(String(b.created_at || '')))
+    .slice(0, 4)
+    .map((e: any) => ({
+      name:
+        (e.email || '')
+          .split('@')[0]
+          .replace(/[._]/g, ' ')
+          .replace(/\b\w/g, (c: string) => c.toUpperCase()) || 'Team member',
+      role:
+        e.role === 'owner'
+          ? 'Owner'
+          : String(e.role || 'staff').replace(/\b\w/g, (c: string) => c.toUpperCase()),
+      since: e.created_at
+        ? new Date(e.created_at).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' })
+        : null,
+    }));
 
   return {
     hourlySales: Object.entries(hourBuckets).map(([hour, v]) => ({ hour, ...v })),
@@ -1065,15 +1277,17 @@ export async function fetchDashboard(tenantId: string): Promise<DashboardData> {
       { name: 'Takeaway', value: revByType.takeaway },
       { name: 'Delivery', value: revByType.delivery },
     ],
+    weeklyRevenue,
+    weeklyTrending,
     totalRevenue,
-    totalOrders: todays.length,
-    ordersTrendPct: pct(todays.length, yesterdays.length),
+    totalOrders: liveToday.length,
+    ordersTrendPct: pct(liveToday.length, liveYesterday.length),
     newCustomers: uniqueToday,
     customersTrendPct: pct(
       uniqueToday,
-      new Set(yesterdays.map((r) => r.customer_name).filter(Boolean)).size
+      new Set(liveYesterday.map((r) => r.customer_name).filter(Boolean)).size
     ),
-    bestEmployees: staffSales,
+    team,
     trendingDishes: trending,
   };
 }
@@ -1115,18 +1329,26 @@ export async function markNotificationRead(id: string): Promise<void> {
   if (error) throw error;
 }
 
-/** v5.40.0 — the header badge counts the truth: one cheap head-count of
- * unread rows. Best-effort by design (the badge is a courtesy — a failed
- * count just means no badge, never a broken screen). */
-export async function fetchUnreadNotificationCount(tenantId: string): Promise<number> {
+/** v5.103.0 — the badge counts the truth the OWNER asked for: one query
+ * pulls the category of every unread row, and the header does the prefs
+ * math (the data layer stays prefs-blind). Replaces the old all-category
+ * head-count, which counted bells the owner had muted. Best-effort by
+ * design (the badge is a courtesy — a failed count just means no badge,
+ * never a broken screen). */
+export async function fetchUnreadCategoryCounts(tenantId: string): Promise<Record<string, number>> {
   requireCloud();
-  const { count, error } = await supabase
+  const { data, error } = await supabase
     .from('notifications')
-    .select('id', { count: 'exact', head: true })
+    .select('category')
     .eq('tenant_id', tenantId)
     .eq('is_read', false);
   if (error) throw error;
-  return count ?? 0;
+  const counts: Record<string, number> = {};
+  for (const row of (data || []) as { category?: string }[]) {
+    const cat = String(row.category || 'unknown');
+    counts[cat] = (counts[cat] || 0) + 1;
+  }
+  return counts;
 }
 
 /** v5.40.0 — the bell rings live: notifications joined the realtime
@@ -1210,6 +1432,37 @@ export function subscribeMessagesRealtime(
       else if (status === 'TIMED_OUT' || status === 'CHANNEL_ERROR' || status === 'CLOSED') onState('offline');
       else onState('connecting');
     });
+  return () => {
+    void supabase.removeChannel(channel);
+  };
+}
+
+/** v5.108.0 — the chat unread feed's own realtime pulse (the rail badge's
+ *  clock). Distinct channel name from subscribeMessagesRealtime's
+ *  `messages-${tenantId}`: supabase-js dedupes channels by name and adding
+ *  postgres_changes callbacks to an already-subscribed channel throws, so
+ *  every consumer keeps its own name ('badge'/'list'/'shared' teach this).
+ *  Two tables suffice: a new line INSERTs and the 031 touch trigger
+ *  UPDATEs the room's preview — both ping the recount. Watermarks are
+ *  client-side upserts; they need no socket. */
+export function subscribeChatUnreadRealtime(
+  tenantId: string,
+  onPing: () => void
+): () => void {
+  requireCloud();
+  const channel = supabase
+    .channel(`chat-unread-${tenantId}`)
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'conversation_messages', filter: `tenant_id=eq.${tenantId}` },
+      () => onPing()
+    )
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'conversations', filter: `tenant_id=eq.${tenantId}` },
+      () => onPing()
+    )
+    .subscribe();
   return () => {
     void supabase.removeChannel(channel);
   };
@@ -1846,15 +2099,113 @@ export async function fetchRecentAdjustments(
   return (data || []) as StockAdjustment[];
 }
 
-/** Live stock board: shelf + deduction ledger + hand-made diary, realtime + RLS. */
+/* v5.77.0 — the bin's bill: the waste side of the 027 diary, aggregated.
+   Every spoilage / spillage / damage row with its SKU joined (name, unit,
+   cost-per-unit on file). Corrections are deliberately excluded — they
+   reconcile the shelf, they didn't feed the bin; deliveries are stock IN.
+   Value is computed at read time from |qty| × cost_per_unit — a SKU with
+   no cost on file reads as unvalued, never as a guessed rupee. */
+export interface WasteMove extends StockAdjustment {
+  inventory_items: { name: string; unit: string; cost_per_unit: number | null };
+}
+
+export async function fetchWasteMoves(tenantId: string): Promise<WasteMove[]> {
+  requireCloud();
+  const { data, error } = await supabase
+    .from('stock_adjustments')
+    .select(
+      'id, tenant_id, inventory_item_id, qty, reason, note, created_by_email, created_at, inventory_items!inner(name, unit, cost_per_unit)'
+    )
+    .eq('tenant_id', tenantId)
+    .in('reason', ['spoilage', 'spillage', 'damage'])
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  /* The FK is many-to-one (every diary row has exactly one SKU) so PostgREST
+     returns the embed as an OBJECT at runtime — but the generated types
+     can't know the cardinality and demand a cast. Normalize defensively:
+     if a future SDK ever hands the object over wrapped, unwrap row one. */
+  return ((data || []) as unknown as (StockAdjustment & { inventory_items: WasteMove['inventory_items'] | WasteMove['inventory_items'][] })[]).map(
+    (row) => ({
+      ...row,
+      inventory_items: Array.isArray(row.inventory_items) ? row.inventory_items[0] : row.inventory_items,
+    })
+  );
+}
+
+/** One paid order line, flattened for the shortlist (v5.78.0) — the raw row
+ *  computeTopMovers groups. Flattened here so the ledger shape never leaks
+ *  into the lib (the same boundary rule fetchWasteMoves obeys). */
+export interface PaidMoverLine {
+  order_id: string;
+  menu_item_id: string | null;
+  name: string;
+  qty: number;
+  unit_price: number;
+}
+
+/** The shortlist's raw material: every line of every PAID ticket in the last
+ *  `days` days. Paid truth mirrors isPaidTicket at the DB level (status ≠
+ *  cancelled AND payment_status = completed) — one definition, two floors.
+ *  The !inner embed on orders is a FILTER, not a join fetch: order_items
+ *  denormalize everything the rail needs. */
+export async function fetchPaidMoverLines(tenantId: string, days: number): Promise<PaidMoverLine[]> {
+  requireCloud();
+  const sinceIso = new Date(Date.now() - days * 86400000).toISOString();
+  const { data, error } = await supabase
+    .from('order_items')
+    .select(
+      'order_id, menu_item_id, name, qty, unit_price, orders!inner(status, payment_status, created_at)'
+    )
+    .eq('tenant_id', tenantId)
+    .neq('orders.status', 'cancelled')
+    .eq('orders.payment_status', 'completed')
+    .gte('orders.created_at', sinceIso);
+  if (error) throw error;
+  return ((data || []) as unknown as PaidMoverLine[]).map((r) => ({
+    order_id: r.order_id,
+    menu_item_id: r.menu_item_id ?? null,
+    name: r.name,
+    qty: Number(r.qty) || 0,
+    unit_price: Number(r.unit_price) || 0,
+  }));
+}
+
+/**
+ * v5.114.0 — the rail's stock count: every SKU at or below its reorder
+ * point, INCLUDING out-of-stock (an out item is the most urgent member of
+ * the set, not a separate quieter story). Two columns, no ids — the same
+ * client-side filter the Inventory shelf's level tones speak, so the rail
+ * badge and the shelf can never disagree about an item.
+ */
+export async function fetchLowStockCount(tenantId: string): Promise<number> {
+  requireCloud();
+  const { data, error } = await supabase
+    .from('inventory_items')
+    .select('current_stock, reorder_point')
+    .eq('tenant_id', tenantId);
+  if (error) throw error;
+  const rows = (data || []) as { current_stock: number; reorder_point: number }[];
+  return rows.filter((r) => Number(r.current_stock) <= Number(r.reorder_point)).length;
+}
+
+/**
+ * Live stock board: shelf + deduction ledger + hand-made diary, realtime + RLS.
+ *
+ * `channelTag` — v5.114.0: supabase-js dedupes channels by NAME, and adding
+ * postgres_changes callbacks to an already-subscribed channel THROWS (the
+ * unread.ts 'badge' lesson). The rail's stock feed and this screen's board
+ * subscription both tap the same three tables, so each consumer owns a
+ * channel name of its own — two small taps, never one shared room.
+ */
 export function subscribeInventoryRealtime(
   tenantId: string,
   onPing: () => void,
-  onState: (s: RealtimeState) => void
+  onState: (s: RealtimeState) => void,
+  channelTag = 'screen'
 ): () => void {
   requireCloud();
   const channel = supabase
-    .channel(`inventory-${tenantId}`)
+    .channel(`inventory-${tenantId}-${channelTag}`)
     .on(
       'postgres_changes',
       { event: '*', schema: 'public', table: 'inventory_items', filter: `tenant_id=eq.${tenantId}` },
@@ -2137,20 +2488,16 @@ export interface TodayCostMargin {
 
 /**
  * Today's cost & margin for the Dashboard "right now" view — one query on
- * v_order_cogs (018) bounded to the IST calendar day, same money basis as
- * Reports/Close-out: margin on PAID, non-cancelled tickets only.
+ * v_order_cogs (018) bounded to the reporting calendar day (5.97.0: the
+ * Settings timezone via src/lib/appday.ts — Asia/Kolkata by default), same
+ * money basis as Reports/Close-out: margin on PAID, non-cancelled tickets.
  */
 export async function fetchTodayCostMargin(tenantId: string): Promise<TodayCostMargin> {
   requireCloud();
-  // IST calendar-day bounds (same math as Reports/Close-out)
-  const todayIso = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Asia/Kolkata',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(new Date());
-  const start = new Date(`${todayIso}T00:00:00+05:30`);
-  const end = new Date(start.getTime() + 24 * 3600 * 1000);
+  // Reporting-day bounds (same math as Reports/Close-out)
+  const { startIso, endIso } = appDayBoundsIso(appTodayIso());
+  const start = new Date(startIso);
+  const end = new Date(endIso);
   const { data, error } = await supabase
     .from('v_order_cogs')
     .select('status, payment_status, total, tax_amount, cogs')
@@ -2202,6 +2549,52 @@ export async function fetchOrderOfferTitle(
   return nested?.title ?? null;
 }
 
+/* ── The offer's scorecard (5.71.0) — offers finally answer for themselves.
+ * 016 wrote every redemption into a ledger row (UNIQUE(order_id), the
+ * discount's exact paise) but no surface ever read them as a season: the
+ * owner could create and pause offers yet never see which one performed.
+ * One bounded read joins the redemption ledger to its offer and ticket. */
+
+export interface OfferRedemptionRow {
+  offerId: string;
+  title: string;
+  discountType: string;
+  discountValue: number;
+  isActive: boolean;
+  /** the paise the offer took off THIS ticket (the ledger's stored truth) */
+  discountAmount: number;
+  /** the total the ticket walked in with (null on a rare orphaned ticket) */
+  orderTotal: number | null;
+  createdAt: string;
+}
+
+export async function fetchOfferRedemptions(tenantId: string, limit = 500): Promise<OfferRedemptionRow[]> {
+  requireCloud();
+  const { data, error } = await supabase
+    .from('offer_redemptions')
+    .select('offer_id, discount_amount, created_at, offers(title, discount_type, discount_value, is_active), orders(total)')
+    .eq('tenant_id', tenantId)
+    .order('created_at', { ascending: false })
+    .limit(limit);
+  if (error) throw error;
+  return ((data || []) as {
+    offer_id: string;
+    discount_amount: number;
+    created_at: string;
+    offers?: { title?: string; discount_type?: string; discount_value?: number; is_active?: boolean } | null;
+    orders?: { total?: number } | null;
+  }[]).map((r) => ({
+    offerId: r.offer_id,
+    title: r.offers?.title ?? 'an offer since gone',
+    discountType: r.offers?.discount_type ?? 'percent',
+    discountValue: Number(r.offers?.discount_value ?? 0),
+    isActive: r.offers?.is_active ?? false,
+    discountAmount: Number(r.discount_amount ?? 0),
+    orderTotal: r.orders?.total != null ? Number(r.orders.total) : null,
+    createdAt: r.created_at,
+  }));
+}
+
 export interface ReceiptPayment {
   method: string;
   amount: number;
@@ -2238,6 +2631,169 @@ export async function fetchOrderPayment(
     paidAt: String(row.created_at || ''),
     confirmedByEmail: row.confirmed_by_email ?? null,
   };
+}
+
+/* ── Split bills (5.63.0) — the ledger already holds one row per payment;
+ *    a ticket may now be SETTLED across several of them. Non-covering parts
+ *    are plain member inserts (RLS "payments member all"); the covering part
+ *    rides the guarded sp_record_payment, which flips the order exactly once,
+ *    when the last part lands. Zero migration — 007's table was built for
+ *    this, the client simply stopped assuming one row per ticket. */
+
+/** ALL ledger rows for an order, oldest first. A one-shot ticket sees one
+ * row; a split ticket sees N. Fails soft (empty list) — the ledger is
+ * progress display, never the ticket's own truth (that lives on orders). */
+export async function fetchOrderPayments(
+  tenantId: string,
+  orderId: string,
+): Promise<ReceiptPayment[]> {
+  requireCloud();
+  const { data, error } = await supabase
+    .from('payments')
+    .select('method, amount, confirmed_by_email, created_at')
+    .eq('tenant_id', tenantId)
+    .eq('order_id', orderId)
+    .order('created_at', { ascending: true });
+  if (error || !data) return [];
+  return (
+    data as {
+      method: string;
+      amount: number;
+      confirmed_by_email: string | null;
+      created_at: string;
+    }[]
+  ).map((row) => ({
+    method: String(row.method || ''),
+    amount: Number(row.amount ?? 0),
+    paidAt: String(row.created_at || ''),
+    confirmedByEmail: row.confirmed_by_email ?? null,
+  }));
+}
+
+/** Records ONE NON-COVERING part of a split: a ledger row and nothing else —
+ * the order stays honestly pending until a later part covers the ticket.
+ * Amount/positive are re-guarded here (the table CHECK also holds). */
+export async function insertPartialPayment(
+  tenantId: string,
+  orderId: string,
+  method: PaymentMethod,
+  amount: number,
+  actorEmail: string,
+): Promise<void> {
+  requireCloud();
+  if (!(amount > 0)) throw new Error('Payment amount must be greater than zero.');
+  const { error } = await supabase.from('payments').insert({
+    tenant_id: tenantId,
+    order_id: orderId,
+    method,
+    amount,
+    status: 'paid',
+    confirmed_by_email: actorEmail,
+  });
+  if (error) throw error;
+}
+
+/** Paid-so-far per order, bounded to the ids you pass (the unpaid column) —
+ * feeds the "₹X in · ₹Y open" badges on the Bills list. */
+export async function fetchOpenPaymentSums(
+  tenantId: string,
+  orderIds: string[],
+): Promise<Map<string, number>> {
+  const map = new Map<string, number>();
+  if (!tenantId || orderIds.length === 0) return map;
+  requireCloud();
+  const { data, error } = await supabase
+    .from('payments')
+    .select('order_id, amount')
+    .eq('tenant_id', tenantId)
+    .in('order_id', orderIds);
+  if (error || !data) return map;
+  for (const r of data as { order_id: string; amount: number }[]) {
+    map.set(r.order_id, (map.get(r.order_id) || 0) + Number(r.amount || 0));
+  }
+  return map;
+}
+
+/** Ledger rows whose money moved inside a window (5.64.0) — Reports' pay-mix
+ * reads each PART under its own method instead of attributing a split ticket's
+ * whole total to whichever method covered the balance. Fails soft (empty). */
+export async function fetchPaymentsInRange(
+  tenantId: string,
+  startIso: string | null,
+  endIso: string,
+): Promise<(ReceiptPayment & { orderId: string })[]> {
+  requireCloud();
+  let q = supabase
+    .from('payments')
+    .select('order_id, method, amount, confirmed_by_email, created_at')
+    .eq('tenant_id', tenantId)
+    .lt('created_at', endIso)
+    .order('created_at', { ascending: true });
+  if (startIso) q = q.gte('created_at', startIso);
+  const { data, error } = await q;
+  if (error || !data) return [];
+  return (
+    data as {
+      order_id: string;
+      method: string;
+      amount: number;
+      confirmed_by_email: string | null;
+      created_at: string;
+    }[]
+  ).map((row) => ({
+    orderId: String(row.order_id || ''),
+    method: String(row.method || ''),
+    amount: Number(row.amount ?? 0),
+    paidAt: String(row.created_at || ''),
+    confirmedByEmail: row.confirmed_by_email ?? null,
+  }));
+}
+
+/* ── Kitchen speed (5.67.0): the status-hop ledger, read raw ───────────────── */
+
+export interface StatusHop {
+  orderId: string;
+  fromStatus: string;
+  toStatus: string;
+  atIso: string;
+}
+
+/**
+ * Raw status hops for a window — 007's order_status_history, the
+ * trigger-written trail of every status transition (placed → fired → ready →
+ * done). Reports computes the kitchen-speed story from these hops; this
+ * reader stays dumb on purpose. Read is bounded to the window (the caller
+ * adds a tail so a ticket that fired just after midnight still lands),
+ * tenant-scoped by RLS, and fail-soft like every Reports sidecar.
+ */
+export async function fetchStatusHopsInRange(
+  tenantId: string,
+  startIso: string | null,
+  endIso: string,
+): Promise<StatusHop[]> {
+  requireCloud();
+  let q = supabase
+    .from('order_status_history')
+    .select('order_id, from_status, to_status, created_at')
+    .eq('tenant_id', tenantId)
+    .lt('created_at', endIso)
+    .order('created_at', { ascending: true });
+  if (startIso) q = q.gte('created_at', startIso);
+  const { data, error } = await q;
+  if (error || !data) return [];
+  return (
+    data as {
+      order_id: string;
+      from_status: string;
+      to_status: string;
+      created_at: string;
+    }[]
+  ).map((row) => ({
+    orderId: String(row.order_id || ''),
+    fromStatus: String(row.from_status || ''),
+    toStatus: String(row.to_status || ''),
+    atIso: String(row.created_at || ''),
+  }));
 }
 
 /* ── Guest feedback (migration 019, Task 50) ───────────────────────────────── */
@@ -2281,19 +2837,12 @@ export async function fetchFeedbackStats(tenantId: string): Promise<FeedbackStat
     orders?: { order_number?: number } | null;
   }[];
 
-  const todayKey = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Asia/Kolkata',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(new Date());
-  const isToday = (iso: string) =>
-    new Intl.DateTimeFormat('en-CA', {
-      timeZone: 'Asia/Kolkata',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-    }).format(new Date(iso)) === todayKey;
+  /* v5.106.0 — "today" rides the reporting clock (appday): the same voice
+     the Dashboard's Guest love card and the Reports screen speak. The old
+     bucket was hardcoded Asia/Kolkata, so on a non-IST reporting day the
+     card counted a different "today" than the screen it sits on. */
+  const todayKey = appTodayIso();
+  const isToday = (iso: string) => appDayKey(iso) === todayKey;
 
   const stars = { one: 0, two: 0, three: 0, four: 0, five: 0 };
   let sum = 0;
@@ -2470,12 +3019,17 @@ export interface FeedbackRow {
   comment: string | null;
   created_at: string;
   order_number: number;
+  /** 5.70.0 — the guest identity the ticket carried (null on anonymous
+   *  takeaways): the recover list can name WHO to call back, not just
+   *  WHICH ticket went wrong. */
+  customer_name?: string | null;
+  customer_phone?: string | null;
 }
 
 export async function fetchFeedbackRows(tenantId: string, limit = 500): Promise<FeedbackRow[]> {
   const { data, error } = await supabase
     .from('order_feedback')
-    .select('rating, comment, created_at, orders(order_number)')
+    .select('rating, comment, created_at, orders(order_number, customer_name, customer_phone)')
     .eq('tenant_id', tenantId)
     .order('created_at', { ascending: false })
     .limit(limit);
@@ -2484,11 +3038,13 @@ export async function fetchFeedbackRows(tenantId: string, limit = 500): Promise<
     rating: number;
     comment: string | null;
     created_at: string;
-    orders?: { order_number?: number } | null;
+    orders?: { order_number?: number; customer_name?: string | null; customer_phone?: string | null } | null;
   }[]).map((r) => ({
     rating: r.rating,
     comment: r.comment,
     created_at: r.created_at,
     order_number: r.orders?.order_number ?? 0,
+    customer_name: r.orders?.customer_name ?? null,
+    customer_phone: r.orders?.customer_phone ?? null,
   }));
 }

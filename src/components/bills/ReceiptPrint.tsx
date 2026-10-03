@@ -1,5 +1,6 @@
 import { formatMoney } from '../../lib/prefs';
 import { printHiddenFrame } from '../../lib/printFrame';
+import { BOOKING_TZ } from '../../lib/bookingday';
 
 /**
  * Customer receipt — thermal 80mm print view (Task 49).
@@ -11,7 +12,11 @@ import { printHiddenFrame } from '../../lib/printFrame';
  * 5% GST as 2.5% + 2.5%.
  */
 
-const IST_TZ = 'Asia/Kolkata';
+/* v5.106.0 — the receipt is a legal record, so it keeps the DB's clock
+ * (BOOKING_TZ, the same Asia/Kolkata that migrations 030/032 compose in and
+ * India's GST filings speak). It deliberately does NOT follow the owner's
+ * reporting-timezone choice — a printed tax document must not shift with a
+ * settings toggle. The printed "IST" suffix stays unconditional: correct. */
 
 export interface ReceiptItem {
   name: string;
@@ -40,6 +45,10 @@ export interface ReceiptOpts {
   paymentLabel: string | null;
   paidAt?: string | null;
   isPaid: boolean;
+  /** 5.63.0 split bills — every ledger row of a settled ticket, oldest first.
+   *  Present with 2+ rows → the payment block prints one PAID line per part
+   *  instead of the single-method line. Absent/1 row → byte-identical receipt. */
+  splitPayments?: { label: string; amount: number }[] | null;
   printedBy?: string | null;
   /** v5.29.0 — the café's face (migration 024's logo_url) atop the receipt
    *  header. NULL/absent → byte-identical pre-5.29 header: no tile, no
@@ -67,7 +76,7 @@ const esc = (s: string): string =>
 
 const istDateTime = (iso: string): string =>
   new Intl.DateTimeFormat('en-IN', {
-    timeZone: IST_TZ,
+    timeZone: BOOKING_TZ,
     day: '2-digit',
     month: 'short',
     year: 'numeric',
@@ -78,7 +87,7 @@ const istDateTime = (iso: string): string =>
 
 const istTime = (iso: string): string =>
   new Intl.DateTimeFormat('en-IN', {
-    timeZone: IST_TZ,
+    timeZone: BOOKING_TZ,
     hour: '2-digit',
     minute: '2-digit',
     hour12: false,
@@ -123,12 +132,21 @@ export function buildReceiptHtml(opts: ReceiptOpts): string {
         )
       : '';
 
+  const split = (opts.splitPayments || []).filter((p) => p.amount > 0);
   const paymentBlock = opts.isPaid
-    ? row(
-        `PAID${opts.paymentLabel ? ` · ${esc(opts.paymentLabel)}` : ''}`,
-        opts.paidAt ? istTime(opts.paidAt) : '',
-        true,
-      )
+    ? split.length > 1
+      ? `${split
+          .map((p) => row(`PAID · ${esc(p.label)}`, formatMoney(p.amount)))
+          .join('')}${row(
+          'SETTLED',
+          opts.paidAt ? istTime(opts.paidAt) : '',
+          true,
+        )}`
+      : row(
+          `PAID${opts.paymentLabel ? ` · ${esc(opts.paymentLabel)}` : ''}`,
+          opts.paidAt ? istTime(opts.paidAt) : '',
+          true,
+        )
     : `<div style="padding:2.5px 0;font-weight:800;">PAYMENT DUE</div>`;
 
   const metaBits = [

@@ -1,40 +1,178 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Repeat } from 'lucide-react';
+import { CircleOff, Repeat, RotateCcw } from 'lucide-react';
 import {
   Armchair,
+  CircleAlert,
   Coffee,
   Croissant,
   CupSoda,
   IceCreamCone,
   Loader2,
+  MessageSquare,
+  MessageSquarePlus,
   Minus,
   PackageOpen,
   Pizza,
   Plus,
+  Search,
   ShoppingBag,
   Soup,
+  UserCheck,
   UtensilsCrossed,
   X,
+  Zap,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
-import type { Category, MenuItem, MenuItemVariant, Offer, OrderType } from '../../types';
-import { createOrder, fetchAddons, fetchCategories, fetchMenuItemAddonIds, fetchMenuItems, fetchMenuVariants, fetchOffers, fetchTables, type DiningTable } from '../../lib/api';
+import type { Category, Customer, CustomerStats, MenuItem, MenuItemVariant, Offer, OrderType } from '../../types';
+import { createOrder, fetchAddons, fetchCategories, fetchCustomerOrders, fetchCustomerStats, fetchCustomers, fetchInventory, fetchMenuItemAddonIds, fetchMenuItems, fetchMenuVariants, fetchOffers, fetchPaidMoverLines, fetchRecipeLines, fetchTables, updateMenuItem, type DiningTable, type InventoryItem, type RecipeLine } from '../../lib/api';
+import { computeTopMovers, MOVER_WINDOW_DAYS, type Mover } from '../../lib/movers';
+import { shelfCoverage, shelfTone, shelfVoice, type ShelfCoverage } from '../../lib/shelf';
 import { CounterInbox } from './CounterInbox';
 import { useTenant } from '../../lib/tenant';
+import { useDialogA11y } from '../../lib/useDialogA11y';
 import { formatMoney } from '../../lib/prefs';
+import { computeUsual, USUAL_WINDOW } from '../../lib/usual';
 import { useUi } from '../../store/session';
 import { cartTotal, offerDiscount, useCart } from '../../store/cart';
 import { ItemDetailModal } from './ItemDetailModal';
 import { VegMark } from '../shell/VegMark';
+import { MarkHit } from '../shell/MarkHit';
+import { EmptyState } from '../shell/EmptyState';
 
 /**
  * Food & Drinks (Figma Food_&_Drinks_219-30044 / 219-29357 / Add_to_Order_219-30062 /
  * 219-26844 skeleton / Empty_State_219-29868):
  * categories grid of sage photo cards → items grid (gold prices, gold selected card)
  * → item detail modal → floating order pill + review drawer with GST 5% checkout.
+ *
+ * v5.119.0 — the first door learns to say why: the shell search's oldest
+ * consumer now keeps the box's promise level-honest (dynamic placeholder —
+ * "Search categories…" vs "Search {category}…"), its empty states distinguish
+ * a search miss from an empty catalog (what was searched, what the search
+ * reaches, and a Clear search way out), and surviving names paint their
+ * matched span gold (MarkHit — the rooms/shelf treatment, now menu-wide).
  */
 
 /* ────────────────────────────── helpers ────────────────────────────── */
+
+/* ── v5.78.0 — THE COUNTER'S SHORTLIST: the week's paid movers, one tap each.
+   The store-wide sibling of the regular's usual: the usual names what ONE
+   guest keeps ordering, the shortlist names what the ROOM keeps ordering.
+   A speed surface — no category, no modal, one tap and the line is in. */
+
+interface MoverEntry {
+  mover: Mover;
+  item: MenuItem;
+  /** The chip rides the dish AS THE CARD PRINTS IT — the base price, no
+   *  size inferred. The counter never silently upsizes a guest (the house
+   *  rule the usual's well already obeys): a size is a conscious modal pick. */
+  price: number;
+}
+
+function RushRail({
+  entries,
+  shelf,
+  onTap,
+}: {
+  entries: MoverEntry[];
+  /* 5.91.0 — the shelf's answer per dish (null = the shelf hasn't been read:
+     the line stays silent, never an invented number). */
+  shelf: Map<string, ShelfCoverage>;
+  onTap: (e: MoverEntry) => void;
+}): React.ReactElement | null {
+  if (entries.length === 0) return null;
+  return (
+    <section
+      className="mb-5 rounded-2xl border border-[#EAD9BE] bg-[#FDF9F0] p-4"
+      aria-label="The counter's shortlist"
+    >
+      <div className="mb-1 flex items-center justify-between gap-2">
+        <h2 className="flex items-center gap-1.5 text-[15px] font-bold text-[#1A1A1A]">
+          <Zap size={15} aria-hidden className="text-[#8A5A00]" />
+          The counter's shortlist
+        </h2>
+        <span className="rounded-full bg-[#F3E8CF] px-2 py-0.5 text-[10.5px] font-bold tabular-nums text-[#8A5A00]">
+          last {MOVER_WINDOW_DAYS} days
+        </span>
+      </div>
+      <p className="mb-3 text-[11.5px] text-[#969696]">
+        The week's movers by paid tickets — one tap, straight into the cart at the card price.
+      </p>
+      <div className="flex flex-wrap gap-2">
+        {entries.map((e, i) => {
+          const soldOut = e.item.is_available === false;
+          const label = e.item.name;
+          return (
+            <button
+              key={e.mover.menuItemId}
+              type="button"
+              onClick={() => onTap(e)}
+              aria-label={
+                soldOut
+                  ? `${e.item.name}, sold out — open it to put it back on the menu`
+                  : `Add ${label} to order — ${e.mover.units} sold this week, ${formatMoney(e.price)}`
+              }
+              className={`flex items-center gap-2.5 rounded-xl border border-[#E3E7E0] bg-[#FBFAF7] px-3 py-2 text-left transition hover:-translate-y-0.5 hover:border-[#B88E2F] hover:shadow-sm active:translate-y-0 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#967221] ${
+                soldOut ? 'opacity-60' : ''
+              }`}
+            >
+              <span
+                className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[11.5px] font-bold tabular-nums ${
+                  i === 0 ? 'bg-[#B88E2F] text-white' : 'bg-[#F3E8CF] text-[#8A6A1F]'
+                }`}
+                aria-hidden
+              >
+                {i + 1}
+              </span>
+              <span className="text-left">
+                <span className="block text-[13px] font-semibold leading-tight text-[#1F3A38]">
+                  {e.item.name}
+                  {soldOut && (
+                    <span className="ml-1.5 rounded-full bg-[#FDF3F2] px-1.5 py-0.5 align-middle text-[9.5px] font-bold uppercase text-[#B4483C]">
+                      sold out
+                    </span>
+                  )}
+                </span>
+                <span className="block text-[11px] tabular-nums text-[#969696]">
+                  ×{e.mover.units} this week · {e.mover.tickets}{' '}
+                  {e.mover.tickets === 1 ? 'ticket' : 'tickets'}
+                </span>
+                {/* 5.91.0 — the shelf's voice at the moment of selling: the same
+                    answer the inventory board speaks, in the board's own tones
+                    (green comfortable · amber low · red out · grey can't-say).
+                    A dish with no recipe stays silent — silence, not zero. */}
+                {(() => {
+                  const c = shelf.get(e.mover.menuItemId);
+                  if (!c) return null;
+                  const v = shelfVoice(c);
+                  if (!v) return null;
+                  return (
+                    <span
+                      className="mt-0.5 block text-[10.5px] font-semibold tabular-nums"
+                      style={{ color: shelfTone(c) }}
+                      title={
+                        c.unknown
+                          ? 'A recipe SKU is off the shelf — the shelf cannot answer.'
+                          : c.coverage === 0
+                            ? `The thinnest recipe SKU (${c.thin?.name || 'a SKU'}) is out — the shelf cannot make another.`
+                            : `The shelf can make about ${c.coverage} more — the thinnest recipe SKU (${c.thin?.name || 'a SKU'}) decides.`
+                      }
+                    >
+                      {v}
+                    </span>
+                  );
+                })()}
+              </span>
+              <span className="text-[12px] font-bold tabular-nums text-[#B88E2F]">
+                {formatMoney(e.price)}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
 
 function categoryIcon(name: string): LucideIcon {
   const n = name.toLowerCase();
@@ -54,6 +192,36 @@ const ORDER_TYPES: { value: OrderType; label: string }[] = [
 ];
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
+
+/** What the drawer knows about the phone being keyed — CRM identity +
+ *  ledger facts + the guest's most-ordered dish, matched against the live menu.
+ *  v5.74.0 — the usual's NAME and SIZE now come from the ONE shared truth in
+ *  src/lib/usual.ts (paid tickets only, 50-ticket window, deterministic
+ *  tie-breaks) — the same definition the guest drawer's well speaks. */
+interface RegularInfo {
+  crm: Customer | null;
+  stats: CustomerStats | null;
+  usual: { name: string; qty: number; item: MenuItem | null } | null;
+}
+
+/** Digits-only phone key — the ledger stores phones as typed ("98765 43210"
+ *  lives beside "9876543210"), so recognition normalizes; +91 prefixes drop. */
+const phoneKey = (p: string): string => {
+  const d = p.replace(/\D/g, '');
+  return d.length > 10 ? d.slice(-10) : d;
+};
+
+/** "last seen today / yesterday / 2 Oct" — the book speaks in days, not timestamps. */
+function fmtLastSeen(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const now = new Date();
+  if (d.toDateString() === now.toDateString()) return 'today';
+  const yest = new Date(now);
+  yest.setDate(now.getDate() - 1);
+  if (d.toDateString() === yest.toDateString()) return 'yesterday';
+  return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+}
 
 /** Teal strip bound to cart.tableId (v5.18.0): which table this cart is
  *  seated at, one-tap unassign, honest hint that guests can also scan the
@@ -98,22 +266,18 @@ function TablePrelinkStrip(): React.ReactElement | null {
 
 /* ─────────────────────────── presentational bits ─────────────────────────── */
 
-const EmptyState: React.FC<{ icon: LucideIcon; title: string; body: string }> = ({
-  icon: Icon,
-  title,
-  body,
-}) => (
-  <div className="flex flex-col items-center justify-center px-6 py-16 text-center">
-    <span
-      aria-hidden
-      className="flex h-20 w-20 items-center justify-center rounded-full bg-[#EAF0EC] text-[#0F3D3E]"
-    >
-      <Icon size={34} strokeWidth={1.6} />
-    </span>
-    <h3 className="mt-4 text-base font-bold text-[#1A1A1A]">{title}</h3>
-    <p className="mt-1 max-w-sm text-[13px] leading-relaxed text-[#6B6B6B]">{body}</p>
-  </div>
-);
+/* v5.119.0 — the gold glint reached the menu; v5.120.0 — the component
+ * itself moved to src/components/shell/MarkHit.tsx (one truth for every
+ * search surface — the rooms Mark and the shelf ShelfMark live there
+ * too). This file imports it like any other shell primitive.
+ * v5.121.0 — the honest-miss layout followed the same arc: the private
+ * EmptyState born here in 5.119.0 now lives in
+ * src/components/shell/EmptyState.tsx (Bills' misses speak the same
+ * voice), and this file imports it like any other shell primitive.
+ * v5.122.0 — the count line reaches the menu (Bills' house pattern):
+ * while a search narrows either grid, a badge says how much of the pool
+ * the term captured — categories at the grid level, dishes inside one
+ * (the pool = the open category, Veg already applied). */
 
 const SkeletonGrid: React.FC<{ count?: number; withCircle?: boolean }> = ({
   count = 8,
@@ -133,10 +297,13 @@ const SkeletonGrid: React.FC<{ count?: number; withCircle?: boolean }> = ({
   </div>
 );
 
-const CategoryCard: React.FC<{ category: Category; onOpen: (c: Category) => void }> = ({
-  category,
-  onOpen,
-}) => {
+const CategoryCard: React.FC<{
+  category: Category;
+  count: number;
+  pulled: number;
+  query?: string;
+  onOpen: (c: Category) => void;
+}> = ({ category, count, pulled, query, onOpen }) => {
   const [imgFailed, setImgFailed] = useState(false);
   const Icon = categoryIcon(category.name);
   const showImage = Boolean(category.image_url) && !imgFailed;
@@ -163,7 +330,16 @@ const CategoryCard: React.FC<{ category: Category; onOpen: (c: Category) => void
           <Icon size={52} strokeWidth={1.6} />
         </span>
       )}
-      <span className="mt-4 text-[15px] font-bold text-[#1A1A1A]">{category.name}</span>
+      <span className="mt-4 text-[15px] font-bold text-[#1A1A1A]">
+        <MarkHit text={category.name} query={query ?? ''} />
+      </span>
+      {/* 5.95.0 — the card says what it holds: an honest item count, and when
+          some of them are pulled the caption names that too (a "3 items" card
+          that opens onto one sellable dish was a small lie). */}
+      <span className="mt-0.5 text-[12px] font-medium text-[#5F6B63]">
+        {count} {count === 1 ? 'item' : 'items'}
+        {pulled > 0 ? ` · ${pulled} pulled` : ''}
+      </span>
     </button>
   );
 };
@@ -171,43 +347,45 @@ const CategoryCard: React.FC<{ category: Category; onOpen: (c: Category) => void
 const ItemCard: React.FC<{
   item: MenuItem;
   selected: boolean;
+  query?: string;
   onSelect: (item: MenuItem) => void;
   onAdd: (item: MenuItem) => void;
-}> = ({ item, selected, onSelect, onAdd }) => {
+}> = ({ item, selected, query, onSelect, onAdd }) => {
   const [imgFailed, setImgFailed] = useState(false);
   const Icon = categoryIcon(item.name);
   const showImage = Boolean(item.image_url) && !imgFailed;
+  /* v5.57.0 — a pulled dish is no longer a wall: the card still opens (first
+     tap), the modal becomes the way back. Only order-building is blocked. */
   const unavailable = item.is_available === false;
   const detail = (item.description || '').trim();
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (unavailable) return;
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
-      onSelect(item);
+      if (unavailable) onAdd(item);
+      else onSelect(item);
     }
   };
 
   return (
     <div
       role="button"
-      tabIndex={unavailable ? -1 : 0}
+      tabIndex={0}
       aria-pressed={selected}
-      aria-disabled={unavailable || undefined}
       aria-label={
         unavailable
-          ? `${item.name}, unavailable`
+          ? `${item.name}, sold out — open to put it back on the menu`
           : `${item.name}, ${formatMoney(item.price)}${
               item.is_veg === true ? ', vegetarian' : item.is_veg === false ? ', non-vegetarian' : ''
             }${selected ? ', selected' : ''}`
       }
-      onClick={() => !unavailable && onSelect(item)}
+      onClick={() => (unavailable ? onAdd(item) : onSelect(item))}
       onKeyDown={handleKeyDown}
       className={`flex cursor-pointer flex-col items-center rounded-2xl border p-4 text-center transition-shadow ${
         selected
           ? 'border-transparent bg-[#B88E2F] shadow-md'
           : 'border-[#E3E7E0] bg-white hover:shadow-md'
-      } ${unavailable ? 'cursor-not-allowed opacity-60' : 'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#967221]'}`}
+      } ${unavailable ? 'opacity-60' : 'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#967221]'}`}
     >
       {showImage ? (
         <img
@@ -226,15 +404,20 @@ const ItemCard: React.FC<{
           <Icon size={36} strokeWidth={1.6} />
         </span>
       )}
-      <span className="mt-3 text-[15px] font-bold text-[#1A1A1A]">{item.name}</span>
+      <span className="mt-3 text-[15px] font-bold text-[#1A1A1A]">
+        <MarkHit text={item.name} query={query ?? ''} />
+      </span>
       {detail && (
         <span className={`mt-0.5 truncate text-xs ${selected ? 'text-[#1A1A1A]/70' : 'text-[#969696]'}`}>
           {detail}
         </span>
       )}
       {unavailable && (
-        <span className="mt-1.5 rounded-full bg-[#FEF2F2] px-2 py-0.5 text-[10.5px] font-semibold text-[#B42318]">
-          Unavailable
+        /* v5.57.0 — the Menu screen's own SOLD OUT tone (#B4483C on #FDF3F2):
+           one vocabulary from the owner's list to the counter grid, instead
+           of the old lone "Unavailable" pill nobody else spoke. */
+        <span className="mt-1.5 rounded-full bg-[#FDF3F2] px-2 py-0.5 text-[10.5px] font-bold tracking-[0.06em] text-[#B4483C]">
+          SOLD OUT
         </span>
       )}
       <span className={`mt-1 flex items-center justify-center gap-1.5 text-lg font-bold ${selected ? 'text-[#1A1A1A]' : 'text-[#B88E2F]'}`}>
@@ -264,15 +447,120 @@ const ItemCard: React.FC<{
 const OrderDrawer: React.FC<{
   open: boolean;
   tenantId: string;
+  /** The live menu — the recognition well matches the guest's usual dish
+   *  against it, so "add their usual" can only ever sell what exists today. */
+  items: MenuItem[];
+  /** Variant-bearing usuals open the item modal — the drawer can't reach the
+   *  parent's modal state, so the parent hands down the gesture. */
+  onChooseItem: (item: MenuItem) => void;
   onClose: () => void;
   onPlaced: (orderNumber: number) => void;
-}> = ({ open, tenantId, onClose, onPlaced }) => {
+}> = ({ open, tenantId, items, onChooseItem, onClose, onPlaced }) => {
   const cart = useCart();
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [tables, setTables] = useState<DiningTable[] | null>(null);
   const [offers, setOffers] = useState<Offer[]>([]);
   const panelRef = useRef<HTMLDivElement>(null);
+  /* v5.110.0 — the order drawer holds the door (replaces the hand-rolled Escape
+     listener + manual panel focus; Escape stands down once the order posts). */
+  const dlgRef = useDialogA11y<HTMLDivElement>(() => { if (!submitting) onClose(); }, open, panelRef);
+  /* v5.76.0 — the line-note editor: which line is speaking, and its draft.
+     Commits through cart.setLineNote (trims, empty clears). The editor row
+     only renders while its line exists, so a stale key after a clear is
+     harmless. */
+  const [noteKey, setNoteKey] = useState<string | null>(null);
+  const [noteDraft, setNoteDraft] = useState('');
+  const commitNote = () => {
+    if (noteKey) cart.setLineNote(noteKey, noteDraft);
+    setNoteKey(null);
+    setNoteDraft('');
+  };
+
+  /* Regular guest recognition (5.62.0) — the CRM + ledger speak while the
+     cashier keys the phone. Recognition is a bonus, never a gate: any read
+     failure stays silent and the ticket flows as if the book were empty. */
+  const [regular, setRegular] = useState<{ key: string; info: RegularInfo | null } | null>(null);
+  const [regLoading, setRegLoading] = useState(false);
+  const phoneInput = cart.customerPhone;
+
+  useEffect(() => {
+    const key = phoneKey(phoneInput);
+    if (!open || !tenantId || key.length < 6) {
+      setRegular(null);
+      setRegLoading(false);
+      return;
+    }
+    if (regular && regular.key === key) return; // already answered for this phone
+    let alive = true;
+    setRegLoading(true);
+    const timer = setTimeout(async () => {
+      try {
+        const [statsMap, crmRows] = await Promise.all([
+          fetchCustomerStats(tenantId),
+          fetchCustomers(tenantId),
+        ]);
+        if (!alive) return;
+        let stats: CustomerStats | null = null;
+        let rawPhone = '';
+        for (const [p, s] of statsMap) {
+          if (phoneKey(p) === key) {
+            stats = s;
+            rawPhone = p;
+            break;
+          }
+        }
+        const crm = crmRows.find((c) => phoneKey(c.phone) === key) || null;
+        if (!stats || stats.orders_placed === 0) {
+          // book-only phone (or a ghost of cancelled tickets): the name is
+          // worth showing, history never is.
+          if (!alive) return;
+          setRegular({ key, info: crm ? { crm, stats, usual: null } : null });
+          setRegLoading(false);
+          return;
+        }
+        const past = await fetchCustomerOrders(tenantId, rawPhone, USUAL_WINDOW);
+        if (!alive) return;
+        /* v5.74.0 — the shared usual: paid tickets only, over the same
+         * 50-ticket window the guest drawer reads, tie-broken the same
+         * deterministic way. The chip, the well and the ledger cannot
+         * disagree about a regular's habit anymore. */
+        const shared = computeUsual(past);
+        const usual: RegularInfo['usual'] = shared
+          ? { name: shared.name, qty: shared.units, item: items.find((m) => m.name === shared.name) || null }
+          : null;
+        setRegular({ key, info: { crm, stats, usual } });
+      } catch {
+        if (alive) setRegular({ key, info: null }); // silent-bonus discipline
+      }
+      if (alive) setRegLoading(false);
+    }, 420);
+    return () => {
+      alive = false;
+      clearTimeout(timer);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, phoneInput, tenantId, items, regular]);
+
+  const regKey = phoneKey(cart.customerPhone);
+  const regActive = regular && regular.key === regKey ? regular.info : null;
+  const regHistory =
+    regActive?.stats && regActive.stats.orders_placed > 0 ? regActive.stats : null;
+  const regShowLoad = regLoading && regKey.length >= 6 && !regActive;
+  const regCrmName = regActive?.crm?.name || null;
+  const regSuggestName = !!regCrmName && !cart.customerName.trim();
+  const regUsual = regActive?.usual ?? null;
+
+  const addTheirUsual = useCallback(() => {
+    if (!regUsual?.item) return;
+    cart.add(regUsual.item, 1, [], undefined);
+  }, [regUsual, cart]);
+
+  const chooseTheirUsual = useCallback(() => {
+    if (!regUsual?.item) return;
+    onClose();
+    onChooseItem(regUsual.item);
+  }, [regUsual, onClose, onChooseItem]);
 
   // floor list + active offers — loaded when the drawer opens
   useEffect(() => {
@@ -298,16 +586,6 @@ const OrderDrawer: React.FC<{
     };
   }, [open, tenantId]);
 
-  useEffect(() => {
-    if (!open) return;
-    panelRef.current?.focus();
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [open, onClose]);
-
   if (!open) return null;
 
   const subtotal = round2(cartTotal(cart.lines));
@@ -329,6 +607,10 @@ const OrderDrawer: React.FC<{
         guestCount: cart.orderType === 'dine_in' ? cart.guestCount || null : null,
         customerName: cart.customerName || null,
         customerPhone: cart.customerPhone.trim() || null,
+        // v5.76.0 — the ticket's word to the kitchen, riding FIRST in the
+        // context string (before Table:/Guests:) so the board's chip leads
+        // with what the guest actually asked for.
+        notes: cart.kitchenNote.trim() || null,
         discountAmount: discount > 0 ? discount : null,
         offerId: discount > 0 && cart.offer ? cart.offer.id : null,
         items: cart.lines.map((l) => ({
@@ -340,9 +622,14 @@ const OrderDrawer: React.FC<{
           // v5.56.0 — the extras ride to the ledger; receipts/KDS/track read
           // them back the same way they do for guest-placed tickets.
           addons: l.addons,
+          // v5.76.0 — the line's word rides to order_items.notes, the column
+          // KDS prints as an orange ↳ whisper and the receipt as a bullet.
+          notes: l.note?.trim() || undefined,
         })),
       });
       useCart.getState().clear();
+      setNoteKey(null);
+      setNoteDraft('');
       onPlaced(order.order_number);
       onClose();
     } catch (err) {
@@ -353,12 +640,12 @@ const OrderDrawer: React.FC<{
   };
 
   return (
-    <div className="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label="Review order">
+    <div ref={dlgRef} className="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label="Review order">
       <button
         type="button"
         aria-label="Close order drawer"
         onClick={onClose}
-        className="absolute inset-0 h-full w-full cursor-default bg-[#0F3D3E]/45"
+        className="absolute inset-0 h-full w-full cursor-default bg-[#0F3D3E]/45 focus-visible:outline-none"
       />
       <div
         ref={panelRef}
@@ -478,6 +765,100 @@ const OrderDrawer: React.FC<{
                 className="sp-input h-11 w-full px-3 text-[13.5px]"
               />
             </div>
+            {/* Regular guest recognition (5.62.0): the book speaks while the
+                cashier keys — identity is teal, the usual rides existing paths. */}
+            {regActive && (
+              <div className="col-span-2 rounded-xl border border-[#E3E7E0] bg-[#FBFBF9] px-3.5 py-3">
+                <p className="flex items-center gap-1.5 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-[#969696]">
+                  <UserCheck size={12} aria-hidden />
+                  {regHistory ? 'Regular guest' : 'In the book'}
+                </p>
+                <p className="mt-1 text-[13.5px] font-semibold text-[#1A1A1A]">
+                  {regCrmName || 'Known phone'}
+                </p>
+                {regHistory ? (
+                  <p className="mt-0.5 text-[11.5px] text-[#6B6B6B]">
+                    {regHistory.visits > 0
+                      ? `${regHistory.visits} ${regHistory.visits === 1 ? 'visit' : 'visits'}`
+                      : `${regHistory.orders_placed} ${regHistory.orders_placed === 1 ? 'order' : 'orders'}`}
+                    {regHistory.total_spent > 0 && (
+                      <>
+                        {' · '}
+                        <span className="font-semibold text-[#8A6D1F]">{formatMoney(regHistory.total_spent)}</span> lifetime
+                      </>
+                    )}
+                    {regHistory.last_visit_at && <> · last seen {fmtLastSeen(regHistory.last_visit_at)}</>}
+                  </p>
+                ) : (
+                  <p className="mt-0.5 text-[11.5px] text-[#6B6B6B]">
+                    First order on this phone — the ledger will remember it.
+                  </p>
+                )}
+                {(regSuggestName || regUsual) && (
+                  <div className="mt-2.5 flex flex-wrap items-center gap-2">
+                    {regSuggestName && regCrmName && (
+                      <button
+                        type="button"
+                        onClick={() => cart.setCustomerName(regCrmName)}
+                        className="rounded-lg border border-[#E3E7E0] bg-white px-2.5 py-1.5 text-[11.5px] font-semibold text-[#0F3D3E] transition-colors hover:bg-[#EEF3F1]"
+                      >
+                        It's {regCrmName} — add name
+                      </button>
+                    )}
+                    {regUsual?.item && regUsual.item.is_available !== false && (
+                      regUsual.item.variants && regUsual.item.variants.length > 0 ? (
+                        <button
+                          type="button"
+                          onClick={chooseTheirUsual}
+                          className="rounded-lg border border-[#E3E7E0] bg-white px-2.5 py-1.5 text-[11.5px] font-semibold text-[#0F3D3E] transition-colors hover:bg-[#EEF3F1]"
+                        >
+                          Usually {regUsual.name} — choose size
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={addTheirUsual}
+                          className="rounded-lg bg-[#0F3D3E] px-2.5 py-1.5 text-[11.5px] font-semibold text-white transition-colors hover:bg-[#0C3233]"
+                        >
+                          Add their usual — {regUsual.name}
+                        </button>
+                      )
+                    )}
+                    {regUsual?.item && regUsual.item.is_available === false && (
+                      <p className="flex items-center gap-1.5 text-[11.5px] text-[#969696]">
+                        <CircleOff size={12} aria-hidden />
+                        Their usual {regUsual.name} is sold out right now
+                      </p>
+                    )}
+                    {regUsual && !regUsual.item && (
+                      <p className="text-[11.5px] text-[#969696]">Usually orders {regUsual.name}</p>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+            {regShowLoad && (
+              <p className="col-span-2 px-1 text-[11px] text-[#969696]">Checking the book…</p>
+            )}
+            {/* v5.76.0 — the ticket's word to the kitchen. orders.notes has
+                carried the chip on the board since 001 and the receipt reads
+                it too, but only the guest door ever wrote it — the counter
+                was mute. One honest line, trimmed at the store boundary. */}
+            <div className="col-span-2">
+              <label htmlFor="od-kitchen-note" className="mb-1 flex items-center gap-1.5 text-[12px] font-medium text-[#6B6B6B]">
+                <MessageSquare size={12} aria-hidden />
+                Kitchen note <span className="text-[#969696]">· the board reads it first</span>
+              </label>
+              <textarea
+                id="od-kitchen-note"
+                rows={2}
+                maxLength={240}
+                value={cart.kitchenNote}
+                onChange={(e) => cart.setKitchenNote(e.target.value)}
+                placeholder="e.g. candle with the muffin · pack separately · guest allergic to nuts"
+                className="sp-input w-full resize-none px-3 py-2.5 text-[13.5px] leading-relaxed"
+              />
+            </div>
           </div>
 
           {/* Lines */}
@@ -508,6 +889,48 @@ const OrderDrawer: React.FC<{
                           + {l.addonNames.join(', + ')}
                         </p>
                       )}
+                      {/* v5.76.0 — the line's word to the kitchen, shown in the
+                          SAME whisper the board prints (orange ↳, italic): what
+                          the cashier types is byte-for-byte what the kitchen
+                          reads. Click the pencil to speak or re-speak it. */}
+                      {l.note && noteKey !== l.key && (
+                        <p className="mt-0.5 flex max-w-full items-center gap-1 text-[11.5px] italic leading-snug text-[#C2571B]" title={l.note}>
+                          <span aria-hidden>↳</span>
+                          <span className="truncate">{l.note}</span>
+                        </p>
+                      )}
+                      {noteKey === l.key && (
+                        <span className="mt-1.5 flex w-full items-center gap-1.5">
+                          <input
+                            type="text"
+                            autoFocus
+                            value={noteDraft}
+                            onChange={(e) => setNoteDraft(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                commitNote();
+                              }
+                              if (e.key === 'Escape') {
+                                e.preventDefault();
+                                setNoteKey(null);
+                                setNoteDraft('');
+                              }
+                            }}
+                            placeholder="e.g. less spicy · no onion · oat milk"
+                            aria-label={`Kitchen note for ${l.name}`}
+                            maxLength={120}
+                            className="sp-input h-11 min-w-0 flex-1 px-3 text-[12.5px]"
+                          />
+                          <button
+                            type="button"
+                            onClick={commitNote}
+                            className="h-11 shrink-0 rounded-xl bg-[#0F3D3E] px-3.5 text-[12px] font-semibold text-white transition-colors hover:bg-[#0C3233] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#967221]"
+                          >
+                            Save
+                          </button>
+                        </span>
+                      )}
                       <span className="mt-1.5 flex items-center gap-1.5">
                         <button
                           type="button"
@@ -527,6 +950,31 @@ const OrderDrawer: React.FC<{
                           className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#B88E2F] text-white transition-colors hover:bg-[#967221] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#967221]"
                         >
                           <Plus size={15} aria-hidden />
+                        </button>
+                        {/* v5.76.0 — the line speaks. Ghost pencil beside the
+                            steppers: tinted when the line already carries a
+                            word (the kitchen will read it), grey when silent. */}
+                        <span aria-hidden className="mx-0.5 h-6 w-px bg-[#E3E7E0]" />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (noteKey === l.key) {
+                              setNoteKey(null);
+                              setNoteDraft('');
+                            } else {
+                              setNoteKey(l.key);
+                              setNoteDraft(l.note ?? '');
+                            }
+                          }}
+                          aria-label={l.note ? `Edit the kitchen note for ${l.name}` : `Add a kitchen note for ${l.name}`}
+                          aria-expanded={noteKey === l.key}
+                          className={`flex h-11 w-11 items-center justify-center rounded-xl border transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#967221] ${
+                            l.note
+                              ? 'border-[#EAD9BE] bg-[#FDF9F0] text-[#C2571B] hover:bg-[#F9F1E2]'
+                              : 'border-[#E3E7E0] bg-white text-[#6B6B6B] hover:text-[#1A1A1A]'
+                          } ${noteKey === l.key ? 'ring-1 ring-[#E3E7E0]' : ''}`}
+                        >
+                          <MessageSquarePlus size={15} aria-hidden />
                         </button>
                       </span>
                     </div>
@@ -635,6 +1083,12 @@ const FoodDrinksInner: React.FC<{ onRetry: () => void }> = ({ onRetry }) => {
   const breadcrumb = useUi((s) => s.breadcrumb);
   const setBreadcrumb = useUi((s) => s.setBreadcrumb);
   const search = useUi((s) => s.search);
+  const setSearch = useUi((s) => s.setSearch);
+  /* v5.116.0 — the menu is the shell search box's FIRST and oldest
+   * consumer; it says so via the registration contract. v5.119.0 — the
+   * registration went DYNAMIC: the box's promise now moves with the
+   * screen's level (see the level-aware effect at the breadcrumb
+   * derivation below). */
   /* Veg-only (v5.53.0) — the counter speaks the same leaf the guest menu
      speaks: a phone order saying "veg only" filters in one tap. */
   const [vegOnly, setVegOnly] = useState(false);
@@ -644,11 +1098,22 @@ const FoodDrinksInner: React.FC<{ onRetry: () => void }> = ({ onRetry }) => {
   const [dataLoading, setDataLoading] = useState(false);
   const [dataError, setDataError] = useState<string | null>(null);
   const [reloadTick, setReloadTick] = useState(0);
+  /** The shortlist's raw truth (v5.78.0): null = still reading, [] = the week
+   *  was quiet (or the read failed — the rail is never a gate, it stays home). */
+  const [movers, setMovers] = useState<Mover[] | null>(null);
+  /* 5.91.0 — the shelf, read fail-soft alongside the shortlist: recipes (015)
+     + the stock they draw from. null = not yet read (or the read failed) —
+     the shelf stays silent on the cards, never an invented number. */
+  const [shelf, setShelf] = useState<{ items: InventoryItem[]; recipes: RecipeLine[] } | null>(null);
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detailItem, setDetailItem] = useState<MenuItem | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [toast, setToast] = useState<{ kind: 'added' | 'placed' | 'repeated'; message: string; orderNumber?: number } | null>(null);
+  const [toast, setToast] = useState<{
+    kind: 'added' | 'placed' | 'repeated' | 'pulled' | 'returned' | 'failed';
+    message: string;
+    orderNumber?: number;
+  } | null>(null);
 
   /* "Their usual" landing (v5.54.0) — the guests drawer's Repeat drops the
      ticket into the live cart and walks the cashier here; the hint names
@@ -677,9 +1142,52 @@ const FoodDrinksInner: React.FC<{ onRetry: () => void }> = ({ onRetry }) => {
     [categories, activeCategoryName]
   );
 
+  /* v5.119.0 — the placeholder keeps the box honest about its REACH: at
+   * the categories level the search reads category names ("Search
+   * categories…"); inside a category it reads that category's dish names
+   * and says so ("Search Starters…"). The old static "Search the menu…"
+   * promised a menu-wide sweep the filter never delivered — the same
+   * promise/reach gap the honest empty states below now narrate in the
+   * other direction (what was searched, what WITHIN, and the way out). */
+  const searchPlaceholder = isItemsLevel
+    ? `Search ${activeCategoryName ?? 'items'}…`
+    : 'Search categories…';
+  useEffect(() => {
+    useUi.getState().setSearchMeta({ placeholder: searchPlaceholder });
+    return () => useUi.getState().setSearchMeta(null);
+  }, [searchPlaceholder]);
+
   useEffect(() => {
     setSelectedId(null);
   }, [activeCategoryName]);
+
+  /* The shortlist matched against the LIVE menu (v5.78.0): movers whose dish
+     left the menu are dropped — the rail pins only what the counter can sell. */
+  const moverEntries = useMemo<MoverEntry[]>(() => {
+    if (!movers || movers.length === 0) return [];
+    const byId = new Map(items.map((i) => [i.id, i]));
+    const out: MoverEntry[] = [];
+    for (const m of movers) {
+      const item = byId.get(m.menuItemId);
+      if (!item) continue;
+      out.push({ mover: m, item, price: item.price });
+    }
+    return out;
+  }, [movers, items]);
+
+  /* One tap, straight in: the dish joins the cart at its base card price —
+     never a size the cashier didn't choose (the same rule that sends the
+     usual's variant-bearing dish to the modal instead of guessing). A
+     sold-out tap is the way back (v5.57.0 grammar): it opens the item,
+     where the put-back toggle lives. */
+  const tapMover = useCallback((e: MoverEntry) => {
+    if (e.item.is_available === false) {
+      setDetailItem(e.item);
+      return;
+    }
+    useCart.getState().add(e.item, 1, [], undefined);
+    setToast({ kind: 'added', message: `1× ${e.item.name} added to order` });
+  }, []);
 
   /* Production data load — no mocks, honest errors. v5.55.0 also loads the
      option surfaces (variants + allowed add-ons) the guest menu has always
@@ -743,24 +1251,113 @@ const FoodDrinksInner: React.FC<{ onRetry: () => void }> = ({ onRetry }) => {
     };
   }, [tenantId, reloadTick]);
 
+  /* The shortlist's raw read (v5.78.0) — fail-soft like every option surface:
+     if the read fails the rail stays home, the menu never does. Reloads with
+     the same tick the menu reloads (availability flips keep it honest). */
+  useEffect(() => {
+    if (!tenantId) return;
+    let alive = true;
+    fetchPaidMoverLines(tenantId, MOVER_WINDOW_DAYS)
+      .then((rows) => {
+        if (alive) setMovers(computeTopMovers(rows));
+      })
+      .catch(() => {
+        if (alive) setMovers([]);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [tenantId, reloadTick]);
+
+  /* 5.91.0 — the shelf's read rides the same tick: recipes + stock, both
+     fail-soft together (one answer needs both; a half-read is silence). */
+  useEffect(() => {
+    if (!tenantId) return;
+    let alive = true;
+    Promise.all([fetchInventory(tenantId), fetchRecipeLines(tenantId)])
+      .then(([items, recipes]) => {
+        if (alive) setShelf({ items, recipes });
+      })
+      .catch(() => {
+        if (alive) setShelf(null);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [tenantId, reloadTick]);
+
+  /* one coverage verdict per dish on the shortlist — the ONE shared math
+     (src/lib/shelf.ts), the same answer the shelf's board computes. */
+  const shelfByItem = useMemo<Map<string, ShelfCoverage>>(() => {
+    const map = new Map<string, ShelfCoverage>();
+    if (!shelf || !movers) return map;
+    for (const m of movers) {
+      const lines = shelf.recipes.filter((r) => r.menu_item_id === m.menuItemId);
+      map.set(m.menuItemId, shelfCoverage(lines, shelf.items));
+    }
+    return map;
+  }, [shelf, movers]);
+
   /* Toast auto-dismiss. */
   useEffect(() => {
     if (!toast) return;
-    const t = window.setTimeout(() => setToast(null), toast.kind === 'placed' ? 6500 : 3200);
+    const t = window.setTimeout(() => setToast(null), toast.kind === 'placed' || toast.kind === 'failed' ? 6500 : 3200);
     return () => window.clearTimeout(t);
   }, [toast]);
+
+  /* v5.57.0 — the counter pulls the dish. Optimistic flip (the grid and the
+     modal react the same tick), then the same menu write the Menu screen
+     makes; a failed write reverts both and says so — a sold-out state the
+     cloud never confirmed would be a lie the guest menu can't see. */
+  const flipBusyRef = useRef(false);
+  const handleToggleAvailability = useCallback(
+    async (item: MenuItem, available: boolean): Promise<boolean> => {
+      if (!tenantId || flipBusyRef.current) return false; // double-dispatch guard
+      flipBusyRef.current = true;
+      const revert = () => {
+        setItems((list) => list.map((i) => (i.id === item.id ? { ...i, is_available: !available } : i)));
+        setDetailItem((d) => (d && d.id === item.id ? { ...d, is_available: !available } : d));
+      };
+      setItems((list) => list.map((i) => (i.id === item.id ? { ...i, is_available: available } : i)));
+      setDetailItem((d) => (d && d.id === item.id ? { ...d, is_available: available } : d));
+      try {
+        await updateMenuItem(item.id, tenantId, { isAvailable: available });
+        setToast(
+          available
+            ? { kind: 'returned', message: `${item.name} is back on the menu` }
+            : { kind: 'pulled', message: `${item.name} marked sold out — guest menu updated` },
+        );
+        return true;
+      } catch {
+        revert();
+        setToast({ kind: 'failed', message: 'Could not update the menu — check the connection and try again.' });
+        return false;
+      } finally {
+        flipBusyRef.current = false;
+      }
+    },
+    [tenantId],
+  );
 
   const q = search.trim().toLowerCase();
   const visibleCategories = useMemo(
     () => (q ? categories.filter((c) => c.name.toLowerCase().includes(q)) : categories),
     [categories, q]
   );
-  const visibleItems = useMemo(() => {
+  /* v5.122.0 — the search's pool, exposed: the count line above the grid
+   * needs the number the search STARTS from (the open category, Veg
+   * already applied) — otherwise "N of M" would claim the wrong whole.
+   * visibleItems is this pool under the search term. */
+  const itemPool = useMemo(() => {
     if (!isItemsLevel) return [];
     let inCategory = activeCategory ? items.filter((i) => i.category_id === activeCategory.id) : [];
     if (vegOnly) inCategory = inCategory.filter((i) => i.is_veg === true);
-    return q ? inCategory.filter((i) => i.name.toLowerCase().includes(q)) : inCategory;
-  }, [items, activeCategory, isItemsLevel, q, vegOnly]);
+    return inCategory;
+  }, [items, activeCategory, isItemsLevel, vegOnly]);
+  const visibleItems = useMemo(
+    () => (q ? itemPool.filter((i) => i.name.toLowerCase().includes(q)) : itemPool),
+    [itemPool, q]
+  );
 
   /* honest counts for the toggle chip — veg dishes in the OPEN category, or
      across the whole menu when no category is open (search-all level) */
@@ -777,6 +1374,20 @@ const FoodDrinksInner: React.FC<{ onRetry: () => void }> = ({ onRetry }) => {
     },
     [setBreadcrumb]
   );
+
+  /* 5.95.0 — what each category holds: total live items + how many are
+     pulled. One pass feeds both the cards' captions and the switcher
+     rail's badges, so every count on the surface comes from one map. */
+  const countByCategory = useMemo(() => {
+    const map = new Map<string, { total: number; pulled: number }>();
+    for (const it of items) {
+      const entry = map.get(it.category_id) || { total: 0, pulled: 0 };
+      entry.total += 1;
+      if (it.is_available === false) entry.pulled += 1;
+      map.set(it.category_id, entry);
+    }
+    return map;
+  }, [items]);
 
   const onSelectItem = useCallback(
     (item: MenuItem) => {
@@ -857,6 +1468,58 @@ const FoodDrinksInner: React.FC<{ onRetry: () => void }> = ({ onRetry }) => {
         {isItemsLevel ? activeCategoryName || 'Items' : 'Categories'}
       </h1>
 
+      {/* 5.95.0 — the switcher rail: inside a category, every other shelf is
+          one tap away — no Go-back detour mid-order. The active chip is the
+          way back to Categories (the tap-is-the-way-back grammar), the
+          badges say what each shelf holds. Scrolls sideways when the room
+          grows; keyboard ring matches the Veg chip's. */}
+      {isItemsLevel && categories.length > 0 && (
+        <nav
+          aria-label="Switch category"
+          className="mb-4 flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+        >
+          {categories.map((c) => {
+            const active = c.name === activeCategoryName;
+            const ChipIcon = categoryIcon(c.name);
+            const cnt = countByCategory.get(c.id) || { total: 0, pulled: 0 };
+            return (
+              <button
+                key={c.id}
+                type="button"
+                aria-current={active ? 'true' : undefined}
+                onClick={() =>
+                  active
+                    ? setBreadcrumb(['Food & Drinks', 'Categories'])
+                    : openCategory(c)
+                }
+                title={
+                  active
+                    ? `Back to all categories — ${c.name} is open`
+                    : `Switch to ${c.name} — ${cnt.total} ${cnt.total === 1 ? 'item' : 'items'}${
+                        cnt.pulled > 0 ? `, ${cnt.pulled} pulled` : ''
+                      }`
+                }
+                className={`flex h-9 shrink-0 items-center gap-1.5 rounded-full border px-3.5 text-[12.5px] font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[#967221] ${
+                  active
+                    ? 'border-[#0F3D3E] bg-[#0F3D3E] text-white shadow-sm'
+                    : 'border-[#E3E7E0] bg-white text-[#6B6B6B] hover:border-[#967221] hover:text-[#1A1A1A]'
+                }`}
+              >
+                <ChipIcon size={13} aria-hidden className={active ? 'text-[#D9E2DD]' : 'text-[#9AA8A0]'} />
+                {c.name}
+                <span
+                  className={`rounded-full px-1.5 py-px text-[10.5px] font-bold ${
+                    active ? 'bg-white/15 text-white' : 'bg-[#F0F2EF] text-[#5F6B63]'
+                  }`}
+                >
+                  {cnt.total}
+                </span>
+              </button>
+            );
+          })}
+        </nav>
+      )}
+
       {/* Veg-only filter (v5.53.0) — items level only; the chip shows the
           honest veg count for the pool it filters. */}
       {isItemsLevel && (
@@ -899,6 +1562,11 @@ const FoodDrinksInner: React.FC<{ onRetry: () => void }> = ({ onRetry }) => {
         </div>
       )}
 
+      {/* The counter's shortlist (v5.78.0): the week's paid movers, one tap
+          each — a speed surface above the gate, gone honest when the week
+          was quiet (no paid sales ⇒ no rail, never a lie). */}
+      {moverEntries.length > 0 && <RushRail entries={moverEntries} shelf={shelfByItem} onTap={tapMover} />}
+
       {/* Counter gate (v5.3.0): fresh tickets wait HERE for an Ok — the KDS
           never sees `new`. Self-contained band; vanishes when empty. */}
       <div className="mb-5">
@@ -912,16 +1580,61 @@ const FoodDrinksInner: React.FC<{ onRetry: () => void }> = ({ onRetry }) => {
 
       {!isItemsLevel && (
         <>
+          {/* v5.122.0 — the count line (Bills' house pattern, aria-live):
+              while the search narrows the grid, say how much of the
+              catalog the term captured — even when it captured none
+              (the miss state below keeps its own say). */}
+          {q && (
+            <p
+              aria-live="polite"
+              className="mb-4 flex items-center gap-2 text-[12px] font-medium text-[#0F3D3E]"
+            >
+              <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[#0F3D3E] px-1.5 text-[10.5px] font-bold tabular-nums text-white">
+                {visibleCategories.length}
+              </span>
+              <span className="text-[#6B6B6B]">
+                of {categories.length} {categories.length === 1 ? 'category' : 'categories'}{' '}
+                {visibleCategories.length === 1 || categories.length === 1 ? 'matches' : 'match'} “{search.trim()}”
+              </span>
+            </p>
+          )}
           {visibleCategories.length === 0 ? (
-            <EmptyState
-              icon={PackageOpen}
-              title="No categories yet"
-              body="Categories created for this business in the cloud will show up here."
-            />
+            q ? (
+              /* v5.119.0 — a search miss is not an empty catalog: say what
+               * was searched, what the search reaches at this level, and
+               * hand back the way out. The old "No categories yet" here
+               * was the catalog-truth empty state worn during a search. */
+              <EmptyState
+                icon={Search}
+                title={`No category matches “${search.trim()}”`}
+                body="At this level the search reads category NAMES only. Open a category to search its dishes — the catalog itself is untouched."
+                action={
+                  <button
+                    onClick={() => setSearch('')}
+                    className="rounded-lg bg-[#F3E8CF] px-3 py-1.5 text-[12px] font-semibold text-[#1A1A1A] transition hover:bg-[#E9D9AF]"
+                  >
+                    Clear search
+                  </button>
+                }
+              />
+            ) : (
+              <EmptyState
+                icon={PackageOpen}
+                title="No categories yet"
+                body="Categories created for this business in the cloud will show up here."
+              />
+            )
           ) : (
             <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-4">
               {visibleCategories.map((c) => (
-                <CategoryCard key={c.id} category={c} onOpen={openCategory} />
+                <CategoryCard
+                  key={c.id}
+                  category={c}
+                  count={countByCategory.get(c.id)?.total ?? 0}
+                  pulled={countByCategory.get(c.id)?.pulled ?? 0}
+                  query={q}
+                  onOpen={openCategory}
+                />
               ))}
             </div>
           )}
@@ -930,16 +1643,65 @@ const FoodDrinksInner: React.FC<{ onRetry: () => void }> = ({ onRetry }) => {
 
       {isItemsLevel && (
         <>
+          {/* v5.122.0 — the count line at the dish level: the badge counts
+              what the search captured, the words name the pool it started
+              from (the open category, Veg already applied) — and it speaks
+              even at zero, like Bills' "0 of 55". */}
+          {q && (
+            <p
+              aria-live="polite"
+              className="mb-4 flex items-center gap-2 text-[12px] font-medium text-[#0F3D3E]"
+            >
+              <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[#0F3D3E] px-1.5 text-[10.5px] font-bold tabular-nums text-white">
+                {visibleItems.length}
+              </span>
+              <span className="text-[#6B6B6B]">
+                of {itemPool.length} {itemPool.length === 1 ? 'dish' : 'dishes'}{' '}
+                {visibleItems.length === 1 || itemPool.length === 1 ? 'matches' : 'match'} “{search.trim()}”
+              </span>
+            </p>
+          )}
           {visibleItems.length === 0 ? (
-            <EmptyState
-              icon={PackageOpen}
-              title={vegOnly ? 'No vegetarian items here' : 'No items in this category'}
-              body={
-                vegOnly
-                  ? 'Every item in this category is marked non-vegetarian — turn the Veg only filter off to see them.'
-                  : 'Menu items added to this category will show up here.'
-              }
-            />
+            q ? (
+              /* v5.119.0 — inside a category the search reaches THIS
+               * category's dish names only, and the Veg chip can miss on
+               * its own: when both filters are in play, the empty state
+               * names both ways to miss and clears the one that came
+               * through the search box. The old titles here ("No items in
+               * this category" / "No vegetarian items here") claimed a
+               * catalog truth a filter had no right to claim. */
+              <EmptyState
+                icon={Search}
+                title={
+                  vegOnly
+                    ? `Nothing matches “${search.trim()}” among the vegetarian dishes`
+                    : `No dish matches “${search.trim()}” in ${activeCategoryName}`
+                }
+                body={
+                  vegOnly
+                    ? 'The search and the Veg chip are both in play — either can miss. Clear the search, or turn Veg off to widen the pool.'
+                    : `Search reads dish names in ${activeCategoryName} only — a menu-wide sweep is not its job. Clear it, or go back and search category names.`
+                }
+                action={
+                  <button
+                    onClick={() => setSearch('')}
+                    className="rounded-lg bg-[#F3E8CF] px-3 py-1.5 text-[12px] font-semibold text-[#1A1A1A] transition hover:bg-[#E9D9AF]"
+                  >
+                    Clear search
+                  </button>
+                }
+              />
+            ) : (
+              <EmptyState
+                icon={PackageOpen}
+                title={vegOnly ? 'No vegetarian items here' : 'No items in this category'}
+                body={
+                  vegOnly
+                    ? 'Every item in this category is marked non-vegetarian — turn the Veg only filter off to see them.'
+                    : 'Menu items added to this category will show up here.'
+                }
+              />
+            )
           ) : (
             <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-4">
               {visibleItems.map((it) => (
@@ -947,6 +1709,7 @@ const FoodDrinksInner: React.FC<{ onRetry: () => void }> = ({ onRetry }) => {
                   key={it.id}
                   item={it}
                   selected={selectedId === it.id}
+                  query={q}
                   onSelect={onSelectItem}
                   onAdd={setDetailItem}
                 />
@@ -964,6 +1727,7 @@ const FoodDrinksInner: React.FC<{ onRetry: () => void }> = ({ onRetry }) => {
           onAdded={({ name, qty }) =>
             setToast({ kind: 'added', message: `${qty}× ${name} added to order` })
           }
+          onToggleAvailability={(available) => handleToggleAvailability(detailItem, available)}
         />
       )}
 
@@ -989,6 +1753,12 @@ const FoodDrinksInner: React.FC<{ onRetry: () => void }> = ({ onRetry }) => {
       <OrderDrawer
         open={drawerOpen}
         tenantId={tenantId}
+        items={items}
+        onChooseItem={(item) => {
+          setDrawerOpen(false);
+          setSelectedId(item.id);
+          setDetailItem(item);
+        }}
         onClose={() => setDrawerOpen(false)}
         onPlaced={(n) => setToast({ kind: 'placed', message: `Order #${n} placed`, orderNumber: n })}
       />
@@ -1004,7 +1774,19 @@ const FoodDrinksInner: React.FC<{ onRetry: () => void }> = ({ onRetry }) => {
             aria-hidden
             className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#B88E2F] text-white"
           >
-            {toast.kind === 'placed' ? <ShoppingBag size={14} /> : toast.kind === 'repeated' ? <Repeat size={14} /> : <Plus size={14} />}
+            {toast.kind === 'placed' ? (
+              <ShoppingBag size={14} />
+            ) : toast.kind === 'repeated' ? (
+              <Repeat size={14} />
+            ) : toast.kind === 'pulled' ? (
+              <CircleOff size={14} />
+            ) : toast.kind === 'returned' ? (
+              <RotateCcw size={14} />
+            ) : toast.kind === 'failed' ? (
+              <CircleAlert size={14} />
+            ) : (
+              <Plus size={14} />
+            )}
           </span>
           <span className="whitespace-nowrap text-[13px] font-medium text-[#1A1A1A]">{toast.message}</span>
           {toast.kind === 'placed' && (

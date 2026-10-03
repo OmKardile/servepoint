@@ -1,6 +1,7 @@
 import React from 'react';
 import { authService } from '../../lib/authService';
 import { getRoleMeta } from '../../lib/rbac';
+import { useDialogA11y } from '../../lib/useDialogA11y';
 import { useSession, useUi } from '../../store/session';
 import { Sidebar } from './Sidebar';
 import { Header } from './Header';
@@ -13,26 +14,63 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
 
   const roleMeta = getRoleMeta(session?.role);
 
+  /* v5.110.0 — the profile dialog holds the door: Escape closes, Tab cycles
+   * inside, focus returns to the avatar button on close. Initial focus sits
+   * on the card itself (neutral) — first focusable would be Sign out, and an
+   * accidental Enter on that is not a mistake the dialog should invite. */
+  const profileCardRef = React.useRef<HTMLDivElement>(null);
+  const profileDlgRef = useDialogA11y<HTMLDivElement>(() => setProfileOpen(false), profileOpen, profileCardRef);
+
   return (
     <div className="flex h-screen overflow-hidden bg-[#F6F5F2]">
+      {/* v5.109.0 — the shortcut: the first Tab of every screen offers the way
+          in, past the 15-pill rail and the header chrome, straight to the room.
+          Styles are the unlayered .sp-skip-link pair in index.css (its own
+          class because the unlayered custom .sr-only would smother Tailwind's
+          layered focus:not-sr-only even on focus). Enter lands focus on the
+          main landmark below — the tab order continues INSIDE the content,
+          not back at the rail. */}
+      <a
+        href="#sp-main"
+        className="sp-skip-link"
+        onClick={(e) => {
+          e.preventDefault();
+          document.getElementById('sp-main')?.focus();
+        }}
+      >
+        Skip to content
+      </a>
       <Sidebar />
       <div className="flex min-w-0 flex-1 flex-col">
         <Header />
-        <main className="min-h-0 flex-1 overflow-y-auto" aria-label={`${section} content`}>
+        {/* tabIndex={-1} makes the landmark focusable for the skip link only —
+            Tab skips it. outline-none: the UA ring a keyboard-adjacent
+            programmatic focus can paint around the whole content area is
+            noise, not signal (the skip link itself shows the visible ring). */}
+        <main
+          id="sp-main"
+          tabIndex={-1}
+          className="min-h-0 flex-1 overflow-y-auto outline-none"
+          aria-label={`${section} content`}
+        >
           {children}
         </main>
       </div>
 
       {profileOpen && (
         <div
+          ref={profileDlgRef}
           className="fixed inset-0 z-50 flex items-center justify-center bg-[#0F3D3E]/45 p-4"
+          style={{ animation: 'spFadeIn 160ms ease-out' }}
           role="dialog"
           aria-modal="true"
           aria-label="Profile"
           onClick={() => setProfileOpen(false)}
         >
           <div
-            className="sp-card w-full max-w-sm p-6 shadow-xl"
+            ref={profileCardRef}
+            tabIndex={-1}
+            className="sp-card w-full max-w-sm p-6 shadow-xl outline-none"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="text-center">

@@ -201,12 +201,27 @@ export interface AuditLogEntry {
 export interface DashboardData {
   hourlySales: { hour: string; dineIn: number; takeaway: number; delivery: number }[];
   revenueByType: { name: string; value: number }[];
+  /* v5.113.0 — the week is real: seven complete calendar days (local midnights,
+   * oldest first), the same live grammar as the today cards (cancelled never
+   * happened). Today's bucket IS the today card's numbers — the two views
+   * must never disagree. */
+  weeklyRevenue: {
+    label: string;
+    full: string;
+    dineIn: number;
+    takeaway: number;
+    delivery: number;
+    total: number;
+  }[];
+  /* v5.113.0 — plates across the same seven live days, same row shape as
+   * trendingDishes so the card renders either with one grammar. */
+  weeklyTrending: { name: string; tag: string; orders: number; image_url?: string | null }[];
   totalRevenue: number;
   totalOrders: number;
   ordersTrendPct: number;
   newCustomers: number;
   customersTrendPct: number;
-  bestEmployees: { name: string; role: string; sales: number }[];
+  team: { name: string; role: string; since: string | null }[];
   trendingDishes: { name: string; tag: string; orders: number; image_url?: string | null }[];
 }
 

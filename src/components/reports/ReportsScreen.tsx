@@ -17,32 +17,63 @@ import {
 } from 'recharts';
 import {
   ArrowRight,
+  BadgePercent,
   CalendarRange,
+  CheckCircle2,
   Clock,
   Coins,
   Download,
   Flame,
   HandCoins,
+  HeartHandshake,
   Minus,
+  MousePointerClick,
   QrCode,
   Quote,
   RefreshCw,
   ShoppingBag,
+  Split,
   Star,
+  Timer,
+  Trash2,
   TrendingDown,
   TrendingUp,
+  UtensilsCrossed,
   Wallet,
 } from 'lucide-react';
 import {
   fetchDrawerHistory,
   fetchFeedbackRows,
   fetchItemUnitCosts,
+  fetchOfferRedemptions,
   fetchOrderCogs,
   fetchOrders,
+  fetchOffers,
+  fetchStatusHopsInRange,
+  fetchPaymentsInRange,
+  fetchWasteMoves,
 } from '../../lib/api';
-import type { DrawerSession, FeedbackRow } from '../../lib/api';
-import { formatMoney } from '../../lib/prefs';
+import type {
+  DrawerSession,
+  FeedbackRow,
+  OfferRedemptionRow,
+  ReceiptPayment,
+  StatusHop,
+  WasteMove,
+} from '../../lib/api';
+import type { Offer } from '../../types';
+import { formatMoney, subscribePrefs } from '../../lib/prefs';
 import { downloadCsv } from '../../lib/csv';
+import {
+  appTimezone,
+  appTodayIso,
+  appDayStartMs,
+  appDayEndMs,
+  appHour,
+  appDayKey,
+  appFormatters,
+  appTzTag,
+} from '../../lib/appday';
 import { useTenant } from '../../lib/tenant';
 import { useUi } from '../../store/session';
 import type { Order } from '../../types';
@@ -52,7 +83,8 @@ import type { Order } from '../../types';
  *
  * The Dashboard answers "how is RIGHT NOW?"; Reports answers "where does the
  * business actually stand?" over a real range (Today / 7 days / 30 days /
- * All time, in IST calendar days like Close-out):
+ * All time, in the reporting day chosen in Settings — Asia/Kolkata by
+ * default, like Close-out — via src/lib/appday.ts (5.97.0):
  *
  *   1. Headline strip — gross, GST collected, net (ex-GST), orders (+
  *      cancelled sinkage), average ticket, items sold — each carrying a
@@ -60,17 +92,25 @@ import type { Order } from '../../types';
  *      equal-length window immediately before the selected one (prior day /
  *      prior 7 / prior 30). All time has no earlier boundary, so it gets no
  *      chips instead of a fake baseline; empty prior windows chip "new".
- *   2. Trends — the shape of the range, day by day (IST calendar days):
+ *   2. Trends — the shape of the range, day by day (reporting days):
  *      gross bars + ticket line per day with the best day gold, and the
  *      guest-rating average per day as a gold line with honest gaps.
- *   3. Sales by hour — a bar chart of when the day actually earns (IST hours,
+ *   3. Sales by hour — a bar chart of when the day actually earns (reporting hours,
  *      whole range summed). The Dashboard only charts today; this is the trend.
  *   4. Payment mix — how money arrived (cash / UPI / card) + what's still out.
  *   5. Cost & margin — the inventory shelf prices the menu (018 views):
  *      COGS, gross margin and margin-% on PAID tickets, with a revenue-split
  *      bar (what the shelf burned vs what the cafe keeps).
  *   6. Top items — best sellers by revenue with unit counts, share bars and
- *      per-item margin chips, exportable as CSV.
+ *      per-item margin chips, exportable as CSV. Unpriced dishes wear an
+ *      honest "unpriced" chip instead of a fake 100% margin. Under the list
+ *      sits THE EARNER'S LIST (5.72.0): the same dishes ranked by what they
+ *      KEEP (revenue − ingredient cost, recipe-priced dishes only), each row
+ *      naming its divergence from the sales board — "earns above its bill"
+ *      (a quiet earner worth pushing) vs "sells above its earn" (popular but
+ *      thin; review price or recipe). THE MENU'S QUADRANTS (5.73.0) finish
+ *      the frame: the priced menu split at its own averages into Stars /
+ *      Plowhorses / Puzzles / Dogs, each quadrant speaking its verdict.
  *   7. Service mix — dine-in / takeaway / delivery split.
  *   8. Guest satisfaction — the 019 order_feedback ledger read over the
  *      range: average rating with a health verdict, a spoken star histogram,
@@ -97,28 +137,26 @@ import type { Order } from '../../types';
 
 type RangeKey = 'today' | '7d' | '30d' | 'all';
 
-const IST_TZ = 'Asia/Kolkata';
+/* ── The reporting day (5.97.0) — the Settings word, kept. Windows, keys,
+   hour buckets and the zone tag resolve through src/lib/appday.ts
+   (Settings › Language & Region › Timezone); on every Indian device that
+   is Asia/Kolkata, so IST numbers here are unchanged to the paisa. ─────── */
 
-/* ── IST day windows (same calendar math as Close-out) ─────────────────── */
-
-function istTodayIso(): string {
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone: IST_TZ,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(new Date());
+/** Calendar-string day shift, DST-safe (noon anchor, v5.83.0's argument). */
+function shiftDayIso(days: number): string {
+  const d = new Date(`${appTodayIso()}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
 }
 
-function istDayStart(dateIso: string): number {
-  return new Date(`${dateIso}T00:00:00+05:30`).getTime();
-}
-
+/* Windows keep the v5.19.0 semantics EXACTLY: "N days" = N calendar days
+   ENDING today (today inclusive) — only the midnight math is now DST-safe
+   through the lib instead of a +05:30 literal. */
 function rangeWindow(range: RangeKey): { startMs: number | null; endMs: number } {
-  const endMs = istDayStart(istTodayIso()) + 24 * 3600 * 1000; // end of today (IST)
+  const endMs = appDayEndMs(appTodayIso()); // end of the reporting day
   if (range === 'all') return { startMs: null, endMs };
   const days = range === 'today' ? 1 : range === '7d' ? 7 : 30;
-  return { startMs: endMs - days * 24 * 3600 * 1000, endMs };
+  return { startMs: appDayStartMs(shiftDayIso(-(days - 1))), endMs };
 }
 
 /** The EQUAL-LENGTH window immediately before the current one (v5.19.0) —
@@ -128,9 +166,8 @@ function priorWindow(range: RangeKey): { startMs: number; endMs: number } | null
   if (range === 'all') return null;
   const { startMs, endMs } = rangeWindow(range);
   const days = range === 'today' ? 1 : range === '7d' ? 7 : 30;
-  const span = days * 24 * 3600 * 1000;
-  const start = startMs ?? endMs - span;
-  return { startMs: start - span, endMs: start };
+  const start = startMs ?? appDayStartMs(shiftDayIso(-(days - 1)));
+  return { startMs: appDayStartMs(shiftDayIso(-(2 * days - 1))), endMs: start };
 }
 
 /** Spoken/written name of the comparison baseline. */
@@ -191,14 +228,159 @@ function aggregateTickets(rows: Order[], cogsMap: Map<string, number>): RangeAgg
   return { gross, gst, net, placed, cancelled, items, avgTicket, paidNet, cogs, margin, marginPct, paidCount };
 }
 
-/** Hour-of-day (0–23) in IST for an ISO timestamp. */
-function istHour(iso: string): number {
-  const h = new Intl.DateTimeFormat('en-GB', {
-    timeZone: IST_TZ,
-    hour: '2-digit',
-    hour12: false,
-  }).format(new Date(iso));
-  return Number(h) % 24;
+/* ── Kitchen speed (5.67.0) — the clock reads the hop ledger ──────────────── */
+
+interface SpeedTicket {
+  orderNumber: number;
+  orderId: string;
+  minutes: number;
+  firedAt: Date;
+  readyAt: Date;
+}
+
+interface SpeedItem {
+  name: string;
+  tickets: number;
+  avgMin: number;
+  slowestMin: number;
+  /** 5.69.0 — the dish's own clock: fire → its last ticked line (029's
+   *  checked_at), one opinion per dish per timed ticket, only when EVERY
+   *  line of that dish on the ticket was ticked (a half-ticked dish hasn't
+   *  fully passed — the clock never half-speaks). Null = no ticks on file
+   *  for this dish; the row then rides the ticket-donated span alone. */
+  own: { n: number; avgMin: number; slowestMin: number } | null;
+}
+
+interface SpeedAgg {
+  sample: SpeedTicket[];
+  avgMin: number | null;
+  medianMin: number | null;
+  slowest: SpeedTicket | null;
+  breaches: SpeedTicket[];
+  items: SpeedItem[];
+}
+
+/** The kitchen's honest stopwatch, straight off 007's trigger-written hop
+ *  trail: FIRED = the hop into 'preparing' (the counter's Ok — the earliest
+ *  one wins, retries can't inflate), READY = the earliest hop into 'ready'
+ *  or, for takeaways that never sat on the pass, 'completed'. Only tickets
+ *  with BOTH endpoints are timed — a ticket still cooking has no finish
+ *  line, and the clock never guesses. Cancelled tickets never enter. */
+function kitchenSpeed(rows: Order[], hopRows: StatusHop[]): SpeedAgg {
+  const live = new Map(
+    rows
+      .filter((o) => String(o.status || '').toLowerCase() !== 'cancelled')
+      .map((o) => [o.id, o]),
+  );
+  const firedAt = new Map<string, Date>();
+  const readyAt = new Map<string, Date>();
+  for (const h of hopRows) {
+    if (!live.has(h.orderId)) continue;
+    const at = new Date(h.atIso);
+    if (Number.isNaN(at.getTime())) continue;
+    if (h.toStatus === 'preparing') {
+      const prev = firedAt.get(h.orderId);
+      if (!prev || at < prev) firedAt.set(h.orderId, at);
+    }
+    if (h.toStatus === 'ready' || h.toStatus === 'completed') {
+      const prev = readyAt.get(h.orderId);
+      if (!prev || at < prev) readyAt.set(h.orderId, at);
+    }
+  }
+  const sample: SpeedTicket[] = [];
+  for (const [id, o] of live) {
+    const f = firedAt.get(id);
+    const r = readyAt.get(id);
+    if (!f || !r || r.getTime() <= f.getTime()) continue;
+    sample.push({
+      orderNumber: Number(o.order_number),
+      orderId: id,
+      minutes: (r.getTime() - f.getTime()) / 60000,
+      firedAt: f,
+      readyAt: r,
+    });
+  }
+  sample.sort((a, b) => a.minutes - b.minutes);
+  const n = sample.length;
+  const avgMin = n > 0 ? sample.reduce((s, t) => s + t.minutes, 0) / n : null;
+  const medianMin = n > 0 ? sample[Math.floor((n - 1) / 2)].minutes : null;
+  const slowest = n > 0 ? sample[n - 1] : null;
+  // the 10-minute SLA the kitchen board already shouts about (LATE PREP)
+  const breaches = sample.filter((t) => t.minutes > 10);
+  // 5.68.0 — the slow dish: each timed ticket donates its fire→ready span to
+  // every dish on it (one sample per DISH per ticket — a ×2 line is one
+  // opinion, not two). The dish the pass waits for floats up on its own.
+  const byItem = new Map<string, { total: number; n: number; max: number }>();
+  // 5.69.0 — the dish's own clock: the SAME timed tickets, but the span is
+  // fire → the dish's last ticked line (029's checked_at), not the ticket's
+  // ready hop. A ticket with three dishes waits for the slowest one; the
+  // check-clock lets the two that passed early speak for themselves. Rules:
+  // every line of the dish must be ticked (fully passed), the sample spans
+  // fire→check only when the check is after the fire (a pre-fire tick would
+  // wind the clock backwards — skipped, never negative), and only tickets
+  // already in the timed sample contribute (the block's common denominator
+  // stays 'tickets with a complete story'; mid-flight dishes stay on the
+  // KDS's clock).
+  const byOwn = new Map<string, { total: number; n: number; max: number }>();
+  for (const t of sample) {
+    const o = live.get(t.orderId);
+    const lines = o?.items || [];
+    const perDish = new Map<string, { allChecked: boolean; last: number }>();
+    for (const it of lines) {
+      const key = it.variant_name ? `${it.name} · ${it.variant_name}` : it.name;
+      const cur = perDish.get(key) || { allChecked: true, last: 0 };
+      if (!it.checked_at) {
+        cur.allChecked = false;
+      } else {
+        const at = new Date(it.checked_at).getTime();
+        if (!Number.isNaN(at) && at > cur.last) cur.last = at;
+      }
+      perDish.set(key, cur);
+    }
+    for (const [key, d] of perDish) {
+      if (!d.allChecked || d.last <= t.firedAt.getTime()) continue;
+      const spanMin = (d.last - t.firedAt.getTime()) / 60000;
+      const cur = byOwn.get(key) || { total: 0, n: 0, max: 0 };
+      cur.total += spanMin;
+      cur.n += 1;
+      cur.max = Math.max(cur.max, spanMin);
+      byOwn.set(key, cur);
+    }
+    const seen = new Set<string>();
+    for (const it of lines) {
+      const key = it.variant_name ? `${it.name} · ${it.variant_name}` : it.name;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const cur = byItem.get(key) || { total: 0, n: 0, max: 0 };
+      cur.total += t.minutes;
+      cur.n += 1;
+      cur.max = Math.max(cur.max, t.minutes);
+      byItem.set(key, cur);
+    }
+  }
+  const items: SpeedItem[] = [...byItem.entries()]
+    .map(([name, v]) => {
+      const own = byOwn.get(name);
+      return {
+        name,
+        tickets: v.n,
+        avgMin: v.total / v.n,
+        slowestMin: v.max,
+        own: own ? { n: own.n, avgMin: own.total / own.n, slowestMin: own.max } : null,
+      };
+    })
+    .sort((a, b) => b.avgMin - a.avgMin || b.slowestMin - a.slowestMin);
+  return { sample, avgMin, medianMin, slowest, breaches, items };
+}
+
+/** "6m 40s" voice — seconds-true, never a bare decimal the eye rounds wrong. */
+function fmtDuration(minutes: number): string {
+  const totalSec = Math.max(0, Math.round(minutes * 60));
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const s = totalSec % 60;
+  if (h > 0) return `${h}h ${String(m).padStart(2, '0')}m`;
+  return `${m}m ${String(s).padStart(2, '0')}s`;
 }
 
 function hourLabel(h: number): string {
@@ -224,6 +406,9 @@ interface ItemRank {
   units: number;
   revenue: number;
   cost: number;
+  /** true when the dish's menu item has recipe pricing on file (v_item_unit_cost);
+   *  unpriced dishes sit out of the margin board — a zero cost is not a 100% margin */
+  priced: boolean;
 }
 
 const TYPE_LABEL: Record<string, string> = {
@@ -289,43 +474,8 @@ function signedMoney(v: number): string {
   return formatMoney(0);
 }
 
-const IST_DT = new Intl.DateTimeFormat('en-IN', {
-  timeZone: IST_TZ,
-  day: 'numeric',
-  month: 'short',
-  hour: 'numeric',
-  minute: '2-digit',
-  hour12: true,
-});
-
-/* ── IST day keys/labels for the trends buckets ────────────────────────── */
-
-const IST_DAY_KEY = new Intl.DateTimeFormat('en-CA', {
-  timeZone: IST_TZ,
-  year: 'numeric',
-  month: '2-digit',
-  day: '2-digit',
-});
-
-const IST_DAY_LABEL = new Intl.DateTimeFormat('en-IN', {
-  timeZone: IST_TZ,
-  day: 'numeric',
-  month: 'short',
-});
-
-const IST_CLOSE_LABEL = new Intl.DateTimeFormat('en-IN', {
-  timeZone: IST_TZ,
-  day: 'numeric',
-  month: 'short',
-  hour: 'numeric',
-  minute: '2-digit',
-  hour12: true,
-});
-
-/** YYYY-MM-DD in IST for an ISO timestamp — the trends bucket key. */
-function istDayKey(iso: string): string {
-  return IST_DAY_KEY.format(new Date(iso));
-}
+/* Trends bucket keys/labels come from appday: appDayKey + appFormatters,
+   rebuilt whenever the owner's chosen timezone changes. */
 
 /** Drawer variance color — the exact health tones the Close-out voice uses. */
 function varianceColor(v: number): string {
@@ -339,6 +489,9 @@ function varianceColor(v: number): string {
 
 export const ReportsScreen: React.FC = () => {
   const [attempt, setAttempt] = useState(0);
+  /* 5.97.0 — the owner's timezone word takes effect live: a Settings save
+     refetches and re-renders every report in the chosen day. */
+  useEffect(() => subscribePrefs(() => setAttempt((a) => a + 1)), []);
   return <ReportsInner key={attempt} onTenantRetry={() => setAttempt((a) => a + 1)} />;
 };
 
@@ -351,6 +504,18 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
   const [unitCosts, setUnitCosts] = useState<Map<string, number>>(new Map());
   const [feedback, setFeedback] = useState<FeedbackRow[]>([]);
   const [shifts, setShifts] = useState<DrawerSession[]>([]);
+  /* 5.71.0 — the offer's scorecard: the redemption ledger (016) finally read
+     as a season, joined to the offer rows so silent offers speak zeros. */
+  const [redemptions, setRedemptions] = useState<OfferRedemptionRow[]>([]);
+  const [offersList, setOffersList] = useState<Offer[]>([]);
+  /* 5.77.0 — the bin's bill: the waste side of the 027 diary (spoilage /
+     spillage / damage with the SKU joined). null = not answered yet; [] =
+     answered, nothing was binned. Rides the fail-soft sidecar. */
+  const [waste, setWaste] = useState<WasteMove[] | null>(null);
+  /* 5.64.0 — the payments ledger rows for the SELECTED range. The mix reads
+     the parts: a split ticket lands under each method it was paid with. */
+  const [ledger, setLedger] = useState<(ReceiptPayment & { orderId: string })[]>([]);
+  const [hops, setHops] = useState<StatusHop[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshedAt, setRefreshedAt] = useState<Date | null>(null);
@@ -374,15 +539,24 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
       // the sales view never dies for them — their sections fall back to
       // their own honest empty states.
       try {
-        const [fb, sh] = await Promise.all([
+        const [fb, sh, reds, offerRows, wmoves] = await Promise.all([
           fetchFeedbackRows(tenantId),
           fetchDrawerHistory(tenantId, 200),
+          fetchOfferRedemptions(tenantId),
+          fetchOffers(tenantId),
+          fetchWasteMoves(tenantId),
         ]);
         setFeedback(fb);
         setShifts(sh);
+        setRedemptions(reds);
+        setOffersList(offerRows);
+        setWaste(wmoves);
       } catch {
         setFeedback([]);
         setShifts([]);
+        setRedemptions([]);
+        setOffersList([]);
+        setWaste([]);
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not load sales data from the cloud.');
@@ -405,6 +579,51 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
       return true;
     });
   }, [orders, range]);
+
+  /* 5.64.0 — the ledger rides the range: one bounded read per window (or
+     refresh), fail-soft like every other sidecar section. */
+  useEffect(() => {
+    if (!tenantId) return;
+    let alive = true;
+    const { startMs, endMs } = rangeWindow(range);
+    fetchPaymentsInRange(
+      tenantId,
+      startMs !== null ? new Date(startMs).toISOString() : null,
+      new Date(endMs).toISOString()
+    )
+      .then((rows) => {
+        if (alive) setLedger(rows);
+      })
+      .catch(() => {
+        if (alive) setLedger([]);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [tenantId, range, refreshedAt]);
+
+  /* 5.67.0 — the hop ledger rides the range: 007's trigger-written trail of
+     every status hop, bounded to the window with a 6h tail (a ticket that
+     fires just after midnight still lands), fail-soft like every sidecar. */
+  useEffect(() => {
+    if (!tenantId) return;
+    let alive = true;
+    const { startMs, endMs } = rangeWindow(range);
+    fetchStatusHopsInRange(
+      tenantId,
+      startMs !== null ? new Date(startMs).toISOString() : null,
+      new Date(endMs + 6 * 3600 * 1000).toISOString()
+    )
+      .then((rows) => {
+        if (alive) setHops(rows);
+      })
+      .catch(() => {
+        if (alive) setHops([]);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [tenantId, range, refreshedAt]);
 
   const agg = useMemo(() => aggregateTickets(inRange, cogsMap), [inRange, cogsMap]);
 
@@ -436,38 +655,68 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
     const buckets = Array.from({ length: 24 }, (_, h) => ({ hour: h, label: hourLabel(h), gross: 0 }));
     for (const o of inRange) {
       if (String(o.status || '').toLowerCase() === 'cancelled') continue;
-      buckets[istHour(o.created_at)].gross += Number(o.total ?? 0);
+      buckets[appHour(o.created_at)].gross += Number(o.total ?? 0);
     }
     return buckets;
   }, [inRange]);
 
   const payMix = useMemo(() => {
+    /* 5.64.0 — the mix reads the LEDGER, not the covering method: a split
+       ticket's parts each land under the method that took them, and "money
+       still out" is the BALANCE (total − ledger parts), not the whole ticket.
+       Legacy pre-007 tickets (no ledger rows) keep the stored-method
+       fallback, so old history never vanishes from the mix. */
+    const cancelledIds = new Set(
+      inRange.filter((o) => String(o.status || '').toLowerCase() === 'cancelled').map((o) => o.id)
+    );
+    const rowsByOrder = new Map<string, (ReceiptPayment & { orderId: string })[]>();
+    for (const r of ledger) {
+      if (cancelledIds.has(r.orderId)) continue;
+      const cur = rowsByOrder.get(r.orderId);
+      if (cur) cur.push(r);
+      else rowsByOrder.set(r.orderId, [r]);
+    }
     const mix = new Map<string, { method: string; count: number; total: number }>();
     let unpaid = 0;
     let unpaidAmt = 0;
+    let splitTickets = 0;
     for (const o of inRange) {
       if (String(o.status || '').toLowerCase() === 'cancelled') continue;
+      const rows = rowsByOrder.get(o.id) || [];
       if (String(o.payment_status || '').toLowerCase() === 'completed') {
-        const m = String(o.payment_method || 'cash').toLowerCase();
-        const cur = mix.get(m) || { method: m, count: 0, total: 0 };
-        cur.count += 1;
-        cur.total += Number(o.total ?? 0);
-        mix.set(m, cur);
+        if (rows.length > 1) splitTickets += 1;
+        if (rows.length > 0) {
+          for (const r of rows) {
+            const m = String(r.method || 'cash').toLowerCase();
+            const cur = mix.get(m) || { method: m, count: 0, total: 0 };
+            cur.count += 1;
+            cur.total += Number(r.amount || 0);
+            mix.set(m, cur);
+          }
+        } else {
+          const m = String(o.payment_method || 'cash').toLowerCase();
+          const cur = mix.get(m) || { method: m, count: 0, total: 0 };
+          cur.count += 1;
+          cur.total += Number(o.total ?? 0);
+          mix.set(m, cur);
+        }
       } else {
         unpaid += 1;
-        unpaidAmt += Number(o.total ?? 0);
+        const paid = rows.reduce((s, r) => s + Number(r.amount || 0), 0);
+        unpaidAmt += Math.max(0, Number(o.total ?? 0) - paid);
       }
     }
     const paid = [...mix.values()].sort((a, b) => b.total - a.total);
-    return { paid, unpaid, unpaidAmt };
-  }, [inRange]);
+    return { paid, unpaid, unpaidAmt, splitTickets };
+  }, [inRange, ledger]);
 
   const topItems = useMemo(() => {
     const byName = new Map<string, ItemRank>();
     for (const o of inRange) {
       if (String(o.status || '').toLowerCase() === 'cancelled') continue;
       for (const it of o.items || []) {
-        const cur = byName.get(it.name) || { name: it.name, units: 0, revenue: 0, cost: 0 };
+        const priced = unitCosts.has(it.menu_item_id ?? '');
+        const cur = byName.get(it.name) || { name: it.name, units: 0, revenue: 0, cost: 0, priced };
         cur.units += Number(it.qty ?? 0);
         cur.revenue += Number(it.item_total ?? Number(it.unit_price ?? 0) * Number(it.qty ?? 0));
         // base-recipe ingredient cost for the units sold (variants/add-ons not priced)
@@ -477,6 +726,46 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
     }
     return [...byName.values()].sort((a, b) => b.revenue - a.revenue);
   }, [inRange, unitCosts]);
+
+  /* 5.72.0 — the earner's list. Top items ranks by what dishes RING; this ranks
+   * by what they KEEP (revenue − ingredient cost). Only recipe-priced dishes
+   * speak here — an unpriced dish would claim a fake 100% margin. The sell rank
+   * rides along so the board can name the divergence: the dish that sells most
+   * is not always the dish that earns most. */
+  const marginRank = useMemo(
+    () =>
+      topItems
+        .filter((it) => it.priced && it.revenue > 0)
+        .sort((a, b) => b.revenue - b.cost - (a.revenue - a.cost)),
+    [topItems],
+  );
+  const sellsRank = useMemo(() => {
+    const m = new Map<string, number>();
+    topItems.forEach((it, i) => m.set(it.name, i + 1));
+    return m;
+  }, [topItems]);
+
+  /* 5.73.0 — the menu's quadrants (classic menu engineering, honestly computed).
+   * Popularity = units vs the priced menu's average units; richness = per-unit
+   * contribution margin vs the average. Stars protect themselves; Plowhorses
+   * sell but keep little (re-price or re-recipe); Puzzles keep much but sell
+   * little (push them); Dogs do neither. Relative by nature — needs ≥2 priced
+   * dishes before a split means anything. */
+  const menuMatrix = useMemo(() => {
+    const priced = topItems.filter((it) => it.priced && it.revenue > 0 && it.units > 0);
+    if (priced.length < 2) return null;
+    const avgUnits = priced.reduce((s, it) => s + it.units, 0) / priced.length;
+    const avgCm = priced.reduce((s, it) => s + (it.revenue - it.cost) / it.units, 0) / priced.length;
+    const cells: Record<'star' | 'plowhorse' | 'puzzle' | 'dog', ItemRank[]> = {
+      star: [], plowhorse: [], puzzle: [], dog: [],
+    };
+    for (const it of priced) {
+      const pop = it.units >= avgUnits;
+      const rich = (it.revenue - it.cost) / it.units >= avgCm;
+      cells[pop && rich ? 'star' : pop && !rich ? 'plowhorse' : !pop && rich ? 'puzzle' : 'dog'].push(it);
+    }
+    return { cells, avgUnits, avgCm, n: priced.length };
+  }, [topItems]);
 
   const typeMix = useMemo(() => {
     const m = new Map<string, { count: number; total: number }>();
@@ -495,8 +784,16 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
 
   const exportRanking = useCallback(() => {
     if (topItems.length === 0) return;
+    const earnsRank = new Map<string, number>();
+    marginRank.forEach((it, i) => earnsRank.set(it.name, i + 1));
+    const className = new Map<string, string>();
+    if (menuMatrix) {
+      for (const [key, dishes] of Object.entries(menuMatrix.cells)) {
+        for (const d of dishes) className.set(d.name, key);
+      }
+    }
     const rows: (string | number)[][] = [
-      ['Rank', 'Item', 'Units sold', 'Revenue (INR)', 'Ingredient cost (INR)', 'Margin (INR)', 'Margin %', 'Share of item revenue %'],
+      ['Rank', 'Item', 'Units sold', 'Revenue (INR)', 'Ingredient cost (INR)', 'Margin (INR)', 'Margin %', 'Share of item revenue %', 'Sells rank', 'Earns rank', 'Quadrant'],
     ];
     const total = topItems.reduce((n, it) => n + it.revenue, 0) || 1;
     topItems.forEach((it, i) => {
@@ -511,10 +808,13 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
         margin.toFixed(2),
         marginPct.toFixed(1),
         ((it.revenue / total) * 100).toFixed(1),
+        i + 1,
+        it.priced ? (earnsRank.get(it.name) ?? '') : 'unpriced',
+        it.priced ? (className.get(it.name) ?? '') : '',
       ]);
     });
-    downloadCsv(`servepoint-top-items-${istTodayIso()}.csv`, rows);
-  }, [topItems]);
+    downloadCsv(`servepoint-top-items-${appTodayIso()}.csv`, rows);
+  }, [topItems, marginRank, menuMatrix]);
 
   /* ── guest satisfaction (019) — range-scoped reads, fail-soft data ── */
 
@@ -539,24 +839,239 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
     const quotes = fbInRange
       .filter((f) => f.comment && f.comment.trim().length > 0)
       .slice(0, 3);
-    return { stars, avg, count: fbInRange.length, quotes };
+    /* 5.70.0 — the recover list: every rating ≤ 3 in the window, newest
+       first. The bell already rings at ≤ 2 (030's trigger); this is the
+       owner's season-long callback sheet — the three-star "meh" deserves
+       a name too. Capped on screen, complete in the CSV. */
+    const low = fbInRange
+      .filter((f) => f.rating <= 3)
+      .slice(0, 8);
+    return { stars, avg, count: fbInRange.length, quotes, low };
   }, [fbInRange]);
+
+  /* ── 5.77.0 — the bin's bill: what the shelf threw away, in rupees ── */
+
+  const wasteAgg = useMemo(() => {
+    const moves = waste || [];
+    const { startMs, endMs } = rangeWindow(range);
+    const inWin = moves.filter((m) => {
+      const t = new Date(m.created_at).getTime();
+      if (Number.isNaN(t)) return false;
+      if (startMs !== null && (t < startMs || t >= endMs)) return false;
+      return true;
+    });
+    /* Each move is valued at its SKU's cost on file. A SKU with no cost on
+       file counts as UNVALUED — the bill stays silent rather than guessing
+       a rupee (the same honesty the earner's list gives unpriced dishes).
+       027's server guard makes waste leave the shelf (negative qty), so the
+       bill reads |qty| — but abs() defensively anyway. */
+    const valueOf = (m: WasteMove): number | null => {
+      const c = m.inventory_items?.cost_per_unit;
+      if (c === null || c === undefined) return null;
+      return Math.abs(Number(m.qty)) * Number(c);
+    };
+    let total = 0;
+    let unvalued = 0;
+    const reasons: Record<'spoilage' | 'spillage' | 'damage', { rupees: number; count: number }> = {
+      spoilage: { rupees: 0, count: 0 },
+      spillage: { rupees: 0, count: 0 },
+      damage: { rupees: 0, count: 0 },
+    };
+    const byItem = new Map<
+      string,
+      { name: string; unit: string; qty: number; rupees: number; count: number; unvalued: number; last: string; note: string }
+    >();
+    for (const m of inWin) {
+      const v = valueOf(m);
+      if (v === null) unvalued += 1;
+      else total += v;
+      const r = reasons[m.reason as keyof typeof reasons];
+      if (r) {
+        if (v !== null) r.rupees += v;
+        r.count += 1;
+      }
+      const key = m.inventory_items?.name || 'Unknown SKU';
+      const cur =
+        byItem.get(key) ||
+        {
+          name: key,
+          unit: m.inventory_items?.unit || '',
+          qty: 0,
+          rupees: 0,
+          count: 0,
+          unvalued: 0,
+          last: m.created_at,
+          note: m.note || '',
+        };
+      cur.qty += Math.abs(Number(m.qty));
+      cur.count += 1;
+      if (v === null) cur.unvalued += 1;
+      else cur.rupees += v;
+      if (new Date(m.created_at).getTime() > new Date(cur.last).getTime()) cur.last = m.created_at;
+      byItem.set(key, cur);
+    }
+    const items = [...byItem.values()]
+      .sort((a, b) => b.rupees - a.rupees || b.count - a.count || a.name.localeCompare(b.name))
+      .slice(0, 6);
+    return { count: inWin.length, total, unvalued, reasons, items };
+  }, [waste, range]);
+
+  /* ── 5.71.0 — the offer's scorecard: every offer answers for itself ── */
+
+  const offerAgg = useMemo(() => {
+    const { startMs, endMs } = rangeWindow(range);
+    const inWin = redemptions.filter((r) => {
+      const t = new Date(r.createdAt).getTime();
+      if (Number.isNaN(t)) return false;
+      if (startMs !== null && (t < startMs || t >= endMs)) return false;
+      return true;
+    });
+    const byOffer = new Map<string, { uses: number; discountSum: number; revenue: number; lastAt: string | null }>();
+    for (const r of inWin) {
+      const cur = byOffer.get(r.offerId) || { uses: 0, discountSum: 0, revenue: 0, lastAt: null as string | null };
+      cur.uses += 1;
+      cur.discountSum += r.discountAmount;
+      cur.revenue += r.orderTotal ?? 0;
+      if (!cur.lastAt || r.createdAt > cur.lastAt) cur.lastAt = r.createdAt;
+      byOffer.set(r.offerId, cur);
+    }
+    /* every offer on the books gets a row — an offer with zero rides in the
+       window speaks honest zeros, it does not vanish (the dead offer is the
+       one the owner most needs to see). Orphaned redemptions (offer row gone
+       despite the CASCADE) still render defensively. */
+    const rows = new Map<string, { id: string; title: string; isActive: boolean; uses: number; discountSum: number; revenue: number; lastAt: string | null; voice: string }>();
+    const voiceOf = (o: Offer) => (o.discount_type === 'flat' ? `${formatMoney(Number(o.discount_value))} off` : `${Number(o.discount_value)}% off`);
+    for (const o of offersList) {
+      const v = byOffer.get(o.id);
+      rows.set(o.id, {
+        id: o.id,
+        title: o.title,
+        isActive: o.is_active,
+        uses: v?.uses ?? 0,
+        discountSum: v?.discountSum ?? 0,
+        revenue: v?.revenue ?? 0,
+        lastAt: v?.lastAt ?? null,
+        voice: voiceOf(o),
+      });
+    }
+    for (const [id, v] of byOffer) {
+      if (rows.has(id)) continue;
+      rows.set(id, {
+        id,
+        title: inWin.find((r) => r.offerId === id)?.title || 'an offer since gone',
+        isActive: false,
+        uses: v.uses,
+        discountSum: v.discountSum,
+        revenue: v.revenue,
+        lastAt: v.lastAt,
+        voice: '',
+      });
+    }
+    const list = [...rows.values()].sort((a, b) => b.uses - a.uses || b.revenue - a.revenue || a.title.localeCompare(b.title));
+    const totalUses = list.reduce((s, o) => s + o.uses, 0);
+    const totalDiscount = list.reduce((s, o) => s + o.discountSum, 0);
+    const totalRevenue = list.reduce((s, o) => s + o.revenue, 0);
+    return { list, totalUses, totalDiscount, totalRevenue, offerCount: offersList.length };
+  }, [redemptions, offersList, range]);
+
+  const exportOffers = useCallback(() => {
+    if (offerAgg.list.length === 0) return;
+    const rows: (string | number)[][] = [
+      ['Offer scorecard — how the counter\'s offers performed', ''],
+      ['Offer', 'State', 'Discount', 'Tickets', 'Brought in', 'Discount cost', `Last redemption (${appTzTag()})`],
+    ];
+    for (const o of offerAgg.list) {
+      rows.push([
+        o.title,
+        o.isActive ? 'active' : 'paused',
+        o.voice,
+        o.uses,
+        formatMoney(o.revenue),
+        formatMoney(o.discountSum),
+        o.lastAt ? appFormatters().dt.format(new Date(o.lastAt)) : '',
+      ]);
+    }
+    downloadCsv(`servepoint-offer-scorecard-${appTodayIso()}.csv`, rows);
+  }, [offerAgg]);
 
   const exportRatings = useCallback(() => {
     if (fbAgg.count === 0) return;
     const rows: (string | number)[][] = [
-      ['Submitted (IST)', 'Order #', 'Rating (1-5)', 'Comment'],
+      [`Submitted (${appTzTag()})`, 'Order #', 'Rating (1-5)', 'Comment'],
     ];
     for (const f of [...fbInRange].reverse()) {
       rows.push([
-        IST_DT.format(new Date(f.created_at)),
+        appFormatters().dt.format(new Date(f.created_at)),
         f.order_number,
         f.rating,
         f.comment ?? '',
       ]);
     }
-    downloadCsv(`servepoint-guest-ratings-${istTodayIso()}.csv`, rows);
-  }, [fbInRange, fbAgg.count]);
+    if (fbAgg.low.length > 0) {
+      rows.push(
+        [],
+        ['The recover list — every rating ≤ 3, newest first'],
+        [`Submitted (${appTzTag()})`, 'Order #', 'Rating', 'Guest', 'Phone', 'Comment'],
+      );
+      for (const f of fbAgg.low) {
+        rows.push([
+          appFormatters().dt.format(new Date(f.created_at)),
+          f.order_number,
+          f.rating,
+          f.customer_name ?? '',
+          f.customer_phone ?? '',
+          f.comment ?? '',
+        ]);
+      }
+    }
+    downloadCsv(`servepoint-guest-ratings-${appTodayIso()}.csv`, rows);
+  }, [fbInRange, fbAgg]);
+
+  /* ── kitchen speed (5.67.0) — the stopwatch that reads the hop ledger ───── */
+
+  const kitchen = useMemo(() => kitchenSpeed(inRange, hops), [inRange, hops]);
+
+  const exportKitchenSpeed = useCallback(() => {
+    if (kitchen.sample.length === 0) return;
+    const rows: (string | number)[][] = [
+      [`Kitchen speed (fire → ready, ${appTzTag()})`, ''],
+      ['Tickets timed', kitchen.sample.length],
+      ['Average', fmtDuration(kitchen.avgMin ?? 0)],
+      ['Median', fmtDuration(kitchen.medianMin ?? 0)],
+      ['Slowest', kitchen.slowest ? `#${kitchen.slowest.orderNumber} · ${fmtDuration(kitchen.slowest.minutes)}` : '—'],
+      [`Over the 10-minute SLA`, kitchen.breaches.length],
+      [],
+      ['Ticket', `Fired (${appTzTag()})`, `Ready (${appTzTag()})`, 'Duration', 'SLA'],
+    ];
+    for (const t of [...kitchen.sample].sort((a, b) => b.minutes - a.minutes)) {
+      rows.push([
+        `#${t.orderNumber}`,
+        appFormatters().dt.format(t.firedAt),
+        appFormatters().dt.format(t.readyAt),
+        fmtDuration(t.minutes),
+        t.minutes > 10 ? 'over' : 'ok',
+      ]);
+    }
+    if (kitchen.items.length > 0) {
+      rows.push(
+        [],
+        ['The slow dish — fire-to-ready span of every timed ticket the dish rode on'],
+        ['Item', 'Tickets timed', 'Average', 'Slowest ticket span', 'Own-clock average', 'Own-clock slowest', 'Own-clock tickets'],
+      );
+      for (const d of kitchen.items) {
+        rows.push([
+          d.name,
+          d.tickets,
+          fmtDuration(d.avgMin),
+          fmtDuration(d.slowestMin),
+          d.own ? fmtDuration(d.own.avgMin) : '',
+          d.own ? fmtDuration(d.own.slowestMin) : '',
+          d.own ? d.own.n : '',
+        ]);
+      }
+    }
+    downloadCsv(`servepoint-kitchen-speed-${appTodayIso()}.csv`, rows);
+  }, [kitchen]);
 
   /* ── drawer honesty (020) — sealed shifts only, variance is STORED truth ── */
 
@@ -586,7 +1101,7 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
     const byDay = new Map<string, { gross: number; tickets: number; gst: number; net: number; items: number }>();
     for (const o of inRange) {
       if (String(o.status || '').toLowerCase() === 'cancelled') continue;
-      const key = istDayKey(o.created_at);
+      const key = appDayKey(o.created_at);
       const cur = byDay.get(key) || { gross: 0, tickets: 0, gst: 0, net: 0, items: 0 };
       cur.gross += Number(o.total ?? 0);
       cur.tickets += 1;
@@ -597,26 +1112,33 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
     }
     // The window: filled calendar days for 7d/30d (gaps read as slow days),
     // today's single day, or — for All time — the most recent 30 days that
-    // actually hold tickets, said honestly in the caption.
-    const { endMs } = rangeWindow(range);
+    // actually hold tickets, said honestly in the caption. Days are stepped
+    // as calendar STRINGS through the lib (DST-safe — a 24h ms stride drifts
+    // across a zone's spring-forward).
     let dayMs: number[] = [];
     if (range === 'today') {
-      dayMs = [endMs - 24 * 3600 * 1000];
+      dayMs = [appDayStartMs(appTodayIso())];
     } else if (range === '7d' || range === '30d') {
       const days = range === '7d' ? 7 : 30;
-      for (let t = endMs - days * 24 * 3600 * 1000; t < endMs; t += 24 * 3600 * 1000) dayMs.push(t);
+      const dayKeys: string[] = [];
+      for (let i = days - 1; i >= 0; i--) {
+        const d = new Date(`${appTodayIso()}T12:00:00Z`);
+        d.setUTCDate(d.getUTCDate() - i);
+        dayKeys.push(d.toISOString().slice(0, 10));
+      }
+      dayMs = dayKeys.map((k) => appDayStartMs(k));
     } else {
       dayMs = [...byDay.keys()]
         .sort()
         .slice(-30)
-        .map((k) => istDayStart(k));
+        .map((k) => appDayStartMs(k));
     }
     return dayMs.map((ms) => {
-      const key = IST_DAY_KEY.format(new Date(ms));
+      const key = appDayKey(new Date(ms).toISOString());
       const cur = byDay.get(key) || { gross: 0, tickets: 0, gst: 0, net: 0, items: 0 };
       return {
         key,
-        label: IST_DAY_LABEL.format(new Date(ms)),
+        label: appFormatters().dayLabel.format(new Date(ms)),
         gross: cur.gross,
         tickets: cur.tickets,
         gst: cur.gst,
@@ -635,12 +1157,20 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
 
   const exportDaily = useCallback(() => {
     if (daily.length === 0) return;
-    const rows: (string | number)[][] = [['Day (IST)', 'Gross (INR)', 'Tickets', 'Avg ticket (INR)']];
+    const rows: (string | number)[][] = [[`Day (${appTzTag()})`, 'Gross (INR)', 'Tickets', 'Avg ticket (INR)']];
     for (const d of daily) {
       rows.push([d.label, d.gross.toFixed(2), d.tickets, d.tickets > 0 ? d.avg.toFixed(2) : '']);
     }
-    downloadCsv(`servepoint-daily-sales-${istTodayIso()}.csv`, rows);
+    downloadCsv(`servepoint-daily-sales-${appTodayIso()}.csv`, rows);
   }, [daily]);
+
+  /* 5.96.0 — the day door: a bar is a day's whole counted book one tap away.
+     Close-out already browses any IST day (its own Previous/Next arrows);
+     the sectionHint grammar carries the day key there — consumed once on
+     arrival, never persisted, never riding the URL. */
+  const openDayInCloseout = useCallback((key: string) => {
+    useUi.getState().goSection('eod', ['Reports', 'Close-out'], `day:${key}`);
+  }, []);
 
   /* ── 5.50.0 — the other five sections speak CSV too. Reports had exits for
      daily sales, item ranking and guest ratings since 5.3.x; the hour shape,
@@ -652,17 +1182,24 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
   const exportHourly = useCallback(() => {
     // All 24 buckets, zeros included — the gaps ARE the quiet hours; a
     // spreadsheet should see the whole day the chart draws.
-    const rows: (string | number)[][] = [['Hour (IST)', 'Gross (INR)']];
+    const rows: (string | number)[][] = [[`Hour (${appTzTag()})`, 'Gross (INR)']];
     for (const h of hourly) rows.push([h.label, h.gross.toFixed(2)]);
-    downloadCsv(`servepoint-sales-by-hour-${istTodayIso()}.csv`, rows);
+    downloadCsv(`servepoint-sales-by-hour-${appTodayIso()}.csv`, rows);
   }, [hourly]);
 
   const exportPayMix = useCallback(() => {
-    const rows: (string | number)[][] = [['Method', 'Tickets', 'Total (INR)']];
+    const rows: (string | number)[][] = [['Method', 'Payments', 'Total (INR)']];
     for (const m of payMix.paid) rows.push([m.method, m.count, m.total.toFixed(2)]);
-    if (payMix.unpaid > 0) rows.push(['Unpaid — money still out', payMix.unpaid, payMix.unpaidAmt.toFixed(2)]);
+    if (payMix.splitTickets > 0)
+      rows.push([
+        `Split tickets — settled in parts`,
+        payMix.splitTickets,
+        '',
+      ]);
+    if (payMix.unpaid > 0)
+      rows.push(['Unpaid — balance still out', payMix.unpaid, payMix.unpaidAmt.toFixed(2)]);
     if (rows.length === 1) return;
-    downloadCsv(`servepoint-payment-mix-${istTodayIso()}.csv`, rows);
+    downloadCsv(`servepoint-payment-mix-${appTodayIso()}.csv`, rows);
   }, [payMix]);
 
   const exportMargin = useCallback(() => {
@@ -678,7 +1215,7 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
       ['', ''],
       ['Note', 'Recipes × current shelf cost — a restock reprices history; variants/add-ons not priced.'],
     ];
-    downloadCsv(`servepoint-cost-margin-${istTodayIso()}.csv`, rows);
+    downloadCsv(`servepoint-cost-margin-${appTodayIso()}.csv`, rows);
   }, [agg, range]);
 
   const exportTypeMix = useCallback(() => {
@@ -688,13 +1225,13 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
       const share = agg.placed > 0 ? (v.count / agg.placed) * 100 : 0;
       rows.push([TYPE_LABEL[t] || t, v.count, v.total.toFixed(2), share.toFixed(1)]);
     }
-    downloadCsv(`servepoint-service-mix-${istTodayIso()}.csv`, rows);
+    downloadCsv(`servepoint-service-mix-${appTodayIso()}.csv`, rows);
   }, [typeMix, agg.placed]);
 
   const exportShifts = useCallback(() => {
     if (shiftAgg.count === 0) return;
     const rows: (string | number)[][] = [
-      ['Closed (IST)', 'Expected (INR)', 'Counted (INR)', 'Variance (INR)', 'Closed by', 'Note'],
+      [`Closed (${appTzTag()})`, 'Expected (INR)', 'Counted (INR)', 'Variance (INR)', 'Closed by', 'Note'],
     ];
     let sumExp = 0;
     let sumCnt = 0;
@@ -704,7 +1241,7 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
       sumExp += exp;
       sumCnt += cnt;
       rows.push([
-        s.closed_at ? IST_CLOSE_LABEL.format(new Date(s.closed_at)) : '—',
+        s.closed_at ? appFormatters().closeLabel.format(new Date(s.closed_at)) : '—',
         s.expected_cash === null ? '' : exp.toFixed(2),
         s.counted_cash === null ? '' : cnt.toFixed(2),
         s.variance === null ? '' : Number(s.variance).toFixed(2),
@@ -713,13 +1250,13 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
       ]);
     }
     rows.push(['NET', sumExp.toFixed(2), sumCnt.toFixed(2), shiftAgg.net.toFixed(2), '', '']);
-    downloadCsv(`servepoint-drawer-shifts-${istTodayIso()}.csv`, rows);
+    downloadCsv(`servepoint-drawer-shifts-${appTodayIso()}.csv`, rows);
   }, [shiftsInRange, shiftAgg]);
 
   const fbDaily = useMemo(() => {
     const byDay = new Map<string, { sum: number; n: number }>();
     for (const f of fbInRange) {
-      const key = istDayKey(f.created_at);
+      const key = appDayKey(f.created_at);
       const cur = byDay.get(key) || { sum: 0, n: 0 };
       cur.sum += f.rating;
       cur.n += 1;
@@ -727,13 +1264,17 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
     }
     if (range === '7d' || range === '30d') {
       // Filled window: unrated days stay null so the line's gaps are honest.
-      const { endMs } = rangeWindow(range);
+      // Calendar strings through the lib — DST-safe (see the trends window);
+      // the window ENDS today, same as the KPI range.
       const days = range === '7d' ? 7 : 30;
       const out: { label: string; avg: number | null; n: number }[] = [];
-      for (let t = endMs - days * 24 * 3600 * 1000; t < endMs; t += 24 * 3600 * 1000) {
-        const cur = byDay.get(IST_DAY_KEY.format(new Date(t)));
+      for (let i = days - 1; i >= 0; i--) {
+        const d = new Date(`${appTodayIso()}T12:00:00Z`);
+        d.setUTCDate(d.getUTCDate() - i);
+        const key = appDayKey(new Date(appDayStartMs(d.toISOString().slice(0, 10))).toISOString());
+        const cur = byDay.get(key);
         out.push({
-          label: IST_DAY_LABEL.format(new Date(t)),
+          label: appFormatters().dayLabel.format(new Date(appDayStartMs(d.toISOString().slice(0, 10)))),
           avg: cur ? cur.sum / cur.n : null,
           n: cur?.n ?? 0,
         });
@@ -745,7 +1286,7 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
       .sort()
       .map((k) => {
         const cur = byDay.get(k)!;
-        return { label: IST_DAY_LABEL.format(new Date(istDayStart(k))), avg: cur.sum / cur.n, n: cur.n };
+        return { label: appFormatters().dayLabel.format(new Date(appDayStartMs(k))), avg: cur.sum / cur.n, n: cur.n };
       });
   }, [fbInRange, range]);
 
@@ -764,7 +1305,7 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
     () =>
       shiftsInRange.map((s) => ({
         id: s.id,
-        short: s.closed_at ? IST_CLOSE_LABEL.format(new Date(s.closed_at)) : '—',
+        short: s.closed_at ? appFormatters().closeLabel.format(new Date(s.closed_at)) : '—',
         variance: Number(s.variance ?? 0),
       })),
     [shiftsInRange],
@@ -949,7 +1490,7 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
                     </button>
                   )}
                   <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#6B6B6B]">
-                    <CalendarRange size={11} aria-hidden /> IST days ·{' '}
+                    <CalendarRange size={11} aria-hidden /> {appTzTag()} days ·{' '}
                     {RANGE_LABEL[range].toLowerCase()}
                   </span>
                 </div>
@@ -974,14 +1515,23 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
               ) : (
                 <>
                   <p className="mb-3 text-[11.5px] text-[#969696]">
-                    Gross ₹ (bars) and tickets (line) per IST day — the shape of the range. Best
+                    Gross ₹ (bars) and tickets (line) per {appTzTag()} day — the shape of the range. Best
                     day:{' '}
                     <span className="font-bold text-[#8A5A00]">
                       {bestDay ? `${bestDay.label} (${formatMoney(bestDay.gross)})` : '—'}
                     </span>
                     {range === 'all' ? ' · most recent 30 ticket days shown' : ''}
+                    {/* 5.96.0 — the affordance is said out loud: a bar opens that
+                        day's counted book in Close-out. */}
+                    <span className="mt-0.5 flex items-center gap-1 font-semibold text-[#1D5D7E]">
+                      <MousePointerClick size={11} aria-hidden /> Tap a bar to open that day in
+                      Close-out
+                    </span>
                   </p>
-                  <div className="h-56" aria-hidden>
+                  <div
+                    className="h-56 [&_.recharts-bar-rectangle]:cursor-pointer [&_.recharts-rectangle]:cursor-pointer"
+                    aria-hidden
+                  >
                     <ResponsiveContainer width="100%" height="100%">
                       <ComposedChart data={daily} margin={{ top: 4, right: 4, bottom: 0, left: -18 }}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#E3E7E0" vertical={false} />
@@ -1024,7 +1574,22 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
                               : [String(v), 'Tickets']
                           }
                         />
-                        <Bar yAxisId="rupees" dataKey="gross" radius={[4, 4, 0, 0]} maxBarSize={38}>
+                        <Bar
+                          yAxisId="rupees"
+                          dataKey="gross"
+                          radius={[4, 4, 0, 0]}
+                          maxBarSize={38}
+                          activeBar={{ fill: '#967221' }}
+                          onClick={(
+                            data: unknown,
+                            index: number,
+                          ) => {
+                            const payload = (data as { payload?: (typeof daily)[number] } | null)
+                              ?.payload;
+                            const d = payload || (index != null ? daily[index] : undefined);
+                            if (d && d.key) openDayInCloseout(d.key);
+                          }}
+                        >
                           {daily.map((d) => (
                             <Cell
                               key={d.key}
@@ -1055,7 +1620,7 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
             <section className="sp-card p-5" aria-label="Ratings over time">
               <h2 className="mb-1 text-[15px] font-bold text-[#1A1A1A]">Ratings over time</h2>
               <p className="mb-3 text-[11.5px] text-[#969696]">
-                Average ★ per IST day — gaps are honest unrated days.{' '}
+                Average ★ per {appTzTag()} day — gaps are honest unrated days.{' '}
                 {fbDailyTotals.ratings > 0
                   ? `${fbDailyTotals.ratings} rating${fbDailyTotals.ratings === 1 ? '' : 's'} · ${fbDailyTotals.days} day${fbDailyTotals.days === 1 ? '' : 's'} rated.`
                   : ''}
@@ -1155,7 +1720,7 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
                     CSV
                   </button>
                   <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#6B6B6B]">
-                    <Clock size={11} aria-hidden /> IST hours · {RANGE_LABEL[range].toLowerCase()}
+                    <Clock size={11} aria-hidden /> {appTzTag()} hours · {RANGE_LABEL[range].toLowerCase()}
                   </span>
                 </div>
               </div>
@@ -1220,8 +1785,16 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
                 )}
               </div>
               <p className="mb-2 text-[11.5px] text-[#969696]">
-                Paid tickets by method{payMix.unpaid > 0 ? ' — plus what is still out' : ''}
+                Settled money by method — each part under its own method
+                {payMix.unpaid > 0 ? ' · plus what is still out' : ''}
               </p>
+              {payMix.splitTickets > 0 && (
+                <p className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold text-[#8A6A20]">
+                  <Split size={12} aria-hidden />
+                  {payMix.splitTickets} {payMix.splitTickets === 1 ? 'ticket' : 'tickets'} settled in
+                  parts — the mix reads each part, not the covering method
+                </p>
+              )}
               {payMix.paid.length === 0 ? (
                 <div className="flex h-56 flex-col items-center justify-center gap-2 text-center">
                   <Wallet size={22} className="text-[#969696]" aria-hidden />
@@ -1311,6 +1884,104 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
               )}
             </section>
           </div>
+
+          {/* ── 5.71.0 — the offer's scorecard: offers answer for themselves ── */}
+          <section className="sp-card p-5" aria-label="Offer scorecard">
+            <div className="mb-1 flex items-center justify-between gap-2">
+              <h2 className="flex items-center gap-1.5 text-[15px] font-bold text-[#1A1A1A]">
+                <BadgePercent size={15} aria-hidden className="text-[#8A5A00]" />
+                Offer scorecard
+              </h2>
+              {offerAgg.list.length > 0 && (
+                <button
+                  onClick={exportOffers}
+                  aria-label="Export offer scorecard as CSV"
+                  title="Export how each offer performed — tickets, money in, discount cost — as CSV"
+                  className="inline-flex h-7 items-center rounded-lg border border-[#B88E2F]/45 bg-[#FDF9F0] px-2.5 text-[11px] font-bold text-[#8A5A00] transition hover:bg-[#B88E2F] hover:text-white active:scale-[0.97]"
+                >
+                  CSV
+                </button>
+              )}
+            </div>
+            <p className="mb-3 text-[11.5px] text-[#969696]">
+              How the counter's offers actually performed. Revenue rode in with the offer — the counter can't prove it
+              wouldn't have come anyway.
+            </p>
+            {offerAgg.totalUses > 0 && (
+              <p className="mb-3 flex items-center gap-1.5 text-[11px] font-semibold text-[#8A6A20]">
+                <BadgePercent size={12} aria-hidden />
+                {offerAgg.totalUses} {offerAgg.totalUses === 1 ? 'ticket' : 'tickets'} rode offers —{' '}
+                {formatMoney(offerAgg.totalDiscount)} off the gross, {formatMoney(offerAgg.totalRevenue)} walked in with
+                them
+              </p>
+            )}
+            {offerAgg.list.length === 0 ? (
+              <div className="flex h-40 flex-col items-center justify-center gap-2 text-center">
+                <span className="flex h-11 w-11 items-center justify-center rounded-full bg-[#FDF6E7]">
+                  <BadgePercent size={18} className="text-[#B88E2F]" aria-hidden />
+                </span>
+                <p className="text-[12.5px] font-semibold text-[#1A1A1A]">No offers written yet</p>
+                <p className="max-w-[260px] text-[11.5px] text-[#969696]">
+                  Offers live on Guests → Offers; the counter applies them at charge time, and every ride lands here.
+                </p>
+              </div>
+            ) : (
+              <ul className="flex flex-col gap-2">
+                {offerAgg.list.map((o) => {
+                  const silent = o.uses === 0;
+                  return (
+                    <li
+                      key={o.id}
+                      className="flex items-center gap-3 rounded-xl border border-[#E3E7E0] bg-[#FBFBF9] px-3.5 py-2.5"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className="truncate text-[13px] font-bold text-[#1A1A1A]">{o.title}</span>
+                          {o.voice && (
+                            <span className="shrink-0 rounded-full bg-[#F3E8CF] px-1.5 py-0.5 text-[9.5px] font-bold text-[#8A5A00]">
+                              {o.voice}
+                            </span>
+                          )}
+                          <span
+                            className={`shrink-0 rounded-full px-1.5 py-0.5 text-[9.5px] font-bold ${
+                              o.isActive ? 'bg-[#EAF0EC] text-[#2E7D32]' : 'bg-[#F6F5F2] text-[#969696]'
+                            }`}
+                            title={o.isActive ? 'The counter can apply it right now' : 'Paused — nothing new can ride it'}
+                          >
+                            {o.isActive ? 'active' : 'paused'}
+                          </span>
+                        </div>
+                        <p className="mt-0.5 truncate text-[10.5px] font-semibold text-[#969696]">
+                          {silent
+                            ? 'silent in this window — no ticket rode it'
+                            : `last rode ${o.lastAt ? appFormatters().dt.format(new Date(o.lastAt)) : '—'}`}
+                        </p>
+                      </div>
+                      <div className="shrink-0 text-right">
+                        <p
+                          className={`text-[13px] font-extrabold tabular-nums leading-tight ${
+                            silent ? 'text-[#C9CFC9]' : 'text-[#0F3D3E]'
+                          }`}
+                        >
+                          {o.uses} {o.uses === 1 ? 'ticket' : 'tickets'}
+                        </p>
+                        {!silent && (
+                          <p className="text-[10.5px] font-semibold tabular-nums text-[#6B6B6B]">
+                            brought {formatMoney(o.revenue)} · cost {formatMoney(o.discountSum)}
+                          </p>
+                        )}
+                      </div>
+                    </li>
+                  );
+                })}
+                {offerAgg.totalUses === 0 && (
+                  <li className="pt-1 text-center text-[11.5px] font-semibold text-[#969696]">
+                    no ticket rode an offer in this window
+                  </li>
+                )}
+              </ul>
+            )}
+          </section>
 
           {/* ── cost & margin: the shelf prices the menu (018 views) ── */}
           <section className="sp-card p-5" aria-label="Cost and margin">
@@ -1460,18 +2131,26 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
                               <span className="truncate text-[13px] font-bold text-[#1A1A1A]">
                                 {it.name}
                               </span>
-                              {it.revenue > 0 && (
-                                <span
-                                  className="shrink-0 rounded-full px-1.5 py-0.5 text-[9.5px] font-extrabold tabular-nums"
-                                  style={{
-                                    color: marginTone(((it.revenue - it.cost) / it.revenue) * 100),
-                                    backgroundColor: `${marginTone(((it.revenue - it.cost) / it.revenue) * 100)}14`,
-                                  }}
-                                  title={`Ingredient cost ${formatMoney(it.cost)} · margin ${formatMoney(it.revenue - it.cost)}`}
-                                >
-                                  {(((it.revenue - it.cost) / it.revenue) * 100).toFixed(0)}% mgn
-                                </span>
-                              )}
+                              {it.revenue > 0 &&
+                                (it.priced ? (
+                                  <span
+                                    className="shrink-0 rounded-full px-1.5 py-0.5 text-[9.5px] font-extrabold tabular-nums"
+                                    style={{
+                                      color: marginTone(((it.revenue - it.cost) / it.revenue) * 100),
+                                      backgroundColor: `${marginTone(((it.revenue - it.cost) / it.revenue) * 100)}14`,
+                                    }}
+                                    title={`Ingredient cost ${formatMoney(it.cost)} · margin ${formatMoney(it.revenue - it.cost)}`}
+                                  >
+                                    {(((it.revenue - it.cost) / it.revenue) * 100).toFixed(0)}% mgn
+                                  </span>
+                                ) : (
+                                  <span
+                                    className="shrink-0 rounded-full bg-[#F1F1EE] px-1.5 py-0.5 text-[9.5px] font-extrabold text-[#969696]"
+                                    title="No recipe pricing on file for this dish — its cost reads zero, so no margin is claimed. Price it with recipe lines in Inventory."
+                                  >
+                                    unpriced
+                                  </span>
+                                ))}
                             </span>
                             <span className="shrink-0 text-[12px] font-bold tabular-nums text-[#0F3D3E]">
                               {formatMoney(it.revenue)}
@@ -1501,6 +2180,179 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
                     </li>
                   )}
                 </ol>
+              )}
+              {marginRank.length > 0 ? (
+                <div className="mt-4 rounded-xl border border-[#E3E7E0] bg-[#FBFBF9] p-3">
+                  <div className="mb-1 flex items-center justify-between gap-2">
+                    <h3 className="flex items-center gap-1.5 text-[10.5px] font-bold uppercase tracking-[0.08em] text-[#8A938C]">
+                      <Coins size={11} aria-hidden />
+                      The earner's list
+                    </h3>
+                    <span className="text-[10px] font-semibold text-[#969696]">
+                      ranked by what the dish keeps
+                    </span>
+                  </div>
+                  <p className="mb-2.5 text-[10.5px] font-semibold text-[#8A938C]">
+                    {marginRank.length} recipe-priced dish{marginRank.length === 1 ? '' : 'es'} in range
+                    {topItems.some((t) => !t.priced)
+                      ? ` · ${topItems.filter((t) => !t.priced).length} unpriced sit out — no honest cost on file`
+                      : ''}
+                  </p>
+                  <ol className="flex flex-col gap-2.5">
+                    {marginRank.slice(0, 5).map((it, i) => {
+                      const margin = it.revenue - it.cost;
+                      const pct = it.revenue > 0 ? (margin / it.revenue) * 100 : 0;
+                      const sell = sellsRank.get(it.name) ?? 0;
+                      const earns = i + 1;
+                      const top = marginRank[0];
+                      const maxMargin = top.revenue - top.cost || 1;
+                      const share = (margin / maxMargin) * 100;
+                      const drift = sell - earns; // >0: earns above its bill · <0: sells above its earn
+                      return (
+                        <li key={it.name} className="flex items-center gap-3">
+                          <span
+                            aria-hidden
+                            className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-[11.5px] font-extrabold ${
+                              i === 0
+                                ? 'bg-[#B88E2F] text-white'
+                                : i < 3
+                                  ? 'bg-[#F3E8CF] text-[#8A5A00]'
+                                  : 'bg-[#EAF0EC] text-[#0F3D3E]'
+                            }`}
+                          >
+                            {i === 0 ? <Coins size={13} aria-hidden /> : i + 1}
+                          </span>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-baseline justify-between gap-2">
+                              <span className="flex min-w-0 items-center gap-1.5">
+                                <span
+                                  className="truncate text-[13px] font-bold text-[#1A1A1A]"
+                                  title={`${it.name} — kept ${formatMoney(margin)} of ${formatMoney(it.revenue)}`}
+                                >
+                                  {it.name}
+                                </span>
+                                {drift !== 0 && (
+                                  <span
+                                    className="shrink-0 whitespace-nowrap rounded-full px-1.5 py-0.5 text-[9.5px] font-extrabold"
+                                    style={{
+                                      color: drift > 0 ? '#2E7D32' : '#8A5A00',
+                                      backgroundColor: drift > 0 ? '#2E7D3214' : '#8A5A0014',
+                                    }}
+                                    title={
+                                      drift > 0
+                                        ? `Earns #${earns} while selling #${sell} — a quiet earner worth pushing`
+                                        : `Sells #${sell} while earning #${earns} — popular but thin; review price or recipe`
+                                    }
+                                  >
+                                    {drift > 0 ? 'earns above its bill' : 'sells above its earn'}
+                                  </span>
+                                )}
+                              </span>
+                              <span className="shrink-0 text-[12px] font-bold tabular-nums text-[#8A5A00]">
+                                {formatMoney(margin)}
+                                <span className="ml-1 text-[10px] font-semibold text-[#969696]">
+                                  {pct.toFixed(0)}%
+                                </span>
+                              </span>
+                            </div>
+                            <div className="mt-1 flex items-center gap-2">
+                              <div
+                                className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-[#EAF0EC]"
+                                aria-hidden
+                              >
+                                <div
+                                  className="h-full rounded-full bg-[#8A5A00]"
+                                  style={{ width: `${Math.max(3, share)}%` }}
+                                />
+                              </div>
+                              <span className="shrink-0 text-[10.5px] font-semibold tabular-nums text-[#6B6B6B]">
+                                sells #{sell} · earns #{earns}
+                              </span>
+                            </div>
+                          </div>
+                        </li>
+                      );
+                    })}
+                    {marginRank.length > 5 && (
+                      <li className="pt-1 text-center text-[11.5px] text-[#969696]">
+                        + {marginRank.length - 5} more in the CSV export
+                      </li>
+                    )}
+                  </ol>
+                </div>
+              ) : topItems.some((t) => !t.priced) ? (
+                <p className="mt-3 rounded-xl border border-[#E3E7E0] bg-[#FBFBF9] p-3 text-[11px] text-[#969696]">
+                  No recipe-priced dishes in this range yet — the earner's list needs recipe
+                  lines (Inventory) before it can say what a dish keeps.
+                </p>
+              ) : null}
+              {menuMatrix && (
+                <div className="mt-4 rounded-xl border border-[#E3E7E0] bg-[#FBFBF9] p-3">
+                  <div className="mb-1 flex items-center justify-between gap-2">
+                    <h3 className="flex items-center gap-1.5 text-[10.5px] font-bold uppercase tracking-[0.08em] text-[#8A938C]">
+                      <Split size={11} aria-hidden />
+                      The menu's quadrants
+                    </h3>
+                    <span className="text-[10px] font-semibold text-[#969696]">
+                      popularity × per-unit margin
+                    </span>
+                  </div>
+                  <p className="mb-2.5 text-[10.5px] font-semibold text-[#8A938C]">
+                    {menuMatrix.n} priced dishes split at the menu average —{' '}
+                    {menuMatrix.avgUnits.toFixed(1)} units · {formatMoney(menuMatrix.avgCm)} kept
+                    per unit sold
+                  </p>
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    {MENU_QUADRANTS.map((q) => {
+                      const dishes = [...menuMatrix.cells[q.key]].sort((a, b) => b.units - a.units);
+                      return (
+                        <div
+                          key={q.key}
+                          className="rounded-lg border p-2.5"
+                          style={{ borderColor: q.bg, backgroundColor: `${q.bg}26` }}
+                          aria-label={`${q.label}: ${dishes.length > 0 ? dishes.map((d) => d.name).join(', ') : 'none this window'}`}
+                        >
+                          <div className="mb-0.5 flex items-center justify-between gap-1">
+                            <span
+                              className="text-[10.5px] font-extrabold uppercase tracking-[0.06em]"
+                              style={{ color: q.color }}
+                            >
+                              {q.label}
+                            </span>
+                            <span className="text-[9.5px] font-semibold tabular-nums text-[#969696]">
+                              {dishes.length}
+                            </span>
+                          </div>
+                          <p className="mb-1.5 text-[10px] font-semibold leading-tight text-[#8A938C]">
+                            {q.verdict}
+                          </p>
+                          {dishes.length === 0 ? (
+                            <p className="text-[10.5px] italic text-[#969696]">none this window</p>
+                          ) : (
+                            <ul className="flex flex-col gap-1">
+                              {dishes.map((d) => (
+                                <li
+                                  key={d.name}
+                                  className="flex items-baseline justify-between gap-2"
+                                >
+                                  <span
+                                    className="truncate text-[11.5px] font-bold text-[#1A1A1A]"
+                                    title={`${d.name} — ${d.units} units · keeps ${formatMoney((d.revenue - d.cost) / d.units)} per unit`}
+                                  >
+                                    {d.name}
+                                  </span>
+                                  <span className="shrink-0 text-[10px] font-semibold tabular-nums text-[#6B6B6B]">
+                                    {d.units}u · {formatMoney((d.revenue - d.cost) / d.units)}/unit
+                                  </span>
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
               )}
             </section>
 
@@ -1569,6 +2421,357 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
               )}
             </section>
           </div>
+
+          {/* ── row: kitchen speed (5.67.0) — the clock reads the hop ledger ── */}
+          <section className="sp-card p-5" aria-label="Kitchen speed">
+            <div className="mb-1 flex items-center justify-between gap-2">
+              <h2 className="flex items-center gap-1.5 text-[15px] font-bold text-[#1A1A1A]">
+                <Flame size={14} aria-hidden className="text-[#B3261E]" />
+                Kitchen speed
+              </h2>
+              <button
+                onClick={exportKitchenSpeed}
+                disabled={kitchen.sample.length === 0}
+                aria-label="Export kitchen speed as CSV"
+                title="Export the range's fire-to-ready timings as CSV"
+                className="inline-flex h-7 items-center rounded-lg border border-[#B88E2F]/45 bg-[#FDF9F0] px-2.5 text-[11px] font-bold text-[#8A5A00] transition hover:bg-[#B88E2F] hover:text-white active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                CSV
+              </button>
+            </div>
+            <p className="mb-4 text-[11.5px] text-[#969696]">
+              How long each ticket really took from the counter's Ok to the pass —
+              the status ledger, not guesses
+            </p>
+            {kitchen.sample.length === 0 ? (
+              <p className="py-8 text-center text-[12.5px] text-[#969696]">
+                No fired-then-finished tickets in range — the clock times only
+                tickets with both hops on the ledger.
+              </p>
+            ) : (
+              <>
+                <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                  <div className="flex flex-col gap-1 rounded-2xl border border-[#E3E7E0] bg-white px-4 py-3.5">
+                    <span className="text-[10.5px] font-bold uppercase tracking-[0.08em] text-[#8A938C]">
+                      Average
+                    </span>
+                    <span className="text-[21px] font-extrabold leading-none tracking-tight tabular-nums text-[#0F3D3E]">
+                      {fmtDuration(kitchen.avgMin ?? 0)}
+                    </span>
+                    <span className="text-[11px] font-semibold text-[#8A938C]">
+                      {kitchen.sample.length} {kitchen.sample.length === 1 ? 'ticket' : 'tickets'} timed
+                    </span>
+                  </div>
+                  <div className="flex flex-col gap-1 rounded-2xl border border-[#E3E7E0] bg-white px-4 py-3.5">
+                    <span className="text-[10.5px] font-bold uppercase tracking-[0.08em] text-[#8A938C]">
+                      Median
+                    </span>
+                    <span className="text-[21px] font-extrabold leading-none tracking-tight tabular-nums text-[#0F3D3E]">
+                      {fmtDuration(kitchen.medianMin ?? 0)}
+                    </span>
+                    <span className="text-[11px] font-semibold text-[#8A938C]">the middle ticket</span>
+                  </div>
+                  <div className="flex flex-col gap-1 rounded-2xl border border-[#E3E7E0] bg-white px-4 py-3.5">
+                    <span className="text-[10.5px] font-bold uppercase tracking-[0.08em] text-[#8A938C]">
+                      Slowest
+                    </span>
+                    <span className="text-[21px] font-extrabold leading-none tracking-tight tabular-nums text-[#0F3D3E]">
+                      {kitchen.slowest ? fmtDuration(kitchen.slowest.minutes) : '—'}
+                    </span>
+                    <span className="text-[11px] font-semibold text-[#8A938C]">
+                      {kitchen.slowest ? `ticket #${kitchen.slowest.orderNumber}` : '—'}
+                    </span>
+                  </div>
+                  <div className="flex flex-col gap-1 rounded-2xl border border-[#E3E7E0] bg-white px-4 py-3.5">
+                    <span className="text-[10.5px] font-bold uppercase tracking-[0.08em] text-[#8A938C]">
+                      Over the 10-min SLA
+                    </span>
+                    <span
+                      className={`text-[21px] font-extrabold leading-none tracking-tight tabular-nums ${kitchen.breaches.length > 0 ? 'text-[#B3261E]' : 'text-[#2E7D32]'}`}
+                    >
+                      {kitchen.breaches.length}
+                    </span>
+                    <span className="text-[11px] font-semibold text-[#8A938C]">
+                      {kitchen.breaches.length === 0
+                        ? 'all tickets inside the line'
+                        : 'late-prep territory'}
+                    </span>
+                  </div>
+                </div>
+                <div
+                  className="mt-3 h-2 overflow-hidden rounded-full bg-[#FCEBEA]"
+                  role="meter"
+                  aria-valuenow={Math.round((kitchen.breaches.length / kitchen.sample.length) * 100)}
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-label="Share of timed tickets over the 10-minute SLA"
+                >
+                  <div
+                    className="h-full rounded-full bg-[#B3261E]"
+                    style={{
+                      width: `${Math.max(
+                        2,
+                        (kitchen.breaches.length / kitchen.sample.length) * 100,
+                      )}%`,
+                    }}
+                  />
+                </div>
+                {kitchen.sample.length < 3 ? (
+                  <p className="mt-2 flex items-center gap-1 text-[10.5px] font-bold text-[#8A6D1F]">
+                    <Clock size={11} aria-hidden />
+                    small sample — the clock needs more timed tickets before it says anything loud
+                  </p>
+                ) : null}
+                {kitchen.items.length > 0 ? (
+                  <div className="mt-4 rounded-xl border border-[#E3E7E0] bg-[#FBFBF9] p-3">
+                    <div className="mb-2 flex items-center justify-between gap-2">
+                      <h3 className="flex items-center gap-1.5 text-[10.5px] font-bold uppercase tracking-[0.08em] text-[#8A938C]">
+                        <UtensilsCrossed size={11} aria-hidden />
+                        The slow dish
+                      </h3>
+                      <span className="text-[10px] font-semibold text-[#969696]">
+                        fire → pass, per timed ticket the dish rode on
+                      </span>
+                    </div>
+                    {kitchen.items.some((d) => d.own) ? (
+                      <p className="mb-2 flex items-center gap-1 text-[10.5px] font-semibold text-[#8A938C]">
+                        <Timer size={11} aria-hidden />
+                        rows with “own clock” read fire → the dish's last ticked line — finer than the ticket's span
+                      </p>
+                    ) : null}
+                    <ul className="flex flex-col gap-2.5">
+                      {kitchen.items.slice(0, 5).map((d, i) => {
+                        const top = kitchen.items[0];
+                        const maxAvg = top.avgMin || 1;
+                        const share = (d.avgMin / maxAvg) * 100;
+                        const over = d.avgMin > 10;
+                        return (
+                          <li key={d.name}>
+                            <div className="flex items-baseline justify-between gap-2">
+                              <span className="flex min-w-0 items-center gap-1.5 text-[12.5px] font-bold text-[#1A1A1A]">
+                                <span className="truncate">{d.name}</span>
+                                {i === 0 ? (
+                                  <span
+                                    className={`inline-flex shrink-0 items-center rounded-full px-1.5 py-0.5 text-[9.5px] font-bold ${over ? 'bg-[#FCEBEA] text-[#B3261E]' : 'bg-[#EAF0EC] text-[#2E7D32]'}`}
+                                    title="The dish the pass waits for — longest average fire-to-ready span"
+                                  >
+                                    the pass waits for this
+                                  </span>
+                                ) : null}
+                              </span>
+                              <span
+                                className={`shrink-0 text-[11.5px] tabular-nums ${over ? 'text-[#B3261E]' : 'text-[#6B6B6B]'}`}
+                              >
+                                {d.tickets} {d.tickets === 1 ? 'ticket' : 'tickets'} · avg{' '}
+                                {fmtDuration(d.avgMin)}
+                              </span>
+                            </div>
+                            <div
+                              className="mt-1 h-2 overflow-hidden rounded-full bg-[#EAF0EC]"
+                              role="meter"
+                              aria-valuenow={Math.round(share)}
+                              aria-valuemin={0}
+                              aria-valuemax={100}
+                              aria-label={`${d.name} average fire-to-ready span, relative to the slowest dish`}
+                            >
+                              <div
+                                className={`h-full rounded-full ${over ? 'bg-[#B3261E]' : 'bg-[#0F3D3E]'}`}
+                                style={{ width: `${Math.max(3, share)}%` }}
+                              />
+                            </div>
+                            <p className="mt-0.5 text-[10.5px] font-semibold text-[#969696]">
+                              slowest ticket span {fmtDuration(d.slowestMin)}
+                            </p>
+                            {d.own && (
+                              <p
+                                className={`mt-0.5 flex items-center gap-1 text-[10.5px] font-bold ${d.own.avgMin > 10 ? 'text-[#B3261E]' : 'text-[#0F3D3E]'}`}
+                                title="The dish's own clock — fire to its last ticked line (the kitchen's 029 checks), only on timed tickets. Finer than the ticket's span: the ticket waits for its slowest dish, the check-clock lets the early ones speak."
+                              >
+                                <Timer size={11} aria-hidden className="shrink-0" />
+                                <span className="truncate">
+                                  own clock · avg {fmtDuration(d.own.avgMin)} · {d.own.n}{' '}
+                                  {d.own.n === 1 ? 'ticked ticket' : 'ticked tickets'}
+                                  {d.own.avgMin > 10 ? ' · over SLA' : ''}
+                                </span>
+                              </p>
+                            )}
+                          </li>
+                        );
+                      })}
+                    </ul>
+                    {kitchen.items.length > 5 ? (
+                      <p className="pt-1.5 text-center text-[11.5px] text-[#969696]">
+                        + {kitchen.items.length - 5} more in the CSV export
+                      </p>
+                    ) : null}
+                  </div>
+                ) : null}
+                <ul className="mt-4 flex flex-col gap-1.5">
+                  {[...kitchen.sample]
+                    .sort((a, b) => b.minutes - a.minutes)
+                    .slice(0, 5)
+                    .map((t) => (
+                      <li
+                        key={t.orderNumber}
+                        className="flex items-center justify-between gap-2 border-b border-[#E3E7E0]/60 pb-1.5 last:border-0"
+                      >
+                        <span className="flex items-center gap-1.5 text-[12.5px] font-bold text-[#1A1A1A]">
+                          #{t.orderNumber}
+                          {t.minutes > 10 ? (
+                            <span className="inline-flex items-center rounded-full bg-[#FCEBEA] px-1.5 py-0.5 text-[10px] font-bold text-[#B3261E]">
+                              over SLA
+                            </span>
+                          ) : null}
+                        </span>
+                        <span className="text-[11.5px] tabular-nums text-[#6B6B6B]">
+                          fired {appFormatters().dt.format(t.firedAt)} → ready {appFormatters().dt.format(t.readyAt)}
+                        </span>
+                        <span
+                          className={`text-[12.5px] font-extrabold tabular-nums ${t.minutes > 10 ? 'text-[#B3261E]' : 'text-[#0F3D3E]'}`}
+                        >
+                          {fmtDuration(t.minutes)}
+                        </span>
+                      </li>
+                    ))}
+                  {kitchen.sample.length > 5 ? (
+                    <li className="pt-1 text-center text-[11.5px] text-[#969696]">
+                      + {kitchen.sample.length - 5} more in the CSV export
+                    </li>
+                  ) : null}
+                </ul>
+              </>
+            )}
+          </section>
+
+          {/* ── 5.77.0 — THE BIN'S BILL: the waste side of the 027 diary ── */}
+          <section className="sp-card p-5" aria-label="The bin's bill">
+            <div className="mb-1 flex items-center justify-between gap-2">
+              <h2 className="flex items-center gap-1.5 text-[15px] font-bold text-[#1A1A1A]">
+                <Trash2 size={15} aria-hidden className="text-[#8A5A00]" />
+                The bin's bill
+              </h2>
+              {wasteAgg.count > 0 && (
+                <span className="rounded-full bg-[#F3E8CF] px-2 py-0.5 text-[10.5px] font-bold tabular-nums text-[#8A5A00]">
+                  {wasteAgg.count} {wasteAgg.count === 1 ? 'move' : 'moves'}
+                </span>
+              )}
+            </div>
+            <p className="mb-3 text-[11.5px] text-[#969696]">
+              What the shelf threw away — spoilage, spills, damage, valued at each SKU's cost on file. Corrections
+              reconcile the shelf; they didn't feed the bin.
+            </p>
+            {wasteAgg.count === 0 ? (
+              <div className="flex h-36 flex-col items-center justify-center gap-2 text-center">
+                <span className="flex h-11 w-11 items-center justify-center rounded-full bg-[#EAF0EC]">
+                  <Trash2 size={18} className="text-[#0F3D3E]" aria-hidden />
+                </span>
+                <p className="text-[12.5px] font-semibold text-[#1A1A1A]">The bin took nothing in this range</p>
+                <p className="max-w-[280px] text-[11.5px] text-[#969696]">
+                  No spoilage, spillage or damage rows in the diary window — the shelf is honest. Log waste from
+                  Inventory and it answers here.
+                </p>
+              </div>
+            ) : (
+              <>
+                {/* the bill itself — one number, then how the bin split it */}
+                <div className="mb-3 flex flex-wrap items-end justify-between gap-2 rounded-xl bg-[#FBFAF7] px-4 py-3">
+                  <div>
+                    <p className="text-[10.5px] font-semibold uppercase tracking-[0.08em] text-[#969696]">
+                      Binned in this range
+                    </p>
+                    <p className="text-[26px] font-extrabold leading-tight tabular-nums text-[#B4483C]">
+                      {formatMoney(Math.round(wasteAgg.total * 100) / 100)}
+                    </p>
+                    {wasteAgg.unvalued > 0 && (
+                      <p className="mt-0.5 text-[11px] text-[#8A5A00]">
+                        + {wasteAgg.unvalued} {wasteAgg.unvalued === 1 ? 'move' : 'moves'} with no cost on file —
+                        counted as nothing rather than guessed
+                      </p>
+                    )}
+                  </div>
+                  <ul className="flex flex-col gap-1.5">
+                    {(['spoilage', 'spillage', 'damage'] as const).map((r) => {
+                      const meta = {
+                        spoilage: { label: 'Spoilage', dot: '#C9950A' },
+                        spillage: { label: 'Spillage', dot: '#3B5BA5' },
+                        damage: { label: 'Damage', dot: '#B3261E' },
+                      }[r];
+                      const share = wasteAgg.total > 0 ? wasteAgg.reasons[r].rupees / wasteAgg.total : 0;
+                      return (
+                        <li key={r} className="flex items-center gap-2 text-[11.5px]">
+                          <span
+                            aria-hidden
+                            className="h-2 w-2 shrink-0 rounded-full"
+                            style={{ backgroundColor: meta.dot }}
+                          />
+                          <span className="w-16 shrink-0 font-semibold text-[#6B6B6B]">{meta.label}</span>
+                          <span
+                            aria-hidden
+                            className="h-1.5 w-24 shrink-0 overflow-hidden rounded-full"
+                            style={{ backgroundColor: '#EAF0EC' }}
+                          >
+                            <span
+                              className="block h-full rounded-full"
+                              style={{ width: `${Math.max(share * 100, wasteAgg.reasons[r].count > 0 ? 3 : 0)}%`, backgroundColor: meta.dot }}
+                            />
+                          </span>
+                          <span className="min-w-14 text-right font-bold tabular-nums text-[#1A1A1A]">
+                            {formatMoney(Math.round(wasteAgg.reasons[r].rupees * 100) / 100)}
+                          </span>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+                {/* the heaviest SKUs — sorted by what they cost the bin */}
+                <ul className="flex flex-col gap-1.5">
+                  {wasteAgg.items.map((it) => (
+                    <li
+                      key={it.name}
+                      className="flex items-center gap-3 rounded-xl border border-[#E3E7E0] bg-[#FBFBF9] px-3.5 py-2.5"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <p className="flex flex-wrap items-center gap-1.5">
+                          <span className="truncate text-[13px] font-bold text-[#1A1A1A]">{it.name}</span>
+                          <span className="shrink-0 rounded-full bg-[#F1F4F1] px-1.5 py-0.5 text-[9.5px] font-bold tabular-nums text-[#0F3D3E]">
+                            {Math.round(it.qty * 100) / 100} {it.unit} · {it.count} {it.count === 1 ? 'move' : 'moves'}
+                          </span>
+                          {it.unvalued > 0 && (
+                            <span
+                              className="shrink-0 rounded-full bg-[#F3E8CF] px-1.5 py-0.5 text-[9.5px] font-bold text-[#8A5A00]"
+                              title="Some moves of this SKU had no cost on file — those rows are counted as nothing rather than guessed."
+                            >
+                              no cost on file
+                            </span>
+                          )}
+                        </p>
+                        {it.note && (
+                          <p className="mt-0.5 flex items-center gap-1 truncate text-[11px] italic text-[#6B6B6B]" title={it.note}>
+                            <Quote size={10} aria-hidden className="shrink-0" />
+                            {it.note}
+                          </p>
+                        )}
+                        <p className="mt-0.5 text-[10.5px] tabular-nums text-[#969696]">
+                          last binned {appFormatters().dt.format(new Date(it.last).getTime())}
+                        </p>
+                      </div>
+                      <span className="shrink-0 text-[13px] font-extrabold tabular-nums text-[#B4483C]">
+                        {formatMoney(Math.round(it.rupees * 100) / 100)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+                {wasteAgg.items.length > 0 && (
+                  <p className="mt-2.5 flex items-center gap-1.5 text-[11px] text-[#969696]">
+                    <Trash2 size={11} aria-hidden />
+                    Reads the 027 diary's waste side only — deliveries (stock in) and corrections (shelf
+                    reconciliation) never land here. Log waste from Inventory; the bill answers for the range selected
+                    above.
+                  </p>
+                )}
+              </>
+            )}
+          </section>
 
           {/* ── row: guest satisfaction (019) + drawer honesty (020) ── */}
           <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
@@ -1689,6 +2892,94 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
                         </li>
                       ))}
                     </ul>
+                  )}
+                  {/* 5.70.0 — the recover list: every ≤3-star rating in the window
+                      becomes a named callback. The bell rings at ≤2 (030's
+                      trigger); this is the season-long sheet, three-star "meh"
+                      included, each row opening the CRM the ticket booked. */}
+                  {fbAgg.low.length > 0 ? (
+                    <div className="mt-4 border-t border-dashed border-[#E3E7E0] pt-3.5">
+                      <div className="flex items-baseline justify-between gap-2">
+                        <h3 className="flex items-center gap-1.5 text-[10.5px] font-bold uppercase tracking-[0.08em] text-[#8A938C]">
+                          <HeartHandshake size={12} aria-hidden />
+                          The recover list
+                        </h3>
+                        <span className="text-[10px] font-semibold text-[#969696]">
+                          every rating ≤ 3 · newest first
+                        </span>
+                      </div>
+                      <ul className="mt-2.5 flex flex-col gap-2">
+                        {fbAgg.low.map((f) => {
+                          const who = f.customer_name || (f.customer_phone ? f.customer_phone : null);
+                          return (
+                            <li
+                              key={`low-${f.order_number}-${f.created_at}`}
+                              className="rounded-r-lg border-l-2 border-[#B3261E] bg-[#FBFBF9] py-2 pl-3 pr-2.5"
+                            >
+                              <div className="flex items-start gap-2">
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex items-center gap-1.5">
+                                    <span
+                                      className="inline-flex shrink-0 items-center gap-0.5 text-[10.5px] font-bold tabular-nums text-[#B3261E]"
+                                      aria-label={`${f.rating} star rating`}
+                                    >
+                                      {Array.from({ length: f.rating }).map((_, i) => (
+                                        <Star key={i} size={10} aria-hidden className="fill-[#B3261E] text-[#B3261E]" />
+                                      ))}
+                                      {f.rating}
+                                    </span>
+                                    <span className="text-[10.5px] font-bold tabular-nums text-[#6B6B6B]">
+                                      #{f.order_number}
+                                    </span>
+                                    <span className="text-[10px] font-semibold text-[#969696]">
+                                      {appFormatters().dt.format(new Date(f.created_at))}
+                                    </span>
+                                  </div>
+                                  <p className="mt-0.5 truncate text-[12px] italic leading-snug text-[#1A1A1A]">
+                                    {f.comment && f.comment.trim().length > 0
+                                      ? `“${f.comment.trim()}”`
+                                      : 'no comment — the stars said it'}
+                                  </p>
+                                  <p className="mt-0.5 truncate text-[10.5px] font-semibold text-[#969696]">
+                                    {who
+                                      ? `${f.customer_name || ''}${f.customer_name && f.customer_phone ? ' · ' : ''}${f.customer_phone || ''}`
+                                      : 'anonymous ticket — no guest on file'}
+                                  </p>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => goSection('customers', ['Reports', 'Guests'])}
+                                  aria-label={
+                                    who
+                                      ? `Open Guests — find ${f.customer_name || f.customer_phone} and make it right`
+                                      : 'Open Guests — the CRM books every phone automatically'
+                                  }
+                                  title={
+                                    who
+                                      ? `Open Guests — find ${f.customer_name || f.customer_phone} and make it right`
+                                      : 'Open Guests — the CRM books every phone automatically'
+                                  }
+                                  className="inline-flex shrink-0 items-center gap-1 rounded-full bg-[#0F3D3E]/5 px-2 py-0.5 text-[10px] font-bold text-[#0F3D3E] transition-[background-color,transform] duration-150 hover:bg-[#0F3D3E]/10 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B88E2F]"
+                                >
+                                  Find guest
+                                  <ArrowRight size={10} aria-hidden />
+                                </button>
+                              </div>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                      {fbInRange.filter((f) => f.rating <= 3).length > fbAgg.low.length ? (
+                        <p className="pt-1.5 text-center text-[11px] text-[#969696]">
+                          + {fbInRange.filter((f) => f.rating <= 3).length - fbAgg.low.length} more in the CSV export
+                        </p>
+                      ) : null}
+                    </div>
+                  ) : (
+                    <p className="mt-4 flex items-center gap-1.5 border-t border-dashed border-[#E3E7E0] pt-3 text-[11.5px] font-semibold text-[#2E7D32]">
+                      <CheckCircle2 size={12} aria-hidden />
+                      no low stars in this window — nothing to recover
+                    </p>
                   )}
                 </>
               )}
@@ -1825,7 +3116,7 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
                         <li key={s.id}>
                           <div className="flex items-center justify-between gap-2">
                             <span className="min-w-0 truncate text-[11.5px] font-semibold text-[#1A1A1A]">
-                              {s.closed_at ? IST_DT.format(new Date(s.closed_at)) : '—'}
+                              {s.closed_at ? appFormatters().dt.format(new Date(s.closed_at)) : '—'}
                             </span>
                             <span className="flex shrink-0 items-center gap-2">
                               <span className="text-[10.5px] tabular-nums text-[#969696]">
@@ -1859,7 +3150,7 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
           </div>
 
           <p className="px-1 text-[10.5px] text-[#969696]">
-            Aggregated from the most recent 500 tickets in the cloud, IST calendar days. Cancelled
+            Aggregated from the most recent 500 tickets in the cloud, {appTzTag()} calendar days. Cancelled
             tickets are excluded from every money figure; margin is computed on paid tickets only.
             Comparison chips read the equal-length window immediately before the selected range,
             from the same ledger. Guest satisfaction reads the ratings ledger; drawer honesty reads
@@ -1879,6 +3170,14 @@ function marginTone(pct: number): string {
   if (pct >= 40) return '#8A5A00';
   return '#B3261E';
 }
+
+/** 5.73.0 — the menu-engineering quadrants, in the house palette. */
+const MENU_QUADRANTS: { key: 'star' | 'plowhorse' | 'puzzle' | 'dog'; label: string; verdict: string; color: string; bg: string }[] = [
+  { key: 'star', label: 'Stars', verdict: 'popular and rich — protect them', color: '#8A5A00', bg: '#F3E8CF' },
+  { key: 'puzzle', label: 'Puzzles', verdict: 'rich but rarely ordered — push them', color: '#0F3D3E', bg: '#EAF0EC' },
+  { key: 'plowhorse', label: 'Plowhorses', verdict: 'popular but thin — re-price or re-recipe', color: '#8A5A00', bg: '#F3E8CF' },
+  { key: 'dog', label: 'Dogs', verdict: 'neither popular nor rich — review their place', color: '#6B6B6B', bg: '#F1F1EE' },
+];
 
 function marginWord(pct: number): string {
   if (pct >= 65) return 'healthy for a cafe';
@@ -1919,17 +3218,27 @@ const DeltaChip: React.FC<{
   if (prior === 0 && current === 0) return null;
   const isNew = prior === 0 && current > 0;
   const pct = prior > 0 ? ((current - prior) / prior) * 100 : 0;
-  const flat = !isNew && Math.abs(pct) < 0.05;
+  /* 5.94.0 — the multiple voice: at extreme ratios a percentage slab is a
+   *  dare, not a signal ("1471% vs prior 7 days" — true, and useless). From
+   *  1000% up — eleven times prior and beyond — the chip speaks in multiples
+   *  ("15.7×"), the way the counter actually says it; the title/aria still
+   *  carry both raw numbers, so the truth never left the chip. */
+  const mult = pct >= 1000 ? current / prior : null;
+  const flat = !isNew && mult === null && Math.abs(pct) < 0.05;
   const kind = isNew ? 'new' : flat ? 'flat' : pct > 0 ? 'up' : 'down';
   const skin = DELTA_SKIN[kind];
   const text = isNew
     ? 'new'
     : flat
       ? '±0%'
-      : `${Math.abs(pct) >= 100 ? Math.round(Math.abs(pct)) : Math.abs(pct).toFixed(1)}%`;
+      : mult !== null
+        ? `${mult.toFixed(1)}×`
+        : `${Math.abs(pct) >= 100 ? Math.round(Math.abs(pct)) : Math.abs(pct).toFixed(1)}%`;
   const detail = isNew
     ? `${fmt(current)} — no sales in the earlier window (${baseline})`
-    : `${fmt(current)} vs ${fmt(prior)} (${baseline})`;
+    : mult !== null
+      ? `${fmt(current)} vs ${fmt(prior)} — ${mult.toFixed(1)}× the earlier window (${baseline})`
+      : `${fmt(current)} vs ${fmt(prior)} (${baseline})`;
   const Icon = kind === 'up' ? TrendingUp : kind === 'down' ? TrendingDown : Minus;
   return (
     <span

@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle,
+  Armchair,
   CalendarDays,
   ChevronDown,
   ChevronLeft,
@@ -10,10 +11,13 @@ import {
   Download,
   Flame,
   HandCoins,
+  History,
   LockKeyhole,
   MoonStar,
   Printer,
   RefreshCw,
+  Split,
+  Trash2,
   TrendingDown,
   Wallet,
 } from 'lucide-react';
@@ -26,15 +30,28 @@ import {
   fetchDrawerHistory,
   fetchDrawerMovements,
   fetchOrderCogs,
+  fetchReservations,
+  fetchWasteMoves,
   openDrawerSession,
   recordDrawerMovement,
   type DaySectionRow,
   type DrawerMovement,
   type DrawerSession,
+  type Reservation,
+  type WasteMove,
 } from '../../lib/api';
-import { formatMoney } from '../../lib/prefs';
+import { formatMoney, subscribePrefs } from '../../lib/prefs';
+import {
+  appTimezone,
+  appTodayIso,
+  appDayStartMs,
+  appDayBoundsIso,
+  appFormatters,
+  appTzTag,
+} from '../../lib/appday';
 import { printHiddenFrame } from '../../lib/printFrame';
 import { downloadCsv } from '../../lib/csv';
+import { useDialogA11y } from '../../lib/useDialogA11y';
 import { useTenant } from '../../lib/tenant';
 import { useSession, useUi } from '../../store/session';
 import { DoorChip as LiveDoorChip } from '../shell/DoorChip';
@@ -42,7 +59,8 @@ import { DoorChip as LiveDoorChip } from '../shell/DoorChip';
 /**
  * EOD Close-out (NOVA §4.3 — EOD reconciliation, /reconcile in the spec).
  *
- * Day stepper (Asia/Kolkata calendar days) → day summary (orders, gross,
+ * Day stepper (the Settings reporting day — Asia/Kolkata by default) →
+ * day summary (orders, gross,
  * paid, unpaid, average ticket) → cost & margin (ingredient cost the shelf
  * burned for the day's tickets, v_order_cogs view from migration 018; gross
  * margin on PAID tickets) → payment mix (cash / UPI / card from the payments
@@ -63,37 +81,40 @@ import { DoorChip as LiveDoorChip } from '../shell/DoorChip';
  * while margin banks on PAID tickets only.
  */
 
-/* ────────────────────────── IST day-window helpers ─────────────────────── */
+/* ────────────────────────── IST day-window helpers ───────────────────
+   5.97.0 — the Settings word ("Timestamps in reports and shifts") is
+   kept: the math lives in src/lib/appday.ts and follows prefs.timezone.
+   The historic IST names stay for the ledger's readability; on every
+   Indian device these helpers are exactly IST, unchanged to the paisa. */
 
-const IST_TZ = 'Asia/Kolkata';
-
-/** YYYY-MM-DD of "now" in IST (en-CA gives calendar order). */
+/** YYYY-MM-DD of "now" in the reporting timezone (en-CA calendar order). */
 function istTodayIso(): string {
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone: IST_TZ,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(new Date());
+  return appTodayIso();
 }
 
-/** [00:00, next 00:00) ISO window for an IST calendar day. */
+/** [00:00, next 00:00) window for a reporting-calendar day. */
 function istDayBounds(dateIso: string): { startIso: string; endIso: string } {
-  const start = new Date(`${dateIso}T00:00:00+05:30`);
-  const end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
-  return { startIso: start.toISOString(), endIso: end.toISOString() };
+  return appDayBoundsIso(dateIso);
 }
 
 function shiftDay(dateIso: string, days: number): string {
-  const d = new Date(`${dateIso}T00:00:00+05:30`);
+  /* v5.83.0 — day arithmetic, fixed. The old anchor (midnight IST =
+     18:30Z on the PREVIOUS UTC date) shifted the UTC date of the wrong
+     instant: from 3 Oct, Previous day derived 2026-10-01T18:30Z whose UTC
+     date is still the 1st → the stepper double-jumped 3→1, and Next day
+     from 1 Oct was a NO-OP (round 118's "automation double-click" was this
+     bug, not the tool). Anchoring at NOON keeps ±1 UTC day safely inside
+     the neighbouring calendar date — a pure date-STRING shift, so it is
+     timezone-agnostic. */
+  const d = new Date(`${dateIso}T12:00:00Z`);
   d.setUTCDate(d.getUTCDate() + days);
   return d.toISOString().slice(0, 10);
 }
 
 function prettyDay(dateIso: string): string {
-  const d = new Date(`${dateIso}T00:00:00+05:30`);
+  const d = new Date(appDayStartMs(dateIso));
   return new Intl.DateTimeFormat('en-IN', {
-    timeZone: IST_TZ,
+    timeZone: appTimezone(),
     weekday: 'short',
     day: 'numeric',
     month: 'short',
@@ -101,14 +122,9 @@ function prettyDay(dateIso: string): string {
   }).format(d);
 }
 
-/** HH:MM in IST for a stored timestamptz. */
+/** HH:MM in the reporting timezone for a stored timestamptz. */
 function istTime(iso: string): string {
-  return new Intl.DateTimeFormat('en-IN', {
-    timeZone: IST_TZ,
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  }).format(new Date(iso));
+  return appFormatters().hhmm.format(new Date(iso));
 }
 
 /* ─────────────────────────────── types ─────────────────────────────────── */
@@ -125,6 +141,9 @@ interface DayOrder {
   customer_name: string | null;
   created_at: string;
   table_id: string | null;
+  /** v5.83.0 — the close sees the floor: table_number embedded in the same
+   *  read (orders.table_id → dining_tables FK), the fetchOrders pattern. */
+  table_label: string | null;
   client_operation_id: string | null;
 }
 
@@ -155,7 +174,8 @@ const StatCard: React.FC<{
   value: string;
   sub?: string;
   tone?: 'teal' | 'gold' | 'green' | 'red';
-}> = ({ label, value, sub, tone = 'teal' }) => {
+  whisper?: React.ReactNode;
+}> = ({ label, value, sub, tone = 'teal', whisper }) => {
   const toneMap: Record<string, string> = {
     teal: 'text-[#0F3D3E]',
     gold: 'text-[#8A5A00]',
@@ -169,6 +189,7 @@ const StatCard: React.FC<{
         {value}
       </span>
       {sub ? <span className="text-[11px] font-semibold text-[#8A938C]">{sub}</span> : null}
+      {whisper}
     </div>
   );
 };
@@ -190,13 +211,24 @@ const StatusChip: React.FC<{ status: string }> = ({ status }) => (
   </span>
 );
 
-const PayChip: React.FC<{ order: DayOrder }> = ({ order }) =>
+/* PayChip reads the LEDGER, not just the stored status: a ticket mid-split
+ * (5.63.0) has parts landed but the balance still out — "part" is the honest
+ * middle voice between "due" and a settled method. v5.66.0. */
+const PayChip: React.FC<{ order: DayOrder; paidIn?: number }> = ({ order, paidIn = 0 }) =>
   order.payment_status === 'completed' ? (
     <span className="inline-flex items-center rounded-full bg-[#EAF0EC] px-2 py-0.5 text-[10.5px] font-bold text-[#2E7D32]">
       {order.payment_method || 'paid'}
     </span>
   ) : order.status === 'cancelled' ? (
     <span className="text-[10.5px] font-bold text-[#B3261E]">—</span>
+  ) : paidIn > 0 ? (
+    <span
+      className="inline-flex items-center gap-1 rounded-full bg-[#FFF8E6] px-2 py-0.5 text-[10.5px] font-bold text-[#8A6D1F]"
+      title={`Split in progress — ${formatMoney(paidIn)} in, balance open`}
+    >
+      <Split size={10} aria-hidden />
+      part
+    </span>
   ) : (
     <span className="inline-flex items-center rounded-full bg-[#FFF4DB] px-2 py-0.5 text-[10.5px] font-bold text-[#8A5A00]">
       due
@@ -213,6 +245,7 @@ interface ZReportOpts {
   paid: number;
   unpaid: number;
   unpaidTickets: number;
+  splitOpen?: number;
   gst: number;
   cogs: number;
   margin: number;
@@ -221,6 +254,13 @@ interface ZReportOpts {
   cancelled: number;
   printedBy: string;
   drawer?: { title: string; rows: [string, string][]; strongLast?: boolean } | null;
+  /** v5.79.0 — the close sees the bin: the day's waste in the Z's own
+   *  language. Undefined = the read never happened (the block stays off;
+   *  the Z never claims an honest zero it didn't verify). */
+  waste?: { rupees: number; moves: number; top: string | null } | null;
+  /** v5.83.0 — the close sees the floor: the day's rounds, computed from
+   *  the SAME day orders the Z already counts (no extra read to trust). */
+  floor?: { rounds: number; rupees: number; busiest: string | null; noShows: number | null } | null;
 }
 
 function printZReport(opts: ZReportOpts): void {
@@ -247,12 +287,35 @@ function printZReport(opts: ZReportOpts): void {
       .join('')}
   </div>`
     : '';
+  const wasteHtml = opts.waste
+    ? `<div style="border-top:1px dashed #000;margin-top:8px;padding-top:6px;">
+    <div style="font-weight:800;padding-bottom:3px;">THE BIN · WASTE</div>
+    ${
+      opts.waste.moves === 0
+        ? row('Waste (spoilage/spill/damage)', 'nothing')
+        : row('Waste (spoilage/spill/damage)', `${formatMoney(opts.waste.rupees)} · ${opts.waste.moves} mv`)
+    }
+    ${opts.waste.top ? row('Heaviest', opts.waste.top) : ''}
+  </div>`
+    : '';
+  const floorHtml = opts.floor
+    ? `<div style="border-top:1px dashed #000;margin-top:8px;padding-top:6px;">
+    <div style="font-weight:800;padding-bottom:3px;">THE FLOOR · ROUNDS</div>
+    ${
+      opts.floor.rounds === 0
+        ? row('Rounds seated', 'none — the floor sat quiet')
+        : row('Rounds seated', `${opts.floor.rounds} · ${formatMoney(opts.floor.rupees)}`)
+    }
+    ${opts.floor.busiest ? row('Busiest table', opts.floor.busiest) : ''}
+    ${opts.floor.noShows && opts.floor.noShows > 0 ? row('No-shows', `${opts.floor.noShows} booking${opts.floor.noShows === 1 ? '' : 's'}`) : ''}
+  </div>`
+    : '';
   const html = `<!doctype html><html><head><meta charset="utf-8"><title>Z-report ${opts.dateIso}</title></head>
 <body style="font-family:'Courier New',monospace;color:#000;margin:0;padding:16px 12px;width:300px;font-size:12px;">
   <div style="text-align:center;border-bottom:1px dashed #000;padding-bottom:8px;margin-bottom:8px;">
     <div style="font-size:15px;font-weight:800;letter-spacing:1px;">${opts.storeName}</div>
     <div>Z-REPORT · END OF DAY</div>
-    <div>${prettyDay(opts.dateIso)} · Asia/Kolkata</div>
+    <div>${prettyDay(opts.dateIso)} · ${appTimezone()}</div>
   </div>
   <div style="border-top:1px dashed #000;padding-top:6px;">
     ${row('Orders', String(opts.orders), true)}
@@ -260,7 +323,11 @@ function printZReport(opts: ZReportOpts): void {
     ${row('Gross sales', formatMoney(opts.gross), true)}
     ${row('GST collected', formatMoney(opts.gst))}
     ${row('PAID', formatMoney(opts.paid), true)}
-    ${row('UNPAID', `${formatMoney(opts.unpaid)} (${opts.unpaidTickets} tkt)`, true)}
+    ${row(
+      'UNPAID',
+      `${formatMoney(opts.unpaid)} (${opts.unpaidTickets} tkt${opts.splitOpen ? ` · ${opts.splitOpen} split parts in` : ''})`,
+      true,
+    )}
   </div>
   <div style="border-top:1px dashed #000;margin-top:8px;padding-top:6px;">
     <div style="font-weight:800;padding-bottom:3px;">COST &amp; MARGIN · PAID TICKETS</div>
@@ -272,9 +339,11 @@ function printZReport(opts: ZReportOpts): void {
     ${methodRows}
   </div>
   ${sectionsHtml}
+  ${wasteHtml}
+  ${floorHtml}
   ${drawerHtml}
   <div style="border-top:1px dashed #000;margin-top:8px;padding-top:6px;text-align:center;color:#333;">
-    <div>Printed ${new Intl.DateTimeFormat('en-IN', { timeZone: IST_TZ, hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date())} IST${opts.printedBy ? ` · ${opts.printedBy}` : ''}</div>
+    <div>Printed ${appFormatters().hhmm.format(new Date())} ${appTzTag()}${opts.printedBy ? ` · ${opts.printedBy}` : ''}</div>
     <div style="margin-top:6px;letter-spacing:2px;">· · · z · close · · ·</div>
   </div>
 </body></html>`;
@@ -364,6 +433,8 @@ const DrawerDialog: React.FC<{
 }> = ({ mode, active, cashIn, moveOut, busy, onCancel, onConfirm }) => {
   const [amount, setAmount] = useState('');
   const [note, setNote] = useState('');
+  /* v5.110.0 — Escape/trap/restore; Escape stands down while the ledger writes. */
+  const dlgRef = useDialogA11y<HTMLDivElement>(() => { if (!busy) onCancel(); }, true);
   const expected = mode === 'close' && active ? Number(active.opening_float) + cashIn - moveOut : 0;
   const parsed = amount.trim() === '' ? null : Number(amount);
   const valid = parsed !== null && Number.isFinite(parsed) && parsed >= 0;
@@ -372,7 +443,9 @@ const DrawerDialog: React.FC<{
 
   return (
     <div
+      ref={dlgRef}
       className="fixed inset-0 z-50 flex items-center justify-center bg-[#0F3D3E]/45 p-4 backdrop-blur-[2px]"
+      style={{ animation: 'spFadeIn 160ms ease-out' }}
       role="dialog"
       aria-modal="true"
       aria-label={mode === 'open' ? 'Open cash drawer' : 'Count and close the drawer'}
@@ -505,12 +578,16 @@ const MovementDialog: React.FC<{
   const [kind, setKind] = useState<'payout' | 'drop'>('payout');
   const [amount, setAmount] = useState('');
   const [reason, setReason] = useState('');
+  /* v5.110.0 — Escape/trap/restore; Escape stands down while the ledger writes. */
+  const dlgRef = useDialogA11y<HTMLDivElement>(() => { if (!busy) onCancel(); }, true);
   const parsed = amount.trim() === '' ? null : Number(amount);
   const valid = parsed !== null && Number.isFinite(parsed) && parsed > 0 && reason.trim().length > 0;
 
   return (
     <div
+      ref={dlgRef}
       className="fixed inset-0 z-50 flex items-center justify-center bg-[#0F3D3E]/45 p-4 backdrop-blur-[2px]"
+      style={{ animation: 'spFadeIn 160ms ease-out' }}
       role="dialog"
       aria-modal="true"
       aria-label="Record a drawer movement"
@@ -678,7 +755,7 @@ const DrawerCard: React.FC<{
       {active ? (
         <>
           <p className="mt-2.5 text-[11.5px] font-semibold text-[#8A938C]">
-            Opened {istTime(active.opened_at)} IST · {active.opened_by_email || 'counter'}
+            Opened {istTime(active.opened_at)} {appTzTag()} · {active.opened_by_email || 'counter'}
           </p>
           <div className="mt-3 grid grid-cols-3 gap-2.5">
             <div className="rounded-xl bg-[#F7F8F6] px-3 py-2.5">
@@ -797,14 +874,43 @@ const EodScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
   const { loading: tenantLoading, error: tenantError, tenantId, tenant } = useTenant();
   const session = useSession((s) => s.session);
   const goSection = useUi((s) => s.goSection);
-  const [dateIso, setDateIso] = useState<string>(() => istTodayIso());
+  /* 5.96.0 — the day door: Reports' day-by-day bars open a day's counted
+     book straight onto that reporting day. The initializer only PEEKS at the
+     section hint (a read is render-safe); the consume — the only store
+     write — waits for the mount effect, so the arrival never sets state
+     while rendering. A hint aimed at another room (Bills' 'unpaid') is
+     never swallowed here. Applied once on arrival; never persists, never
+     rides the URL. */
+  const [dateIso, setDateIso] = useState<string>(() => {
+    const hint = useUi.getState().sectionHint;
+    if (hint && hint.startsWith('day:')) {
+      const d = hint.slice('day:'.length);
+      if (/^\d{4}-\d{2}-\d{2}$/.test(d)) return d;
+    }
+    return istTodayIso();
+  });
+  useEffect(() => {
+    const hint = useUi.getState().sectionHint;
+    if (hint && hint.startsWith('day:')) useUi.getState().consumeSectionHint();
+  }, []);
   const [orders, setOrders] = useState<DayOrder[]>([]);
   const [payments, setPayments] = useState<DayPayment[]>([]);
   const [cogsRows, setCogsRows] = useState<DayCogs[]>([]);
   const [sectionRows, setSectionRows] = useState<DaySectionRow[]>([]);
+  /** The day's bin (v5.79.0): null = not read yet, [] = the shelf's honest
+   *  zero. Fail-soft like the section mix — waste can never take the
+   *  day's money view down. */
+  const [wasteMoves, setWasteMoves] = useState<WasteMove[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshedAt, setRefreshedAt] = useState<Date | null>(null);
+  /* 5.93.0 — the older-unpaid census: everything the day's book can't see
+   * (created before it opened, still not settled). The card used to say
+   * "Unpaid right now" and count only TODAY's tickets — the strip said
+   * "5 · ₹1,801.80" while this tile said "0 · ₹0.00", both honest math, no
+   * words saying they count different days. The census is one bounded count,
+   * fail-soft: a hiccup silences the whisper, never the day's book. */
+  const [olderUnpaid, setOlderUnpaid] = useState(0);
 
   /* ── cash drawer (020) ── */
   const [drawerActive, setDrawerActive] = useState<DrawerSession | null>(null);
@@ -829,7 +935,7 @@ const EodScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
         supabase
           .from('orders')
           .select(
-            'id, order_number, order_type, status, total, tax_amount, payment_status, payment_method, customer_name, created_at, table_id, client_operation_id'
+            'id, order_number, order_type, status, total, tax_amount, payment_status, payment_method, customer_name, created_at, table_id, client_operation_id, dining_tables(table_number)'
           )
           .eq('tenant_id', tenantId)
           .gte('created_at', startIso)
@@ -850,9 +956,18 @@ const EodScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
       ]);
       if (oRes.error) throw oRes.error;
       if (pRes.error) throw pRes.error;
-      setOrders((oRes.data || []) as DayOrder[]);
+      // v5.83.0 — the table embed resolves table_id → table_number in the SAME
+      // read (the fetchOrders boundary pattern); the floor strip names tables,
+      // never raw uuids.
+      const dayOrders = ((oRes.data || []) as unknown[]).map((r: unknown) => {
+        const { dining_tables, ...rest } = r as Omit<DayOrder, 'table_label'> & {
+          dining_tables?: { table_number: string } | null;
+        };
+        return { ...rest, table_label: dining_tables?.table_number ?? null } as DayOrder;
+      });
+      setOrders(dayOrders);
       setPayments((pRes.data || []) as DayPayment[]);
-      const ids = new Set(((oRes.data || []) as DayOrder[]).map((o) => o.id));
+      const ids = new Set(dayOrders.map((o) => o.id));
       setCogsRows(
         (cRes as unknown as DayCogs[]).filter((r) => ids.has(r.order_id)),
       );
@@ -863,7 +978,37 @@ const EodScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
       } catch {
         setSectionRows([]);
       }
+      // The bin (v5.79.0, FAIL-SOFT the same way): the day's close reads the
+      // waste diary so shrinkage lands in the daily ritual, not just Reports.
+      // fetchWasteMoves returns the whole diary; the day window filters here
+      // (the fetchOrderCogs pattern — fetch wide, slice to the day).
+      try {
+        const allWaste = await fetchWasteMoves(tenantId);
+        setWasteMoves(
+          allWaste.filter((m) => m.created_at >= startIso && m.created_at < endIso),
+        );
+      } catch {
+        setWasteMoves([]);
+      }
       setRefreshedAt(new Date());
+      /* 5.93.0 — the older-unpaid census (today's book only: a past day is
+       * finished history, the strip isn't pointing at it). Fail-soft. */
+      if (dateIso === istTodayIso()) {
+        try {
+          const r = await supabase
+            .from('orders')
+            .select('id', { count: 'exact', head: true })
+            .eq('tenant_id', tenantId)
+            .lt('created_at', startIso)
+            .neq('status', 'cancelled')
+            .neq('payment_status', 'completed');
+          setOlderUnpaid(r.error ? 0 : (r.count ?? 0));
+        } catch {
+          setOlderUnpaid(0);
+        }
+      } else {
+        setOlderUnpaid(0);
+      }
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Could not load the day.');
     } finally {
@@ -874,6 +1019,18 @@ const EodScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
   useEffect(() => {
     void load();
   }, [load]);
+
+  /* ── v5.83.0 — the book rides along, FAIL-SOFT like the waste read: the
+     day's no-shows are a whisper on the strip, never a hard dependency.
+     Fetched ONCE per tenant (200 latest); the selected reporting day filters
+     client-side, so day navigation never refetches the book. */
+  const [reservations, setReservations] = useState<Reservation[] | null>(null);
+  useEffect(() => {
+    if (!tenantId) return;
+    fetchReservations(tenantId)
+      .then((rs) => setReservations(rs))
+      .catch(() => setReservations((prev) => prev ?? []));
+  }, [tenantId]);
 
   /* ── drawer ledger: active session + recent sealed shifts ── */
   const moveSum = movements.reduce((s, m) => s + Number(m.amount || 0), 0);
@@ -975,8 +1132,19 @@ const EodScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
     const gross = live.reduce((s, o) => s + Number(o.total || 0), 0);
     const gst = live.reduce((s, o) => s + Number(o.tax_amount || 0), 0);
     const paid = payments.reduce((s, p) => s + Number(p.amount || 0), 0);
+    // ledger sums per ticket — the split-aware base (v5.66.0): a ticket
+    // mid-split owes only its BALANCE, not the phantom whole. paid + unpaid
+    // now reconcile against gross even mid-split.
+    const ledgerByOrder = new Map<string, number>();
+    payments.forEach((p) =>
+      ledgerByOrder.set(p.order_id, (ledgerByOrder.get(p.order_id) || 0) + Number(p.amount || 0)),
+    );
     const unpaidOrders = live.filter((o) => o.payment_status !== 'completed');
-    const unpaidAmt = unpaidOrders.reduce((s, o) => s + Number(o.total || 0), 0);
+    const unpaidAmt = unpaidOrders.reduce(
+      (s, o) => s + Math.max(0, Number(o.total || 0) - (ledgerByOrder.get(o.id) || 0)),
+      0,
+    );
+    const splitOpen = unpaidOrders.filter((o) => (ledgerByOrder.get(o.id) || 0) > 0).length;
     const avg = live.length > 0 ? gross / live.length : 0;
 
     const mixMap = new Map<string, number>();
@@ -1017,6 +1185,8 @@ const EodScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
       paid,
       unpaidOrders,
       unpaidAmt,
+      splitOpen,
+      ledgerByOrder,
       avg,
       mix,
       orphanPaid,
@@ -1027,6 +1197,81 @@ const EodScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
       paidTickets,
     };
   }, [orders, payments, cogsRows]);
+
+  /* ── the bin (v5.79.0): the day's waste in rupees, the 5.77 truth ──
+   *  Same honesty as Reports' bin's bill: value = |qty| × cost on file; a
+   *  move with no cost on file is UNVALUED — counted as nothing, never a
+   *  guessed rupee. Deliveries (stock IN) and corrections never fed it. */
+  const wasteDay = useMemo(() => {
+    if (!wasteMoves) return null;
+    let rupees = 0;
+    let unvalued = 0;
+    const byItem = new Map<string, { name: string; rupees: number; qty: number; unit: string }>();
+    for (const m of wasteMoves) {
+      const cost = m.inventory_items?.cost_per_unit;
+      const it = m.inventory_items;
+      if (cost == null) {
+        unvalued += 1;
+        continue;
+      }
+      const value = Math.abs(Number(m.qty)) * Number(cost);
+      rupees += value;
+      const cur = byItem.get(m.inventory_item_id) || {
+        name: it?.name || '—',
+        rupees: 0,
+        qty: 0,
+        unit: it?.unit || '',
+      };
+      cur.rupees += value;
+      cur.qty += Math.abs(Number(m.qty));
+      byItem.set(m.inventory_item_id, cur);
+    }
+    const top =
+      [...byItem.values()].sort((a, b) => b.rupees - a.rupees || a.name.localeCompare(b.name))[0] ||
+      null;
+    return { rupees, moves: wasteMoves.length, unvalued, top };
+  }, [wasteMoves]);
+
+  /* ── the floor (v5.83.0): the day's no-shows, from the book ──
+   *  null = the book never loaded (the whisper stays off — silence, not a
+   *  guessed zero); a number = no_show bookings whose slot fell on THIS
+   *  IST day. Cancelled/seated/booked never count. */
+  const noShowDay = useMemo(() => {
+    if (!reservations) return null;
+    const { startIso, endIso } = istDayBounds(dateIso);
+    return reservations.filter((r) => r.status === 'no_show' && r.slot_at >= startIso && r.slot_at < endIso).length;
+  }, [reservations, dateIso]);
+
+  /* ── the floor (v5.83.0): the day's rounds — the close sees the floor ──
+   *  A round is a non-cancelled ticket that HELD a table (table_id set) —
+   *  the same ledger rule the floor rhythm chart reads. Walk-in counter
+   *  tickets don't hold a table, so they stay out — the strip is about the
+   *  floor, and it says so in its footer. Busiest table: rupees → rounds →
+   *  name, the house deterministic tie-break. */
+  const floorDay = useMemo(() => {
+    const rounds = orders.filter((o) => o.table_id && o.status !== 'cancelled');
+    let rupees = 0;
+    const byTable = new Map<string, { label: string; rupees: number; rounds: number }>();
+    for (const o of rounds) {
+      const amt = Number(o.total ?? 0);
+      rupees += amt;
+      const cur = byTable.get(o.table_id!) || { label: o.table_label || 'Table', rupees: 0, rounds: 0 };
+      cur.rupees += amt;
+      cur.rounds += 1;
+      byTable.set(o.table_id!, cur);
+    }
+    const busiest =
+      [...byTable.values()].sort(
+        (a, b) => b.rupees - a.rupees || b.rounds - a.rounds || a.label.localeCompare(b.label),
+      )[0] || null;
+    return {
+      rounds: rounds.length,
+      rupees,
+      busiest: busiest
+        ? `${busiest.label} · ${busiest.rounds} ${busiest.rounds === 1 ? 'round' : 'rounds'} · ${formatMoney(busiest.rupees)}`
+        : null,
+    };
+  }, [orders]);
 
   /* right-now strip (today) */
   const now = useMemo(() => {
@@ -1070,7 +1315,7 @@ const EodScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
       drawer = {
         title: 'CASH DRAWER · OPEN SHIFT',
         rows: [
-          [`Opened ${istTime(drawerActive.opened_at)} IST`, drawerActive.opened_by_email || 'counter'],
+          [`Opened ${istTime(drawerActive.opened_at)} ${appTzTag()}`, drawerActive.opened_by_email || 'counter'],
           ['Float', formatMoney(Number(drawerActive.opening_float))],
           ['Cash in (ledger)', formatMoney(cashIn)],
           ...(moveSum > 0 ? [['Payouts/drops', `-${formatMoney(moveSum)}`] as [string, string]] : []),
@@ -1108,6 +1353,7 @@ const EodScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
       paid: agg.paid,
       unpaid: agg.unpaidAmt,
       unpaidTickets: agg.unpaidOrders.length,
+      splitOpen: agg.splitOpen,
       gst: agg.gst,
       cogs: agg.paidCogs,
       margin: agg.margin,
@@ -1116,6 +1362,21 @@ const EodScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
       cancelled: agg.cancelled,
       printedBy: session?.email || '',
       drawer,
+      waste: wasteDay
+        ? {
+            rupees: wasteDay.rupees,
+            moves: wasteDay.moves,
+            top: wasteDay.top
+              ? `${wasteDay.top.name} · ${wasteDay.top.qty} ${wasteDay.top.unit} · ${formatMoney(wasteDay.top.rupees)}`
+              : null,
+          }
+        : undefined,
+      floor: {
+        rounds: floorDay.rounds,
+        rupees: floorDay.rupees,
+        busiest: floorDay.busiest,
+        noShows: noShowDay,
+      },
     });
   };
 
@@ -1133,7 +1394,7 @@ const EodScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
     const typeLabel = (t: string) =>
       t === 'dine_in' ? 'Dine-in' : t === 'takeaway' ? 'Takeaway' : t === 'delivery' ? 'Delivery' : t;
     const rows: unknown[][] = [
-      ['Ticket', 'Time (IST)', 'Type', 'Status', 'Payment', 'Method', 'Customer', 'Total', 'Tax', 'COGS'],
+      ['Ticket', `Time (${appTzTag()})`, 'Type', 'Status', 'Payment', 'Method', 'Customer', 'Total', 'Tax', 'COGS'],
       ...orders.map((o) => [
         `#${o.order_number}`,
         istTime(o.created_at),
@@ -1231,7 +1492,7 @@ const EodScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
         <div className="flex items-center gap-2">
           {refreshedAt ? (
             <span className="hidden text-[11px] font-semibold text-[#8A938C] sm:inline" title="Last refreshed">
-              as of {istTime(refreshedAt.toISOString())} IST
+              as of {istTime(refreshedAt.toISOString())} {appTzTag()}
             </span>
           ) : null}
           <button
@@ -1293,15 +1554,29 @@ const EodScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
               <Wallet size={18} aria-hidden />
             </span>
             <div className="min-w-0 flex-1">
-              <p className="text-[10.5px] font-bold uppercase tracking-[0.08em] text-[#8A938C]">Unpaid right now</p>
+              {/* 5.93.0 — the card says which day it counts: the day's book
+                  speaks its own window, never "right now" for what is only
+                  today. */}
+              <p className="text-[10.5px] font-bold uppercase tracking-[0.08em] text-[#8A938C]">
+                {isToday ? 'Unpaid today' : 'Unpaid that day'}
+              </p>
               <p className="text-[16px] font-extrabold leading-tight tabular-nums text-[#8A5A00]">
                 {now.unpaid} · {formatMoney(now.unpaidAmt)}
               </p>
+              {isToday && olderUnpaid > 0 && (
+                <p className="mt-0.5 flex items-center gap-1 text-[10.5px] font-semibold text-[#8A5A00]">
+                  <History size={11} aria-hidden />
+                  {olderUnpaid} older unpaid off today's book — see Bills
+                </p>
+              )}
             </div>
-            {now.unpaid > 0 && (
+            {/* 5.93.0 — the door follows the truth (the strip's 5.89.0 rule):
+                today's unpaid can be zero while older unpaid still wait — the
+                whisper points at Bills, so the door must open Bills. */}
+            {(now.unpaid > 0 || olderUnpaid > 0) && (
               <LiveDoorChip
                 label="Bills"
-                aria={`Open Bills — ${now.unpaid} unpaid ${now.unpaid === 1 ? 'ticket' : 'tickets'}, ${formatMoney(now.unpaidAmt)} still out`}
+                aria={`Open Bills — ${now.unpaid} unpaid ${now.unpaid === 1 ? 'ticket' : 'tickets'}, ${formatMoney(now.unpaidAmt)} still out${olderUnpaid > 0 ? `, ${olderUnpaid} older unpaid from earlier days` : ''}`}
                 onOpen={() => goSection('bills', ['Close-out', 'Bills'], 'unpaid')}
               />
             )}
@@ -1400,6 +1675,17 @@ const EodScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
               value={formatMoney(agg.unpaidAmt)}
               tone={agg.unpaidAmt > 0 ? 'gold' : 'teal'}
               sub={`${agg.unpaidOrders.length} ${agg.unpaidOrders.length === 1 ? 'ticket' : 'tickets'} due`}
+              whisper={
+                agg.splitOpen > 0 ? (
+                  <span
+                    className="inline-flex items-center gap-1 text-[10.5px] font-bold text-[#8A6D1F]"
+                    title="Split tickets count their balance, not the whole — the ledger is the truth"
+                  >
+                    <Split size={11} aria-hidden />
+                    {agg.splitOpen} {agg.splitOpen === 1 ? 'ticket' : 'tickets'} settled in parts — the count reads balances
+                  </span>
+                ) : undefined
+              }
             />
             <StatCard label="Avg ticket" value={formatMoney(agg.avg)} sub="gross ÷ orders" />
           </section>
@@ -1453,6 +1739,91 @@ const EodScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
                   the cafe keeps {formatMoney(agg.margin)}
                 </span>
               </div>
+            </div>
+
+            {/* ── 5.79.0 — the close sees the bin: the day's waste strip ── */}
+            {wasteDay && (
+              <div
+                className={`col-span-2 flex flex-wrap items-center justify-between gap-x-4 gap-y-1 rounded-xl border px-4 py-2.5 md:col-span-4 ${
+                  wasteDay.moves === 0
+                    ? 'border-[#E3E7E0] bg-[#F7F8F6]'
+                    : 'border-[#F0DCD7] bg-[#FDF6F4]'
+                }`}
+                aria-label="The bin today"
+              >
+                {wasteDay.moves === 0 ? (
+                  <span className="text-[11.5px] font-semibold text-[#8A938C]">
+                    The bin took nothing today — the shelf's honest day.
+                  </span>
+                ) : (
+                  <>
+                    <span className="flex items-center gap-2 text-[12px] font-bold text-[#B3261E]">
+                      <Trash2 size={13} aria-hidden className="text-[#B3261E]" />
+                      The bin took {formatMoney(wasteDay.rupees)}
+                      <span className="rounded-full bg-[#FBEAE7] px-2 py-0.5 text-[10.5px] font-bold tabular-nums text-[#B3261E]">
+                        {wasteDay.moves} {wasteDay.moves === 1 ? 'move' : 'moves'}
+                      </span>
+                    </span>
+                    {wasteDay.top && (
+                      <span className="text-[11.5px] font-semibold tabular-nums text-[#8A5A00]">
+                        heaviest: {wasteDay.top.name} — {wasteDay.top.qty} {wasteDay.top.unit} ·{' '}
+                        {formatMoney(wasteDay.top.rupees)}
+                      </span>
+                    )}
+                    {wasteDay.unvalued > 0 && (
+                      <span className="text-[10.5px] font-medium text-[#969696]">
+                        {wasteDay.unvalued} {wasteDay.unvalued === 1 ? 'move' : 'moves'} with no cost
+                        on file — counted as nothing, not guessed
+                      </span>
+                    )}
+                    <span className="text-[10.5px] text-[#969696]">
+                      spoilage · spills · damage — deliveries and corrections never fed the bin
+                    </span>
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* ── 5.83.0 — the close sees the floor: the day's rounds strip ── */}
+            <div
+              className={`col-span-2 flex flex-wrap items-center justify-between gap-x-4 gap-y-1 rounded-xl border px-4 py-2.5 md:col-span-4 ${
+                floorDay.rounds === 0
+                  ? 'border-[#E3E7E0] bg-[#F7F8F6]'
+                  : 'border-[#D5E2D8] bg-[#F3F8F4]'
+              }`}
+              aria-label="The floor today"
+            >
+              {floorDay.rounds === 0 ? (
+                <span className="text-[11.5px] font-semibold text-[#8A938C]">
+                  The floor sat quiet — no table rounds to close out.
+                </span>
+              ) : (
+                <>
+                  <span className="flex items-center gap-2 text-[12px] font-bold text-[#0F3D3E]">
+                    <Armchair size={13} aria-hidden className="text-[#2E7D32]" />
+                    The floor served {floorDay.rounds} {floorDay.rounds === 1 ? 'round' : 'rounds'}
+                    <span className="rounded-full bg-[#E3EFE5] px-2 py-0.5 text-[10.5px] font-bold tabular-nums text-[#2E7D32]">
+                      {formatMoney(floorDay.rupees)}
+                    </span>
+                  </span>
+                  {floorDay.busiest && (
+                    <span className="text-[11.5px] font-semibold tabular-nums text-[#1D5D7E]">
+                      busiest: {floorDay.busiest}
+                    </span>
+                  )}
+                  {noShowDay !== null && noShowDay > 0 && (
+                    <span
+                      className="text-[10.5px] font-semibold text-[#8A5A00]"
+                      title="Bookings whose slot fell on this day and were marked no-show in the book"
+                    >
+                      {noShowDay} {noShowDay === 1 ? 'booking' : 'bookings'} didn't show
+                    </span>
+                  )}
+                  <span className="text-[10.5px] text-[#969696]">
+                    table tickets only — walk-in counter rounds never held a table
+                  </span>
+                </>
+              )}
             </div>
           </section>
 
@@ -1603,7 +1974,7 @@ const EodScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
                           <StatusChip status={o.status} />
                         </td>
                         <td className="py-2 pr-3">
-                          <PayChip order={o} />
+                          <PayChip order={o} paidIn={agg.ledgerByOrder.get(o.id) || 0} />
                         </td>
                         <td className="py-2 text-right font-extrabold tabular-nums text-[#0F3D3E]">
                           {formatMoney(Number(o.total || 0))}
@@ -1648,5 +2019,8 @@ const EodScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
 /** EodScreen — remountable wrapper so the tenant hook can be retried. */
 export const EodScreen: React.FC = () => {
   const [attempt, setAttempt] = useState(0);
+  /* 5.97.0 — the owner's timezone word takes effect live: a Settings save
+     re-opens the day book in the chosen day. */
+  useEffect(() => subscribePrefs(() => setAttempt((a) => a + 1)), []);
   return <EodScreenInner key={attempt} onTenantRetry={() => setAttempt((a) => a + 1)} />;
 };

@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   BadgePercent,
+  CalendarClock,
   Crown,
   Gift,
   Loader2,
@@ -26,18 +27,26 @@ import {
   fetchCustomerStats,
   fetchCustomers,
   fetchOffers,
+  fetchReservations,
   subscribeCrmRealtime,
   updateCustomer,
   updateOffer,
   type CustomerInput,
   type OfferInput,
   type RealtimeState,
+  type Reservation,
+  type ReservationStatus,
 } from '../../lib/api';
 import { formatMoney } from '../../lib/prefs';
+import { bookingSlotLabel, bookingDayKey, bookingTodayKey, bookingTzIsForeign } from '../../lib/bookingday';
 import { useTenant } from '../../lib/tenant';
+import { computeUsual, isPaidTicket, USUAL_WINDOW } from '../../lib/usual';
+import { useDialogA11y } from '../../lib/useDialogA11y';
 import { useCart } from '../../store/cart';
 import { useUi } from '../../store/session';
-import type { Customer, CustomerStats, Offer, Order } from '../../types';
+import { MarkHit } from '../shell/MarkHit';
+import { EmptyState } from '../shell/EmptyState';
+import type { Customer, CustomerStats, Offer, Order, OrderItem } from '../../types';
 
 /**
  * Guests (v5.5.0 — NOVA CRM parity, migration 016).
@@ -53,9 +62,33 @@ import type { Customer, CustomerStats, Offer, Order } from '../../types';
  *      guest QR menu banner picks active offers up automatically.
  *
  * Guests who walk in anonymous stay anonymous — the CRM never invents people.
+ *
+ * v5.74.0 — the regular's usual: the drawer now names the dish the guest's
+ * own PAID ledger keeps ordering (the same paid truth v_customer_stats
+ * speaks — status ≠ cancelled AND payment completed), reads it across a
+ * 50-ticket window, and can start it into the live cart at the last price
+ * and extras the ledger froze. A regular's past, one tap from today.
+ *
+ * v5.122.0 — the count line (Bills' house pattern, aria-live): while a
+ * search narrows the book, a badge says how many guests the term captured
+ * out of the whole book — the KPI cards above keep counting EVERYONE, the
+ * way the shelf's value and Bills' unpaid total never narrow with a filter.
+ *
+ * v5.123.0 — the book's miss says why: the generic "No guests match that
+ * search" becomes the shared EmptyState — term named, reach named
+ * (names, phones, notes, AND emails: the hay always read email but the
+ * old placeholder never admitted it; the local box's placeholder now
+ * does), gold Clear search clearing both doors. The catalog-truth "No
+ * guests yet" state joins the same family shape — an empty book and a
+ * filtered one stay different sentences.
  */
 
 type TabKey = 'guests' | 'offers';
+
+/* v5.74.0 — the usual's definition (paid truth, tie-breaks, 50-ticket
+ * window) lives in src/lib/usual.ts — ONE ledger truth shared with the
+ * counter cart's chip. The drawer still SHOWS only the recent 8 rows. */
+const TICKETS_SHOWN = 8;
 
 /* ─────────────────────────────── helpers ───────────────────────────────── */
 
@@ -97,6 +130,108 @@ function offerBadgeLabel(o: Offer): string {
     : `${formatMoney(Number(o.discount_value))} off`;
 }
 
+/* ── The CRM reads the book (5.90.0) — a guest row carries today's promise.
+   The join is the PHONE, the CRM's own identity key since v5.5: a book row
+   speaks for a guest only when both sides carry a non-empty phone that
+   normalizes to the same digits — the echo never guesses, and a row without
+   a phone on either side stays silent. 5.105.0 — the IST helpers were
+   "byte-matched to FloorScreen" by hand; now they ARE the floor's voice:
+   one booking clock (src/lib/bookingday.ts, the DB's word) for book, bell
+   and drawer — drift can never return. ── */
+const istDateKeyBook = bookingDayKey;
+const istTodayKeyBook = bookingTodayKey;
+const istSlotLabelBook = bookingSlotLabel;
+
+/** Digits-only phone normalizer — "98765 43210" and "9876543210" are the
+ *  same guest. Empty stays empty: an empty phone never matches. */
+function phoneDigits(p: string | null | undefined): string {
+  return (p || '').replace(/\D/g, '');
+}
+
+export interface BookVoice {
+  /** The strongest of the guest's promises today — the pill's voice. */
+  status: ReservationStatus;
+  /** True when the booked slot is still ahead (the gold "expected" voice). */
+  upcoming: boolean;
+  /** The pill's label — "On the book · seated" / "· 7:10 pm" / "· went quiet". */
+  label: string;
+  /** IST slot label of the speaking row ("6:31 pm"). */
+  slot: string;
+  /** Minutes until the slot (only for the upcoming gold voice). */
+  mins: number | null;
+  /** How many book rows the guest has today (the sentence names them all). */
+  count: number;
+  /** The full provenance sentence for title/aria. */
+  sentence: string;
+  /** The book's own tone family, byte-matched to RES_META / the bell. */
+  bg: string;
+  fg: string;
+}
+
+/** Pick the strongest of a guest's today-rows and word the voice. Priority:
+ *  a party on the premises outranks a promise, a promise outranks a debt,
+ *  the record outranks silence — seated > expected > no-show > went quiet >
+ *  cancelled. The clock never convicts: a past booked hour is "went
+ *  quiet", never "no-show". */
+function buildBookVoice(name: string, rows: Reservation[], nowMs: number): BookVoice | null {
+  if (!rows.length) return null;
+  const todayKey = istTodayKeyBook();
+  const todays = rows.filter((r) => istDateKeyBook(r.slot_at) === todayKey);
+  if (!todays.length) return null;
+  const rank: Record<ReservationStatus, number> = { seated: 4, booked: 3, no_show: 2, cancelled: 1 };
+  const pick = [...todays].sort((a, b) => {
+    // booked splits into expected (future) vs quiet (past) — future first
+    const ra = rank[a.status] === 3 && new Date(a.slot_at).getTime() > nowMs ? 3.5 : rank[a.status];
+    const rb = rank[b.status] === 3 && new Date(b.slot_at).getTime() > nowMs ? 3.5 : rank[b.status];
+    if (ra !== rb) return rb - ra;
+    return new Date(b.slot_at).getTime() - new Date(a.slot_at).getTime();
+  })[0];
+  const slotMs = new Date(pick.slot_at).getTime();
+  const upcoming = pick.status === 'booked' && slotMs > nowMs;
+  const mins = upcoming ? Math.round((slotMs - nowMs) / 60000) : null;
+  const voice: Record<string, { label: string; bg: string; fg: string; detail: string }> = {
+    seated: { label: 'On the book · seated', bg: '#E7F1E8', fg: '#2E7D32', detail: 'the party is on the premises now' },
+    expected: {
+      label: `On the book · ${istSlotLabelBook(pick.slot_at)}`,
+      bg: '#FBF3E1',
+      fg: '#8A5A00',
+      detail: mins !== null && mins <= 45 ? `the party is expected at ${istSlotLabelBook(pick.slot_at)} — due in about ${mins} minute${mins === 1 ? '' : 's'}` : `the party is expected at ${istSlotLabelBook(pick.slot_at)}`,
+    },
+    quiet: {
+      label: 'On the book · went quiet',
+      bg: '#F1F4F1',
+      fg: '#6B6B6B',
+      detail: `the promised hour (${istSlotLabelBook(pick.slot_at)}) went by, still booked`,
+    },
+    no_show: {
+      label: 'On the book · no-show',
+      bg: '#FCEBEA',
+      fg: '#B3261E',
+      detail: `marked no-show for ${istSlotLabelBook(pick.slot_at)}`,
+    },
+    cancelled: {
+      label: 'On the book · cancelled',
+      bg: '#EAF0EC',
+      fg: '#6B6B6B',
+      detail: `the ${istSlotLabelBook(pick.slot_at)} promise was cancelled — the book keeps the record`,
+    },
+  };
+  const key = pick.status === 'booked' ? (upcoming ? 'expected' : 'quiet') : pick.status;
+  const v = voice[key];
+  const n = todays.length;
+  return {
+    status: pick.status,
+    upcoming,
+    label: v.label,
+    slot: istSlotLabelBook(pick.slot_at),
+    mins,
+    count: n,
+    bg: v.bg,
+    fg: v.fg,
+    sentence: `The book holds ${n === 1 ? 'a promise' : `${n} promises`} for ${name} today — ${v.detail}. Matched by phone number; the book's truth as of now.`,
+  };
+}
+
 function fmtWhen(ts: string | null): string {
   if (!ts) return '—';
   const d = new Date(ts);
@@ -117,6 +252,15 @@ function orderStatusTone(s: string): string {
   return 'bg-[#FFF4DC] text-[#8A5A00]';
 }
 
+/** v5.74.0 — a 3px left rail in the ticket's own status color, so the
+ *  drawer's ticket stack scans by state before it is even read. */
+function orderRail(s: string): string {
+  if (s === 'completed') return '#2E7D32';
+  if (s === 'cancelled') return '#B3261E';
+  if (s === 'ready') return '#3B5BA5';
+  return '#C9950A';
+}
+
 /* ─────────────────────────────── screen ────────────────────────────────── */
 
 export const CustomersScreen: React.FC = () => {
@@ -134,7 +278,21 @@ const GuestsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry })
   const [error, setError] = useState<string | null>(null);
   const [rt, setRt] = useState<RealtimeState>('connecting');
   const [busyId, setBusyId] = useState<string | null>(null);
-  const [query, setQuery] = useState('');
+  /* v5.116.0 — the guest search joins the shell-search contract: the
+   * header box and the tab's own box are two doors to one state. */
+  const query = useUi((s) => s.search);
+  const setQuery = useUi((s) => s.setSearch);
+  useEffect(() => {
+    useUi.getState().setSearchMeta({ placeholder: 'Search guests…' });
+    return () => useUi.getState().setSearchMeta(null);
+  }, []);
+  /* 5.90.0 — the book, read fail-soft alongside every load. null = the CRM
+     has not read the book (or could not): every voice stays SILENT — an
+     unread book never becomes an invented all-clear. */
+  const [book, setBook] = useState<Reservation[] | null>(null);
+  /* the 30s book tick: a booked row crosses its hour (expected → went quiet)
+     between loads, and the pill must cross with it, unprompted. */
+  const [bookTick, setBookTick] = useState(0);
 
   // dialogs / drawers
   const [guestForm, setGuestForm] = useState<{ mode: 'new' | 'edit'; customer: Customer | null; open: boolean }>({
@@ -167,6 +325,11 @@ const GuestsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry })
     } finally {
       setLoading(false);
     }
+    /* the book rides along, fail-soft — its own truth, never the screen's
+       error: a failed read silences the voices, it does not alarm the CRM. */
+    fetchReservations(tenantId, 100)
+      .then((rows) => setBook(rows))
+      .catch(() => setBook(null));
   }, [tenantId]);
 
   useEffect(() => {
@@ -178,11 +341,40 @@ const GuestsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry })
     if (!tenantId) return;
     const unsub = subscribeCrmRealtime(tenantId, () => void load(), setRt);
     const poll = window.setInterval(() => void load(), 30_000);
+    const tick = window.setInterval(() => setBookTick((t) => t + 1), 30_000);
     return () => {
       unsub();
       window.clearInterval(poll);
+      window.clearInterval(tick);
     };
   }, [tenantId, load]);
+
+  /* one voice per guest — built on every book read and every 30s tick so
+     the expected/quiet boundary crosses live (the floor's promiseTick
+     grammar, the bell's echoTick grammar, now the CRM's bookTick). */
+  const bookVoices = useMemo(() => {
+    void bookTick;
+    if (!book) return null;
+    const nowMs = Date.now();
+    const byPhone = new Map<string, Reservation[]>();
+    for (const r of book) {
+      const d = phoneDigits(r.phone);
+      if (!d) continue; // a book row without a phone can never claim a guest
+      const list = byPhone.get(d) || [];
+      list.push(r);
+      byPhone.set(d, list);
+    }
+    const map = new Map<string, BookVoice>();
+    for (const g of guests) {
+      const d = phoneDigits(g.phone);
+      if (!d) continue;
+      const rows = byPhone.get(d);
+      if (!rows) continue;
+      const voice = buildBookVoice(g.name || 'Unnamed guest', rows, nowMs);
+      if (voice) map.set(g.id, voice);
+    }
+    return map;
+  }, [book, guests, bookTick]);
 
   /* mutations ─────────────────────────────────────────────────────────── */
 
@@ -448,6 +640,7 @@ const GuestsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry })
       {tab === 'guests' ? (
         <GuestsTab
           rows={rows}
+          total={guests.length}
           kpis={kpis}
           query={query}
           setQuery={setQuery}
@@ -458,6 +651,7 @@ const GuestsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry })
           setDeleteArm={setDeleteArm}
           busyId={busyId}
           onOpenDetail={setDetailFor}
+          bookVoices={bookVoices}
         />
       ) : (
         <OffersTab
@@ -497,6 +691,7 @@ const GuestsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry })
           tenantId={tenantId}
           customer={detailFor}
           stats={stats.get(detailFor.phone) || null}
+          voice={bookVoices?.get(detailFor.id) ?? null}
           onClose={() => setDetailFor(null)}
         />
       )}
@@ -513,6 +708,7 @@ interface GuestRow {
 
 const GuestsTab: React.FC<{
   rows: GuestRow[];
+  total: number;
   kpis: { total: number; regulars: number; vip: number; topName: string; topSpent: number };
   query: string;
   setQuery: (q: string) => void;
@@ -523,7 +719,10 @@ const GuestsTab: React.FC<{
   setDeleteArm: (id: string | null) => void;
   busyId: string | null;
   onOpenDetail: (g: Customer) => void;
-}> = ({ rows, kpis, query, setQuery, loading, onEdit, onDelete, deleteArm, setDeleteArm, busyId, onOpenDetail }) => {
+  /* 5.90.0 — the book's voices, keyed by guest id (null = the CRM has not
+     read the book: every row stays silent, never an invented all-clear). */
+  bookVoices: Map<string, BookVoice> | null;
+}> = ({ rows, total, kpis, query, setQuery, loading, onEdit, onDelete, deleteArm, setDeleteArm, busyId, onOpenDetail, bookVoices }) => {
   if (loading) {
     return (
       <div className="space-y-3 px-6 py-5">
@@ -565,27 +764,61 @@ const GuestsTab: React.FC<{
           type="search"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search name, phone, notes…"
+          placeholder="Search name, phone, email, notes…"
           aria-label="Search guests"
           className="sp-input h-11 w-full pl-10 pr-3 text-[13.5px]"
         />
       </div>
 
+      {/* v5.122.0 — the count line (Bills' house pattern, aria-live):
+          while the search narrows the book, say how much of it the term
+          captured — the whole-book KPIs above stay untouched by design. */}
+      {query.trim() && (
+        <p
+          aria-live="polite"
+          className="mt-3 flex items-center gap-2 text-[12px] font-medium text-[#0F3D3E]"
+        >
+          <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[#0F3D3E] px-1.5 text-[10.5px] font-bold tabular-nums text-white">
+            {rows.length}
+          </span>
+          <span className="text-[#6B6B6B]">
+            of {total} {total === 1 ? 'guest' : 'guests'}{' '}
+            {rows.length === 1 || total === 1 ? 'matches' : 'match'} “{query.trim()}”
+          </span>
+        </p>
+      )}
+
       {/* list */}
       {rows.length === 0 ? (
-        <div className="mt-6 rounded-2xl border border-dashed border-[#E3E7E0] bg-[#FBFAF7] px-6 py-12 text-center">
-          <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-[#F6F5F2] text-[#969696]">
-            <Users size={20} aria-hidden />
-          </span>
-          <p className="mt-3 text-[14px] font-semibold text-[#1A1A1A]">
-            {query ? 'No guests match that search' : 'No guests yet'}
-          </p>
-          <p className="mx-auto mt-1 max-w-sm text-[12.5px] leading-relaxed text-[#6B6B6B]">
-            {query
-              ? 'Try a different name or phone.'
-              : 'Add one by hand, or just type a phone on the next ticket — every order with a phone books its guest here automatically.'}
-          </p>
-        </div>
+        query ? (
+          /* v5.123.0 — the book's miss says why (the 5.119.0 contract
+           * reaches its second-to-last generic voice): the term is
+           * named, the reach is named — including emails, which the
+           * hay always read but the old placeholder never admitted —
+           * and the gold way-out clears BOTH doors of the search. */
+          <EmptyState
+            icon={Search}
+            title={`No guest matches “${query.trim()}”`}
+            body="Search reads names, phones, notes, and emails — an email match keeps its row without a gold mark; open the guest to see the address."
+            action={
+              <button
+                onClick={() => setQuery('')}
+                className="rounded-lg bg-[#F3E8CF] px-3 py-1.5 text-[12px] font-semibold text-[#1A1A1A] transition hover:bg-[#E9D9AF]"
+              >
+                Clear search
+              </button>
+            }
+          />
+        ) : (
+          /* catalog truth: an empty book is a different sentence from a
+           * filtered one — it keeps its own voice, now in the shared
+           * family shape. */
+          <EmptyState
+            icon={Users}
+            title="No guests yet"
+            body="Add one by hand, or just type a phone on the next ticket — every order with a phone books its guest here automatically."
+          />
+        )
       ) : (
         <ul className="mt-4 space-y-2.5">
           {rows.map(({ g, s }) => {
@@ -594,6 +827,10 @@ const GuestsTab: React.FC<{
             const visits = s?.visits ?? 0;
             const spent = Number(s?.total_spent ?? 0);
             const armed = deleteArm === g.id;
+            /* 5.90.0 — the guest's promise today, if the book holds one for
+               this phone. The pill wears the book's own tone family; the
+               hover/aria carries the full provenance sentence. */
+            const voice = bookVoices?.get(g.id) ?? null;
             return (
               <li key={g.id} className="sp-card group px-4 py-3.5 transition-shadow hover:shadow-md">
                 <div className="flex items-center gap-3.5">
@@ -608,16 +845,29 @@ const GuestsTab: React.FC<{
                   </button>
                   <button type="button" onClick={() => onOpenDetail(g)} className="min-w-0 flex-1 text-left">
                     <span className="flex flex-wrap items-center gap-2">
-                      <span className="truncate text-[14px] font-semibold text-[#1A1A1A]">{g.name || 'Unnamed guest'}</span>
+                      <span className="truncate text-[14px] font-semibold text-[#1A1A1A]">
+                        <MarkHit text={g.name || 'Unnamed guest'} query={query} />
+                      </span>
                       <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${tier.cls}`}>
                         {tier.label}
                       </span>
+                      {voice && (
+                        <span
+                          className="inline-flex items-center gap-1 whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-bold"
+                          style={{ backgroundColor: voice.bg, color: voice.fg }}
+                          title={voice.sentence}
+                          aria-label={voice.sentence}
+                        >
+                          <CalendarClock size={10} aria-hidden />
+                          {voice.label}
+                        </span>
+                      )}
                     </span>
                     <span className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[12px] text-[#6B6B6B]">
                       <span className="inline-flex items-center gap-1">
-                        <Phone size={11} aria-hidden /> {g.phone}
+                        <Phone size={11} aria-hidden /> <MarkHit text={g.phone} query={query} />
                       </span>
-                      {g.notes && <span className="truncate">· {g.notes}</span>}
+                      {g.notes && <span className="truncate">· <MarkHit text={g.notes} query={query} /></span>}
                     </span>
                   </button>
                   <div className="hidden shrink-0 items-center gap-7 sm:flex">
@@ -833,6 +1083,8 @@ const GuestDialog: React.FC<{
   const [phone, setPhone] = useState(customer?.phone ?? '');
   const [email, setEmail] = useState(customer?.email ?? '');
   const [notes, setNotes] = useState(customer?.notes ?? '');
+  /* v5.110.0 — Escape/trap/restore; Escape stands down while the guest saves. */
+  const dlgRef = useDialogA11y<HTMLDivElement>(() => { if (!busy) onClose(); }, true);
   const [localErr, setLocalErr] = useState<string | null>(null);
 
   const submit = () => {
@@ -843,8 +1095,8 @@ const GuestDialog: React.FC<{
   };
 
   return (
-    <div className="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label={mode === 'new' ? 'Add guest' : 'Edit guest'}>
-      <button type="button" aria-label="Close" onClick={onClose} className="absolute inset-0 h-full w-full cursor-default bg-[#0F3D3E]/45" />
+    <div ref={dlgRef} className="fixed inset-0 z-50" style={{ animation: 'spFadeIn 160ms ease-out' }} role="dialog" aria-modal="true" aria-label={mode === 'new' ? 'Add guest' : 'Edit guest'}>
+      <button type="button" aria-label="Close" onClick={onClose} className="absolute inset-0 h-full w-full cursor-default bg-[#0F3D3E]/45 focus-visible:outline-none" />
       <div className="absolute left-1/2 top-1/2 w-[min(440px,92vw)] -translate-x-1/2 -translate-y-1/2 rounded-2xl bg-white p-5 shadow-2xl">
         <div className="flex items-center justify-between">
           <h2 className="text-[16px] font-bold text-[#1A1A1A]">{mode === 'new' ? 'Add guest' : 'Edit guest'}</h2>
@@ -905,6 +1157,8 @@ const OfferDialog: React.FC<{
   const [minOrder, setMinOrder] = useState(offer ? String(Number(offer.min_order_amount)) : '0');
   const [isActive, setIsActive] = useState(offer?.is_active ?? true);
   const [localErr, setLocalErr] = useState<string | null>(null);
+  /* v5.110.0 — Escape/trap/restore; Escape stands down while the offer saves. */
+  const dlgRef = useDialogA11y<HTMLDivElement>(() => { if (!busy) onClose(); }, true);
 
   const submit = () => {
     const v = Number(dvalue);
@@ -925,8 +1179,8 @@ const OfferDialog: React.FC<{
   };
 
   return (
-    <div className="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label={mode === 'new' ? 'New offer' : 'Edit offer'}>
-      <button type="button" aria-label="Close" onClick={onClose} className="absolute inset-0 h-full w-full cursor-default bg-[#0F3D3E]/45" />
+    <div ref={dlgRef} className="fixed inset-0 z-50" style={{ animation: 'spFadeIn 160ms ease-out' }} role="dialog" aria-modal="true" aria-label={mode === 'new' ? 'New offer' : 'Edit offer'}>
+      <button type="button" aria-label="Close" onClick={onClose} className="absolute inset-0 h-full w-full cursor-default bg-[#0F3D3E]/45 focus-visible:outline-none" />
       <div className="absolute left-1/2 top-1/2 w-[min(460px,92vw)] -translate-x-1/2 -translate-y-1/2 rounded-2xl bg-white p-5 shadow-2xl">
         <div className="flex items-center justify-between">
           <h2 className="text-[16px] font-bold text-[#1A1A1A]">{mode === 'new' ? 'New offer' : 'Edit offer'}</h2>
@@ -992,14 +1246,22 @@ const GuestDetailDrawer: React.FC<{
   tenantId: string;
   customer: Customer;
   stats: CustomerStats | null;
+  /* 5.90.0 — the guest's promise today (null = no match, or the book is
+     unread — silence either way). */
+  voice: BookVoice | null;
   onClose: () => void;
-}> = ({ tenantId, customer, stats, onClose }) => {
+}> = ({ tenantId, customer, stats, voice, onClose }) => {
   const [orders, setOrders] = useState<Order[] | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  /* v5.110.0 — the drawer holds the door (replaces the hand-rolled Escape listener). */
+  const dlgRef = useDialogA11y<HTMLDivElement>(onClose, true);
 
   useEffect(() => {
     let alive = true;
-    fetchCustomerOrders(tenantId, customer.phone, 8)
+    /* v5.74.0 — the fetch widened from 8 to USUAL_WINDOW (50): the recent
+     * list still SHOWS the same TICKETS_SHOWN rows, but the usual now reads
+     * a window wide enough that a habit cannot hide behind one accident. */
+    fetchCustomerOrders(tenantId, customer.phone, USUAL_WINDOW)
       .then((o) => {
         if (alive) setOrders(o);
       })
@@ -1011,19 +1273,38 @@ const GuestDetailDrawer: React.FC<{
     };
   }, [tenantId, customer.phone]);
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
-
   const tone = avatarTone(customer.phone);
   const tier = tierOf(stats?.visits ?? 0, Number(stats?.total_spent ?? 0));
   const visits = stats?.visits ?? 0;
   const spent = Number(stats?.total_spent ?? 0);
   const placed = stats?.orders_placed ?? 0;
+
+  /* THE USUAL (v5.74.0) — the dish the guest's own paid ledger keeps naming.
+   * The definition (paid truth, tie-breaks, window) is ONE shared truth in
+   * src/lib/usual.ts — the counter cart's chip speaks the same one. */
+  const paidTickets = useMemo(() => (orders || []).filter(isPaidTicket), [orders]);
+
+  const usual = useMemo(() => (orders ? computeUsual(orders) : null), [orders]);
+  const usualLiving = Boolean(usual?.line?.menu_item_id);
+
+  /** One ledger line rides into the live cart — the exact v5.56.0
+   *  arithmetic the repeat action speaks (extras folded back out of the
+   *  frozen unit price, cart.add re-folding the same extras in). */
+  const addLineToCart = (it: OrderItem, qty?: number) => {
+    const addonSnap = (it.addons || []).map((a) => ({
+      id: null as string | null,
+      name: a.name,
+      price: Number(a.price),
+    }));
+    const addonSum = Math.round(addonSnap.reduce((s, a) => s + a.price, 0) * 100) / 100;
+    const basePrice = Math.round((Number(it.unit_price) - addonSum) * 100) / 100;
+    useCart.getState().add(
+      { id: it.menu_item_id as string, name: it.name, price: basePrice, image_url: null, is_veg: null },
+      qty ?? it.qty,
+      addonSnap,
+      it.variant_name ? { name: it.variant_name, priceDelta: 0 } : null
+    );
+  };
 
   /* "Their usual" (v5.54.0) — a regular's past ticket becomes today's cart:
      every line (qty + the addon-inclusive unit price the ledger froze) rides
@@ -1035,40 +1316,32 @@ const GuestDetailDrawer: React.FC<{
     (o.items || []).length > 0 && (o.items || []).every((it) => Boolean(it.menu_item_id));
 
   const repeatOrder = (o: Order) => {
+    for (const it of o.items || []) addLineToCart(it);
     const cart = useCart.getState();
-    for (const it of o.items || []) {
-      /* v5.56.0 — the ledger's frozen extras repeat too (a guest-placed
-         "Large + Extra shot" no longer degrades to a bare Large). The RPC
-         froze unit_price WITH the add-ons (017: price + delta + Σ addons),
-         so the base is reconstructed by subtracting the snapshot back out —
-         cart.add then re-folds the same extras into the exact same total.
-         The snapshot's addon_id is not in the read payload, so id rides
-         null — the column is SET NULL by design, a snapshot needs no
-         living row. The variant keeps 5.54/5.55's delta-0 rule for the
-         same reason. */
-      const addonSnap = (it.addons || []).map((a) => ({
-        id: null as string | null,
-        name: a.name,
-        price: Number(a.price),
-      }));
-      const addonSum = Math.round(addonSnap.reduce((s, a) => s + a.price, 0) * 100) / 100;
-      const basePrice = Math.round((Number(it.unit_price) - addonSum) * 100) / 100;
-      cart.add(
-        { id: it.menu_item_id as string, name: it.name, price: basePrice, image_url: null, is_veg: null },
-        it.qty,
-        addonSnap,
-        it.variant_name ? { name: it.variant_name, priceDelta: 0 } : null,
-      );
-    }
     cart.setCustomerName(customer.name || '');
     cart.setCustomerPhone(customer.phone);
     onClose();
     useUi.getState().goSection('food', ['Food & Drinks'], `repeat:${o.order_number}`);
   };
 
+  /* START THEIR USUAL (v5.74.0) — the habit itself, one tap. The latest
+   * expression of it rides in at the habit's own size (the last line's
+   * qty), at the last price and extras the ledger froze, with the guest's
+   * identity pre-filled. Guard: a usual whose dish was de-listed cannot
+   * start — the well keeps the name (ledger truth) but says so honestly. */
+  const startUsual = () => {
+    if (!usual?.line || !usualLiving) return;
+    addLineToCart(usual.line);
+    const cart = useCart.getState();
+    cart.setCustomerName(customer.name || '');
+    cart.setCustomerPhone(customer.phone);
+    onClose();
+    useUi.getState().goSection('food', ['Food & Drinks'], `usual:${customer.phone}`);
+  };
+
   return (
-    <div className="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label={`Guest ${customer.name || customer.phone}`}>
-      <button type="button" aria-label="Close" onClick={onClose} className="absolute inset-0 h-full w-full cursor-default bg-[#0F3D3E]/45" />
+    <div ref={dlgRef} className="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label={`Guest ${customer.name || customer.phone}`}>
+      <button type="button" aria-label="Close" onClick={onClose} className="absolute inset-0 h-full w-full cursor-default bg-[#0F3D3E]/45 focus-visible:outline-none" />
       <div className="absolute inset-y-0 right-0 flex w-[min(430px,94vw)] flex-col bg-white shadow-2xl">
         {/* head */}
         <div className="border-b border-[#E3E7E0] px-5 py-4">
@@ -1100,20 +1373,110 @@ const GuestDetailDrawer: React.FC<{
         <div className="grid grid-cols-3 divide-x divide-[#F0F1EE] border-b border-[#E3E7E0] bg-[#FBFAF7]">
           <div className="px-4 py-3 text-center">
             <p className="text-[10px] font-semibold uppercase tracking-wide text-[#969696]">Paid visits</p>
-            <p className="mt-0.5 text-[18px] font-bold text-[#1A1A1A]">{visits}</p>
+            <p className="mt-0.5 text-[18px] font-bold text-[#1A1A1A] tabular-nums">{visits}</p>
           </div>
           <div className="px-4 py-3 text-center">
             <p className="text-[10px] font-semibold uppercase tracking-wide text-[#969696]">Paid total</p>
-            <p className="mt-0.5 text-[18px] font-bold text-[#2E7D32]">{formatMoney(spent)}</p>
+            <p className="mt-0.5 text-[18px] font-bold text-[#2E7D32] tabular-nums">{formatMoney(spent)}</p>
           </div>
           <div className="px-4 py-3 text-center">
             <p className="text-[10px] font-semibold uppercase tracking-wide text-[#969696]">All tickets</p>
-            <p className="mt-0.5 text-[18px] font-bold text-[#1A1A1A]">{placed}</p>
+            <p className="mt-0.5 text-[18px] font-bold text-[#1A1A1A] tabular-nums">{placed}</p>
           </div>
         </div>
 
         {/* tickets */}
         <div className="flex-1 overflow-y-auto px-5 py-4">
+          {/* TODAY ON THE BOOK (5.90.0) — the guest's promise, in the book's
+              own tones: the same family the chip, drill, book rows and the
+              bell speak. Null = no match today: the block simply never
+              renders, an unread book never invents an all-clear. */}
+          {voice && (
+            <div
+              className="mb-4 rounded-2xl border px-4 py-3.5"
+              style={{ borderColor: voice.fg ? `${voice.fg}22` : undefined, backgroundColor: voice.bg }}
+              role="note"
+              aria-label={voice.sentence}
+            >
+              <div className="flex items-center gap-1.5">
+                <CalendarClock size={13} style={{ color: voice.fg }} aria-hidden />
+                <p className="text-[10px] font-bold uppercase tracking-[0.14em]" style={{ color: voice.fg }}>
+                  Today on the book
+                </p>
+              </div>
+              <p className="mt-1.5 text-[15.5px] font-bold tabular-nums" style={{ color: voice.fg }}>
+                {voice.upcoming
+                  ? `Expected ${voice.slot}${bookingTzIsForeign() ? ' IST' : ''}`
+                  : voice.label.replace('On the book · ', '')}
+              </p>
+              <p className="mt-0.5 text-[11.5px] font-medium leading-relaxed" style={{ color: voice.fg, opacity: 0.88 }}>
+                {voice.sentence}
+              </p>
+            </div>
+          )}
+          {/* THE USUAL (v5.74.0) — the dish this guest's own paid ledger keeps
+              naming, with the share of everything they've rung it accounts
+              for, and one tap to start it into today's order. */}
+          {orders !== null && usual && usual.line && (
+            <div
+              className="mb-4 rounded-2xl border border-[#E3E7E0] bg-[#FBFAF7] px-4 py-3.5"
+              aria-label={`The usual: ${usual.units} times ${usual.name}`}
+            >
+              <div className="flex items-center gap-1.5">
+                <Sparkles size={13} className="text-[#B88E2F]" aria-hidden />
+                <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#8A5A00]">The usual</p>
+              </div>
+              <p className="mt-1.5 text-[15.5px] font-bold text-[#1A1A1A]">
+                <span className="tabular-nums">{usual.units}×</span> {usual.name}
+              </p>
+              <p className="mt-0.5 text-[11.5px] leading-relaxed text-[#6B6B6B]">
+                named across <span className="font-semibold text-[#1A1A1A] tabular-nums">{usual.tickets}</span>{' '}
+                paid {usual.tickets === 1 ? 'ticket' : 'tickets'} ·{' '}
+                <span className="tabular-nums">{formatMoney(usual.rupees)}</span> of everything they've rung
+                {paidTickets.length >= USUAL_WINDOW && ` · last-${USUAL_WINDOW}-ticket window`}
+              </p>
+              <div
+                className="mt-2 h-1.5 overflow-hidden rounded-full bg-[#EAF0EC]"
+                role="img"
+                aria-label={`${Math.round(usual.share * 100)} percent of everything they have rung`}
+              >
+                <div
+                  className="h-full rounded-full bg-[#B88E2F]"
+                  style={{ width: `${Math.max(3, Math.round(usual.share * 100))}%` }}
+                />
+              </div>
+              {usualLiving ? (
+                <button
+                  type="button"
+                  onClick={startUsual}
+                  aria-label={`Start their usual — ${usual.line.qty} times ${usual.name} at the last price they paid`}
+                  title={`Start their usual — ${usual.line.qty}× ${usual.name} at the last price and extras the ledger froze`}
+                  className="mt-2.5 flex h-8 w-full items-center justify-center gap-1.5 rounded-full bg-[#B88E2F] text-[12px] font-bold text-white shadow-sm transition-colors hover:bg-[#A67D28] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[#B88E2F]"
+                >
+                  <Repeat size={12} aria-hidden />
+                  Start their usual
+                </button>
+              ) : (
+                <p
+                  className="mt-2.5 rounded-full bg-[#F6F5F2] px-2.5 py-1.5 text-center text-[10.5px] text-[#969696]"
+                  title="This dish is no longer on the menu, so the usual cannot be started."
+                >
+                  Off the menu now — the usual can't be started
+                </p>
+              )}
+            </div>
+          )}
+          {orders !== null && !usual && orders.length > 0 && (
+            <p className="mb-4 rounded-xl bg-[#F6F5F2] px-3 py-2.5 text-center text-[11.5px] text-[#969696]">
+              No usual yet — a usual is named by paid tickets only.
+            </p>
+          )}
+          {orders !== null && !usual && orders.length === 0 && (
+            <p className="mb-4 rounded-xl bg-[#F6F5F2] px-3 py-2.5 text-center text-[11.5px] text-[#969696]">
+              No usual yet — their first paid ticket will name it.
+            </p>
+          )}
+          {orders === null && !err && <div className="sp-skeleton mb-4 h-[92px] rounded-2xl" />}
           <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#969696]">Recent tickets</p>
           {err && <p className="mt-2 rounded-xl bg-[#FEF2F2] px-3 py-2 text-[12.5px] text-[#B42318]">{err}</p>}
           {orders === null && !err && (
@@ -1130,10 +1493,14 @@ const GuestDetailDrawer: React.FC<{
           )}
           {orders && orders.length > 0 && (
             <ul className="mt-3 space-y-2.5">
-              {orders.map((o) => (
-                <li key={o.id} className="rounded-xl border border-[#E3E7E0] px-3.5 py-3">
+              {orders.slice(0, TICKETS_SHOWN).map((o) => (
+                <li
+                  key={o.id}
+                  className="rounded-xl border border-[#E3E7E0] px-3.5 py-3"
+                  style={{ borderLeft: `3px solid ${orderRail(String(o.status))}` }}
+                >
                   <div className="flex items-center justify-between gap-2">
-                    <span className="text-[13px] font-bold text-[#1A1A1A]">#{o.order_number}</span>
+                    <span className="text-[13px] font-bold text-[#1A1A1A] tabular-nums">#{o.order_number}</span>
                     <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${orderStatusTone(String(o.status))}`}>
                       {String(o.status).replace('_', ' ')}
                     </span>
@@ -1143,7 +1510,7 @@ const GuestDetailDrawer: React.FC<{
                   </p>
                   <div className="mt-1.5 flex items-center justify-between text-[11.5px] text-[#969696]">
                     <span>{fmtWhen(o.created_at)} · {String(o.payment_status || 'pending')}</span>
-                    <span className="font-semibold text-[#1A1A1A]">
+                    <span className="font-semibold text-[#1A1A1A] tabular-nums">
                       {Number(o.discount_amount) > 0 && (
                         <span className="mr-1.5 text-[#2E7D32]">−{formatMoney(Number(o.discount_amount))}</span>
                       )}

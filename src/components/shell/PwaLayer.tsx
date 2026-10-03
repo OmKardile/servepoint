@@ -163,7 +163,11 @@ export function PwaLayer() {
       {/* ── Install card (staff surfaces only) ───────────────────────────── */}
       {showInstall && (
         <div
-          role="dialog"
+          /* v5.111.0 — role="region", not "dialog": this card is a NON-modal
+             toast (the app stays usable behind it; own close button, no
+             aria-modal). role="dialog" promised a modal room that never
+             existed, and assistive tech held it to the promise. */
+          role="region"
           aria-label="Install ServePoint"
           className="fixed bottom-4 right-4 z-[90] w-[calc(100vw-2rem)] max-w-sm sm:bottom-6 sm:right-6"
           style={{ animation: 'spPwaRise 320ms cubic-bezier(0.22, 1, 0.36, 1)' }}

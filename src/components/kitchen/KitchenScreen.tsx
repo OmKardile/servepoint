@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import {
   Armchair,
   BellRing,
@@ -22,6 +22,8 @@ import {
   type RealtimeState,
 } from '../../lib/api';
 import { useTenant } from '../../lib/tenant';
+import { isSameLocalDay } from '../../lib/day';
+import { isQuietNow, subscribePrefs } from '../../lib/prefs';
 import type { Order } from '../../types';
 
 /**
@@ -75,10 +77,6 @@ function stageOf(status: string): StageKey | null {
   if (s === 'ready') return 'ready';
   if (s === 'completed') return 'completed';
   return null; // `new` (counter inbox) + cancelled — hidden from the rail
-}
-
-function isSameLocalDay(iso: string): boolean {
-  return new Date(iso).toDateString() === new Date().toDateString();
 }
 
 /** Elapsed since created_at, KDS style: 0:42 under an hour, then 1:04:09. */
@@ -419,6 +417,14 @@ export const KitchenScreen: React.FC = () => {
   const soundRef = useRef(soundOn);
   soundRef.current = soundOn;
 
+  /* 5.101.0 — quiet hours: the owner's schedule silences the room. The gate
+   * itself is evaluated at sound-time (no remount needed); the tick below
+   * only keeps the BUTTON'S WORD current — when quiet hours are live the
+   * chip says so instead of claiming a chime that will not ring. */
+  const [, tickQuiet] = useReducer((n: number) => n + 1, 0);
+  useEffect(() => subscribePrefs(tickQuiet), [tickQuiet]);
+  const quietNow = isQuietNow();
+
   /* v5.31.0 — header brand tile: same honest guard as the guest ticket's
    * brand row (5.28). A dead URL hides its own tile; a logo change un-hides. */
   const [logoBroken, setLogoBroken] = useState(false);
@@ -492,7 +498,7 @@ export const KitchenScreen: React.FC = () => {
     current.forEach((id) => {
       if (!seenNewRef.current!.has(id)) fresh = true;
     });
-    if (fresh && soundRef.current) chime();
+    if (fresh && soundRef.current && !isQuietNow()) chime();
     seenNewRef.current = current;
   }, [orders, loading]);
 
@@ -686,13 +692,23 @@ export const KitchenScreen: React.FC = () => {
           <button
             onClick={toggleSound}
             aria-pressed={soundOn}
-            title={soundOn ? 'New-order chime on' : 'New-order chime muted'}
+            title={
+              !soundOn
+                ? 'New-order chime muted'
+                : quietNow
+                  ? 'New-order chime on — quiet hours right now, the board still updates'
+                  : 'New-order chime on'
+            }
             className={`flex h-8 items-center gap-1.5 rounded-full border px-2.5 text-[12px] font-semibold transition ${
-              soundOn ? 'border-[#B88E2F]/40 bg-[#B88E2F]/10 text-[#7A5B18]' : 'border-[#E3E7E0] bg-white text-[#969696]'
+              !soundOn
+                ? 'border-[#E3E7E0] bg-white text-[#969696]'
+                : quietNow
+                  ? 'border-[#0F3D3E]/30 bg-[#0F3D3E]/5 text-[#0F3D3E]'
+                  : 'border-[#B88E2F]/40 bg-[#B88E2F]/10 text-[#7A5B18]'
             }`}
           >
-            {soundOn ? <Volume2 size={14} aria-hidden /> : <VolumeX size={14} aria-hidden />}
-            {soundOn ? 'Chime on' : 'Muted'}
+            {!soundOn ? <VolumeX size={14} aria-hidden /> : <Volume2 size={14} aria-hidden />}
+            {!soundOn ? 'Muted' : quietNow ? 'Chime on · quiet' : 'Chime on'}
           </button>
           <button
             onClick={() => void refetch()}

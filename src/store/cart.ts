@@ -24,6 +24,11 @@ export interface CartLine {
      the counter's extras reach order_item_addons — the same rows the guest
      door has always written — and the kitchen/receipt/track read them back. */
   addons: { id: string | null; name: string; price: number }[];
+  /* v5.76.0 — the line's word to the kitchen ('less spicy', 'no onion').
+     order_items.notes exists since 001 and KDS/receipts already render it —
+     this is the counter finally writing the column the guest side always
+     did. Empty/whitespace is normalized away at the store boundary. */
+  note?: string;
 }
 
 interface CartState {
@@ -38,6 +43,10 @@ interface CartState {
   customerPhone: string;
   /** Offer picked in the drawer; discount is computed at render, ledger written on place. */
   offer: Offer | null;
+  /** v5.76.0 — the ticket-level note the kitchen reads on the board
+      (rides input.notes → orders.notes; the counter's context joins
+      'Table:' / 'Guests:' after it). */
+  kitchenNote: string;
   add: (
     /* Structural minimum (v5.54.0): the modal passes the full MenuItem, the
        guests drawer's "their usual" repeat passes a synthesized snapshot —
@@ -65,6 +74,9 @@ interface CartState {
   setCustomerName: (n: string) => void;
   setCustomerPhone: (p: string) => void;
   setOffer: (o: Offer | null) => void;
+  setKitchenNote: (n: string) => void;
+  /** v5.76.0 — set/clear one line's kitchen word. Empty string clears. */
+  setLineNote: (key: string, note: string) => void;
   clear: () => void;
 }
 
@@ -80,6 +92,7 @@ export const useCart = create<CartState>((set, get) => ({
   customerName: '',
   customerPhone: '',
   offer: null,
+  kitchenNote: '',
   add: (item, qty, addons, variant) => {
     const addonNames = addons.map((a) => a.name);
     const addonTotal = addons.reduce((s, a) => s + a.price, 0);
@@ -89,6 +102,8 @@ export const useCart = create<CartState>((set, get) => ({
     if (idx >= 0) {
       lines[idx] = { ...lines[idx], qty: lines[idx].qty + qty };
     } else {
+      // note: undefined — a fresh line starts silent; the drawer's editor
+      // writes it after the line exists (merges keep the earlier note).
       lines.push({
         key,
         menuItemId: item.id,
@@ -123,6 +138,13 @@ export const useCart = create<CartState>((set, get) => ({
   setCustomerName: (customerName) => set({ customerName }),
   setCustomerPhone: (customerPhone) => set({ customerPhone }),
   setOffer: (offer) => set({ offer }),
+  setKitchenNote: (kitchenNote) => set({ kitchenNote: kitchenNote.trim() ? kitchenNote : '' }),
+  setLineNote: (key, note) =>
+    set({
+      lines: get().lines.map((l) =>
+        l.key === key ? { ...l, note: note.trim() ? note.trim() : undefined } : l,
+      ),
+    }),
   // a placed ticket is a finished story — the next ticket starts anonymous,
   // with no offer silently riding over from the last one. The TABLE binding
   // releases too (v5.18.0): a chained pre-link would quietly put the next
@@ -137,6 +159,7 @@ export const useCart = create<CartState>((set, get) => ({
       tableId: null,
       tableLabel: '',
       guestCount: 2,
+      kitchenNote: '',
     }),
 }));
 

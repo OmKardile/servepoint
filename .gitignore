@@ -9,3 +9,4 @@ tool-results/
 dist/
 preview.log
 preview.pid
+tsbuildinfo

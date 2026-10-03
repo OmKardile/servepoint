@@ -29,6 +29,21 @@ import { GuestGatePage, GuestMenuPage, GuestTrackPage } from './components/guest
 import { PwaLayer } from './components/shell/PwaLayer';
 import brandLockup from './assets/brand/lockup-light.png';
 
+/* v5.93.0 — the sidebar's words are the URLs. Two rail names differ from
+ * their section ids (the rail says "Close-out", the code says 'eod'; the rail
+ * says "Guests", the code says 'customers') — and until now only the code's
+ * word was deep-linkable: /close-out and /guests fell through to Dashboard
+ * while /eod and /customers worked, words no human ever bookmarks. Staff
+ * bookmark what the rail SAYS, so every spoken name resolves — alongside the
+ * plain ids, which keep working untouched. */
+const SECTION_SLUGS: Readonly<Record<string, Section>> = Object.freeze(
+  Object.fromEntries([
+    ...(Object.keys(SECTION_LABELS) as Section[]).map((id) => [id, id]),
+    ['close-out', 'eod'],
+    ['guests', 'customers'],
+  ] as [string, Section][])
+);
+
 /**
  * v5.0.0 Production router (ADR-0013 role model / ADR-0014 rebuild):
  *  - No session → ServePoint login (email + password only).
@@ -76,8 +91,9 @@ const CafeApp: React.FC = () => {
     deepLinkDone.current = true;
     const parts = window.location.pathname.split('/').filter(Boolean);
     const seg = parts.length >= 2 ? parts[1] : parts[0];
-    if (seg && Object.hasOwn(SECTION_LABELS, seg)) {
-      goSection(seg as Section, [SECTION_LABELS[seg as Section]]);
+    const target = seg ? SECTION_SLUGS[seg] : undefined;
+    if (target) {
+      goSection(target, [SECTION_LABELS[target]]);
     }
   }, [goSection]);
 

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import {
   BellRing,
   ChevronDown,
@@ -8,10 +8,13 @@ import {
   Timer,
   TriangleAlert,
   User,
+  Volume2,
+  VolumeX,
   Wifi,
   WifiOff,
 } from 'lucide-react';
 import type { Order } from '../../types';
+import { isQuietNow, subscribePrefs } from '../../lib/prefs';
 import {
   advanceOrder,
   fetchOrders,
@@ -22,6 +25,7 @@ import {
 } from '../../lib/api';
 import { useTenant } from '../../lib/tenant';
 import { formatMoney } from '../../lib/prefs';
+import { isSameLocalDay } from '../../lib/day';
 
 /**
  * CounterInbox (v5.3.0 — "the counter is the gate", NOVA rule #1).
@@ -60,10 +64,6 @@ function doorbell(): void {
   } catch {
     /* audio optional */
   }
-}
-
-function isSameLocalDay(iso: string): boolean {
-  return new Date(iso).toDateString() === new Date().toDateString();
 }
 
 function ageMinutes(createdIso: string, nowMs: number): number {
@@ -219,6 +219,28 @@ export function CounterInbox(): React.ReactElement | null {
   const [rt, setRt] = useState<RealtimeState>('connecting');
   const [nowMs, setNowMs] = useState(() => Date.now());
 
+  /* 5.102.0 — the doorbell answers to the counter. The KDS chime has had its
+   * own mute since the chip landed; the counter's bell now keeps the same
+   * room-local grammar: its own switch, its own key (sp.counter.sound,
+   * sibling of sp.kds.sound), its own honest word. Quiet hours (5.101.0)
+   * layers the owner's schedule OVER this switch — both must say yes to ring. */
+  const [soundOn, setSoundOn] = useState(() => {
+    try {
+      return window.localStorage.getItem('sp.counter.sound') !== 'off';
+    } catch {
+      return true;
+    }
+  });
+  const soundRef = useRef(soundOn);
+  soundRef.current = soundOn;
+
+  /* the tick keeps the BUTTON'S WORD current — the gate itself is evaluated
+   * at sound-time (no remount needed); this only re-renders the chip when
+   * prefs change so a quiet-hours save re-speaks the label live. */
+  const [, tickQuiet] = useReducer((n: number) => n + 1, 0);
+  useEffect(() => subscribePrefs(tickQuiet), [tickQuiet]);
+  const quietNow = isQuietNow();
+
   const load = useCallback(async () => {
     if (!tenantId) return;
     setError(null);
@@ -284,7 +306,9 @@ export function CounterInbox(): React.ReactElement | null {
     current.forEach((id) => {
       if (!seenRef.current!.has(id)) fresh = true;
     });
-    if (fresh) doorbell();
+    /* 5.101.0 quiet hours + 5.102.0 the counter's own mute: both must say
+     * yes — the KDS gate reads the same way in KitchenScreen. */
+    if (fresh && soundRef.current && !isQuietNow()) doorbell();
     seenRef.current = current;
   }, [tickets, loading]);
 
@@ -306,7 +330,25 @@ export function CounterInbox(): React.ReactElement | null {
     [tenantId, load]
   );
 
-  /* zero tickets → the band disappears entirely (zero noise on the POS) */
+  /* 5.102.0 — the counter's own bell switch. Mirrors the KDS chime toggle:
+   * persist, then ring once as audible confirmation — which also unlocks the
+   * AudioContext on a user gesture (autoplay policies). */
+  const toggleSound = useCallback(() => {
+    setSoundOn((v) => {
+      const next = !v;
+      try {
+        window.localStorage.setItem('sp.counter.sound', next ? 'on' : 'off');
+      } catch {
+        /* storage optional */
+      }
+      if (next) doorbell();
+      return next;
+    });
+  }, []);
+
+  /* zero tickets → the band disappears entirely (zero noise on the POS).
+   * A muted bell rides the same rule: the next ticket re-opens the band
+   * (silently), and the chip is waiting there with its honest word. */
   if (!loading && tickets.length === 0 && !error) return null;
 
   return (
@@ -314,38 +356,67 @@ export function CounterInbox(): React.ReactElement | null {
       aria-label="Incoming order tickets awaiting the counter"
       className="rounded-2xl border border-[#E3E7E0] bg-white/70 backdrop-blur-sm"
     >
-      <button
-        type="button"
-        onClick={() => setCollapsed((v) => !v)}
-        className="flex w-full items-center gap-2.5 px-4 py-3 text-left"
-        aria-expanded={!collapsed}
-      >
-        <span className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#FFF4DB] text-[#B88E2F]">
-          <BellRing size={15} aria-hidden />
-          {tickets.length > 0 && !collapsed ? (
-            <span
-              className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-[#B3261E] px-1 text-[10px] font-extrabold text-white"
-              aria-hidden
-            >
-              {tickets.length}
-            </span>
-          ) : null}
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="flex items-center gap-2">
-            <h2 className="text-[13.5px] font-extrabold tracking-tight text-[#1A1A1A]">
-              Incoming tickets
-            </h2>
-            <span className="rounded-full bg-[#EAF0EC] px-2 py-0.5 text-[11px] font-bold text-[#0F3D3E]">
-              {tickets.length} awaiting Ok
-            </span>
+      {/* 5.102.0 — the header is no longer one button: the band toggle keeps
+       * the identity + chevron, and the doorbell's own switch sits beside it
+       * (a button inside a button is invalid HTML and a11y mush). */}
+      <div className="flex w-full items-center gap-2.5 px-4 py-3">
+        <button
+          type="button"
+          onClick={() => setCollapsed((v) => !v)}
+          aria-expanded={!collapsed}
+          className="flex min-w-0 flex-1 items-center gap-2.5 text-left"
+        >
+          <span className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#FFF4DB] text-[#B88E2F]">
+            <BellRing size={15} aria-hidden />
+            {tickets.length > 0 && !collapsed ? (
+              <span
+                className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-[#B3261E] px-1 text-[10px] font-extrabold text-white"
+                aria-hidden
+              >
+                {tickets.length}
+              </span>
+            ) : null}
           </span>
-          <p className="truncate text-[11.5px] text-[#6B6B6B]">
-            Guest QR tickets &amp; walk-ins land here — only Ok fires them to the kitchen.
-          </p>
-        </span>
+          <span className="min-w-0 flex-1">
+            <span className="flex items-center gap-2">
+              <h2 className="text-[13.5px] font-extrabold tracking-tight text-[#1A1A1A]">
+                Incoming tickets
+              </h2>
+              <span className="rounded-full bg-[#EAF0EC] px-2 py-0.5 text-[11px] font-bold text-[#0F3D3E]">
+                {tickets.length} awaiting Ok
+              </span>
+            </span>
+            <p className="truncate text-[11.5px] text-[#6B6B6B]">
+              Guest QR tickets &amp; walk-ins land here — only Ok fires them to the kitchen.
+            </p>
+          </span>
+        </button>
+        {/* the counter's own bell switch — the KDS chime chip's sibling, same
+         * three honest states: gold on / deep-teal on-but-quiet / grey muted */}
+        <button
+          type="button"
+          onClick={toggleSound}
+          aria-pressed={soundOn}
+          title={
+            !soundOn
+              ? 'Counter doorbell muted'
+              : quietNow
+                ? 'Doorbell on — quiet hours right now, the band still updates'
+                : 'Counter doorbell on'
+          }
+          className={`flex h-8 shrink-0 items-center gap-1.5 rounded-full border px-2.5 text-[12px] font-semibold transition ${
+            !soundOn
+              ? 'border-[#E3E7E0] bg-white text-[#969696]'
+              : quietNow
+                ? 'border-[#0F3D3E]/30 bg-[#0F3D3E]/5 text-[#0F3D3E]'
+                : 'border-[#B88E2F]/40 bg-[#B88E2F]/10 text-[#7A5B18]'
+          }`}
+        >
+          {!soundOn ? <VolumeX size={14} aria-hidden /> : <Volume2 size={14} aria-hidden />}
+          {!soundOn ? 'Muted' : quietNow ? 'Bell on · quiet' : 'Bell on'}
+        </button>
         <span
-          className="flex items-center gap-1.5 text-[11px] font-bold"
+          className="flex shrink-0 items-center gap-1.5 text-[11px] font-bold"
           title={rt === 'live' ? 'Realtime connected' : rt === 'connecting' ? 'Connecting…' : 'Realtime offline — polling'}
         >
           {rt === 'offline' ? (
@@ -362,7 +433,7 @@ export function CounterInbox(): React.ReactElement | null {
           aria-hidden
           className={`shrink-0 text-[#6B6B6B] transition-transform ${collapsed ? '' : 'rotate-180'}`}
         />
-      </button>
+      </div>
 
       {!collapsed ? (
         <div className="border-t border-[#E3E7E0] px-4 py-3">

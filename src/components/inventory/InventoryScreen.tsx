@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle,
   BookOpenText,
@@ -7,6 +7,7 @@ import {
   ClipboardCheck,
   ClipboardList,
   Copy,
+  Download,
   Layers,
   Loader2,
   Minus,
@@ -16,11 +17,13 @@ import {
   Pencil,
   Plus,
   RefreshCw,
+  Search,
   ShoppingBasket,
   Trash2,
   Wifi,
   WifiOff,
   X,
+  Zap,
 } from 'lucide-react';
 import {
   adjustStock,
@@ -29,6 +32,7 @@ import {
   fetchDeductionWindow,
   fetchInventory,
   fetchMenuItems,
+  fetchPaidMoverLines,
   fetchRecentAdjustments,
   fetchRecentDeductions,
   fetchRecipeLines,
@@ -43,9 +47,15 @@ import {
   type StockAdjustmentReason,
   type StockDeduction,
 } from '../../lib/api';
+import { computeTopMovers, MOVER_WINDOW_DAYS, type Mover } from '../../lib/movers';
 import { formatMoney } from '../../lib/prefs';
+import { LOW_COVER, shelfCoverage } from '../../lib/shelf';
 import { downloadCsv } from '../../lib/csv';
+import { appTodayIso } from '../../lib/appday';
+import { useDialogA11y } from '../../lib/useDialogA11y';
 import { useTenant } from '../../lib/tenant';
+import { useUi } from '../../store/session';
+import { MarkHit } from '../shell/MarkHit';
 import type { MenuItem } from '../../types';
 
 /**
@@ -70,6 +80,14 @@ import type { MenuItem } from '../../types';
  * stock_adjustments on the cloud. Every hand-made move goes through the
  * 027 RPC (atomic, row-locked — no client read-modify-write). Stock going
  * negative is allowed (real cafes oversell) — rendered red.
+ *
+ * v5.117.0 — the shelf learns the shell's word: the screen registers its
+ * search vocabulary with the header ("Search the shelf…") and the filter
+ * narrows the ingredient list by NAME (two doors — the toolbar's own box
+ * and the header box share one state). Honesty rails: the LOW STOCK / OUT
+ * chips, the shelf value and the movers section keep counting the WHOLE
+ * shelf; a filtered list is a narrower view, never a quieter ledger, and
+ * the empty state says so.
  */
 
 type TabKey = 'stock' | 'recipes' | 'reorder';
@@ -78,6 +96,20 @@ type TabKey = 'stock' | 'recipes' | 'reorder';
 const REORDER_WINDOW_DAYS = 14;
 /** Days of cover the shopping list buys (suggested = burn × this − stock). */
 const REORDER_COVER_DAYS = 7;
+
+/** v5.81.0 — one row of the shelf's answer: how many more of a shortlist
+ * dish the shelf can make. coverage null + unknown false = no recipe on
+ * file (the shelf can't answer); unknown true = a recipe SKU is missing
+ * from the shelf map (coverage unknowable, said honestly). */
+interface ShelfAnswerRow {
+  mover: Mover;
+  rank: number;
+  name: string;
+  coverage: number | null;
+  thin: string | null;
+  thinUnit: string | null;
+  unknown: boolean;
+}
 
 const UNITS = ['g', 'kg', 'ml', 'l', 'pc'] as const;
 
@@ -125,6 +157,10 @@ const REASON_META: Record<StockAdjustmentReason, { label: string; chip: string }
 
 /* ─────────────────────────────── screen ────────────────────────────────── */
 
+/* v5.120.0 — the gold glint, consolidated: one truth now lives in
+ * src/components/shell/MarkHit.tsx and serves every search surface
+ * (rooms, shelf, menu, bills, guests). This file imports it like any
+ * other shell primitive. */
 export const InventoryScreen: React.FC = () => {
   const [attempt, setAttempt] = useState(0);
   return <InventoryInner key={attempt} onTenantRetry={() => setAttempt((a) => a + 1)} />;
@@ -132,6 +168,18 @@ export const InventoryScreen: React.FC = () => {
 
 const InventoryInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }) => {
   const { tenantId, loading: tenantLoading, error: tenantError } = useTenant();
+  /* v5.117.0 — the shelf joins the shell-search contract: the header box
+   * (when the shelf is on stage) and the toolbar's own box are two doors
+   * to one state. The filter reads ingredient NAMES only and never
+   * touches the ledger's own voices — the LOW STOCK / OUT chips and the
+   * movers section keep counting the WHOLE shelf while the list narrows;
+   * a filtered view must never be mistaken for a quieter shelf. */
+  const shelfQuery = useUi((s) => s.search);
+  const setShelfQuery = useUi((s) => s.setSearch);
+  useEffect(() => {
+    useUi.getState().setSearchMeta({ placeholder: 'Search the shelf…' });
+    return () => useUi.getState().setSearchMeta(null);
+  }, []);
   const [tab, setTab] = useState<TabKey>('stock');
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
@@ -148,6 +196,11 @@ const InventoryInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
   const [editorOpen, setEditorOpen] = useState(false);
   const [editing, setEditing] = useState<InventoryItem | null>(null);
   const [restockFor, setRestockFor] = useState<{ item: InventoryItem; suggested: number | null } | null>(null);
+  /* v5.81.0 — the room's movers, so the shelf answers in their terms.
+   * Fail-soft like every ledger read: null = unread, [] = quiet week or
+   * failed read — the shelf view never waits on the ledger, and a quiet
+   * week prints no rows (never a lie). */
+  const [movers, setMovers] = useState<Mover[] | null>(null);
   const [wasteFor, setWasteFor] = useState<InventoryItem | null>(null);
   const [countOpen, setCountOpen] = useState(false);
   const [deleteArm, setDeleteArm] = useState<string | null>(null);
@@ -182,6 +235,23 @@ const InventoryInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
     void load();
   }, [tenantId, load]);
 
+  /* v5.81.0 — the shortlist read: the same movers the counter sells and the
+   * menu protects, computed by the one definition (no forked math). */
+  useEffect(() => {
+    if (!tenantId) return;
+    let alive = true;
+    fetchPaidMoverLines(tenantId, MOVER_WINDOW_DAYS)
+      .then((rows) => {
+        if (alive) setMovers(computeTopMovers(rows));
+      })
+      .catch(() => {
+        if (alive) setMovers([]);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [tenantId]);
+
   useEffect(() => {
     if (!tenantId) return;
     const unsub = subscribeInventoryRealtime(tenantId, () => void load(), setRt);
@@ -198,6 +268,45 @@ const InventoryInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
     const value = items.reduce((n, i) => n + i.current_stock * Number(i.cost_per_unit ?? 0), 0);
     return { low, out, value };
   }, [items]);
+
+  /* v5.117.0 — the visible slice of the shelf under the search: names
+   * only, case-insensitive. The header chips above keep speaking the
+   * WHOLE shelf's truth — the filter narrows the list, never the story. */
+  const shelfQ = shelfQuery.trim().toLowerCase();
+  const visibleShelf = useMemo(
+    () => (shelfQ ? items.filter((i) => i.name.toLowerCase().includes(shelfQ)) : items),
+    [items, shelfQ]
+  );
+
+  /* v5.81.0 — THE SHELF'S ANSWER: for each of the room's favourites, how
+   * many more the shelf can make right now. Per-serve needs come from the
+   * recipe lines (015), stock from the shelf itself; the thinnest SKU
+   * decides. Dishes without a recipe say so; a recipe naming a SKU that
+   * left the shelf says so; a dish that left the menu drops off the list.
+   * Recomputes with the screen's own reload rhythm (realtime + 30s poll). */
+  const shelfAnswer = useMemo<ShelfAnswerRow[]>(() => {
+    if (!movers || movers.length === 0 || menuItems.length === 0) return [];
+    const live = new Map(menuItems.map((m) => [m.id, m.name]));
+    const rows: ShelfAnswerRow[] = [];
+    movers.forEach((mv, idx) => {
+      const name = live.get(mv.menuItemId);
+      if (!name) return; /* the dish left the menu — the shelf no longer answers for it */
+      const lines = recipes.filter((r) => r.menu_item_id === mv.menuItemId);
+      /* the ONE shared math (5.91.0, src/lib/shelf.ts) — the counter's rail
+         speaks the same answer the board computes here */
+      const c = shelfCoverage(lines, items);
+      rows.push({
+        mover: mv,
+        rank: idx + 1,
+        name,
+        coverage: c.coverage,
+        thin: c.thin ? c.thin.name : null,
+        thinUnit: c.thin ? c.thin.unit : null,
+        unknown: c.unknown,
+      });
+    });
+    return rows;
+  }, [movers, menuItems, items, recipes]);
 
   /** one feed, two ledgers: engine deductions + hand-made moves, newest first */
   const diary = useMemo<DiaryRow[]>(() => {
@@ -512,12 +621,114 @@ const InventoryInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
             </div>
           ) : (
             <>
+              {/* ── the shelf's answer — prep coverage of the counter's shortlist ── */}
+              {shelfAnswer.length > 0 && (
+                <section
+                  className="rounded-2xl border border-[#EAD9BE] bg-[#FDF9F0] p-4"
+                  aria-label="How many more of the room's favourites the shelf can still make"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <h2 className="flex items-center gap-1.5 text-[10.5px] font-bold uppercase tracking-[0.08em] text-[#8A5A00]">
+                      <Zap size={12} aria-hidden /> The shelf's answer
+                    </h2>
+                    <span className="rounded-full bg-[#F3E8CF] px-2 py-0.5 text-[10px] font-bold text-[#8A5A00]">
+                      the counter's shortlist · last {MOVER_WINDOW_DAYS} days
+                    </span>
+                  </div>
+                  <p className="mt-1 text-[11.5px] text-[#8A6A1F]">
+                    How many more of the room's favourites this shelf can still make — the thinnest recipe SKU
+                    decides, computed from what's actually on file.
+                  </p>
+                  <ul className="mt-2.5 flex flex-col gap-1.5">
+                    {shelfAnswer.map((row) => {
+                      const tone =
+                        row.unknown || row.coverage === null
+                          ? '#969696'
+                          : row.coverage === 0
+                            ? '#B4483C'
+                            : row.coverage < LOW_COVER
+                              ? '#8A5A00'
+                              : '#2E7D32';
+                      const verdict = row.unknown
+                        ? 'a recipe SKU is off the shelf — coverage unknown'
+                        : row.coverage === null
+                          ? 'no recipe on file — the shelf can\'t answer'
+                          : row.coverage === 0
+                            ? `can't make another — ${row.thin} is out`
+                            : `~${row.coverage} more · thinnest: ${row.thin}${row.thinUnit ? ` (${row.thinUnit})` : ''}`;
+                      return (
+                        <li
+                          key={row.mover.menuItemId}
+                          className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl bg-white/80 px-3 py-2"
+                        >
+                          <span
+                            className="inline-flex shrink-0 items-center whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-bold tabular-nums"
+                            style={
+                              row.rank === 1
+                                ? { backgroundColor: '#B88E2F', color: '#FFFFFF' }
+                                : { backgroundColor: '#F3E8CF', color: '#8A6A1F' }
+                            }
+                          >
+                            No.{row.rank}
+                          </span>
+                          <span className="text-[13px] font-semibold text-[#1A1A1A]">{row.name}</span>
+                          <span
+                            className="ml-auto whitespace-nowrap text-[11.5px] font-bold tabular-nums"
+                            style={{ color: tone }}
+                          >
+                            {verdict}
+                          </span>
+                          <span className="whitespace-nowrap text-[10.5px] text-[#8A6A1F] tabular-nums">
+                            {row.mover.units} sold · {row.mover.tickets} {row.mover.tickets === 1 ? 'ticket' : 'tickets'} this week
+                          </span>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </section>
+              )}
+
               {/* ── shelf toolbar — the count entry point ── */}
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="text-[11.5px] text-[#6B6B6B]">
-                  <span className="font-bold text-[#1A1A1A]">{items.length}</span>{' '}
-                  ingredient{items.length === 1 ? '' : 's'} on the shelf — every hand move lands in the diary
-                </p>
+                {/* v5.117.0 — the shelf's own door to the shared search:
+                    types into the same useUi.search the header box speaks. */}
+                <div className="relative">
+                  <Search
+                    size={14}
+                    aria-hidden
+                    className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#969696]"
+                  />
+                  <input
+                    type="search"
+                    value={shelfQuery}
+                    onChange={(e) => setShelfQuery(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Escape') {
+                        setShelfQuery('');
+                        e.currentTarget.blur();
+                      }
+                    }}
+                    placeholder="Search the shelf…"
+                    aria-label="Search the shelf"
+                    title="Search ingredient names — Esc clears"
+                    className="h-9 w-44 rounded-full border border-[#E3E7E0] bg-white pl-8.5 pr-3 text-[12.5px] text-[#1A1A1A] outline-none transition placeholder:text-[#969696] hover:border-[#C9CFC9] focus:border-[#B88E2F] focus:ring-2 focus:ring-[#B88E2F]/25 [&::-webkit-search-cancel-button]:hidden"
+                  />
+                </div>
+                {shelfQ ? (
+                  /* v5.123.0 — the count line wears the house badge (Bills'
+                      voice): same pill, same grammar, one family. */
+                  <p className="flex items-center gap-2 text-[11.5px] text-[#6B6B6B]" aria-live="polite">
+                    <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[#0F3D3E] px-1.5 text-[10.5px] font-bold tabular-nums text-white">
+                      {visibleShelf.length}
+                    </span>
+                    of {items.length} ingredients match “{shelfQuery.trim()}”
+                  </p>
+                ) : (
+                  <p className="text-[11.5px] text-[#6B6B6B]">
+                    <span className="font-bold text-[#1A1A1A]">{items.length}</span>{' '}
+                    ingredient{items.length === 1 ? '' : 's'} on the shelf — every hand move lands in the diary
+                  </p>
+                )}
                 <button
                   onClick={() => setCountOpen(true)}
                   className="flex h-9 items-center gap-1.5 rounded-lg border border-[#E3E7E0] bg-white px-3 text-[11.5px] font-bold text-[#0F3D3E] transition hover:border-[#0F3D3E] disabled:opacity-50"
@@ -527,7 +738,26 @@ const InventoryInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
                 </button>
               </div>
               <ul className="flex flex-col gap-2.5" aria-label="Ingredient stock list">
-              {items.map((it) => {
+              {items.length > 0 && visibleShelf.length === 0 ? (
+                /* v5.117.0 — the search came up empty; own what it reads
+                    (names) and offer the way back. */
+                <li className="flex flex-col items-center justify-center py-10 text-center">
+                  <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#EAF0EC] text-[#0F3D3E]">
+                    <Search size={22} aria-hidden />
+                  </span>
+                  <p className="mt-3 max-w-[240px] text-[12.5px] leading-relaxed text-[#6B6B6B]">
+                    No ingredient matches “{shelfQuery.trim()}” — the shelf counts stay whole-shelf.
+                  </p>
+                  <button
+                    onClick={() => {
+                      setShelfQuery('');
+                    }}
+                    className="mt-3 rounded-lg bg-[#F3E8CF] px-3 py-1.5 text-[12px] font-semibold text-[#1A1A1A] transition hover:bg-[#E9D9AF]"
+                  >
+                    Clear search
+                  </button>
+                </li>
+              ) : visibleShelf.map((it) => {
                 const tone = levelTone(it.current_stock, it.reorder_point);
                 const max = Math.max(it.reorder_point * 2, it.current_stock, 1);
                 const pct = Math.min(100, (it.current_stock / max) * 100);
@@ -540,7 +770,9 @@ const InventoryInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
                   >
                     <div className="min-w-0 flex-1 basis-52">
                       <div className="flex items-center gap-2">
-                        <h3 className="truncate text-[14px] font-bold text-[#1A1A1A]">{it.name}</h3>
+                        <h3 className="truncate text-[14px] font-bold text-[#1A1A1A]">
+                          <MarkHit text={it.name} query={shelfQ} />
+                        </h3>
                         <span className="shrink-0 rounded-full bg-[#EAF0EC] px-2 py-0.5 text-[10.5px] font-bold text-[#0F3D3E]">
                           {it.unit}
                         </span>
@@ -800,13 +1032,35 @@ const RecipeBoard: React.FC<{
   const effectiveId = selectedId ?? menuItems[0]?.id ?? null;
   const selected = menuItems.find((m) => m.id === effectiveId) || null;
 
-  // Load the saved recipe into the draft whenever the picked item changes.
+  /* v5.75.0 bug fix — this screen polls every 30s and rides inventory
+   * realtime; every refetch hands `recipes` a new identity, and the load
+   * effect below used to clobber the draft mid-edit, silently discarding
+   * an operator's unsaved lines. Dirty edits now survive background
+   * refreshes — they still yield to an explicit item switch or Discard. */
+  const dirtyRef = useRef(false);
+  const editedIdRef = useRef<string | null>(null);
+  const markDirty = () => {
+    dirtyRef.current = true;
+    editedIdRef.current = effectiveId;
+    setDirty(true);
+  };
+  const clearDirty = () => {
+    dirtyRef.current = false;
+    editedIdRef.current = null;
+    setDirty(false);
+  };
+
+  // Load the saved recipe into the draft whenever the picked item changes —
+  // but never clobber unsaved edits for the item being edited (5.75.0).
   useEffect(() => {
     if (!effectiveId) return;
+    if (dirtyRef.current && editedIdRef.current === effectiveId) return;
     const saved = recipes
       .filter((r) => r.menu_item_id === effectiveId)
       .map((r) => ({ inventory_item_id: r.inventory_item_id, qty_per_serve: Number(r.qty_per_serve) }));
     setDraft(saved);
+    dirtyRef.current = false;
+    editedIdRef.current = null;
     setDirty(false);
   }, [effectiveId, recipes]);
 
@@ -825,7 +1079,7 @@ const RecipeBoard: React.FC<{
       ...d.filter((l) => l.inventory_item_id !== addIng),
       { inventory_item_id: addIng, qty_per_serve: qty },
     ]);
-    setDirty(true);
+    markDirty();
     setAddIng('');
     setAddQty('');
   };
@@ -835,6 +1089,9 @@ const RecipeBoard: React.FC<{
     setSaving(true);
     await onSave(effectiveId, draft);
     setSaving(false);
+    /* the refetch hands back the saved ledger; drop the dirty guard so the
+       draft reloads from truth (5.75.0). */
+    clearDirty();
   };
 
   if (menuItems.length === 0) {
@@ -900,7 +1157,7 @@ const RecipeBoard: React.FC<{
                       setDraft((d) =>
                         d.map((x) => (x.inventory_item_id === l.inventory_item_id ? { ...x, qty_per_serve: v } : x))
                       );
-                      setDirty(true);
+                      markDirty();
                     }}
                     aria-label={`Quantity of ${ing?.name ?? 'ingredient'} per serve`}
                     className="h-9 w-24 rounded-lg border border-[#E3E7E0] bg-white px-2.5 text-right text-[12.5px] tabular-nums text-[#1A1A1A] focus:border-[#B88E2F] focus:outline-none focus:ring-2 focus:ring-[#B88E2F]/25"
@@ -910,7 +1167,7 @@ const RecipeBoard: React.FC<{
                 <button
                   onClick={() => {
                     setDraft((d) => d.filter((x) => x.inventory_item_id !== l.inventory_item_id));
-                    setDirty(true);
+                    markDirty();
                   }}
                   aria-label={`Remove ${ing?.name ?? 'ingredient'} from recipe`}
                   className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-[#6B6B6B] transition hover:bg-[#FCEBEA] hover:text-[#B3261E]"
@@ -978,7 +1235,7 @@ const RecipeBoard: React.FC<{
                 .filter((r) => r.menu_item_id === selected.id)
                 .map((r) => ({ inventory_item_id: r.inventory_item_id, qty_per_serve: Number(r.qty_per_serve) }));
               setDraft(saved);
-              setDirty(false);
+              clearDirty();
             }
           }}
           disabled={!dirty}
@@ -1024,6 +1281,8 @@ const IngredientDialog: React.FC<{
   const [cost, setCost] = useState(editing?.cost_per_unit != null ? String(editing.cost_per_unit) : '');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  /* v5.110.0 — Escape/trap/restore; Escape stands down while a save is in flight. */
+  const dlgRef = useDialogA11y<HTMLDivElement>(() => { if (!busy) onClose(); }, true);
 
   const valid = name.trim().length > 0 && Number(stock) >= 0 && Number(reorder) >= 0;
 
@@ -1047,7 +1306,7 @@ const IngredientDialog: React.FC<{
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0F3D3E]/45 p-4" role="dialog" aria-modal="true" aria-label={editing ? 'Edit ingredient' : 'Add ingredient'}>
+    <div ref={dlgRef} className="fixed inset-0 z-50 flex items-center justify-center bg-[#0F3D3E]/45 p-4" style={{ animation: 'spFadeIn 160ms ease-out' }} role="dialog" aria-modal="true" aria-label={editing ? 'Edit ingredient' : 'Add ingredient'}>
       <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl">
         <h2 className="text-[16px] font-bold text-[#1A1A1A]">
           {editing ? 'Edit ingredient' : 'Add ingredient'}
@@ -1154,8 +1413,10 @@ const RestockDialog: React.FC<{
 }> = ({ item, suggestedQty = null, busy, onClose, onConfirm }) => {
   const [qty, setQty] = useState(suggestedQty != null && suggestedQty > 0 ? String(suggestedQty) : '');
   const valid = Number(qty) > 0;
+  /* v5.110.0 — Escape/trap/restore; Escape stands down while a restock lands. */
+  const dlgRef = useDialogA11y<HTMLDivElement>(() => { if (!busy) onClose(); }, true);
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0F3D3E]/45 p-4" role="dialog" aria-modal="true" aria-label={`Restock ${item.name}`}>
+    <div ref={dlgRef} className="fixed inset-0 z-50 flex items-center justify-center bg-[#0F3D3E]/45 p-4" style={{ animation: 'spFadeIn 160ms ease-out' }} role="dialog" aria-modal="true" aria-label={`Restock ${item.name}`}>
       <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-2xl">
         <h2 className="text-[16px] font-bold text-[#1A1A1A]">Restock {item.name}</h2>
         <p className="mt-0.5 text-[11.5px] text-[#6B6B6B]">
@@ -1254,6 +1515,8 @@ const WasteDialog: React.FC<{
   const [err, setErr] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const valid = Number(qty) > 0 && note.length <= 280;
+  /* v5.110.0 — Escape/trap/restore; Escape stands down while waste posts. */
+  const dlgRef = useDialogA11y<HTMLDivElement>(() => { if (!sending) onClose(); }, true);
 
   const submit = async () => {
     if (!valid) return;
@@ -1272,7 +1535,9 @@ const WasteDialog: React.FC<{
 
   return (
     <div
+      ref={dlgRef}
       className="fixed inset-0 z-50 flex items-center justify-center bg-[#0F3D3E]/45 p-4"
+      style={{ animation: 'spFadeIn 160ms ease-out' }}
       role="dialog"
       aria-modal="true"
       aria-label={`Log waste for ${item.name}`}
@@ -1394,6 +1659,8 @@ const StocktakeDialog: React.FC<{
   const [note, setNote] = useState('');
   const [err, setErr] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
+  /* v5.110.0 — Escape/trap/restore; Escape stands down while corrections post. */
+  const dlgRef = useDialogA11y<HTMLDivElement>(() => { if (!sending) onClose(); }, true);
 
   const rows = items.map((it) => {
     const raw = counts[it.id]?.trim() ?? '';
@@ -1429,7 +1696,9 @@ const StocktakeDialog: React.FC<{
 
   return (
     <div
+      ref={dlgRef}
       className="fixed inset-0 z-50 flex items-center justify-center bg-[#0F3D3E]/45 p-4"
+      style={{ animation: 'spFadeIn 160ms ease-out' }}
       role="dialog"
       aria-modal="true"
       aria-label="Count the shelf"
@@ -1612,7 +1881,9 @@ const ReorderBoard: React.FC<{
 
   const exportList = useCallback(() => {
     if (buyRows.length === 0) return;
-    const todayIso = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date());
+    /* v5.106.0 — the filename carries the reporting day (appday), the same
+       word the shelf's reports speak; the old name was hardcoded IST. */
+    const todayIso = appTodayIso();
     const out: (string | number)[][] = [
       ['Item', 'On shelf', 'Unit', 'Reorder point', 'Burn/day', 'Days left', 'Suggested qty', 'Cost/unit', 'Est cost'],
     ];
@@ -1666,7 +1937,7 @@ const ReorderBoard: React.FC<{
               onClick={copyList}
               disabled={buyRows.length === 0}
               aria-label="Copy shopping list to clipboard"
-              className="flex h-11 items-center gap-1.5 rounded-xl border border-[#E3E7E0] bg-white px-3 text-[12.5px] font-bold text-[#0F3D3E] transition hover:border-[#B88E2F] hover:text-[#B88E2F] disabled:cursor-not-allowed disabled:opacity-40"
+              className="flex h-11 items-center gap-1.5 rounded-xl border border-[#E3E7E0] bg-white px-3 text-[12.5px] font-bold text-[#0F3D3E] transition hover:border-[#B88E2F] hover:text-[#B88E2F] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#B88E2F] disabled:cursor-not-allowed disabled:opacity-40"
             >
               {copied ? <Check size={14} aria-hidden /> : <Copy size={14} aria-hidden />}
               {copied ? 'Copied!' : 'Copy'}
@@ -1675,8 +1946,10 @@ const ReorderBoard: React.FC<{
               onClick={exportList}
               disabled={buyRows.length === 0}
               aria-label="Export shopping list as CSV"
-              className="flex h-11 items-center gap-1.5 rounded-xl border border-[#E3E7E0] bg-white px-3 text-[12.5px] font-bold text-[#0F3D3E] transition hover:border-[#B88E2F] hover:text-[#B88E2F] disabled:cursor-not-allowed disabled:opacity-40"
+              title="Export the shopping list as CSV (opens in Excel / Sheets)"
+              className="flex h-11 items-center gap-1.5 rounded-xl border border-[#E3E7E0] bg-white px-3 text-[12.5px] font-bold text-[#0F3D3E] transition hover:border-[#B88E2F] hover:text-[#B88E2F] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#B88E2F] disabled:cursor-not-allowed disabled:opacity-40"
             >
+              <Download size={15} aria-hidden />
               CSV
             </button>
           </div>

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import {
+  Activity,
   AlertTriangle,
   BookOpen,
   Bug,
@@ -22,9 +23,43 @@ import { useSession, useUi } from '../../store/session';
  * operator contact with copy-to-clipboard, docs pointer, and a report
  * form that stores nothing — support requests are relayed by the
  * platform operator (support@servepoint.app).
+ *
+ * 5.100.0 — the report finds its own way out. "Send report" still stores
+ * and transmits NOTHING (ADR-0014 unchanged); but the finished report used
+ * to dead-end — the user was told to email the operator and had to retype
+ * everything. The success state now hands the composed report over: an
+ * "Open in email app" mailto link with subject/body prefilled (the user's
+ * own mail client does the sending — the app still transmits nothing), a
+ * "Copy report" button, and an "Attach diagnostics" helper in the form
+ * that appends the release/workspace/device block the operator always
+ * ends up asking for.
  */
 
 const SUPPORT_EMAIL = 'support@servepoint.app';
+
+/* Shared clipboard helper — the page's two copy affordances (email, report)
+ * ride the same path: async Clipboard API when present, execCommand
+ * fallback for non-secure contexts, and a settled callback either way. */
+const copyText = (text: string, onDone: () => void): void => {
+  if (navigator.clipboard?.writeText) {
+    navigator.clipboard.writeText(text).then(onDone).catch(onDone);
+  } else {
+    const el = document.createElement('textarea');
+    el.value = text;
+    el.setAttribute('readonly', '');
+    el.style.position = 'fixed';
+    el.style.opacity = '0';
+    document.body.appendChild(el);
+    el.select();
+    try {
+      document.execCommand('copy');
+    } catch {
+      /* the callback still fires — the button says what actually happened */
+    }
+    document.body.removeChild(el);
+    onDone();
+  }
+};
 
 /* ── Honest error card ───────────────────────────────────────────────── */
 
@@ -51,25 +86,86 @@ interface ReportDraft {
   message: string;
 }
 
+const DIAG_BEGIN = '— ServePoint diagnostics —';
+const DIAG_END = '— end diagnostics —';
+
 const ReportForm: React.FC = () => {
   const session = useSession((s) => s.session);
+  const { tenant } = useTenant();
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState<ReportDraft>({ subject: '', message: '' });
   const [sending, setSending] = useState(false);
   const [submitted, setSubmitted] = useState<ReportDraft | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [diagAttached, setDiagAttached] = useState(false);
 
   const canSend = draft.subject.trim().length > 0 && draft.message.trim().length > 0;
+
+  /* Diagnostics: the release number lives only in the service worker's cache
+   * names, so that is where we read it — 'unknown' stays the honest word when
+   * the API is unavailable (private mode). Re-attaching REFRESHES the block
+   * (the split markers make it idempotent) instead of stacking copies. */
+  const attachDiagnostics = async () => {
+    let release = 'unknown';
+    try {
+      const keys = await caches.keys();
+      const hit = keys.find((k) => k.startsWith('servepoint-v'));
+      if (hit) release = hit.replace(/-(shell|assets|fonts)$/, '');
+    } catch {
+      /* keep 'unknown' */
+    }
+    const block = [
+      DIAG_BEGIN,
+      `release: ${release}`,
+      `workspace: ${tenant?.name || 'unknown'}`,
+      `reported by: ${session?.name || 'unknown'} (${session?.email || 'unknown'})`,
+      `screen: Support`,
+      `when: ${new Date().toString()}`,
+      `online: ${navigator.onLine ? 'yes' : 'no'}`,
+      `device: ${navigator.userAgent}`,
+      DIAG_END,
+    ].join('\n');
+    setDraft((d) => {
+      const base = d.message.split(DIAG_BEGIN)[0].trimEnd();
+      const joined = (base ? `${base}\n\n` : '') + block;
+      const overflow = Math.max(0, joined.length - 2000);
+      const trimmedBase = overflow > 0 ? base.slice(0, base.length - overflow) : base;
+      return {
+        ...d,
+        message: (trimmedBase ? `${trimmedBase}\n\n` : '') + block,
+      };
+    });
+    setDiagAttached(true);
+  };
 
   const onSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!canSend || sending) return;
     setSending(true);
-    // Honest by design: nothing is stored or transmitted here. The submitted
-    // state is local-only and tells the user how the request is actually relayed.
+    // Honest by design (ADR-0014): nothing is stored or transmitted here. The
+    // submitted state is local-only and the handoff below gives the composed
+    // report somewhere to go — the user's own mail client does any sending.
     window.setTimeout(() => {
       setSubmitted({ subject: draft.subject.trim(), message: draft.message.trim() });
       setSending(false);
     }, 350);
+  };
+
+  const handoffHref = (r: ReportDraft): string => {
+    const body = [
+      r.message,
+      '',
+      `— Reported from the Support screen by ${session?.name || 'unknown'} (${session?.email || 'unknown'}) · ${tenant?.name || 'workspace unknown'}`,
+    ].join('\n');
+    return `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(`[ServePoint] ${r.subject}`)}&body=${encodeURIComponent(body)}`;
+  };
+
+  const onCopyReport = () => {
+    if (!submitted) return;
+    copyText(`Subject: ${submitted.subject}\n\n${submitted.message}`, () => {
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2000);
+    });
   };
 
   if (submitted) {
@@ -81,24 +177,44 @@ const ReportForm: React.FC = () => {
           </span>
           <div className="min-w-0 flex-1">
             <p className="text-[14px] font-semibold text-[#1A1A1A]">Report ready: {submitted.subject}</p>
-            <p className="mt-1 break-words text-[13px] leading-relaxed text-[#6B6B6B]">{submitted.message}</p>
+            <p className="mt-1 break-words whitespace-pre-wrap text-[13px] leading-relaxed text-[#6B6B6B]">{submitted.message}</p>
+            <div className="mt-4 flex flex-wrap items-center gap-2">
+              <a
+                href={handoffHref(submitted)}
+                className="sp-cta flex h-10 items-center gap-2 px-4 text-[13px]"
+                aria-label={`Open your email app with the report to ${SUPPORT_EMAIL}`}
+              >
+                <Mail size={15} aria-hidden />
+                Open in email app
+              </a>
+              <button
+                type="button"
+                onClick={onCopyReport}
+                aria-label={copied ? 'Report copied to clipboard' : 'Copy the full report to the clipboard'}
+                className="flex h-10 items-center gap-2 rounded-xl border border-[#E3E7E0] bg-white px-4 text-[13px] font-semibold text-[#0F3D3E] transition hover:bg-[#F6F5F2] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#967221]"
+              >
+                {copied ? <Check size={15} className="text-[#2E7D32]" aria-hidden /> : <Copy size={15} aria-hidden />}
+                {copied ? 'Copied' : 'Copy report'}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setSubmitted(null);
+                  setDraft({ subject: '', message: '' });
+                  setDiagAttached(false);
+                }}
+                className="flex h-10 items-center rounded-xl px-3 text-[13px] font-semibold text-[#6B6B6B] transition hover:bg-[#F6F5F2] hover:text-[#0F3D3E] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#967221]"
+              >
+                Write another report
+              </button>
+            </div>
             <p className="mt-3 flex items-start gap-2 text-[12.5px] leading-relaxed text-[#6B6B6B]">
               <Info size={14} className="mt-0.5 shrink-0" aria-hidden />
               <span>
-                Support requests are relayed by the platform operator. Email{' '}
-                <span className="font-semibold text-[#0F3D3E]">{SUPPORT_EMAIL}</span> with the report above to make
-                sure it gets picked up.
+                Nothing was sent by the app itself — the button above hands this text to your own mail app,
+                addressed to <span className="font-semibold text-[#0F3D3E]">{SUPPORT_EMAIL}</span>.
               </span>
             </p>
-            <button
-              onClick={() => {
-                setSubmitted(null);
-                setDraft({ subject: '', message: '' });
-              }}
-              className="mt-4 flex h-11 items-center rounded-xl border border-[#E3E7E0] bg-white px-4 text-[13px] font-semibold text-[#0F3D3E] transition hover:bg-[#F6F5F2] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#967221]"
-            >
-              Write another report
-            </button>
           </div>
         </div>
       </div>
@@ -150,6 +266,22 @@ const ReportForm: React.FC = () => {
           {session?.name && (
             <p className="text-[12px] text-[#969696]">Reporting as {session.name} ({session.email})</p>
           )}
+          <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+            <button
+              type="button"
+              onClick={attachDiagnostics}
+              aria-label={diagAttached ? 'Diagnostics attached to the report' : 'Attach app diagnostics to the report'}
+              className={`flex h-9 items-center gap-2 rounded-xl border px-3 text-[12.5px] font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#967221] ${
+                diagAttached
+                  ? 'border-[#BBDBC0] bg-[#EAF0EC] text-[#2E7D32]'
+                  : 'border-[#E3E7E0] bg-white text-[#5F6B63] hover:bg-[#F6F5F2]'
+              }`}
+            >
+              {diagAttached ? <Check size={14} aria-hidden /> : <Activity size={14} aria-hidden />}
+              {diagAttached ? 'Diagnostics attached' : 'Attach diagnostics'}
+            </button>
+            <p className="text-[11.5px] text-[#969696]">release · workspace · device — helps the operator reproduce it</p>
+          </div>
           <button
             type="submit"
             disabled={!canSend || sending}

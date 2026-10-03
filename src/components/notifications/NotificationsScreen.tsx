@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useReducer, useState } from 'react';
 import {
   AlertTriangle,
   ArrowRight,
@@ -6,6 +6,7 @@ import {
   Check,
   CheckCheck,
   Clock,
+  Info,
   Loader2,
   MessageSquare,
   RefreshCw,
@@ -16,17 +17,20 @@ import {
 } from 'lucide-react';
 import {
   fetchNotifications,
+  fetchReservations,
   markNotificationRead,
   markNotificationsRead,
   subscribeNotificationsRealtime,
   type RealtimeState,
 } from '../../lib/api';
 import { dbErrorHint } from '../../lib/dbErrors';
-import { timeAgo } from '../../lib/prefs';
+import { getPrefs, subscribePrefs, timeAgo } from '../../lib/prefs';
+import { bookingSlotLabel, bookingDayKey, bookingTodayKey } from '../../lib/bookingday';
 import { useTenant } from '../../lib/tenant';
 import { useUi, type Section } from '../../store/session';
 import { SECTION_LABELS } from '../shell/Sidebar';
 import type { AppNotification, NotificationCategory } from '../../types';
+import type { Reservation } from '../../lib/api';
 
 /**
  * Notifications (v5.0.0, ADR-0014) — Figma Notifications_219-29744.
@@ -49,6 +53,17 @@ import type { AppNotification, NotificationCategory } from '../../types';
  * ping recounts the header badge for free) and honest category filters —
  * chips exist only for categories that actually have bells, with true
  * counts, so no chip is a dead end.
+ *
+ * v5.88.0 — the echo learns: a booking reminder is a TEXT snapshot (the
+ * trigger has no reservation FK), so it kept advertising parties whose
+ * promise had already died — cancelled, seated, no-show, gone quiet. Now
+ * each reminder reconciles with the book's LIVE truth at render time:
+ * title "Booking today: <name> ×<party>" + body "<slot> — …" matched
+ * against today's reservations. Exactly ONE match speaks, in the same
+ * tone family the floor's book already uses (cancelled/seated/no-show/
+ * went quiet/still expected); zero or several matches stay silent — the
+ * echo never guesses, and an unread book (null) never becomes an
+ * invented all-clear. Read-only: the bell never writes to the book.
  */
 
 const CATEGORY_ICON: Record<NotificationCategory, React.ComponentType<{ size?: number; className?: string }>> = {
@@ -87,6 +102,103 @@ const CATEGORY_CHIP: Record<NotificationCategory, { unread: string; read: string
   message: { unread: 'bg-white text-[#0F3D3E]', read: 'bg-[#F6F5F2] text-[#0F3D3E]' },
 };
 
+/* ── The echo (v5.88.0) — helpers + reconciler ───────────────────────── */
+
+/* v5.88.0 — the echo's slot label compared against the book byte-for-byte.
+ * 5.105.0 — the three drifted copies (floor / echo / guest drawer) became
+ * ONE voice in src/lib/bookingday.ts, anchored to the DB's own clock —
+ * the trigger that composed this bell body speaks Asia/Kolkata, so the
+ * matcher must too. On IST devices the words are unchanged. */
+const istSlotLabelEcho = bookingSlotLabel;
+const istDayKeyEcho = bookingDayKey;
+
+/** "Booking today: Kavita Desai ×2" → name + party. */
+const REMINDER_TITLE_RE = /^Booking today: (.+) ×(\d+)$/;
+
+/** The echo's voice — the RES_META family the floor's book already speaks
+ *  (same hex values, so bell and book read as one instrument). */
+type EchoState = {
+  label: string;
+  bg: string;
+  fg: string;
+  /** cancelled strikes the guest's name through, as the book does. */
+  strike: boolean;
+  /** cancelled dims the whole card, as the book's rows do. */
+  dim: boolean;
+  /** The full sentence for title/aria — provenance always included. */
+  note: string;
+};
+
+function echoFor(
+  n: AppNotification,
+  reservations: Reservation[] | null,
+  nowMs: number,
+  todayKey: string,
+): EchoState | null {
+  if (n.category !== 'reminder' || !reservations) return null;
+  const m = REMINDER_TITLE_RE.exec(n.title);
+  if (!m) return null;
+  const name = m[1].trim();
+  const party = Number.parseInt(m[2], 10);
+  const slotLabel = (n.body || '').split(' — ')[0]?.trim();
+  if (!name || !Number.isFinite(party) || !slotLabel) return null;
+  const matches = reservations.filter(
+    (r) => r.guest_name === name && r.party_size === party && istSlotLabelEcho(r.slot_at) === slotLabel,
+  );
+  /* Exactly one match speaks. Zero = the echo doesn't guess; more than one
+   * = ambiguous (two identical promises) — silence, never a coin flip. */
+  if (matches.length !== 1) return null;
+  const r = matches[0];
+  const provenance = `Matched to the book by guest, party and hour — the book's truth as of now.`;
+  if (r.status === 'cancelled')
+    return {
+      label: 'Cancelled',
+      bg: '#EAF0EC',
+      fg: '#6B6B6B',
+      strike: true,
+      dim: true,
+      note: `This booking was cancelled. ${provenance}`,
+    };
+  if (r.status === 'seated')
+    return {
+      label: 'Seated',
+      bg: '#E7F1E8',
+      fg: '#2E7D32',
+      strike: false,
+      dim: false,
+      note: `The party is already seated. ${provenance}`,
+    };
+  if (r.status === 'no_show')
+    return {
+      label: 'Marked no-show',
+      bg: '#FCEBEA',
+      fg: '#B3261E',
+      strike: false,
+      dim: false,
+      note: `The booking was marked no-show. ${provenance}`,
+    };
+  /* Still `booked`: the clock speaks only for today-in-IST, same rule as
+   * the floor — quiet when the hour went by, expected while it stands. */
+  if (istDayKeyEcho(r.slot_at) !== todayKey) return null;
+  if (new Date(r.slot_at).getTime() < nowMs)
+    return {
+      label: 'Went quiet',
+      bg: '#F1F4F1',
+      fg: '#6B6B6B',
+      strike: false,
+      dim: false,
+      note: 'The promised hour went by — the party is still booked. Seat them or mark the no-show; the clock does not convict.',
+    };
+  return {
+    label: 'Still expected',
+    bg: '#FBF3E1',
+    fg: '#8A5A00',
+    strike: false,
+    dim: false,
+    note: `The book still holds this promise. ${provenance}`,
+  };
+}
+
 /* ── Skeletons ───────────────────────────────────────────────────────── */
 
 const NotificationsSkeleton: React.FC = () => (
@@ -120,20 +232,23 @@ const ErrorCard: React.FC<{ message: string; onRetry: () => void }> = ({ message
 
 const NotificationCard: React.FC<{
   n: AppNotification;
+  echo: EchoState | null;
   marking: boolean;
   onMarkOne: (n: AppNotification) => void;
   onOpen: (n: AppNotification) => void;
-}> = ({ n, marking, onMarkOne, onOpen }) => {
+}> = ({ n, echo, marking, onMarkOne, onOpen }) => {
   const Icon = CATEGORY_ICON[n.category] || Bell;
   const unread = !n.is_read;
   const chip = CATEGORY_CHIP[n.category] || CATEGORY_CHIP.message;
   const door = doorOf(n);
+  const titleMatch = echo?.strike ? REMINDER_TITLE_RE.exec(n.title) : null;
   return (
     <article
-      aria-label={`${CATEGORY_LABEL[n.category] || 'Notification'}: ${n.title}${unread ? ' (unread)' : ''}`}
+      aria-label={`${CATEGORY_LABEL[n.category] || 'Notification'}: ${n.title}${echo ? ` — ${echo.label}` : ''}${unread ? ' (unread)' : ''}`}
       className={`rounded-2xl border bg-[#EAF0EC] p-4 sm:p-5 ${
         unread ? 'border-[#B88E2F]' : 'border-[#E3E7E0]'
-      }`}
+      } ${echo?.dim ? 'opacity-70' : ''}`}
+      title={echo?.note}
     >
       <div className="flex items-start gap-3">
         <span
@@ -145,8 +260,13 @@ const NotificationCard: React.FC<{
         </span>
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-3">
-            <h3 className={`text-[14px] leading-snug text-[#1A1A1A] ${unread ? 'font-bold' : 'font-semibold'}`}>
-              {n.title}
+            <h3 className={`text-[14px] leading-snug text-[#1A1A1A] ${unread ? 'font-bold' : 'font-semibold'}`}>{echo?.strike && titleMatch ? (
+                <>
+                  Booking today: <span className="line-through">{titleMatch[1]}</span> ×{titleMatch[2]}
+                </>
+              ) : (
+                n.title
+              )}
               {unread && (
                 <span className="ml-2 inline-block h-2 w-2 rounded-full bg-[#B88E2F] align-middle" aria-label="Unread" />
               )}
@@ -155,7 +275,15 @@ const NotificationCard: React.FC<{
           </div>
           <p className="mt-1 break-words text-[13px] leading-relaxed text-[#6B6B6B]">{n.body}</p>
           <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2">
-            <p className="flex items-center gap-1.5 text-[12px] text-[#969696]">
+            <p className="flex flex-wrap items-center gap-1.5 text-[12px] text-[#969696]">
+              {echo && (
+                <span
+                  className="rounded-full px-2 py-0.5 text-[10.5px] font-bold uppercase tracking-wide"
+                  style={{ background: echo.bg, color: echo.fg }}
+                >
+                  {echo.label}
+                </span>
+              )}
               <Clock size={13} aria-hidden />
               {timeAgo(n.created_at)}
             </p>
@@ -204,6 +332,18 @@ const NotificationsContent: React.FC<{ onTenantRetry: () => void }> = ({ onTenan
   const [markError, setMarkError] = useState<string | null>(null);
   const [rt, setRt] = useState<RealtimeState>('connecting');
   const [filter, setFilter] = useState<NotificationCategory | 'all'>('all');
+  /* v5.88.0 — the echo's book: today's reservations, fail-soft. Null = the
+   *  echo goes silent; the list itself never depends on it. */
+  const [reservations, setReservations] = useState<Reservation[] | null>(null);
+  const [echoTick, setEchoTick] = useState(0);
+
+  /* 5.103.0 — the toggles keep their word. A category switched off in
+   * Settings leaves the alert surface (list + chips + header badge); the
+   * subscribePrefs tick re-renders on a save, and the fresh read below
+   * applies it live — no reload, same discipline as the sound gates. */
+  const [, tickNotify] = useReducer((n: number) => n + 1, 0);
+  useEffect(() => subscribePrefs(tickNotify), [tickNotify]);
+  const notify = getPrefs().notify;
 
   const load = useCallback(async () => {
     if (!tenant.tenantId) return;
@@ -215,6 +355,15 @@ const NotificationsContent: React.FC<{ onTenantRetry: () => void }> = ({ onTenan
       setError((err as Error).message);
     } finally {
       setLoading(false);
+    }
+    /* v5.88.0 — the echo's book rides the same rhythm (realtime ring or
+     *  30s poll), so a seating on the floor reaches the bell within one
+     *  beat. Fail-soft: a refusal leaves the previous truth (or silence). */
+    try {
+      const book = await fetchReservations(tenant.tenantId, 200);
+      setReservations(book);
+    } catch {
+      setReservations(null);
     }
   }, [tenant.tenantId]);
 
@@ -245,18 +394,31 @@ const NotificationsContent: React.FC<{ onTenantRetry: () => void }> = ({ onTenan
 
   const unreadCount = useMemo(() => items.filter((n) => !n.is_read).length, [items]);
 
+  /* v5.88.0 — the echo's clock: the quiet/expected boundary walks on its
+   *  own 30s tick, so a reminder flips between polls without a fetch —
+   *  the same discipline as the floor's promise clock. */
+  const nowMs = useMemo(() => Date.now(), [echoTick]);
+  const todayKey = useMemo(() => bookingTodayKey(), [echoTick]);
+
+  /* 5.103.0 — the alert surface: only categories the owner kept. A category
+   * the panel doesn't name yet (a future one) alerts by default — the
+   * toggle mutes only what it names. */
+  const kept = items.filter((n) => notify[n.category] !== false);
+  const hiddenCount = items.length - kept.length;
+
   /* v5.42.0 — honest filters: a chip exists only when at least one bell of
-   * that category is on record, and its count is the true count. No chip is
-   * ever a dead end, and "All" always leads. */
+   * that category is on record AND the owner hasn't muted it — no chip is
+   * ever a dead end, and no chip invites you into a muted room. */
   const chips = useMemo(() => {
     const counts = new Map<NotificationCategory, number>();
-    for (const n of items) counts.set(n.category, (counts.get(n.category) || 0) + 1);
+    for (const n of kept) counts.set(n.category, (counts.get(n.category) || 0) + 1);
     return [...counts.entries()].sort((a, b) => b[1] - a[1]);
-  }, [items]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items, notify]);
 
   const visible = useMemo(
-    () => (filter === 'all' ? items : items.filter((n) => n.category === filter)),
-    [items, filter]
+    () => (filter === 'all' ? kept : kept.filter((n) => n.category === filter)),
+    [items, filter, notify]
   );
 
   const onMarkAllRead = async () => {
@@ -369,7 +531,7 @@ const NotificationsContent: React.FC<{ onTenantRetry: () => void }> = ({ onTenan
           >
             All
             <span className={`ml-1.5 tabular-nums ${filter === 'all' ? 'text-white/70' : 'text-[#969696]'}`}>
-              {items.length}
+              {kept.length}
             </span>
           </button>
           {chips.map(([cat, count]) => (
@@ -390,6 +552,19 @@ const NotificationsContent: React.FC<{ onTenantRetry: () => void }> = ({ onTenan
             </button>
           ))}
         </div>
+      )}
+
+      {/* 5.103.0 — the seam, stated where the hiding happens: muted bells are
+       * out of the alert surface, but their data is not touched — "Mark all
+       * read" still reaches them, same family of honesty as quiet hours. */}
+      {!loading && !error && hiddenCount > 0 && (
+        <p className="mb-3 flex items-start gap-1.5 text-[11.5px] leading-relaxed text-[#6B6B6B]">
+          <Info size={13} className="mt-0.5 shrink-0 text-[#969696]" aria-hidden />
+          <span>
+            {hiddenCount} {hiddenCount === 1 ? 'bell' : 'bells'} hidden by your notification
+            settings — they keep their data, and “Mark all read” still reaches them.
+          </span>
+        </p>
       )}
 
       {/* Body */}
@@ -419,6 +594,7 @@ const NotificationsContent: React.FC<{ onTenantRetry: () => void }> = ({ onTenan
             <NotificationCard
               key={n.id}
               n={n}
+              echo={echoFor(n, reservations, nowMs, todayKey)}
               marking={markingId === n.id}
               onMarkOne={(x) => void onMarkOne(x)}
               onOpen={onOpen}

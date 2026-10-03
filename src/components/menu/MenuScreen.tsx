@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useUi } from '../../store/session';
 import {
   BookOpenText,
   Check,
@@ -12,6 +13,7 @@ import {
   Search,
   SlidersHorizontal,
   Trash2,
+  Trophy,
   X,
 } from 'lucide-react';
 import {
@@ -24,9 +26,11 @@ import {
   deleteVariant,
   fetchAddons,
   fetchCategories,
+  fetchItemUnitCosts,
   fetchMenuItemAddonIds,
   fetchMenuItems,
   fetchMenuVariants,
+  fetchPaidMoverLines,
   renameCategory,
   removeMenuItemPhoto,
   setItemAddons,
@@ -36,8 +40,11 @@ import {
   type Category,
   type MenuVariant,
 } from '../../lib/api';
+import { computeTopMovers, MOVER_WINDOW_DAYS, type Mover } from '../../lib/movers';
 import { useTenant } from '../../lib/tenant';
 import { formatMoney } from '../../lib/prefs';
+import { useDialogA11y } from '../../lib/useDialogA11y';
+import { MarkHit } from '../shell/MarkHit';
 import type { MenuItem } from '../../types';
 
 /**
@@ -46,6 +53,12 @@ import type { MenuItem } from '../../types';
  * price delta), a tenant-level add-on library, and which add-ons each item
  * offers. What lands here is exactly what the counter POS and the guest QR
  * menu render — one menu, every surface.
+ *
+ * v5.75.0 — the dish's true price: every card now states what the dish COSTS
+ * to put on the plate (the 018 recipe view, the same truth Reports' earner's
+ * list speaks) and what it KEEPS — so thin margins show at the surface where
+ * prices are set, not just in the back office. A dish without a recipe says
+ * so honestly instead of pretending its cost is zero.
  */
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
@@ -75,21 +88,44 @@ const VegDot: React.FC<{ veg: boolean }> = ({ veg }) => (
   </span>
 );
 
+/** v5.80.0 — the week's rank medallion: the same gold grammar the counter's
+ * rail prints (rank 1 solid gold, rest tinted). A top mover marked sold out
+ * turns RED — the ledger's way of telling the owner the room's favourite is
+ * off the shelf before the rush finds out. Numbers are the paid ledger's,
+ * never estimates. */
+const MoverMedallion: React.FC<{ rank: number; units: number; tickets: number; pulled: boolean }> = ({ rank, units, tickets, pulled }) => (
+  <span
+    role="img"
+    aria-label={pulled
+      ? `Ranked No.${rank} this week by paid orders, but sold out — ${units} sold across ${tickets} tickets before it went`
+      : `Ranked No.${rank} this week by paid orders — ${units} sold across ${tickets} tickets`}
+    title={pulled
+      ? `The room's No.${rank} this week (${units} sold across ${tickets} tickets) is SOLD OUT — bring it back before the rush finds out.`
+      : `No.${rank} this week — ${units} sold across ${tickets} paid tickets. The counter's rail pins this dish.`}
+    className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-bold tabular-nums"
+    style={pulled
+      ? { backgroundColor: '#FDF3F2', color: '#B4483C', boxShadow: 'inset 0 0 0 1px #F0D5D1' }
+      : rank === 1
+        ? { backgroundColor: '#B88E2F', color: '#FFFFFF' }
+        : { backgroundColor: '#F3E8CF', color: '#8A6A1F' }}
+  >
+    {rank === 1 && !pulled && <Trophy size={9} aria-hidden />}
+    No.{rank}
+    {pulled && ' · pulled'}
+  </span>
+);
+
 /* ── modals ─────────────────────────────────────────────────────────────── */
 
 function Overlay({ title, onClose, children, wide }: { title: string; onClose: () => void; children: React.ReactNode; wide?: boolean }) {
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  /* v5.110.0 — the overlay holds the door (replaces the hand-rolled Escape listener). */
+  const panelRef = React.useRef<HTMLDivElement>(null);
+  const dlgRef = useDialogA11y<HTMLDivElement>(onClose, true, panelRef);
   return (
-    <div className="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label={title}>
-      <button type="button" aria-label="Close dialog" onClick={onClose} className="absolute inset-0 h-full w-full cursor-default bg-[#0F3D3E]/45" />
+    <div ref={dlgRef} className="fixed inset-0 z-50" style={{ animation: 'spFadeIn 160ms ease-out' }} role="dialog" aria-modal="true" aria-label={title}>
+      <button type="button" aria-label="Close dialog" onClick={onClose} className="absolute inset-0 h-full w-full cursor-default bg-[#0F3D3E]/45 focus-visible:outline-none" />
       <div className="absolute inset-x-2 top-1/2 -translate-y-1/2 sm:inset-x-0 sm:mx-auto" style={{ maxWidth: wide ? 560 : 440 }}>
-        <div className="max-h-[86vh] overflow-y-auto rounded-3xl bg-white p-5 shadow-2xl">
+        <div ref={panelRef} tabIndex={-1} className="max-h-[86vh] overflow-y-auto rounded-3xl bg-white p-5 shadow-2xl outline-none">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="text-[15px] font-bold text-[#1A1A1A]">{title}</h2>
             <button
@@ -439,7 +475,23 @@ export function MenuScreen(): React.ReactElement {
   const [variants, setVariants] = useState<MenuVariant[]>([]);
   const [addons, setAddons] = useState<Addon[]>([]);
   const [links, setLinks] = useState<Map<string, Set<string>>>(new Map());
-  const [query, setQuery] = useState('');
+  /* v5.75.0 — per-serve ingredient cost from the 018 recipe view: what each
+   * dish costs the kitchen, joined beside the price that bills for it. */
+  const [unitCosts, setUnitCosts] = useState<Map<string, number>>(new Map());
+  /* v5.80.0 — the room's movers on the management side: the same paid-ledger
+   * rank the counter's rail sells, so the owner sees which dishes must not
+   * run out. Fail-soft like everywhere the ledger is read: null = unread,
+   * [] = quiet week or read failed — the menu never waits on the ledger,
+   * and a quiet week prints no medallions (it does not invent them). */
+  const [movers, setMovers] = useState<Mover[] | null>(null);
+  /* v5.116.0 — the item search joins the shell-search contract: the
+   * header box and the screen's own box are two doors to one state. */
+  const query = useUi((s) => s.search);
+  const setQuery = useUi((s) => s.setSearch);
+  useEffect(() => {
+    useUi.getState().setSearchMeta({ placeholder: 'Search items…' });
+    return () => useUi.getState().setSearchMeta(null);
+  }, []);
 
   const [itemModal, setItemModal] = useState<{ mode: 'new' } | { mode: 'edit'; itemId: string } | null>(null);
   const [variantsModalFor, setVariantsModalFor] = useState<string | null>(null);
@@ -466,17 +518,19 @@ export function MenuScreen(): React.ReactElement {
     setLoadError(null);
     (async () => {
       try {
-        const [cats, its, vs, as] = await Promise.all([
+        const [cats, its, vs, as, uc] = await Promise.all([
           fetchCategories(tenantId),
           fetchMenuItems(tenantId),
           fetchMenuVariants(tenantId),
           fetchAddons(tenantId),
+          fetchItemUnitCosts(tenantId),
         ]);
         if (!alive) return;
         setCategories(cats);
         setItems(its);
         setVariants(vs);
         setAddons(as);
+        setUnitCosts(uc);
         const l = await fetchMenuItemAddonIds(its.map((i) => i.id));
         if (!alive) return;
         const map = new Map<string, Set<string>>();
@@ -494,6 +548,31 @@ export function MenuScreen(): React.ReactElement {
       alive = false;
     };
   }, [tenantId, tick]);
+
+  /* v5.80.0 — the movers read: one reused fetch (the rail's own), the one
+   * computeTopMovers definition, deterministic ties. Reloads with the
+   * menu's tick so a refresh never shows stale ranks. */
+  useEffect(() => {
+    if (!tenantId) return;
+    let alive = true;
+    fetchPaidMoverLines(tenantId, MOVER_WINDOW_DAYS)
+      .then((rows) => {
+        if (alive) setMovers(computeTopMovers(rows));
+      })
+      .catch(() => {
+        if (alive) setMovers([]);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [tenantId, tick]);
+
+  /* menuItemId → {rank, units, tickets} for the medallions. */
+  const moverInfo = useMemo(() => {
+    const m = new Map<string, { rank: number; units: number; tickets: number }>();
+    (movers ?? []).forEach((mv, i) => m.set(mv.menuItemId, { rank: i + 1, units: mv.units, tickets: mv.tickets }));
+    return m;
+  }, [movers]);
 
   const runAction = useCallback(async (fn: () => Promise<unknown>, okMsg?: string) => {
     if (busyRef.current) return false; // double-dispatch guard (batch-proof, unlike state)
@@ -557,6 +636,12 @@ export function MenuScreen(): React.ReactElement {
           <p className="mt-0.5 text-[13px] text-[#6B6B6B]">
             {tenant?.name} · {categories.length} categor{categories.length === 1 ? 'y' : 'ies'} · {totalItems} item{totalItems === 1 ? '' : 's'} — one menu for the counter, the kitchen and the QR.
           </p>
+          {(movers?.length ?? 0) > 0 && (
+            <p className="mt-1 flex items-center gap-1.5 text-[11.5px] text-[#8A6A1F]">
+              <Trophy size={11} aria-hidden />
+              Gold No.N marks this week's paid movers — the same list the counter's rail pins. A red “No.N · pulled” is a favourite gone sold out.
+            </p>
+          )}
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <div className="relative">
@@ -739,22 +824,58 @@ export function MenuScreen(): React.ReactElement {
                 const itemVariants = variants.filter((v) => v.menu_item_id === item.id);
                 const itemAddonIds = links.get(item.id) || new Set<string>();
                 const armed = confirmId === `item:${item.id}`;
+                /* v5.75.0 — the dish's true price: recipe cost beside the
+                 * billing price. Kept% bands: ≥50% green (healthy), ≥25%
+                 * amber (thin), else red (priced under its own kitchen). */
+                const cost = unitCosts.get(item.id);
+                const keptPct =
+                  cost !== undefined && Number(item.price) > 0
+                    ? (Number(item.price) - cost) / Number(item.price)
+                    : null;
+                const keptTone =
+                  keptPct === null ? null : keptPct >= 0.5 ? '#2E7D32' : keptPct >= 0.25 ? '#8A5A00' : '#B4483C';
+                /* v5.80.0 — the week's rank, from the same paid ledger the
+                 * counter's rail reads: management sees what must not run out. */
+                const mover = moverInfo.get(item.id);
                 return (
                   <div key={item.id} className="flex flex-wrap items-center gap-3 border-b border-[#F0F2EE] px-4 py-3 last:border-0 hover:bg-[#FBFBF9]">
                     <PhotoTile item={item} tenantId={tenantId} busy={busy} runAction={runAction} />
                     <VegDot veg={item.is_veg !== false} />
                     <div className="min-w-0 flex-1">
                       <p className="flex items-center gap-2 truncate text-[14px] font-semibold text-[#1A1A1A]">
-                        {item.name}
+                        <MarkHit text={item.name} query={q} />
+                        {mover && (
+                          <MoverMedallion rank={mover.rank} units={mover.units} tickets={mover.tickets} pulled={item.is_available === false} />
+                        )}
                         {item.is_available === false && <span className="rounded-full bg-[#FDF3F2] px-2 py-0.5 text-[10px] font-bold text-[#B4483C]">SOLD OUT</span>}
                       </p>
-                      {item.description && <p className="truncate text-[12px] text-[#6B6B6B]">{item.description}</p>}
+                      {item.description && <p className="truncate text-[12px] text-[#6B6B6B]"><MarkHit text={item.description} query={q} /></p>}
                       <p className="mt-0.5 flex flex-wrap gap-1.5 text-[10.5px]">
                         {itemVariants.length > 0 && <span className="rounded-full bg-[#F1F4F1] px-2 py-0.5 font-medium text-[#0F3D3E]">{itemVariants.length} option{itemVariants.length > 1 ? 's' : ''}</span>}
                         {itemAddonIds.size > 0 && <span className="rounded-full bg-[#FDF9F0] px-2 py-0.5 font-medium text-[#8A5A16]">{itemAddonIds.size} add-on{itemAddonIds.size > 1 ? 's' : ''}</span>}
                       </p>
                     </div>
-                    <p className="text-[14.5px] font-bold" style={{ color: '#B88E2F' }}>{formatMoney(item.price)}</p>
+                    <div className="text-right">
+                      <p className="text-[14.5px] font-bold" style={{ color: '#B88E2F' }}>{formatMoney(item.price)}</p>
+                      {cost === undefined ? (
+                        <p
+                          className="mt-0.5 text-[10.5px] text-[#969696]"
+                          title="No recipe on file yet (Inventory → Recipes). The kitchen cost is unknown, so the margin board in Reports sits this dish out."
+                        >
+                          no recipe yet
+                        </p>
+                      ) : (
+                        <p
+                          className="mt-0.5 whitespace-nowrap text-[10.5px] text-[#969696] tabular-nums"
+                          title={`Ingredient cost per serve, from the recipe lines (Inventory). At the base price — options change the bill, not the cost.`}
+                        >
+                          costs <span className="font-semibold">{formatMoney(cost)}</span> · keeps{' '}
+                          <span className="font-bold" style={{ color: keptTone ?? undefined }}>
+                            {formatMoney(Number(item.price) - cost)} ({Math.round((keptPct ?? 0) * 100)}%)
+                          </span>
+                        </p>
+                      )}
+                    </div>
                     <label className="flex min-h-11 cursor-pointer items-center gap-1.5 text-[11.5px] font-medium text-[#6B6B6B]">
                       <input
                         type="checkbox"

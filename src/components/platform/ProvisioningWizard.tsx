@@ -13,6 +13,7 @@ import { provisionBusiness } from '../../lib/api';
 import { authService } from '../../lib/authService';
 import { supabase } from '../../lib/supabase';
 import { formatMoney } from '../../lib/prefs';
+import { useDialogA11y } from '../../lib/useDialogA11y';
 import type { Tenant } from '../../types';
 
 /**
@@ -211,15 +212,9 @@ export const ProvisioningWizard: React.FC<ProvisioningWizardProps> = ({
     };
   }, [open]);
 
-  /* Escape closes the dialog — unless a provision run is in flight. */
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !submitting) onClose();
-    };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [open, submitting, onClose]);
+  /* v5.110.0 — the wizard holds the door (replaces the hand-rolled Escape
+     listener; Escape stands down while a provision run is in flight). */
+  const dlgRef = useDialogA11y<HTMLDivElement>(() => { if (!submitting) onClose(); }, open);
 
   useEffect(() => {
     return () => {
@@ -351,7 +346,7 @@ export const ProvisioningWizard: React.FC<ProvisioningWizardProps> = ({
   );
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div ref={dlgRef} className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ animation: 'spFadeIn 160ms ease-out' }}>
       {/* Backdrop */}
       <div
         className="absolute inset-0 bg-[#0F3D3E]/45"

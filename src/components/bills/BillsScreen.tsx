@@ -3,20 +3,27 @@ import {
   Check,
   ChevronDown,
   Download,
+  History,
   Loader2,
   MoreHorizontal,
   Plus,
   Receipt,
   RefreshCw,
   Search,
+  SlidersHorizontal,
+  Split,
   X,
 } from 'lucide-react';
+import { dayTime, isSameLocalDay } from '../../lib/day';
 import {
   advanceOrder,
   fetchOrderHistory,
   fetchOrderOfferTitle,
   fetchOrderPayment,
+  fetchOrderPayments,
+  fetchOpenPaymentSums,
   fetchOrders,
+  insertPartialPayment,
   recordPayment,
 } from '../../lib/api';
 import type { OrderStatusEvent, PaymentMethod, ReceiptPayment } from '../../lib/api';
@@ -24,8 +31,11 @@ import { printReceipt } from './ReceiptPrint';
 import { preloadPrintImage } from '../../lib/printFrame';
 import { formatMoney, getPrefs } from '../../lib/prefs';
 import { downloadCsv } from '../../lib/csv';
+import { appTodayIso } from '../../lib/appday';
 import { useTenant } from '../../lib/tenant';
-import { useUi } from '../../store/session';
+import { useSession, useUi } from '../../store/session';
+import { MarkHit } from '../shell/MarkHit';
+import { EmptyState } from '../shell/EmptyState';
 import type { Order } from '../../types';
 
 /**
@@ -34,6 +44,18 @@ import type { Order } from '../../types';
  * Two-pane: left order list w/ filters + bottom search bar; right detail pane with
  * Details, Order Info, Items, Total and the gold "Charge customer" flow.
  * Data is live Supabase only (fetchOrders / updateOrderStatus) — no mocks.
+ *
+ * v5.121.0 — the ledger's misses learn to say why (the 5.119.0 contract
+ * reaches its last generic zero state): a search miss now names the term
+ * and the reach (order numbers, customer names, the card's own line); a
+ * filter miss names the status and the window that stood; when both are
+ * in play the body says either can miss. The catalog-truth "No bills
+ * yet" state above it is untouched — an empty ledger and a filtered one
+ * are different sentences.
+ * v5.122.0 — the orphan learns to say why: when a filter empties the
+ * list, the selection HOLDS (5.92.0's keep-valid effect early-returns)
+ * and the detail pane now says so in the amber voice instead of showing
+ * a bill the list swore wasn't there.
  */
 
 type StatusFilter = 'all' | 'active' | 'paid' | 'cancelled';
@@ -101,18 +123,8 @@ const WHITE_PILL =
 const FILTER_PILL_ACTIVE =
   'h-11 w-full appearance-none rounded-full border border-[#B88E2F] bg-[#FDF6E3] pl-4 pr-9 text-[13px] font-bold text-[#8A5A00] transition hover:border-[#967221] focus:border-[#B88E2F] focus:outline-none focus:ring-2 focus:ring-[#B88E2F]/25';
 
-function hhmm(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '—';
-  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-}
-
 function capitalize(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
-}
-
-function isSameLocalDay(iso: string): boolean {
-  return new Date(iso).toDateString() === new Date().toDateString();
 }
 
 /* ── CSV export (NOVA "Orders page — CSV", v5.3.1; shared lib/csv.ts since 5.8.0)
@@ -132,7 +144,7 @@ function itemsSummary(o: Order): string {
     .join('; ');
 }
 
-function exportBillsCsv(rows: Order[]): void {
+function exportBillsCsv(rows: Order[], paidSums: Map<string, number>): void {
   if (rows.length === 0) return;
   const header = [
     'Order #',
@@ -154,11 +166,20 @@ function exportBillsCsv(rows: Order[]): void {
   for (const o of rows) {
     const st = STATUS_LABEL[displayStatus(o)] || displayStatus(o);
     const method = o.payment_method ? METHOD_LABEL[o.payment_method as MethodKey] || o.payment_method : '';
+    /* 5.63.0: a partially-split ticket says so — the ledger's honest voice,
+       not a bare 'pending' that hides money already taken. */
+    const partPaid = Number(paidSums.get(o.id) ?? 0);
+    const paymentCell =
+      String(o.payment_status || '').toLowerCase() === 'completed'
+        ? 'completed'
+        : partPaid > 0
+          ? `partial (${partPaid.toFixed(2)} of ${Number(o.total ?? 0).toFixed(2)} in)`
+          : o.payment_status || 'pending';
     lines.push([
       o.order_number,
       new Date(o.created_at).toLocaleString(),
       st,
-      o.payment_status || 'pending',
+      paymentCell,
       method,
       TYPE_LABEL[String(o.order_type)] || String(o.order_type),
       o.customer_name || '',
@@ -171,7 +192,12 @@ function exportBillsCsv(rows: Order[]): void {
       o.notes || '',
     ]);
   }
-  downloadCsv(`servepoint-bills-${new Date().toISOString().slice(0, 10)}.csv`, lines);
+  /* v5.106.0 — the filename carries the reporting day (appday): the owner's
+     own today, the same word Reports and Close-out speak. The old name was
+     hardcoded IST — the wrong-clock family EOD's stepper came from (5.83.0);
+     5.84.0 fixed the UTC→IST direction, and now the name also follows the
+     owner when the reporting day itself moves. */
+  downloadCsv(`servepoint-bills-${appTodayIso()}.csv`, lines);
 }
 
 /** Secondary line on a row card: "Table 12 · 2 guests" or type + customer. */
@@ -260,7 +286,16 @@ const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRet
 
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [dateFilter, setDateFilter] = useState<DateFilter>('all');
-  const [search, setSearch] = useState('');
+  /* v5.116.0 — the bills search is ONE state with two doors: the header's
+   * shell box and the pane's own bottom box both read and write the same
+   * useUi.search, so they move together no matter which you type in. The
+   * old local useState made the header box a silent stranger here. */
+  const search = useUi((s) => s.search);
+  const setSearch = useUi((s) => s.setSearch);
+  useEffect(() => {
+    useUi.getState().setSearchMeta({ placeholder: 'Search bills…' });
+    return () => useUi.getState().setSearchMeta(null);
+  }, []);
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const [menuOpen, setMenuOpen] = useState(false);
@@ -272,10 +307,20 @@ const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRet
   const [actionError, setActionError] = useState<string | null>(null);
   const [paidThisSession, setPaidThisSession] = useState<Set<string>>(new Set());
 
+  /* ── 5.63.0 split bills — the ledger is the truth, the ticket follows it ──
+   * splitWays: how many ways the counter plans to settle the CURRENT chooser
+   * session. ledger: every payment row already on the selected ticket.
+   * paidSums: ₹-in-per-ticket for the whole list (badges), bounded to unpaid. */
+  const [splitWays, setSplitWays] = useState<1 | 2 | 3>(1);
+  const [ledger, setLedger] = useState<ReceiptPayment[]>([]);
+  const [paidSums, setPaidSums] = useState<Map<string, number>>(new Map());
+  const actorEmail = useSession((s) => s.session?.email || '');
+
   const lastAction = useRef<{
     orderId: string;
     kind: 'pay' | 'cancel' | 'advance';
     patch: OrderPatch;
+    amount?: number;
   } | null>(null);
 
   /** Mirror of the orders list for mutation callbacks (fresh totals). */
@@ -329,6 +374,27 @@ const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRet
     };
   }, [selectedId, tenantId, orders]);
 
+  /** 5.63.0: the selected ticket's FULL ledger (one row per recorded part).
+   * Rides the same deps as receiptMeta — after any mutation the orders array
+   * changes and the ledger re-reads, so the panel always shows server truth. */
+  useEffect(() => {
+    if (!selectedId || !tenantId) {
+      setLedger([]);
+      return;
+    }
+    let alive = true;
+    fetchOrderPayments(tenantId, selectedId)
+      .then((rows) => {
+        if (alive) setLedger(rows);
+      })
+      .catch(() => {
+        if (alive) setLedger([]);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [selectedId, tenantId, orders]);
+
   /** Append-only status trail of the selected order (migration 007). */
   const [trail, setTrail] = useState<OrderStatusEvent[]>([]);
   const [trailLoading, setTrailLoading] = useState(false);
@@ -371,6 +437,14 @@ const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRet
     try {
       const data = await fetchOrders(tenantId);
       setOrders(data);
+      /* 5.63.0: badge math for the unpaid column — one bounded read of the
+         ledger keyed to exactly the tickets still open. */
+      const unpaidIds = data
+        .filter((o) => displayStatus(o) === 'active')
+        .map((o) => o.id);
+      fetchOpenPaymentSums(tenantId, unpaidIds)
+        .then((m) => setPaidSums(m))
+        .catch(() => setPaidSums(new Map()));
     } catch (err) {
       setOrdersError((err as Error)?.message || 'Failed to load orders from the cloud.');
     } finally {
@@ -406,6 +480,11 @@ const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRet
   /* NOVA "unpaid priority" (v5.3.1): money-outstanding bills float to the top
      of the list so the counter never loses sight of what's owed; within each
      group, newest first. Cancelled bills sink to the bottom. */
+  /* v5.120.0 — the glint's query: the same WYSIWYG hay the filter reads
+   * (with the leading '#' stripped, so "#147" glints "147" where the
+   * card actually prints it). The filter memo computes its own copy —
+   * this render-scope one feeds only the row highlights. */
+  const billQ = search.trim().toLowerCase().replace(/^#/, '');
   const sorted = useMemo(() => {
     const rank = (o: Order): number =>
       displayStatus(o) === 'active' ? 0 : displayStatus(o) === 'cancelled' ? 2 : 1;
@@ -424,14 +503,42 @@ const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRet
     [orders]
   );
 
+  /* 5.92.0 — the count chip echoes the strip's whisper: how many of the
+     unpaid are from an earlier day (the ghosts the strip points at when it
+     says "N older tickets — see Bills"). The door opens both ways. */
+  const olderUnpaidCount = useMemo(
+    () =>
+      orders.filter(
+        (o) => displayStatus(o) === 'active' && !isSameLocalDay(o.created_at)
+      ).length,
+    [orders]
+  );
+
   /* Keep a valid selection (auto-select the most urgent bill on load / after
-     a filter change — top of the sorted list, i.e. oldest unpaid first). */
+     a filter change — top of the sorted list, i.e. oldest unpaid first).
+     5.122.0: when a filter empties the list this early-returns and the
+     selection HOLDS — the detail pane now wears the orphan strip and says
+     why it still shows a bill the list does not. */
   useEffect(() => {
     if (ordersLoading || sorted.length === 0) return;
     if (!sorted.some((o) => o.id === selectedId)) setSelectedId(sorted[0].id);
   }, [sorted, selectedId, ordersLoading]);
 
   const selected = orders.find((o) => o.id === selectedId) || null;
+
+  /* ── Split math (5.63.0) — paise-exact, ledger-derived ──────────────────
+   * paidSum / balance come from the LEDGER (server truth), never from a
+   * client-side guess. nextPartAmount rounds DOWN so the covering part
+   * absorbs the cents and the parts sum to exactly the total. */
+  const selectedTotal = Number(selected?.total ?? 0);
+  const paidSum = useMemo(() => ledger.reduce((s, r) => s + Number(r.amount || 0), 0), [ledger]);
+  const balance = Math.max(0, Math.round((selectedTotal - paidSum) * 100) / 100);
+  const covered = selectedTotal > 0 && balance <= 0.005;
+  const remainingWays = Math.max(0, splitWays - ledger.length);
+  const nextPartAmount =
+    remainingWays <= 1 ? balance : Math.floor((balance / remainingWays) * 100) / 100;
+  /* The part that flips the ticket: the only-ways plan, or its last leg. */
+  const nextPartIsCovering = ledger.length === 0 ? splitWays === 1 : remainingWays <= 1;
 
   /* Reset per-order interaction state when the selection changes. */
   useEffect(() => {
@@ -440,6 +547,7 @@ const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRet
     setChooserOpen(false);
     setChosenMethod(null);
     setActionError(null);
+    setSplitWays(1);
   }, [selectedId]);
 
   /* Escape closes the "..." menu. */
@@ -457,33 +565,68 @@ const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRet
 
   /* ── Mutations (charge / cancel) — guarded RPCs + honest errors + retry ── */
   const runMutation = useCallback(
-    async (orderId: string, patch: OrderPatch, kind: 'pay' | 'cancel') => {
+    async (orderId: string, patch: OrderPatch, kind: 'pay' | 'cancel', amount?: number) => {
       if (!tenantId) return;
       const order = ordersRef.current.find((o) => o.id === orderId);
-      lastAction.current = { orderId, kind, patch };
+      lastAction.current = { orderId, kind, patch, amount };
       setMutating(true);
       setActionError(null);
       try {
+        const fullTotal = Number(order?.total ?? 0);
         if (kind === 'pay') {
-          // Migration 007 engine: membership-checked RPC writes the payments
-          // ledger row and flips the order in one transaction. The order's
-          // kitchen status is NOT touched — the counter is the gate.
-          await recordPayment(
-            orderId,
-            tenantId,
-            (patch.payment_method as PaymentMethod) || 'cash',
-            Number(order?.total ?? 0)
+          const method = (patch.payment_method as PaymentMethod) || 'cash';
+          const part = Number(amount ?? order?.total ?? 0);
+          /* Covering = this part settles the REMAINING balance (ledger truth,
+             read before the write) — NOT "part == total": a split's covering
+             half is half the ticket. The covering part rides the guarded RPC
+             (ledger row + flip in one transaction); anything less is a plain
+             member insert and the ticket stays honestly pending. */
+          const rowsBefore = await fetchOrderPayments(tenantId, orderId).catch(
+            () => [] as ReceiptPayment[]
           );
+          const paidBefore = rowsBefore.reduce((s, r) => s + Number(r.amount || 0), 0);
+          const balanceBefore = fullTotal - paidBefore;
+          if (part >= balanceBefore - 0.005) {
+            // The covering payment — migration 007/008 engine: membership-
+            // checked RPC writes the final ledger row and flips the order in
+            // one transaction. The order's kitchen status is NOT touched —
+            // the counter is the gate.
+            await recordPayment(orderId, tenantId, method, part);
+          } else {
+            // A non-covering SPLIT part — one ledger row, order stays
+            // honestly pending until a later part covers the ticket (5.63.0).
+            await insertPartialPayment(tenantId, orderId, method, part, actorEmail);
+          }
         } else {
           await advanceOrder(orderId, tenantId, 'cancelled');
         }
+        /* Local state follows the LEDGER, not the intent: re-derive whether
+           the ticket is now covered from the rows just written. */
+        let coveredNow = true;
+        if (kind === 'pay') {
+          const rows = await fetchOrderPayments(tenantId, orderId).catch(() => [] as ReceiptPayment[]);
+          const sum = rows.reduce((s, r) => s + Number(r.amount || 0), 0);
+          coveredNow = fullTotal > 0 && sum >= fullTotal - 1;
+          setPaidSums((prev) => new Map(prev).set(orderId, sum));
+          setLedger(rows);
+        }
         setOrders((prev) =>
-          prev.map((o) => (o.id === orderId ? ({ ...o, ...patch } as Order) : o))
+          prev.map((o) =>
+            o.id === orderId
+              ? ({
+                  ...o,
+                  ...patch,
+                  payment_status: kind === 'pay' ? (coveredNow ? 'completed' : 'pending') : patch.payment_status,
+                } as Order)
+              : o
+          )
         );
         if (kind === 'pay') {
-          setPaidThisSession((prev) => new Set(prev).add(orderId));
-          setChooserOpen(false);
-          setChosenMethod(null);
+          if (coveredNow) {
+            setPaidThisSession((prev) => new Set(prev).add(orderId));
+            setChooserOpen(false);
+            setChosenMethod(null);
+          }
         } else {
           setMenuOpen(false);
           setConfirmArm(false);
@@ -497,7 +640,7 @@ const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRet
         setMutating(false);
       }
     },
-    [tenantId]
+    [tenantId, actorEmail]
   );
 
   /* ── Kitchen lifecycle advance (Start preparing / Mark ready / Complete) ── */
@@ -525,7 +668,7 @@ const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRet
     const last = lastAction.current;
     if (!last) return;
     if (last.kind === 'pay' || last.kind === 'cancel') {
-      void runMutation(last.orderId, last.patch, last.kind);
+      void runMutation(last.orderId, last.patch, last.kind, last.amount);
     } else if (last.patch.status) {
       void runAdvance(last.orderId, last.patch.status as 'preparing' | 'ready' | 'completed');
     }
@@ -551,6 +694,59 @@ const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRet
     setDateFilter('all');
     setSearch('');
   }, []);
+
+  /* v5.121.0 — the miss sentence. When the narrowed list comes up empty
+   * the note must say WHY: which status word stood, which window word
+   * stood, and — when a search rides along — that either can miss. The
+   * words below are the select labels the operator actually clicked
+   * ("Cancelled", "Last 7 days"), so the note speaks the same nouns the
+   * filters do. 'all' contributes no word: "No bills" needs no adjective.
+   * The catalog-truth "No bills yet" state stays a different sentence —
+   * an empty ledger and a filtered one must not sound alike. */
+  const missQ = search.trim();
+  const statusWord =
+    statusFilter === 'active'
+      ? 'active'
+      : statusFilter === 'paid'
+        ? 'paid'
+        : statusFilter === 'cancelled'
+          ? 'cancelled'
+          : '';
+  const windowPhrase = dateFilter === 'today' ? 'from today' : dateFilter === '7d' ? 'in the last 7 days' : '';
+  const filterLabels = [
+    statusFilter !== 'all' ? statusFilter.charAt(0).toUpperCase() + statusFilter.slice(1) : '',
+    dateFilter === 'today' ? 'Today' : dateFilter === '7d' ? 'Last 7 days' : '',
+  ].filter(Boolean);
+
+  const missTitle = missQ
+    ? `No bill matches “${missQ}”`
+    : statusWord && windowPhrase
+      ? `No ${statusWord} bills ${windowPhrase}`
+      : statusWord
+        ? `No ${statusWord} bills`
+        : windowPhrase
+          ? `No bills ${windowPhrase}`
+          : 'No bills match';
+  const missBody = missQ ? (
+    <>
+      Search reads order numbers, customer names, and what each card prints —
+      the table line.
+      {filterLabels.length > 0 && (
+        <>
+          {' '}
+          The {filterLabels.join(' and ')}{' '}
+          {filterLabels.length > 1 ? 'filters are' : 'filter is'} also in play —
+          either can miss.
+        </>
+      )}
+    </>
+  ) : statusWord && windowPhrase ? (
+    <>The ledger holds {orders.length} bills — none are {statusWord} AND {windowPhrase}. Loosen one, or clear both.</>
+  ) : statusWord ? (
+    <>The ledger holds {orders.length} bills — none of them {statusWord}. Loosen the filter, or clear it.</>
+  ) : (
+    <>The ledger holds {orders.length} bills — none {windowPhrase}. Widen the window, or clear it.</>
+  );
 
   /* ── Full-screen states: tenant skeleton / honest error / empty ── */
   if (tenantLoading) return <BillsSkeleton />;
@@ -597,17 +793,21 @@ const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRet
             <h1 className="text-[20px] font-bold text-[#1A1A1A]">Bills</h1>
             {unpaidCount > 0 && (
               <span
-                title="Bills awaiting payment in the loaded list"
+                title={
+                  olderUnpaidCount > 0
+                    ? `${unpaidCount} awaiting payment — ${olderUnpaidCount} from an earlier day`
+                    : 'Bills awaiting payment in the loaded list'
+                }
                 className="inline-flex shrink-0 items-center gap-1 rounded-full bg-[#FFF4DB] px-2.5 py-1 text-[11px] font-extrabold tabular-nums text-[#8A5A00]"
               >
                 <Receipt size={11} aria-hidden />
-                {unpaidCount} unpaid
+                {unpaidCount} unpaid{olderUnpaidCount > 0 ? ` · ${olderUnpaidCount} older` : ''}
               </span>
             )}
           </div>
           <div className="flex shrink-0 items-center gap-2">
             <button
-              onClick={() => exportBillsCsv(sorted)}
+              onClick={() => exportBillsCsv(sorted, paidSums)}
               disabled={sorted.length === 0}
               aria-label="Export filtered bills as CSV"
               title="Export the filtered list as CSV (opens in Excel / Sheets)"
@@ -739,7 +939,11 @@ const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRet
                     <button
                       onClick={() => setSelectedId(o.id)}
                       aria-pressed={isSelected}
-                      aria-label={`Order ${o.order_number}, ${STATUS_LABEL[status] || status}, ${formatMoney(o.total)}`}
+                      aria-label={`Order ${o.order_number}, ${STATUS_LABEL[status] || status}, ${
+                        status === 'active' && Number(paidSums.get(o.id) ?? 0) > 0
+                          ? `${formatMoney(paidSums.get(o.id) ?? 0)} of ${formatMoney(o.total)} in the ledger, `
+                          : ''
+                      }${formatMoney(o.total)}`}
                       className={`relative w-full rounded-xl border-2 p-3.5 text-left transition ${
                         isSelected
                           ? 'border-[#B88E2F] bg-[#F3E8CF]'
@@ -756,7 +960,7 @@ const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRet
                         <div className="min-w-0">
                           <div className="flex items-center gap-2">
                             <span className="text-[14.5px] font-bold text-[#1A1A1A]">
-                              Order #{o.order_number}
+                              Order&nbsp;<MarkHit text={`#${o.order_number}`} query={billQ} />
                             </span>
                             <span
                               aria-hidden
@@ -768,10 +972,32 @@ const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRet
                             </span>
                           </div>
                           <p className="mt-1 flex items-center gap-1.5 truncate text-[12.5px] text-[#6B6B6B]">
-                            {rowSubline(o)}
+                            <MarkHit text={rowSubline(o)} query={billQ} />
                             {Number(o.discount_amount ?? 0) > 0 && (
                               <span className="inline-flex shrink-0 items-center rounded bg-[#E8F5EC] px-1.5 py-px text-[10px] font-bold text-[#2E7D32]">
                                 −₹{Number(o.discount_amount).toFixed(0)} off
+                              </span>
+                            )}
+                            {/* 5.63.0 — a part-split ticket wears its ledger on
+                                the card: money in (gold) vs money still open. */}
+                            {status === 'active' && Number(paidSums.get(o.id) ?? 0) > 0 && (
+                              <span className="inline-flex shrink-0 items-center gap-1 rounded bg-[#FDF6E3] px-1.5 py-px text-[10px] font-bold tabular-nums text-[#8A5A00]">
+                                <Split size={10} aria-hidden />
+                                {formatMoney(paidSums.get(o.id) ?? 0)} in · {formatMoney(Math.max(0, Number(o.total ?? 0) - Number(paidSums.get(o.id) ?? 0)))}{' '}
+                                open
+                              </span>
+                            )}
+                            {/* 5.92.0 — an off-today ticket still open wears the day:
+                                the strip whispered "N older tickets — see Bills";
+                                the row finishes the sentence. The gold family is
+                                this app's one grammar for "needs attention". */}
+                            {status === 'active' && !isSameLocalDay(o.created_at) && (
+                              <span
+                                title="From an earlier day — still awaiting payment"
+                                className="inline-flex shrink-0 items-center gap-1 rounded bg-[#FFF4DB] px-1.5 py-px text-[10px] font-bold text-[#8A5A00]"
+                              >
+                                <History size={10} aria-hidden />
+                                older ticket
                               </span>
                             )}
                           </p>
@@ -781,7 +1007,7 @@ const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRet
                             {formatMoney(o.total)}
                           </p>
                           <p className="mt-0.5 text-[11.5px] tabular-nums text-[#969696]">
-                            {hhmm(o.created_at)}
+                            {dayTime(o.created_at)}
                           </p>
                         </div>
                       </div>
@@ -790,17 +1016,24 @@ const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRet
                 );
               })}
           {!ordersLoading && visible.length === 0 && (
-            <div role="listitem" className="flex flex-col items-center justify-center py-10 text-center">
-              <p className="text-[13.5px] font-semibold text-[#1A1A1A]">No bills match</p>
-              <p className="mt-1 text-[12.5px] text-[#6B6B6B]">
-                Try a different filter or search term.
-              </p>
-              <button
-                onClick={clearFilters}
-                className="mt-4 h-11 rounded-full border border-[#E3E7E0] bg-white px-5 text-[13px] font-semibold text-[#1A1A1A] transition hover:border-[#B88E2F]"
-              >
-                Clear filters
-              </button>
+            /* v5.121.0 — the miss says why (shared shell EmptyState): the
+             * term and the reach when a search stands, the named status
+             * and window when a filter stands; the gold way-out matches
+             * the family (Messages' "Clear filter", F&D's "Clear search"). */
+            <div role="listitem">
+              <EmptyState
+                icon={missQ ? Search : SlidersHorizontal}
+                title={missTitle}
+                body={missBody}
+                action={
+                  <button
+                    onClick={clearFilters}
+                    className="rounded-lg bg-[#F3E8CF] px-3 py-1.5 text-[12px] font-semibold text-[#1A1A1A] transition hover:bg-[#E9D9AF]"
+                  >
+                    Clear filters
+                  </button>
+                }
+              />
             </div>
           )}
         </div>
@@ -915,6 +1148,28 @@ const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRet
             </div>
           ) : (
             <>
+              {/* v5.122.0 — the orphan honesty strip. The keep-a-valid-
+                  selection effect (5.92.0) HOLDS the selected bill when a
+                  filter empties the list — the pane never strands, but
+                  until now it showed a bill the list swore wasn't there.
+                  Same amber voice as the off-today note; the way-out is
+                  the family gold. A non-empty filtered list never shows
+                  this: there the effect re-selects within the list. */}
+              {sorted.length === 0 && (
+                <div className="mb-4 flex flex-wrap items-center gap-2.5 rounded-xl bg-[#FFF4DB] px-3.5 py-2.5">
+                  <SlidersHorizontal size={14} aria-hidden className="shrink-0 text-[#8A5A00]" />
+                  <p className="min-w-0 flex-1 text-[12.5px] font-medium leading-snug text-[#8A5A00]">
+                    This bill is outside the current filter — the list on the
+                    left came up empty. The detail stays open for reference.
+                  </p>
+                  <button
+                    onClick={clearFilters}
+                    className="shrink-0 rounded-lg bg-[#F3E8CF] px-3 py-1.5 text-[12px] font-semibold text-[#1A1A1A] transition hover:bg-[#E9D9AF]"
+                  >
+                    Clear filters
+                  </button>
+                </div>
+              )}
               <div className="flex items-start justify-between gap-3">
                 <h2 className="text-[22px] font-bold text-[#1A1A1A]">
                   Order #{selected.order_number}
@@ -927,6 +1182,16 @@ const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRet
                   {STATUS_LABEL[displayStatus(selected)] || String(selected.status)}
                 </span>
               </div>
+
+              {/* 5.92.0 — the detail speaks the day too: an off-today ticket's
+                  header no longer implies tonight. Bare clock for today,
+                  "Yesterday 17:28" / "2 Oct · 17:28" otherwise. */}
+              {!isSameLocalDay(selected.created_at) && (
+                <p className="mt-1.5 flex items-center gap-1.5 text-[12px] font-medium text-[#8A5A00]">
+                  <History size={12} aria-hidden />
+                  {dayTime(selected.created_at)} — from an earlier day
+                </p>
+              )}
 
               {paidThisSession.has(selected.id) && (
                 <div aria-live="polite" className="mt-3">
@@ -1074,7 +1339,7 @@ const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRet
                         <span aria-hidden>·</span>
                         <span>{ev.actor_email || 'system'}</span>
                         <span aria-hidden>·</span>
-                        <span>{hhmm(ev.created_at)}</span>
+                        <span>{dayTime(ev.created_at)}</span>
                       </div>
                     ))}
                   </div>
@@ -1120,6 +1385,60 @@ const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRet
                   {formatMoney(selected.total)}
                 </span>
               </div>
+
+              {/* The ledger (5.63.0) — every part already recorded on this
+                  ticket, one row per payment. Gold = money; the open-balance
+                  strip wears the amber "needs attention" grammar. A covered
+                  ticket shows the same rows as its receipt's split block. */}
+              {ledger.length > 0 && (
+                <div className="mt-4 rounded-xl border border-[#E3E7E0] bg-[#FBFBF9] p-3.5">
+                  <div className="flex items-center justify-between">
+                    <h3 className="flex items-center gap-1.5 text-[13px] font-semibold text-[#1A1A1A]">
+                      <Split size={14} aria-hidden className="text-[#8A6A20]" />
+                      The ledger
+                    </h3>
+                    <span className="text-[11px] font-medium text-[#969696]">
+                      {ledger.length} {ledger.length === 1 ? 'entry' : 'entries'}
+                    </span>
+                  </div>
+                  <div className="mt-1.5 divide-y divide-[#E8E8E4]">
+                    {ledger.map((p, i) => (
+                      <div key={`${p.paidAt}-${i}`} className="flex items-center gap-2.5 py-2">
+                        <span
+                          aria-hidden
+                          className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#F3E8CF] text-[#8A6A20]"
+                        >
+                          <Check size={13} />
+                        </span>
+                        <span className="text-[12.5px] font-semibold text-[#1A1A1A]">
+                          {METHOD_LABEL[p.method as MethodKey] || capitalize(p.method || '—')}
+                        </span>
+                        {p.confirmedByEmail && (
+                          <span className="hidden truncate text-[11px] text-[#969696] sm:inline">
+                            {p.confirmedByEmail}
+                          </span>
+                        )}
+                        <span className="ml-auto text-[12.5px] font-bold tabular-nums text-[#1A1A1A]">
+                          {formatMoney(p.amount)}
+                        </span>
+                        <span className="shrink-0 text-right text-[11px] tabular-nums text-[#969696]">
+                          {dayTime(p.paidAt)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                  {!covered && paidSum > 0 && (
+                    <div className="mt-2 flex items-center justify-between rounded-lg bg-[#FDF6E3] px-3 py-2">
+                      <span className="text-[12px] font-semibold text-[#8A5A00]">
+                        Open balance — part {ledger.length + 1} settles it
+                      </span>
+                      <span className="text-[13px] font-bold tabular-nums text-[#8A5A00]">
+                        {formatMoney(balance)}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Customer receipt (Task 49) — thermal 80mm print for any live ticket */}
               {displayStatus(selected) !== 'cancelled' && (
@@ -1167,6 +1486,14 @@ const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRet
                         (selected.payment_method
                           ? METHOD_LABEL[selected.payment_method as MethodKey] || null
                           : null),
+                      /* 5.63.0 — a settled split prints one PAID line per part. */
+                      splitPayments:
+                        ledger.length > 1
+                          ? ledger.map((p) => ({
+                              label: METHOD_LABEL[p.method as MethodKey] || p.method,
+                              amount: Number(p.amount || 0),
+                            }))
+                          : null,
                       paidAt:
                         receiptMeta?.payment?.paidAt ||
                         (displayStatus(selected) === 'paid'
@@ -1192,6 +1519,50 @@ const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRet
           <div className="shrink-0 border-t border-[#E3E7E0] px-5 py-4">
             {chooserOpen ? (
               <div>
+                {/* 5.63.0 — settle in one payment or split the bill in 2/3.
+                    Options below the parts already recorded are honestly
+                    stranded (you can't plan fewer ways than money taken). */}
+                <div className="mb-2 flex items-center justify-between">
+                  <span className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-[#969696]">
+                    <Split size={13} aria-hidden />
+                    Settle in
+                  </span>
+                  {splitWays > 1 && ledger.length === 0 && (
+                    <span className="text-[11px] font-medium tabular-nums text-[#8A5A00]">
+                      {formatMoney(selectedTotal)} ÷ {splitWays} · {formatMoney(nextPartAmount)} each
+                    </span>
+                  )}
+                  {ledger.length > 0 && (
+                    <span className="text-[11px] font-medium tabular-nums text-[#8A5A00]">
+                      part {ledger.length} of {Math.max(splitWays, ledger.length + (balance > 0.005 ? 1 : 0))} in
+                      {' · '}
+                      {formatMoney(balance)} open
+                    </span>
+                  )}
+                </div>
+                <div role="radiogroup" aria-label="Ways to pay" className="mb-3 grid grid-cols-3 gap-2">
+                  {([1, 2, 3] as const).map((w) => {
+                    const stranded = balance > 0.005 && w <= ledger.length;
+                    return (
+                      <button
+                        key={w}
+                        role="radio"
+                        aria-checked={splitWays === w}
+                        disabled={mutating || stranded}
+                        onClick={() => setSplitWays(w)}
+                        className={`h-9 rounded-xl border text-[12px] font-semibold transition ${
+                          splitWays === w
+                            ? 'border-[#B88E2F] bg-[#F3E8CF] text-[#8A5A00]'
+                            : stranded
+                              ? 'cursor-not-allowed border-[#E3E7E0] bg-[#FBFBF9] text-[#C9C9C4]'
+                              : 'border-[#E3E7E0] bg-white text-[#1A1A1A] hover:border-[#B88E2F]'
+                        }`}
+                      >
+                        {w === 1 ? 'One payment' : `Split in ${w}`}
+                      </button>
+                    );
+                  })}
+                </div>
                 {methodChoices.length === 0 ? (
                   <p className="py-2 text-center text-[12.5px] text-[#6B6B6B]">
                     No payment methods are enabled in Settings.
@@ -1220,19 +1591,31 @@ const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRet
                     if (selected && chosenMethod)
                       void runMutation(
                         selected.id,
-                        // Money fields only — the kitchen status is NOT touched
-                        // (NOVA: the counter is the gate, engine advances status).
-                        { payment_status: 'completed', payment_method: chosenMethod },
-                        'pay'
+                        // The kitchen status is NOT touched (NOVA: the counter
+                        // is the gate). payment_status follows the ledger —
+                        // only the covering part completes the ticket.
+                        {
+                          payment_status: nextPartIsCovering ? 'completed' : 'pending',
+                          payment_method: chosenMethod,
+                        },
+                        'pay',
+                        nextPartAmount
                       );
                   }}
-                  disabled={!chosenMethod || mutating || methodChoices.length === 0}
+                  disabled={!chosenMethod || mutating || methodChoices.length === 0 || balance <= 0.005}
+                  aria-label={
+                    nextPartIsCovering
+                      ? `Confirm charge ${formatMoney(nextPartAmount)} by ${chosenMethod ? METHOD_LABEL[chosenMethod] : 'chosen method'}`
+                      : `Record part ${ledger.length + 1} ${formatMoney(nextPartAmount)} by ${chosenMethod ? METHOD_LABEL[chosenMethod] : 'chosen method'}`
+                  }
                   className="sp-cta mt-3 flex h-12 w-full items-center justify-center gap-2 text-[14px]"
                 >
                   {mutating && <Loader2 size={17} className="animate-spin" aria-hidden />}
                   {mutating
                     ? 'Recording payment ...'
-                    : `Confirm charge · ${chosenMethod ? METHOD_LABEL[chosenMethod] : 'choose method'}`}
+                    : nextPartIsCovering
+                      ? `Confirm charge · ${formatMoney(nextPartAmount)} · ${chosenMethod ? METHOD_LABEL[chosenMethod] : 'choose method'}`
+                      : `Record part ${ledger.length + 1} · ${formatMoney(nextPartAmount)} · ${chosenMethod ? METHOD_LABEL[chosenMethod] : 'choose method'}`}
                 </button>
                 <button
                   onClick={() => {

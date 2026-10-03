@@ -5,6 +5,7 @@ import {
   Check,
   ChefHat,
   CircleAlert,
+  CircleOff,
   Clock,
   Copy,
   HeartHandshake,
@@ -42,6 +43,7 @@ import {
   type TableSession,
 } from '../../lib/guest';
 import { GUEST_LANGS, useGuestLang } from '../../lib/guest-i18n';
+import { useDialogA11y } from '../../lib/useDialogA11y';
 
 /**
  * Guest QR surfaces (v5.3.0) — the customer side of the main flow.
@@ -490,9 +492,17 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
   const [vegOnly, setVegOnly] = useState(false);
   const [openItemId, setOpenItemId] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  /* v5.110.0 — the guest's cart holds the door too: desktop QR users get
+     Escape, a trapped Tab, and focus returned to the bar that opened it. */
+  const cartDlgRef = useDialogA11y<HTMLDivElement>(() => setDrawerOpen(false), drawerOpen && phase === 'ready');
   const [customerName, setCustomerName] = useState('');
   const [placing, setPlacing] = useState(false);
   const [placeError, setPlaceError] = useState<string | null>(null);
+  /* v5.58.0 — the stale line owns its fault. After the server bounces the
+     order with ITEM_UNAVAILABLE, cart lines whose dish vanished from the
+     fresh bundle get marked HERE — the drawer shows the badge, the guest
+     removes in one tap, the retry is clean. */
+  const [staleIds, setStaleIds] = useState<ReadonlySet<string>>(new Set());
   const [offers, setOffers] = useState<PublicOffer[]>([]);
   const [selectedOfferId, setSelectedOfferId] = useState<string | null>(() => {
     try {
@@ -609,6 +619,13 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
         }
         return [...prev, { ...l, key }];
       });
+      // a dish the guest can add is, by definition, live again — clear its mark
+      setStaleIds((prev) => {
+        if (!prev.has(l.item.id)) return prev;
+        const next = new Set(prev);
+        next.delete(l.item.id);
+        return next;
+      });
     },
     [phase],
   );
@@ -719,6 +736,21 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
       setPlaceError(res.message || t('orderFail'));
       // a stale offer (paused mid-session) drops off so the retry is clean
       if (res.error === 'OFFER_INVALID') setSelectedOfferId(null);
+      // v5.58.0 — the kitchen moved faster than this cart. Re-fetch the live
+      // bundle (available items only, server-side), mark every line whose
+      // dish vanished, and let the menu grid speak the same truth. The
+      // server's own message stays the voice of the banner; the badge below
+      // just shows WHERE the problem lives. Fail-soft: a refresh hiccup
+      // keeps the banner alone — never invents a stale mark.
+      if (res.error === 'ITEM_UNAVAILABLE' && resolved) {
+        const fresh = await fetchPublicMenu(resolved.slug).catch(() => null);
+        if (fresh?.is_valid && fresh.categories) {
+          const live = new Set<string>();
+          for (const c of fresh.categories) for (const it of c.items) live.add(it.id);
+          setStaleIds(new Set(lines.filter((l) => !live.has(l.item.id)).map((l) => l.item.id)));
+          setMenu(fresh);
+        }
+      }
       setPlacing(false);
       if (res.error === 'SESSION_CLOSED') {
         // the window died mid-checkout (staff cut or the clock) — no silent
@@ -1036,12 +1068,12 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
 
       {/* cart drawer */}
       {drawerOpen && phase === 'ready' && (
-        <div className="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label={t('yourOrder')}>
+        <div ref={cartDlgRef} className="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label={t('yourOrder')}>
           <button
             type="button"
             aria-label={t('closeCart')}
             onClick={() => setDrawerOpen(false)}
-            className="absolute inset-0 h-full w-full cursor-default bg-[#0F3D3E]/45"
+            className="absolute inset-0 h-full w-full cursor-default bg-[#0F3D3E]/45 focus-visible:outline-none"
             style={{ animation: 'spFadeIn 200ms ease-out' }}
           />
           <div
@@ -1062,26 +1094,46 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
 
             <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
               {lines.length === 0 && <p className="mt-10 text-center text-[13.5px] text-[#6B6B6B]">{t('emptyCart')}</p>}
-              {lines.map((l) => (
-                <div key={l.key} className="border-b border-[#F0F2EE] py-3 last:border-0">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="text-[14px] font-semibold text-[#1A1A1A]">
-                        {l.qty} × {l.item.name}
-                      </p>
-                      {l.variant && <p className="text-[12.5px] text-[#6B6B6B]">{l.variant.name}</p>}
-                      {l.addons.length > 0 && <p className="text-[12.5px] text-[#6B6B6B]">+ {l.addons.map((a) => a.name).join(', ')}</p>}
-                      {l.notes && <p className="mt-0.5 text-[12px] italic text-[#8A5A16]">↳ {l.notes}</p>}
-                    </div>
-                    <div className="shrink-0 text-right">
-                      <p className="text-[14px] font-bold text-[#1A1A1A]">{money(lineUnit(l) * l.qty)}</p>
-                      <button type="button" onClick={() => setLines((prev) => prev.filter((x) => x.key !== l.key))} className="mt-1 text-[11.5px] font-medium text-[#B4483C] hover:underline">
-                        {t('remove')}
-                      </button>
+              {lines.map((l) => {
+                const stale = staleIds.has(l.item.id);
+                return (
+                  <div
+                    key={l.key}
+                    className={`rounded-xl py-3 transition-colors ${
+                      stale
+                        ? 'mt-2 border border-[#F3D8D4] bg-[#FDF3F2]/70 px-3 first:mt-0'
+                        : 'border-b border-[#F0F2EE] px-0 last:border-0'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className={`text-[14px] font-semibold ${stale ? 'text-[#6B6B6B]' : 'text-[#1A1A1A]'}`}>
+                          {l.qty} × {l.item.name}
+                        </p>
+                        {stale && (
+                          <p className="mt-1 inline-flex items-center gap-1 rounded-full bg-white px-2 py-0.5 text-[10px] font-bold tracking-[0.06em] text-[#B4483C]">
+                            <CircleOff size={10} aria-hidden />
+                            {t('justSoldOut')}
+                          </p>
+                        )}
+                        {l.variant && <p className="text-[12.5px] text-[#6B6B6B]">{l.variant.name}</p>}
+                        {l.addons.length > 0 && <p className="text-[12.5px] text-[#6B6B6B]">+ {l.addons.map((a) => a.name).join(', ')}</p>}
+                        {l.notes && <p className="mt-0.5 text-[12px] italic text-[#8A5A16]">↳ {l.notes}</p>}
+                      </div>
+                      <div className="shrink-0 text-right">
+                        <p className={`text-[14px] font-bold ${stale ? 'text-[#969696]' : 'text-[#1A1A1A]'}`}>{money(lineUnit(l) * l.qty)}</p>
+                        <button
+                          type="button"
+                          onClick={() => setLines((prev) => prev.filter((x) => x.key !== l.key))}
+                          className={`mt-1 text-[11.5px] font-medium hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#967221] ${stale ? 'font-bold text-[#B4483C]' : 'text-[#B4483C]'}`}
+                        >
+                          {t('remove')}
+                        </button>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
 
               {lines.length > 0 && (
                 <div className="mt-4">

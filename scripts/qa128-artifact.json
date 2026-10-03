@@ -1,0 +1,17 @@
+{
+  "payments_a": {
+    "count": 0,
+    "error": null,
+    "rows": null
+  },
+  "customers_a": {
+    "count": 0,
+    "error": null,
+    "rows": null
+  },
+  "res_a": {
+    "count": null,
+    "error": null,
+    "rows": 0
+  }
+}

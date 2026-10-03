@@ -28,7 +28,7 @@ import { authService } from '../../lib/authService';
 import { updateTenantLegal } from '../../lib/api';
 import { dbErrorHint } from '../../lib/dbErrors';
 import { canPerformAction, getRoleMeta } from '../../lib/rbac';
-import { getPrefs, setPrefs, subscribePrefs } from '../../lib/prefs';
+import { getPrefs, inQuietWindowAt, setPrefs, subscribePrefs } from '../../lib/prefs';
 import type { SpPrefs } from '../../lib/prefs';
 import { useTenant } from '../../lib/tenant';
 import { useSession, useUi } from '../../store/session';
@@ -376,25 +376,35 @@ const ProfileSection: React.FC = () => {
 
 /* ───────────────────────── 2 · Notification ─────────────────────────── */
 
+/* 5.103.0 — the toggles learn the bell's language. The old trio
+ * (messages/orders/promotions) named no category the stream actually
+ * carries and gated nothing; these five rows are the bell's own
+ * categories (types.ts NotificationCategory), word for word. */
 const NOTIFY_ROWS: { key: keyof SpPrefs['notify']; label: string; description: string }[] = [
-  { key: 'messages', label: 'New messages', description: 'Team & personal chats' },
-  { key: 'orders', label: 'Order updates', description: 'Bills & payments' },
-  { key: 'promotions', label: 'Promotions', description: 'Offers & news' },
+  { key: 'system', label: 'System alerts', description: 'Low stock, re-order lines and house notices' },
+  { key: 'reminder', label: 'Reminders', description: 'Today’s bookings and the house clock' },
+  { key: 'message', label: 'New messages', description: 'Chat bells in the bell tray' },
+  { key: 'feedback', label: 'Guest feedback', description: 'Low ratings and guest words' },
+  { key: 'promotion', label: 'Promotions', description: 'Offers & news' },
 ];
 
 const NotificationSection: React.FC = () => {
   const [draft, setDraft] = useState<SpPrefs['notify']>(() => ({ ...getPrefs().notify }));
+  const [quiet, setQuiet] = useState<SpPrefs['quiet']>(() => ({ ...getPrefs().quiet }));
+  const quietNowDraft = inQuietWindowAt(
+    new Date().getHours() * 60 + new Date().getMinutes(),
+    quiet
+  );
 
   return (
     <div>
-      <SectionHeading title="Notification" description="Choose what ServePoint alerts you about." />
+      <SectionHeading title="Notification" description="Choose what the bell alerts you about — muted categories keep their data behind the bell." />
       <div className="mt-6 border-t border-[#E3E7E0]">
-        {NOTIFY_ROWS.map((row, i) => (
+        {NOTIFY_ROWS.map((row) => (
           <SettingRow
             key={row.key}
             label={row.label}
             description={row.description}
-            last={i === NOTIFY_ROWS.length - 1}
           >
             <SPToggle
               label={row.label}
@@ -403,8 +413,55 @@ const NotificationSection: React.FC = () => {
             />
           </SettingRow>
         ))}
+        {/* 5.101.0 — quiet hours: the owner's schedule for the ROOM'S SOUNDS.
+         * The honest seam, stated where the word is chosen: chimes fall
+         * silent, but boards and badges keep counting — silence is not
+         * hiding. Overnight windows (from > to) span midnight. */}
+        <SettingRow
+          label="Quiet hours"
+          description="Kitchen & counter chimes fall silent — boards and badges keep counting"
+        >
+          <SPToggle
+            label="Quiet hours"
+            checked={quiet.enabled}
+            onChange={(v) => setQuiet((q) => ({ ...q, enabled: v }))}
+          />
+        </SettingRow>
+        <SettingRow
+          label="Quiet window"
+          description={
+            quiet.enabled
+              ? quietNowDraft
+                ? 'Chimes are silent right now'
+                : 'Chimes would ring right now'
+              : 'Turn quiet hours on to set the window'
+          }
+          last
+        >
+          <div className="flex items-center gap-2">
+            <input
+              type="time"
+              value={quiet.from}
+              disabled={!quiet.enabled}
+              onChange={(e) => setQuiet((q) => ({ ...q, from: e.target.value }))}
+              aria-label="Quiet hours start"
+              className="sp-input h-9 w-[104px] px-2 text-center text-[12.5px] font-semibold tabular-nums disabled:cursor-not-allowed disabled:opacity-50"
+            />
+            <span className="text-[12px] font-semibold text-[#969696]" aria-hidden>
+              →
+            </span>
+            <input
+              type="time"
+              value={quiet.to}
+              disabled={!quiet.enabled}
+              onChange={(e) => setQuiet((q) => ({ ...q, to: e.target.value }))}
+              aria-label="Quiet hours end"
+              className="sp-input h-9 w-[104px] px-2 text-center text-[12.5px] font-semibold tabular-nums disabled:cursor-not-allowed disabled:opacity-50"
+            />
+          </div>
+        </SettingRow>
       </div>
-      <SectionSave onPersist={() => setPrefs({ notify: draft })} />
+      <SectionSave onPersist={() => setPrefs({ notify: draft, quiet })} />
     </div>
   );
 };
@@ -725,7 +782,11 @@ const LanguageRegionSection: React.FC = () => {
             options={[{ value: 'English', label: 'English' }]}
           />
         </SettingRow>
-        <SettingRow label="Timezone" description="Timestamps in reports and shifts" last>
+        <SettingRow
+          label="Timezone"
+          description="Reports, Close-out and shift clocks follow this timezone — bills and kitchen boards read the device's own clock"
+          last
+        >
           <SPSelect
             label="Timezone"
             value={timezone}

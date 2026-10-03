@@ -1,13 +1,16 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  ArrowDown,
   ArrowLeft,
   Loader2,
   MessagesSquare,
   RefreshCw,
+  Search,
   Send,
   Users,
   Wifi,
   WifiOff,
+  X,
 } from 'lucide-react';
 import {
   fetchConversationUnreadCounts,
@@ -29,7 +32,9 @@ import {
 import { dbErrorHint } from '../../lib/dbErrors';
 import { timeAgo } from '../../lib/prefs';
 import { useSession, useUi } from '../../store/session';
+import { useChatUnread } from '../../store/chatUnread';
 import { useTenant } from '../../lib/tenant';
+import { MarkHit } from '../shell/MarkHit';
 import type { ChatMessage, Conversation } from '../../types';
 
 /**
@@ -55,6 +60,25 @@ import type { ChatMessage, Conversation } from '../../types';
  * definition, read), and the thread renders the round's namesake: a gold
  * "Unread messages" rule at the boundary captured when the room opened —
  * where caught-up ended and the fresh chatter began.
+ *
+ * v5.112.0 — the line stays where you left it: autoscroll only when the
+ * reader already sits at the bottom (the 30s poll used to yank readers
+ * down even with nothing new); drafts are PER ROOM (one shared draft
+ * survived switches and could post to the wrong room — caught live); a
+ * gold jump pill counts the lines that arrived while you read history and
+ * walks you down on click (RM-respecting); the composer grows to 112px;
+ * same-sender runs within three minutes cluster tight with the repeated
+ * name dropped; every bubble's clock wears a full "day at time" tooltip.
+ *
+ * v5.115.0 — the rooms learn a ledger line: a filter box for the rooms list
+ * (substring against the room's name AND its last-line preview, case-
+ * insensitive) plus an "unread only" chip for the busy-hour sweep. Client-
+ * side by construction — the list is already in memory; full-history search
+ * would be a different, heavier promise and is NOT claimed here (the empty
+ * state says so). "/" focuses the filter from anywhere on the screen that
+ * isn't already a field; Esc clears; matches paint gold in the name. A
+ * room filtered out of the list does NOT change what you are reading — the
+ * thread pane keeps its room.
  */
 
 const AVATAR_TONES = [
@@ -64,6 +88,10 @@ const AVATAR_TONES = [
   'bg-[#F3E8CF] text-[#967221]', // gold wash
   'bg-[#FCEBEA] text-[#B3261E]', // rose wash
 ];
+
+/* v5.115.0 — the rooms list's gold glint (Mark). v5.120.0 — the component
+ * moved to src/components/shell/MarkHit.tsx (one truth for every search
+ * surface); this file imports it as MarkHit. */
 
 const avatarTone = (name: string): string => {
   let h = 0;
@@ -84,6 +112,29 @@ const dayLabel = (iso: string): string => {
 
 const clockLabel = (iso: string): string =>
   new Date(iso).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit', hour12: true });
+
+/* v5.112.0 — the full stamp for the bubble tooltip: the clock alone can't
+ * say which day a line landed on; a hover that says "Today at 4:47 pm"
+ * answers it without reading the dividers. */
+const fullStamp = (iso: string): string => {
+  const d = new Date(iso);
+  const today = new Date();
+  const yesterday = new Date();
+  yesterday.setDate(today.getDate() - 1);
+  const day =
+    d.toDateString() === today.toDateString()
+      ? 'Today'
+      : d.toDateString() === yesterday.toDateString()
+        ? 'Yesterday'
+        : d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+  return `${day} at ${clockLabel(iso)}`;
+};
+
+/* v5.112.0 — the cluster rule: consecutive lines from the same sender within
+ * three minutes read as ONE utterance, so they render tight (4px) and the
+ * repeated name drops after the first. A gap of three minutes or a sender
+ * change breaks the run — chat-shaped honesty, not a wall of floats. */
+const CLUSTER_MS = 3 * 60_000;
 
 /* ── Skeletons ───────────────────────────────────────────────────────── */
 
@@ -138,9 +189,21 @@ const UnreadDivider: React.FC = () => (
 );
 
 /* ── Message bubble ──────────────────────────────────────────────────── */
-const Bubble: React.FC<{ m: ChatMessage; mine: boolean }> = ({ m, mine }) => (
-  <div className={`flex flex-col ${mine ? 'items-end' : 'items-start'}`}>
-    {!mine && <span className="mb-0.5 px-1 text-[11px] font-semibold text-[#0F3D3E]/70">{m.sender_name}</span>}
+/* v5.112.0 — `tight` clusters same-sender runs (negative margin eats the
+ * row gap down to ~4px); `showSender` drops the repeated name inside a
+ * run. The first line of a run renders exactly as before. */
+const Bubble: React.FC<{ m: ChatMessage; mine: boolean; tight?: boolean; showSender?: boolean }> = ({
+  m,
+  mine,
+  tight = false,
+  showSender = true,
+}) => (
+  <div
+    className={`flex flex-col ${mine ? 'items-end' : 'items-start'} ${tight ? '-mt-2' : ''}`}
+  >
+    {!mine && showSender && (
+      <span className="mb-0.5 px-1 text-[11px] font-semibold text-[#0F3D3E]/70">{m.sender_name}</span>
+    )}
     <div
       className={`max-w-[85%] rounded-2xl px-3.5 py-2.5 sm:max-w-[70%] ${
         mine
@@ -149,7 +212,10 @@ const Bubble: React.FC<{ m: ChatMessage; mine: boolean }> = ({ m, mine }) => (
       }`}
     >
       <p className="whitespace-pre-wrap break-words text-[13.5px] leading-relaxed">{m.body}</p>
-      <p className={`mt-1 text-right text-[10.5px] tabular-nums ${mine ? 'text-white/60' : 'text-[#969696]'}`}>
+      <p
+        title={fullStamp(m.created_at)}
+        className={`mt-1 text-right text-[10.5px] tabular-nums ${mine ? 'text-white/60' : 'text-[#969696]'}`}
+      >
         {clockLabel(m.created_at)}
       </p>
     </div>
@@ -276,7 +342,12 @@ const MessagesContent: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetr
   const [listLoading, setListLoading] = useState(true);
   const [threadLoading, setThreadLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [draft, setDraft] = useState('');
+  /* v5.112.0 — drafts are PER ROOM: a half-typed line belongs to the room it
+   * was typed for. One shared draft state survived room switches, so "table 4
+   * needs water" begun in Front of House could land in Kitchen on the next
+   * Enter (verified live before the fix — the leak was real). Switching back
+   * to a room restores its draft; sending clears only that room's. */
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
   const [rt, setRt] = useState<RealtimeState>('connecting');
@@ -285,7 +356,35 @@ const MessagesContent: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetr
   const [watermarks, setWatermarks] = useState<Record<string, string>>({});
   const [wmLoaded, setWmLoaded] = useState(false);
   const [boundary, setBoundary] = useState<{ id: string; iso: string } | null>(null);
+  /* v5.115.0 — the rooms filter: a ledger line for busy hours. Purely
+   * client-side (the list is already in memory); filters names and last-
+   * line previews, optionally unread-only. Never touches activeId — what
+   * you are reading is not changed by what the list hides.
+   *
+   * v5.118.0 — the filter stops being a private box: it now reads and
+   * writes the same useUi.search the header box speaks (two doors, one
+   * state — typing in either moves both live), and the screen registers
+   * its vocabulary with the shell so the header box exists here too.
+   * The local " / " handler retires with the move: the verb moved to the
+   * shell (Header), which owns it once for every screen. */
+  const roomQuery = useUi((s) => s.search);
+  const setRoomQuery = useUi((s) => s.setSearch);
+  const [unreadOnly, setUnreadOnly] = useState(false);
+  const roomFilterRef = useRef<HTMLInputElement | null>(null);
+  useEffect(() => {
+    useUi.getState().setSearchMeta({ placeholder: 'Filter rooms…' });
+    return () => useUi.getState().setSearchMeta(null);
+  }, []);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  /* v5.112.0 — stick-to-bottom honesty: the old effect pinned scrollTop to
+   * scrollHeight on EVERY thread refetch, so the 30s poll yanked a reader
+   * back to the bottom even with nothing new on the wire. Autoscroll now
+   * happens only when the reader already sits at the bottom (±80px); else
+   * the miss is counted and the gold jump pill offers the way down. */
+  const stickRef = useRef(true);
+  const lastLenRef = useRef(0);
+  const [newBelow, setNewBelow] = useState(0);
+  const taRef = useRef<HTMLTextAreaElement | null>(null);
   /* v5.45.0 — the typing line: who is answering RIGHT NOW (6s display
    * window, never me). The heartbeat ref throttles my own announces to
    * one upsert per 2.5s of continuous typing; a stale row simply falls
@@ -302,6 +401,41 @@ const MessagesContent: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetr
   const active = useMemo(
     () => conversations.find((cv) => cv.id === activeId) || null,
     [conversations, activeId]
+  );
+
+  /* v5.115.0 — the visible slice of the rooms list, under the filter. */
+  const q = roomQuery.trim().toLowerCase();
+  const visibleRooms = useMemo(() => {
+    if (!q && !unreadOnly) return conversations;
+    return conversations.filter((cv) => {
+      if (unreadOnly && !(unread[cv.id] > 0)) return false;
+      if (!q) return true;
+      return (
+        cv.name.toLowerCase().includes(q) ||
+        (cv.last_message ?? '').toLowerCase().includes(q)
+      );
+    });
+  }, [conversations, q, unreadOnly, unread]);
+  const unreadRoomCount = useMemo(
+    () => conversations.reduce((n, cv) => n + (unread[cv.id] > 0 ? 1 : 0), 0),
+    [conversations, unread]
+  );
+
+  /* v5.115.0 — "/" walked focus to the rooms filter from anywhere on the
+   * screen that wasn't already a field. v5.118.0 — the handler retires:
+   * the verb moved to the shell (Header), which focuses the header box —
+   * now the SAME state through the other door — once for every screen
+   * that claims it. Two handlers on one key would race; one owner is
+   * the honest shape. */
+
+  /* v5.112.0 — the per-room draft: this room's half-typed line, or empty. */
+  const draft = activeId ? (drafts[activeId] ?? '') : '';
+  const setDraft = useCallback(
+    (v: string) => {
+      if (!activeId) return;
+      setDrafts((d) => ({ ...d, [activeId]: v }));
+    },
+    [activeId]
   );
 
   /* v5.43.0 — the unread counts ride every rooms refresh (realtime ping,
@@ -372,6 +506,9 @@ const MessagesContent: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetr
       if (myEmail && tenant.tenantId) {
         try {
           await markConversationRead(activeId, tenant.tenantId, myEmail);
+          /* v5.108.0 — the watermark just moved: the rail's Messages badge
+           * recounts NOW instead of waiting for its poll/realtime cycle. */
+          useChatUnread.getState().nudge();
         } catch {
           /* watermark is a courtesy — the next refresh retells it */
         }
@@ -416,10 +553,27 @@ const MessagesContent: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetr
     };
   }, [tenant.tenantId, loadList, loadThread, loadPeople]);
 
-  /* keep the newest line in view */
+  /* room switch (v5.112.0): the new room lands at its bottom, pill-free —
+   * never inherit the previous room's scroll stance or unread count. */
+  useEffect(() => {
+    stickRef.current = true;
+    lastLenRef.current = 0;
+    setNewBelow(0);
+  }, [activeId]);
+
+  /* v5.112.0 — the honest autoscroll: bottom only when already there; a
+   * refetch with identical content scrolls NOTHING (the old code yanked on
+   * every poll). New lines while reading history feed the jump pill. */
   useEffect(() => {
     const el = scrollRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
+    if (!el) return;
+    const added = Math.max(0, thread.length - lastLenRef.current);
+    lastLenRef.current = thread.length;
+    if (stickRef.current) {
+      el.scrollTop = el.scrollHeight;
+    } else if (added > 0) {
+      setNewBelow((n) => n + added);
+    }
   }, [thread]);
 
   /* v5.43.0 — the unread line's boundary: MY WATERMARK AS IT STOOD when the
@@ -497,7 +651,11 @@ const MessagesContent: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetr
     setSendError(null);
     try {
       await sendMessage(activeId, tenant.tenantId, myName, body);
-      setDraft('');
+      setDrafts((d) => {
+        const next = { ...d };
+        delete next[activeId];
+        return next;
+      });
       retractTyping();
       await loadThread();
       void loadList();
@@ -507,6 +665,42 @@ const MessagesContent: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetr
       setSending(false);
     }
   };
+
+  /* v5.112.0 — the scroll ledger: near-bottom (±80px) = sticking; leaving
+   * the bottom arms the pill, returning to it disarms. */
+  const onThreadScroll = () => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const near = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+    stickRef.current = near;
+    if (near && newBelow) setNewBelow(0);
+  };
+
+  /* the pill's click: down to the freshest line. Smooth, unless the OS
+   * prefers reduced motion — then instant (functional movement, but the
+   * traveler asked for stillness). */
+  const jumpToLatest = () => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    el.scrollTo({ top: el.scrollHeight, behavior: reduced ? 'auto' : 'smooth' });
+    stickRef.current = true;
+    setNewBelow(0);
+  };
+
+  /* v5.112.0 — the composer grows with its line (capped at max-h-28's
+   * 112px); the effect also re-fits on room switch when a restored draft
+   * is taller than the resting input. */
+  const growComposer = useCallback(() => {
+    const el = taRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${Math.min(el.scrollHeight, 112)}px`;
+  }, []);
+
+  useEffect(() => {
+    growComposer();
+  }, [draft, growComposer]);
 
   if (tenant.loading) {
     return (
@@ -580,6 +774,76 @@ const MessagesContent: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetr
             {team && presence && (
               <LineStrip team={team} presence={presence} myEmail={myEmail} myName={myName} />
             )}
+            {/* v5.115.0 — the rooms filter: a ledger line for busy hours.
+                Rendered only once rooms exist; the empty-list state below
+                keeps its own voice. */}
+            {!listLoading && conversations.length > 0 && (
+              <div className="mt-2.5 flex items-center gap-1.5">
+                <div className="relative min-w-0 flex-1">
+                  <Search
+                    size={14}
+                    aria-hidden
+                    className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#969696]"
+                  />
+                  <input
+                    ref={roomFilterRef}
+                    type="search"
+                    value={roomQuery}
+                    onChange={(e) => setRoomQuery(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Escape') {
+                        setRoomQuery('');
+                        e.currentTarget.blur();
+                      }
+                    }}
+                    placeholder="Filter rooms…"
+                    aria-label="Filter rooms"
+                    title="Filter by room name or last line — the header box shares this filter; Esc clears"
+                    className="h-9 w-full rounded-xl border border-[#E3E7E0] bg-[#F6F5F2] pl-9 pr-8 text-[12.5px] text-[#1A1A1A] outline-none transition placeholder:text-[#969696] focus:border-[#B88E2F] focus:bg-white focus:ring-2 focus:ring-[#B88E2F]/25 [&::-webkit-search-cancel-button]:hidden"
+                  />
+                  {roomQuery && (
+                    <button
+                      onClick={() => {
+                        setRoomQuery('');
+                        roomFilterRef.current?.focus();
+                      }}
+                      aria-label="Clear room filter"
+                      title="Clear"
+                      className="absolute right-1.5 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-lg text-[#6B6B6B] transition hover:bg-[#E3E7E0]"
+                    >
+                      <X size={13} aria-hidden />
+                    </button>
+                  )}
+                </div>
+                <button
+                  onClick={() => setUnreadOnly((v) => !v)}
+                  aria-pressed={unreadOnly}
+                  title="Show only rooms with unread lines"
+                  className={`flex h-9 shrink-0 items-center gap-1 rounded-xl border px-2.5 text-[11.5px] font-semibold transition ${
+                    unreadOnly
+                      ? 'border-[#B88E2F] bg-[#FBF7EE] text-[#8A5A00]'
+                      : 'border-[#E3E7E0] bg-white text-[#6B6B6B] hover:border-[#D8DCD4] hover:text-[#1A1A1A]'
+                  }`}
+                >
+                  Unread
+                  <span
+                    aria-hidden
+                    className={`flex h-4.5 min-w-[18px] items-center justify-center rounded-full px-1 text-[10px] font-bold tabular-nums ${
+                      unreadRoomCount > 0
+                        ? 'bg-[#B88E2F] text-white'
+                        : 'bg-[#F6F5F2] text-[#969696]'
+                    }`}
+                  >
+                    {unreadRoomCount}
+                  </span>
+                </button>
+              </div>
+            )}
+            {(q || unreadOnly) && conversations.length > 0 && (
+              <p aria-live="polite" className="sr-only">
+                {visibleRooms.length} of {conversations.length} rooms shown
+              </p>
+            )}
             {listLoading ? (
               <ListSkeleton />
             ) : conversations.length === 0 ? (
@@ -591,9 +855,33 @@ const MessagesContent: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetr
                   No rooms yet — the house seeds them when the workspace is provisioned.
                 </p>
               </div>
+            ) : visibleRooms.length === 0 ? (
+              /* v5.115.0 — the filter came up empty; distinguish it from the
+                  no-rooms-yet voice and own what the filter does NOT do
+                  (full-history search). */
+              <div className="flex flex-1 flex-col items-center justify-center py-10 text-center">
+                <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#EAF0EC] text-[#0F3D3E]">
+                  <Search size={22} aria-hidden />
+                </span>
+                <p className="mt-3 max-w-[240px] text-[12.5px] leading-relaxed text-[#6B6B6B]">
+                  {unreadOnly && !q
+                    ? 'No unread lines — the house is quiet.'
+                    : `No room matches “${roomQuery.trim()}” — filters names and last lines, not the whole history.`}
+                </p>
+                <button
+                  onClick={() => {
+                    setRoomQuery('');
+                    setUnreadOnly(false);
+                    roomFilterRef.current?.focus();
+                  }}
+                  className="mt-3 rounded-lg bg-[#F3E8CF] px-3 py-1.5 text-[12px] font-semibold text-[#1A1A1A] transition hover:bg-[#E9D9AF]"
+                >
+                  Clear filter
+                </button>
+              </div>
             ) : (
               <ul className="min-h-0 flex-1 space-y-1.5 overflow-y-auto">
-                {conversations.map((cv) => {
+                {visibleRooms.map((cv) => {
                   const isActive = cv.id === activeId;
                   const nUnread = unread[cv.id] || 0;
                   return (
@@ -631,7 +919,7 @@ const MessagesContent: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetr
                           <span className="min-w-0 flex-1">
                             <span className="flex items-baseline justify-between gap-2">
                               <span className={`truncate text-[13.5px] text-[#1A1A1A] ${nUnread ? 'font-bold' : 'font-semibold'}`}>
-                                {cv.name}
+                                <MarkHit text={cv.name} query={q} />
                               </span>
                               {cv.last_message_at && (
                                 <span className="shrink-0 text-[10.5px] tabular-nums text-[#969696]">
@@ -694,7 +982,12 @@ const MessagesContent: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetr
                   </div>
                 </header>
 
-                <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto px-4 py-4" aria-live="polite">
+                <div
+                  ref={scrollRef}
+                  onScroll={onThreadScroll}
+                  className="min-h-0 flex-1 overflow-y-auto px-4 py-4"
+                  aria-live="polite"
+                >
                   {threadLoading && thread.length === 0 ? (
                     <ThreadSkeleton />
                   ) : thread.length === 0 ? (
@@ -716,12 +1009,26 @@ const MessagesContent: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetr
                             <span className="text-[11px] font-semibold text-[#969696]">{g.label}</span>
                             <span className="h-px flex-1 bg-[#E3E7E0]" aria-hidden />
                           </div>
-                          {g.items.map((m) => (
-                            <React.Fragment key={m.id}>
-                              {m.id === boundaryId && <UnreadDivider />}
-                              <Bubble m={m} mine={m.sender_name === myName} />
-                            </React.Fragment>
-                          ))}
+                          {g.items.map((m, i) => {
+                            const mine = m.sender_name === myName;
+                            const prev = i > 0 ? g.items[i - 1] : null;
+                            /* a run never crosses the unread divider — the
+                             * boundary line always renders full-height with
+                             * its name, however close the timestamps sit */
+                            const tight =
+                              !!prev &&
+                              !mine &&
+                              prev.sender_name === m.sender_name &&
+                              new Date(m.created_at).getTime() - new Date(prev.created_at).getTime() <
+                                CLUSTER_MS &&
+                              m.id !== boundaryId;
+                            return (
+                              <React.Fragment key={m.id}>
+                                {m.id === boundaryId && <UnreadDivider />}
+                                <Bubble m={m} mine={mine} tight={tight} showSender={!tight} />
+                              </React.Fragment>
+                            );
+                          })}
                         </div>
                       ))}
                     </div>
@@ -730,17 +1037,31 @@ const MessagesContent: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetr
 
                 {/* Composer — with the typing slot above the input (fixed
                     h-6: the announce never shifts the input under you). */}
-                <div className="border-t border-[#E3E7E0] bg-white px-4 py-3">
+                <div className="relative border-t border-[#E3E7E0] bg-white px-4 py-3">
                   {sendError && (
                     <p className="mb-2 break-words rounded-xl border border-[#F5C6C0] bg-[#FEF2F2] px-3 py-2 text-[12px] text-[#B42318]" role="alert">
                       Couldn't send: {sendError}
                     </p>
+                  )}
+                  {/* v5.112.0 — the jump pill: N fresh lines arrived while you
+                      were reading history; gold, counting, one click from
+                      the bottom. Disarms itself the moment you're back. */}
+                  {newBelow > 0 && (
+                    <button
+                      onClick={jumpToLatest}
+                      aria-label={`Jump to ${newBelow} new ${newBelow === 1 ? 'message' : 'messages'}`}
+                      className="absolute -top-9 right-4 z-10 flex h-8 items-center gap-1.5 rounded-full bg-[#B88E2F] px-3.5 text-[12px] font-bold text-white shadow-[0_8px_20px_rgba(15,61,62,0.25)] transition-colors hover:bg-[#A07D28]"
+                    >
+                      {newBelow} new {newBelow === 1 ? 'line' : 'lines'}
+                      <ArrowDown size={13} aria-hidden />
+                    </button>
                   )}
                   <div className="min-h-[24px]">
                     {typingNames.length > 0 && <TypingRow names={typingNames} />}
                   </div>
                   <div className="flex items-end gap-2">
                     <textarea
+                      ref={taRef}
                       value={draft}
                       onChange={(e) => {
                         setDraft(e.target.value);

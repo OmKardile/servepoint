@@ -9,10 +9,13 @@ import {
   Coins,
   Flame,
   Heart,
+  History,
   Inbox,
+  Info,
   PackageMinus,
   ReceiptText,
   ShoppingBag,
+  Split,
   Star,
   TrendingDown,
   TrendingUp,
@@ -20,6 +23,8 @@ import {
   Wallet,
 } from 'lucide-react';
 import {
+  Bar,
+  BarChart,
   CartesianGrid,
   Cell,
   Line,
@@ -31,8 +36,9 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { fetchDashboard, fetchFeedbackStats, fetchInventory, fetchMenuItems, fetchOrders, fetchTodayCostMargin, type FeedbackStats, type InventoryItem, type TodayCostMargin } from '../../lib/api';
+import { fetchDashboard, fetchFeedbackStats, fetchInventory, fetchMenuItems, fetchOpenPaymentSums, fetchOrders, fetchReservations, fetchTables, fetchTodayCostMargin, type DiningTable, type FeedbackStats, type InventoryItem, type Reservation, type TodayCostMargin } from '../../lib/api';
 import { formatMoney } from '../../lib/prefs';
+import { isSameLocalDay } from '../../lib/day';
 import { useTenant } from '../../lib/tenant';
 import { useUi } from '../../store/session';
 import { DoorChip } from '../shell/DoorChip';
@@ -140,30 +146,16 @@ const CardHead: React.FC<{
   </div>
 );
 
-const LegendDots: React.FC = () => (
+const LegendDots: React.FC<{ items?: { color: string; label: string }[] }> = ({
+  items = SERIES.map((s) => ({ color: s.color, label: s.label })),
+}) => (
   <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-1.5">
-    {SERIES.map((s) => (
-      <span key={s.key} className="flex items-center gap-2 text-[12px] text-[#6B6B6B]">
+    {items.map((s) => (
+      <span key={s.label} className="flex items-center gap-2 text-[12px] text-[#6B6B6B]">
         <span aria-hidden className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: s.color }} />
         {s.label}
       </span>
     ))}
-  </div>
-);
-
-/** Honest 7-day view: the dashboard contract exposes today-scoped aggregates only. */
-const WeekNote: React.FC<{ className?: string }> = ({ className = '' }) => (
-  <div className={`flex flex-col items-center justify-center gap-2 text-center ${className}`}>
-    <span
-      className="flex h-14 w-14 items-center justify-center rounded-full bg-[#D9E2DD] text-[#0F3D3E]"
-      aria-hidden
-    >
-      <CalendarClock size={22} />
-    </span>
-    <p className="text-[13.5px] font-semibold text-[#1A1A1A]">No 7-day breakdown yet</p>
-    <p className="max-w-[260px] text-[12px] leading-relaxed text-[#6B6B6B]">
-      This card is recorded for today&apos;s service. Switch back to Today to see current numbers.
-    </p>
   </div>
 );
 
@@ -228,11 +220,79 @@ const TotalRevenueCard: React.FC<{ data: DashboardData }> = ({ data }) => {
   const ariaLabel = `Revenue by order type today: ${data.revenueByType
     .map((seg) => `${seg.name} ${formatMoney(seg.value)}`)
     .join(', ')}`;
+  /* v5.113.0 — the week view's summary: the seven days' total and the best
+   * day, derived in render from the same buckets the chart reads. */
+  const weekTotal = data.weeklyRevenue.reduce((s, d) => s + d.total, 0);
+  const bestDay = data.weeklyRevenue.reduce(
+    (best, d) => (d.total > best.total ? d : best),
+    data.weeklyRevenue[0]
+  );
+  const weekAria = `Bar chart of daily revenue for the past seven days; total ${formatMoney(
+    weekTotal
+  )}${bestDay && bestDay.total > 0 ? `; best day ${bestDay.full} at ${formatMoney(bestDay.total)}` : ''}`;
   return (
     <section className="sp-card p-5" aria-label="Total Revenue">
       <CardHead title="Total Revenue" selectId="revenue-range" range={range} onRange={setRange} />
       {range === 'week' ? (
-        <WeekNote className="mt-3 h-[200px]" />
+        <>
+          <div className="mt-2 h-[176px] w-full" role="img" aria-label={weekAria}>
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={data.weeklyRevenue} margin={{ top: 8, right: 8, bottom: 0, left: -14 }}>
+                <CartesianGrid stroke="#E3E7E0" strokeDasharray="5 6" vertical={false} />
+                <XAxis
+                  dataKey="label"
+                  axisLine={false}
+                  tickLine={false}
+                  tickMargin={10}
+                  tick={{ fill: '#969696', fontSize: 12 }}
+                />
+                <YAxis
+                  axisLine={false}
+                  tickLine={false}
+                  width={44}
+                  tick={{ fill: '#969696', fontSize: 12 }}
+                  tickFormatter={compactTick}
+                />
+                <Tooltip
+                  cursor={{ fill: 'rgba(15, 61, 62, 0.06)' }}
+                  contentStyle={TOOLTIP_STYLE}
+                  labelStyle={{ color: '#6B6B6B', marginBottom: 4 }}
+                  labelFormatter={(_, payload) =>
+                    (payload?.[0]?.payload as { full?: string } | undefined)?.full ?? 'This week'
+                  }
+                  formatter={(value) => formatMoney(Number(value))}
+                />
+                <Bar dataKey="total" name="Revenue" radius={[4, 4, 0, 0]} maxBarSize={34}>
+                  {data.weeklyRevenue.map((d, i) => (
+                    <Cell
+                      key={d.label}
+                      fill={i === data.weeklyRevenue.length - 1 ? '#B88E2F' : '#0F3D3E'}
+                    />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+          {/* The week reads like the pie does: total up front, the legend
+              row answering what the eyes just saw — gold today, teal before. */}
+          <div className="mt-2 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+            <p className="text-[13px] text-[#6B6B6B]">
+              7 days · <span className="font-bold tabular-nums text-[#1A1A1A]">{formatMoney(weekTotal)}</span>
+            </p>
+            {bestDay && bestDay.total > 0 && (
+              <p className="text-[12px] text-[#969696]">
+                Best day · <span className="font-semibold text-[#1A1A1A]">{bestDay.full}</span> ·{' '}
+                {formatMoney(bestDay.total)}
+              </p>
+            )}
+          </div>
+          <LegendDots
+            items={[
+              { color: '#B88E2F', label: 'Today' },
+              { color: '#0F3D3E', label: 'Earlier days' },
+            ]}
+          />
+        </>
       ) : (
         <>
           <div className="relative mt-2 h-[176px] w-full" role="img" aria-label={ariaLabel}>
@@ -453,47 +513,58 @@ const GuestLoveCard: React.FC<{ s: FeedbackStats }> = ({ s }) => {
   );
 };
 
-const BestEmployeesCard: React.FC<{ data: DashboardData }> = ({ data }) => {
-  const [range, setRange] = useState<Range>('today');
-  return (
-    <section className="sp-card p-5" aria-label="Best Employees">
-      <CardHead title="Best Employees" selectId="employees-range" range={range} onRange={setRange} />
-      {range === 'week' ? (
-        <WeekNote className="mt-6 min-h-[240px]" />
+/* 5.99.0 — the team card tells the truth. It used to be "Best Employees"
+ * with a Sales column whose numbers were revenue × hardcoded percentages
+ * (fabricated — orders record no staff attribution). It now shows what the
+ * workspace actually knows: real members, real roles, real tenure — and the
+ * caption says out loud why there is no sales column. The old Today/Week
+ * selector is gone with it: a roster has no time axis, and the Week view was
+ * the WeekNote stub anyway. */
+const TeamCard: React.FC<{ data: DashboardData }> = ({ data }) => (
+  <section className="sp-card p-5" aria-label="Team">
+    <h2 className="text-[15px] font-semibold text-[#1A1A1A]">Team</h2>
+    <ul className="mt-3 divide-y divide-[#EDEFEA]">
+      {data.team.length === 0 ? (
+        <ListEmptyRow message="No team members yet. Add staff from the platform console." />
       ) : (
-        <>
-          <div className="mt-4 flex items-center justify-between border-b border-[#E3E7E0] pb-2 text-[12px] font-medium text-[#969696]">
-            <span>Employees</span>
-            <span>Sales</span>
-          </div>
-          <ul className="divide-y divide-[#EDEFEA]">
-            {data.bestEmployees.length === 0 ? (
-              <ListEmptyRow message="No employee sales recorded yet today." />
-            ) : (
-              data.bestEmployees.map((emp) => (
-                <li key={`${emp.name}-${emp.role}`} className="flex items-center gap-3 py-2.5">
-                  <span
-                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#D9E2DD] text-[13px] font-semibold text-[#0F3D3E]"
-                    aria-hidden
-                  >
-                    {initialsOf(emp.name)}
+        data.team.map((m) => {
+          const isOwner = m.role === 'Owner';
+          return (
+            <li key={`${m.name}-${m.role}`} className="flex items-center gap-3 py-2.5">
+              <span
+                className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[13px] font-semibold ${
+                  isOwner
+                    ? 'border border-[#B88E2F]/60 bg-[#F7F1E1] text-[#7A5B18]'
+                    : 'bg-[#D9E2DD] text-[#0F3D3E]'
+                }`}
+                aria-hidden
+              >
+                {initialsOf(m.name)}
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-[13.5px] font-semibold text-[#1A1A1A]">{m.name}</p>
+                {isOwner ? (
+                  <span className="mt-0.5 inline-flex items-center rounded-full bg-[#F7F1E1] px-2 py-0.5 text-[10.5px] font-bold uppercase tracking-wide text-[#7A5B18]">
+                    Owner
                   </span>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-[13.5px] font-semibold text-[#1A1A1A]">{emp.name}</p>
-                    <p className="truncate text-[12px] text-[#969696]">{emp.role}</p>
-                  </div>
-                  <span className="text-[13.5px] font-semibold text-[#1A1A1A]">
-                    {formatMoney(emp.sales)}
-                  </span>
-                </li>
-              ))
-            )}
-          </ul>
-        </>
+                ) : (
+                  <p className="truncate text-[12px] text-[#969696]">{m.role}</p>
+                )}
+              </div>
+              <span className="shrink-0 text-[12px] font-medium tabular-nums text-[#969696]">
+                {m.since ? `Since ${m.since}` : 'Member'}
+              </span>
+            </li>
+          );
+        })
       )}
-    </section>
-  );
-};
+    </ul>
+    <p className="mt-3 flex items-start gap-1.5 border-t border-[#E3E7E0] pt-3 text-[11.5px] leading-relaxed text-[#6B6B6B]">
+      <Info size={13} className="mt-0.5 shrink-0 text-[#969696]" aria-hidden />
+      <span>Per-staff sales isn&apos;t tracked yet — tickets don&apos;t record who took them.</span>
+    </p>
+  </section>
+);
 
 const DishThumb: React.FC<{ name: string; src?: string | null }> = ({ name, src }) => {
   const [broken, setBroken] = useState(false);
@@ -521,39 +592,58 @@ const DishThumb: React.FC<{ name: string; src?: string | null }> = ({ name, src 
 
 const TrendingDishesCard: React.FC<{ data: DashboardData }> = ({ data }) => {
   const [range, setRange] = useState<Range>('today');
+  /* v5.113.0 — one list, two windows: the week slice has the same row
+   * shape, so the card renders either with one grammar; the footer counts
+   * the week's plates out loud so the header's claim checks out. */
+  const items = range === 'week' ? data.weeklyTrending : data.trendingDishes;
+  const emptyMessage =
+    range === 'week'
+      ? 'No dish sales recorded in the past 7 days.'
+      : 'No dish sales recorded yet today.';
+  const weekPlates = data.weeklyTrending.reduce((s, d) => s + d.orders, 0);
   return (
     <section className="sp-card p-5" aria-label="Trending Dishes">
       <CardHead title="Trending Dishes" selectId="dishes-range" range={range} onRange={setRange} />
-      {range === 'week' ? (
-        <WeekNote className="mt-6 min-h-[240px]" />
-      ) : (
-        <>
-          <div className="mt-4 flex items-center justify-between border-b border-[#E3E7E0] pb-2 text-[12px] font-medium text-[#969696]">
-            <span>Dishes</span>
-            <span>Orders</span>
-          </div>
-          <ul className="divide-y divide-[#EDEFEA]">
-            {data.trendingDishes.length === 0 ? (
-              <ListEmptyRow message="No dish sales recorded yet today." />
-            ) : (
-              data.trendingDishes.map((dish) => (
-                <li key={dish.name} className="flex items-center gap-3 py-2.5">
-                  <DishThumb name={dish.name} src={dish.image_url} />
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-[13.5px] font-semibold text-[#1A1A1A]">{dish.name}</p>
-                    <span className="mt-1 inline-block rounded-full bg-[#B88E2F] px-2 py-[2px] text-[10px] font-semibold leading-none text-white">
-                      {dish.tag}
-                    </span>
-                  </div>
-                  <span className="text-[14px] font-bold text-[#1A1A1A]">
-                    {dish.orders.toLocaleString('en-IN')}
+      <>
+        {/* 5.94.0 — the column says Plates, because the number is plates:
+            a ticket with "Flat White ×2" is one order and two plates. The
+            old header counted the museum anyway; now both the window and
+            the unit speak true. */}
+        <div className="mt-4 flex items-center justify-between border-b border-[#E3E7E0] pb-2 text-[12px] font-medium text-[#969696]">
+          <span>Dishes</span>
+          <span>Plates</span>
+        </div>
+        <ul className="divide-y divide-[#EDEFEA]">
+          {items.length === 0 ? (
+            <ListEmptyRow message={emptyMessage} />
+          ) : (
+            items.map((dish) => (
+              <li key={dish.name} className="flex items-center gap-3 py-2.5">
+                <DishThumb name={dish.name} src={dish.image_url} />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[13.5px] font-semibold text-[#1A1A1A]">{dish.name}</p>
+                  <span className="mt-1 inline-block rounded-full bg-[#B88E2F] px-2 py-[2px] text-[10px] font-semibold leading-none text-white">
+                    {dish.tag}
                   </span>
-                </li>
-              ))
-            )}
-          </ul>
-        </>
-      )}
+                </div>
+                <span className="text-[14px] font-bold text-[#1A1A1A]">
+                  {dish.orders.toLocaleString('en-IN')}
+                </span>
+              </li>
+            ))
+          )}
+        </ul>
+        {range === 'week' && items.length > 0 && (
+          <p className="mt-3 border-t border-[#E3E7E0] pt-2.5 text-[11.5px] text-[#969696]">
+            Past 7 days ·{' '}
+            <span className="font-semibold tabular-nums text-[#1A1A1A]">
+              {weekPlates.toLocaleString('en-IN')}
+            </span>{' '}
+            plates across {data.weeklyTrending.length}{' '}
+            {data.weeklyTrending.length === 1 ? 'dish' : 'dishes'} · top four shown
+          </p>
+        )}
+      </>
     </section>
   );
 };
@@ -648,7 +738,7 @@ const DashboardContent: React.FC<{ data: DashboardData; margin: TodayCostMargin 
       </div>
     </div>
     <div className="mt-5 grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
-      <BestEmployeesCard data={data} />
+      <TeamCard data={data} />
       <TrendingDishesCard data={data} />
       {margin && <TodayMarginCard m={margin} />}
       {love && <GuestLoveCard s={love} />}
@@ -739,8 +829,27 @@ const DashboardInner: React.FC<{ onRetry: () => void }> = ({ onRetry }) => {
  *   • New tickets — the CounterInbox queue (`new`): money waiting to cook.
  *   • In the kitchen — `pending`/`preparing` on the board right now.
  *   • Late prep — `preparing` past the 10-minute SLA (the KDS's own clock).
+ *
+ *   v5.89.0 — "the strip keeps the day": every WAITING count above now
+ *   speaks the SAME local-day grammar the KDS board ("board data — today
+ *   only") and the counter inbox already speak. Before this, the mirror
+ *   counted all-time `new`/`pending`/`preparing` tickets and the strip said
+ *   "4 waiting / 3 in the kitchen" while the rooms themselves showed zero —
+ *   yesterday's ghosts inflating tonight's alarm. Stuck older tickets are
+ *   still named — as an amber whisper under the card they haunt ("N older
+ *   tickets off today's inbox — see Bills"), never silently hidden (a
+ *   whisper, not an invented all-clear), and never counted as work the
+ *   kitchen can still cook. The late-prep card also joins the KDS's own
+ *   escalation clock: amber at the 10-minute SLA, red at the board's
+ *   20-minute red line (waitTone's thresholds, verbatim), with the oldest
+ *   wait spelled out in the hint.
  *   • Unpaid — money still out (opens Bills pre-filtered via sectionHint,
  *     the same context-carrying door Close-out and Reports use).
+ *     v5.65.0 — the band reads the LEDGER: a ticket mid-split (5.63.0) shows
+ *     only its open BALANCE (total − recorded parts), not its whole total —
+ *     the same per-part truth Reports' unpaid bucket learned in 5.64.0, so
+ *     all three surfaces agree mid-split. A gold whisper says when a ticket
+ *     is settled in parts.
  *   • Stock low & out — items at/below the reorder point or at zero
  *     (Inventory's own levelTone math, verbatim).
  *   • Sold out — menu items 86'd (`is_available = false`).
@@ -753,30 +862,49 @@ const DashboardInner: React.FC<{ onRetry: () => void }> = ({ onRetry }) => {
  * failed read hides the strip entirely — the analytics below still load.
  */
 const LATE_PREP_MIN = 10;
+/** The KDS board's red line (KitchenScreen waitTone): past 20 minutes the
+ *  ticket is not just late, it is an apology. The strip escalates with it. */
+const LATE_ESCALATE_MIN = 20;
 const NOW_REFRESH_MS = 30_000;
+
 
 interface NeedsState {
   ready: boolean;
   orders: Order[];
   inventory: InventoryItem[];
   menu: MenuItem[];
+  reservations: Reservation[];
+  tables: DiningTable[];
+  /** v5.65.0 — per-ticket sums of recorded payment parts (the 007 ledger),
+   *  bounded to the unpaid ids; an unpaid ticket's true outstanding is
+   *  total − this. Empty map = nothing mid-split. */
+  paidSums: Map<string, number>;
 }
 
 const NeedsNow: React.FC = () => {
   const { tenantId } = useTenant();
-  const [now, setNow] = useState<NeedsState>({ ready: false, orders: [], inventory: [], menu: [] });
+  const [now, setNow] = useState<NeedsState>({ ready: false, orders: [], inventory: [], menu: [], reservations: [], tables: [], paidSums: new Map() });
 
   useEffect(() => {
     if (!tenantId) return;
     let alive = true;
     const load = async () => {
       try {
-        const [orders, inventory, menu] = await Promise.all([
+        const [orders, inventory, menu, reservations, tables] = await Promise.all([
           fetchOrders(tenantId, 200),
           fetchInventory(tenantId),
           fetchMenuItems(tenantId),
+          fetchReservations(tenantId, 100),
+          fetchTables(tenantId),
         ]);
-        if (alive) setNow({ ready: true, orders, inventory, menu });
+        /* v5.65.0 — the ledger read, bounded to exactly the open ids (the
+           5.63.0 helper; no ids → no call). A cancelled or settled ticket
+           never enters this list, so old ledger rows can't leak in. */
+        const unpaidIds = orders
+          .filter((o) => o.status !== 'cancelled' && o.payment_status !== 'completed')
+          .map((o) => o.id);
+        const paidSums = await fetchOpenPaymentSums(tenantId, unpaidIds);
+        if (alive) setNow({ ready: true, orders, inventory, menu, reservations, tables, paidSums });
       } catch {
         /* the mirror is a courtesy — a first failed read simply stays quiet */
       }
@@ -791,16 +919,50 @@ const NeedsNow: React.FC = () => {
 
   if (!now.ready) return null;
 
+  const nowMs = Date.now();
   const live = now.orders.filter((o) => o.status !== 'cancelled');
-  const newTickets = live.filter((o) => o.status === 'new');
-  const inKitchen = live.filter((o) => ['pending', 'preparing'].includes(o.status));
-  const latePrep = live.filter(
-    (o) => o.status === 'preparing' && Date.now() - new Date(o.created_at).getTime() >= LATE_PREP_MIN * 60000
+  /* 5.89.0 — the strip keeps the day: waiting counts read TODAY's tickets
+     only, the same grammar as the board and inbox the cards open into. The
+     older stuck tickets are counted separately — they speak as whispers,
+     never as tonight's work. */
+  const liveToday = live.filter((o) => isSameLocalDay(o.created_at));
+  const staleOlder = live.filter((o) => !isSameLocalDay(o.created_at));
+  const newTickets = liveToday.filter((o) => o.status === 'new');
+  const staleNew = staleOlder.filter((o) => o.status === 'new');
+  const inKitchen = liveToday.filter((o) => ['pending', 'preparing'].includes(o.status));
+  const staleKitchen = staleOlder.filter((o) => ['pending', 'preparing'].includes(o.status));
+  const latePrep = liveToday.filter(
+    (o) => o.status === 'preparing' && nowMs - new Date(o.created_at).getTime() >= LATE_PREP_MIN * 60000
   );
+  /* the KDS's own clock — the oldest ACTIVE ticket on today's board
+     (queued/preparing/ready, the rail's activeWait grammar): the late card
+     escalates amber at the 10-minute SLA and red at the 20-minute line. */
+  const oldestWaitMin = liveToday.reduce((m, o) => {
+    if (!['pending', 'preparing', 'ready'].includes(o.status)) return m;
+    return Math.max(m, (nowMs - new Date(o.created_at).getTime()) / 60000);
+  }, 0);
   const unpaid = live.filter((o) => o.payment_status !== 'completed');
-  const unpaidAmt = unpaid.reduce((s, o) => s + Number(o.total || 0), 0);
+  /* v5.65.0 — the band reads the balance, not the whole ticket: a mid-split
+     ticket's open outstanding is total − recorded parts (floored at zero;
+     an over-covered row can never inflate the count). Un-split tickets have
+     no ledger rows, so the arithmetic is identity for them. */
+  const unpaidAmt = unpaid.reduce(
+    (s, o) => s + Math.max(0, Number(o.total || 0) - (now.paidSums.get(o.id) || 0)),
+    0
+  );
+  const splitOpen = unpaid.filter((o) => (now.paidSums.get(o.id) || 0) > 0);
   const stockAlerts = now.inventory.filter((i) => i.current_stock <= i.reorder_point);
   const soldOut = now.menu.filter((m) => m.is_available === false);
+  /* v5.61.0 — the front door joins the mirror: booked parties whose slot has
+     arrived or is imminent (the next 90 minutes; an hour of grace covers a
+     party running late without letting week-old ghosts pollute the count),
+     and tables parked at 'billing' — the bill is asked for but not settled. */
+  const arrivals = now.reservations.filter((r) => {
+    if (r.status !== 'booked') return false;
+    const slot = new Date(r.slot_at).getTime();
+    return slot >= nowMs - 60 * 60000 && slot <= nowMs + 90 * 60000;
+  });
+  const billingTables = now.tables.filter((t) => t.status === 'billing');
 
   const slots: {
     key: string;
@@ -810,55 +972,121 @@ const NeedsNow: React.FC = () => {
     icon: React.ReactNode;
     iconTone: string;
     aria: string;
+    hint?: string;
+    /** 5.89.0 — each whisper carries its own glyph (History for the older
+     *  stuck, Clock for the board's oldest wait); Split stays the default. */
+    hintIcon?: React.ReactNode;
     door: { label: string; aria: string; onOpen: () => void } | null;
   }[] = [];
 
   const go = useUi.getState().goSection;
-  if (newTickets.length > 0)
+  /* 5.89.0 — the card speaks today's inbox count; when older `new` tickets
+     are stuck off it (yesterday's ghosts the counter can no longer Ok), the
+     amber whisper names them and points to Bills, the room that can still
+     act. The door follows the truth: the counter when it holds work, Bills
+     when only the ghosts remain. */
+  if (newTickets.length > 0 || staleNew.length > 0)
     slots.push({
       key: 'new',
       label: 'New tickets',
-      value: `${newTickets.length} ${newTickets.length === 1 ? 'ticket' : 'tickets'} waiting`,
-      valueTone: 'text-[#0F3D3E]',
+      value:
+        newTickets.length > 0
+          ? `${newTickets.length} ${newTickets.length === 1 ? 'ticket' : 'tickets'} waiting`
+          : '0 waiting',
+      valueTone: newTickets.length > 0 ? 'text-[#0F3D3E]' : 'text-[#5F6B63]',
       icon: <Inbox size={18} aria-hidden />,
+      iconTone: newTickets.length > 0 ? 'bg-[#EAF2F7] text-[#1D5D7E]' : 'bg-[#F6F5F2] text-[#5F6B63]',
+      aria: `${newTickets.length} new ${newTickets.length === 1 ? 'ticket' : 'tickets'} in the counter inbox, waiting for an Ok${
+        staleNew.length > 0
+          ? `; ${staleNew.length} older ${staleNew.length === 1 ? 'ticket is' : 'tickets are'} stuck off today's inbox — see Bills`
+          : ''
+      }`,
+      hint:
+        staleNew.length > 0
+          ? `${staleNew.length} older ${staleNew.length === 1 ? 'ticket' : 'tickets'} off today's inbox — see Bills`
+          : undefined,
+      hintIcon: staleNew.length > 0 ? <History size={11} aria-hidden className="shrink-0" /> : undefined,
+      door:
+        newTickets.length > 0
+          ? {
+              label: 'Counter',
+              aria: `Open the counter — ${newTickets.length} new ${newTickets.length === 1 ? 'ticket waits' : 'tickets wait'} for an Ok`,
+              onOpen: () => go('food', ['Dashboard', 'Food & Drinks']),
+            }
+          : {
+              label: 'Bills',
+              aria: `Open Bills — ${staleNew.length} older ${staleNew.length === 1 ? 'ticket waits' : 'tickets wait'} off today's inbox`,
+              onOpen: () => go('bills', ['Dashboard', 'Bills'], 'unpaid'),
+            },
+    });
+  if (arrivals.length > 0)
+    slots.push({
+      key: 'arrivals',
+      label: 'Arriving now',
+      value: `${arrivals.length} ${arrivals.length === 1 ? 'party' : 'parties'} due`,
+      valueTone: 'text-[#0F3D3E]',
+      icon: <CalendarClock size={18} aria-hidden />,
       iconTone: 'bg-[#EAF2F7] text-[#1D5D7E]',
-      aria: `${newTickets.length} new ${newTickets.length === 1 ? 'ticket' : 'tickets'} in the counter inbox, waiting for an Ok`,
+      aria: `${arrivals.length} booked ${arrivals.length === 1 ? 'party is' : 'parties are'} due at the door; Seat & order walks them straight to the counter`,
       door: {
-        label: 'Counter',
-        aria: `Open the counter — ${newTickets.length} new ${newTickets.length === 1 ? 'ticket waits' : 'tickets wait'} for an Ok`,
-        onOpen: () => go('food', ['Dashboard', 'Food & Drinks']),
+        label: 'Floor',
+        aria: `Open Floor — ${arrivals.length} booked ${arrivals.length === 1 ? 'party is' : 'parties are'} due at the door`,
+        onOpen: () => go('floor', ['Dashboard', 'Floor']),
       },
     });
-  if (inKitchen.length > 0)
+  /* 5.89.0 — the kitchen card mirrors the board's day: today's count, and
+     when older tickets are stuck off the board (paid but never bumped, or
+     parked mid-flight), the whisper names them — the board itself stays
+     clean, the strip stays honest about the residue it hides. */
+  if (inKitchen.length > 0 || staleKitchen.length > 0)
     slots.push({
       key: 'kitchen',
       label: 'In the kitchen',
-      value: `${inKitchen.length} ${inKitchen.length === 1 ? 'ticket' : 'tickets'}`,
-      valueTone: 'text-[#0F3D3E]',
+      value: inKitchen.length > 0 ? `${inKitchen.length} ${inKitchen.length === 1 ? 'ticket' : 'tickets'}` : '0 on the board',
+      valueTone: inKitchen.length > 0 ? 'text-[#0F3D3E]' : 'text-[#5F6B63]',
       icon: <Flame size={18} aria-hidden />,
-      iconTone: 'bg-[#EAF2F7] text-[#1D5D7E]',
-      aria: `${inKitchen.length} ${inKitchen.length === 1 ? 'ticket is' : 'tickets are'} on the board right now`,
+      iconTone: inKitchen.length > 0 ? 'bg-[#EAF2F7] text-[#1D5D7E]' : 'bg-[#F6F5F2] text-[#5F6B63]',
+      aria: `${inKitchen.length} ${inKitchen.length === 1 ? 'ticket is' : 'tickets are'} on the board right now${
+        staleKitchen.length > 0
+          ? `; ${staleKitchen.length} older ${staleKitchen.length === 1 ? 'ticket is' : 'tickets are'} stuck off today's board — see Bills`
+          : ''
+      }`,
+      hint:
+        staleKitchen.length > 0
+          ? `${staleKitchen.length} older stuck ${staleKitchen.length === 1 ? 'ticket' : 'tickets'} off today's board — see Bills`
+          : undefined,
+      hintIcon: staleKitchen.length > 0 ? <History size={11} aria-hidden className="shrink-0" /> : undefined,
       door: {
         label: 'Kitchen',
         aria: `Open Kitchen — ${inKitchen.length} ${inKitchen.length === 1 ? 'ticket is' : 'tickets are'} on the board right now`,
         onOpen: () => go('kitchen', ['Dashboard', 'Kitchen']),
       },
     });
-  if (latePrep.length > 0)
+  /* 5.89.0 — the late card carries the KDS's own escalation clock: amber at
+     the 10-minute SLA, red at the board's 20-minute red line (waitTone's
+     thresholds), and the oldest wait spelled out — one instrument, one
+     clock, strip and board agreeing to the minute. */
+  if (latePrep.length > 0) {
+    const escalated = oldestWaitMin >= LATE_ESCALATE_MIN;
     slots.push({
       key: 'late',
       label: 'Late prep',
       value: `${latePrep.length}`,
-      valueTone: 'text-[#B3261E]',
+      valueTone: escalated ? 'text-[#B3261E]' : 'text-[#8A5A00]',
       icon: <Clock size={18} aria-hidden />,
-      iconTone: 'bg-[#FCEBEA] text-[#B3261E]',
-      aria: `${latePrep.length} ${latePrep.length === 1 ? 'ticket is' : 'tickets are'} past the ${LATE_PREP_MIN}-minute SLA; oldest waits first`,
+      iconTone: escalated ? 'bg-[#FCEBEA] text-[#B3261E]' : 'bg-[#FFF4DB] text-[#8A5A00]',
+      aria: `${latePrep.length} ${latePrep.length === 1 ? 'ticket is' : 'tickets are'} past the ${LATE_PREP_MIN}-minute SLA; oldest on the board waits ${Math.round(oldestWaitMin)} minutes${
+        escalated ? " — past the board's 20-minute red line" : ''
+      }`,
+      hint: `oldest waits ${Math.round(oldestWaitMin)} min — the board's own clock`,
+      hintIcon: <Clock size={11} aria-hidden className="shrink-0" />,
       door: {
         label: 'Kitchen',
         aria: `Open Kitchen — ${latePrep.length} ${latePrep.length === 1 ? 'ticket is' : 'tickets are'} past the ${LATE_PREP_MIN}-minute SLA; oldest waits first`,
         onOpen: () => go('kitchen', ['Dashboard', 'Kitchen']),
       },
     });
+  }
   if (unpaid.length > 0)
     slots.push({
       key: 'unpaid',
@@ -867,11 +1095,32 @@ const NeedsNow: React.FC = () => {
       valueTone: 'text-[#8A5A00]',
       icon: <Wallet size={18} aria-hidden />,
       iconTone: 'bg-[#FFF4DB] text-[#8A5A00]',
-      aria: `${unpaid.length} unpaid ${unpaid.length === 1 ? 'ticket' : 'tickets'}, ${formatMoney(unpaidAmt)} still out`,
+      aria: `${unpaid.length} unpaid ${unpaid.length === 1 ? 'ticket' : 'tickets'}, ${formatMoney(unpaidAmt)} still out${
+        splitOpen.length > 0 ? ` — ${splitOpen.length} ${splitOpen.length === 1 ? 'ticket is' : 'tickets are'} settled in parts` : ''
+      }`,
+      hint:
+        splitOpen.length > 0
+          ? `${splitOpen.length} ${splitOpen.length === 1 ? 'ticket' : 'tickets'} settled in parts — the band reads balances`
+          : undefined,
       door: {
         label: 'Bills',
         aria: `Open Bills — ${unpaid.length} unpaid ${unpaid.length === 1 ? 'ticket' : 'tickets'}, ${formatMoney(unpaidAmt)} still out`,
         onOpen: () => go('bills', ['Dashboard', 'Bills'], 'unpaid'),
+      },
+    });
+  if (billingTables.length > 0)
+    slots.push({
+      key: 'billing',
+      label: 'Billing',
+      value: `${billingTables.length} ${billingTables.length === 1 ? 'table' : 'tables'} settling`,
+      valueTone: 'text-[#8A5A16]',
+      icon: <ReceiptText size={18} aria-hidden />,
+      iconTone: 'bg-[#FFF4DB] text-[#8A5A00]',
+      aria: `${billingTables.length} ${billingTables.length === 1 ? 'table has' : 'tables have'} asked for the bill and waits to settle`,
+      door: {
+        label: 'Floor',
+        aria: `Open Floor — ${billingTables.length} ${billingTables.length === 1 ? 'table waits' : 'tables wait'} to settle`,
+        onOpen: () => go('floor', ['Dashboard', 'Floor']),
       },
     });
   if (stockAlerts.length > 0)
@@ -928,6 +1177,12 @@ const NeedsNow: React.FC = () => {
                 <div className="min-w-0 flex-1">
                   <p className="text-[10.5px] font-bold uppercase tracking-[0.08em] text-[#8A938C]">{s.label}</p>
                   <p className={`text-[16px] font-extrabold leading-tight tabular-nums ${s.valueTone}`}>{s.value}</p>
+                  {s.hint && (
+                    <p className="mt-0.5 flex items-center gap-1 truncate text-[10.5px] font-semibold leading-tight text-[#8A6D1F]">
+                      {s.hintIcon ?? <Split size={11} aria-hidden className="shrink-0" />}
+                      <span className="truncate">{s.hint}</span>
+                    </p>
+                  )}
                 </div>
                 {s.door && <DoorChip label={s.door.label} aria={s.door.aria} onOpen={s.door.onOpen} />}
               </div>

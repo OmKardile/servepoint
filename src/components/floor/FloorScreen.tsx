@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Armchair,
+  ArrowLeftRight,
   BadgeCheck,
   CalendarClock,
   CircleAlert,
@@ -38,6 +39,8 @@ import {
   createTable,
   createReservation,
   deleteTable,
+  moveOrderTable,
+  fetchOrderById,
   fetchOrders,
   fetchReservations,
   fetchTableSessions,
@@ -57,7 +60,24 @@ import {
 } from '../../lib/api';
 import { useTenant } from '../../lib/tenant';
 import { printHiddenFrame, preloadPrintImage } from '../../lib/printFrame';
-import { formatMoney } from '../../lib/prefs';
+import { formatMoney, subscribePrefs } from '../../lib/prefs';
+import { useDialogA11y } from '../../lib/useDialogA11y';
+import {
+  appTodayIso,
+  appDayStartMs,
+  appHour,
+  appDayKey,
+  appFormatters,
+  appTzTag,
+  appWallToInstant,
+} from '../../lib/appday';
+import {
+  bookingSlotLabel,
+  bookingDayKey,
+  bookingTodayKey,
+  bookingDayStartMs,
+  bookingTzIsForeign,
+} from '../../lib/bookingday';
 import { useUi } from '../../store/session';
 import { useCart } from '../../store/cart';
 import type { Order, OrderItem } from '../../types';
@@ -113,42 +133,28 @@ const esc = (s: string): string =>
 
 const guestUrlOf = (t: DiningTable): string => `${window.location.origin}/t/${t.qr_token}`;
 
-/* ── IST hour math for the floor rhythm strip (v5.22.0) — same calendar
-   math as Reports' Sales-by-hour: Asia/Kolkata hours on real IST days. ── */
-const IST_TZ = 'Asia/Kolkata';
+/* ── Reporting-hour math for the floor rhythm strip (v5.22.0) — same
+   calendar math as Reports' Sales-by-hour (5.97.0: the reporting day
+   follows Settings › Timezone via src/lib/appday.ts; on every Indian
+   device these helpers are exactly IST). ── */
 
 function istHour(iso: string): number {
-  const h = new Intl.DateTimeFormat('en-GB', {
-    timeZone: IST_TZ,
-    hour: '2-digit',
-    hour12: false,
-  }).format(new Date(iso));
-  return Number(h) % 24;
+  return appHour(iso);
 }
 
-/** YYYY-MM-DD of an ISO instant, in IST. */
+/** YYYY-MM-DD of an ISO instant, in the reporting day. */
 function istDateKey(iso: string): string {
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone: IST_TZ,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(new Date(iso));
+  return appDayKey(iso);
 }
 
-/** Today's date (YYYY-MM-DD) in IST. */
+/** Today's date (YYYY-MM-DD) in the reporting day. */
 function istTodayIsoFloor(): string {
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone: IST_TZ,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(new Date());
+  return appTodayIso();
 }
 
-/** UTC-ms of IST midnight for a YYYY-MM-DD day key. */
+/** UTC-ms of reporting-day midnight for a YYYY-MM-DD day key. */
 function istDayStartFloor(dateIso: string): number {
-  return new Date(`${dateIso}T00:00:00+05:30`).getTime();
+  return appDayStartMs(dateIso);
 }
 
 function hourLabel(h: number): string {
@@ -199,12 +205,7 @@ export function buildStickerSheetHtml(cafeName: string, stickers: StickerSpec[],
     </div>`,
     )
     .join('');
-  const today = new Intl.DateTimeFormat('en-IN', {
-    timeZone: 'Asia/Kolkata',
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-  }).format(new Date());
+  const today = appFormatters().stickerDate.format(new Date());
   return `<!doctype html><html><head><meta charset="utf-8"><title>Table QR stickers — ${esc(cafeName)}</title>
 <style>
   @page { size: A4 portrait; margin: 10mm; }
@@ -280,7 +281,67 @@ const STATUS_META: Record<TableStatus, { label: string; bg: string; fg: string; 
   billing: { label: 'Billing', bg: '#FDECEA', fg: '#B4483C', dot: '#B4483C' },
 };
 
-/* ── The book (v5.38.0) — reservation status tones + IST slot labels. ── */
+/* ── The floor owns its holds (v5.82.0) — hold-audit verdicts. ──────────
+   Migration 011's trigger releases a table when its ticket COMPLETES or
+   CANCELS — but a ticket that was hard-DELETED never fires that UPDATE,
+   so the hold outlives its own order and the board says "Occupied"
+   pointing at a ghost. Every held pointer is judged against the ledger;
+   the verdict decides whether a card stays quiet or raises the alarm. */
+type HoldVerdict = 'live' | 'settled' | 'closed-unpaid' | 'ghost';
+
+/** What one ticket says about a hold. A completed ticket has no business
+ *  holding a table; a cancelled one holds nothing at all. */
+function classifyHoldTicket(o: Order): HoldVerdict {
+  if (o.status === 'completed') return o.payment_status === 'completed' ? 'settled' : 'closed-unpaid';
+  if (o.status === 'cancelled') return 'ghost';
+  return 'live';
+}
+
+/** The verdict for one table, or null when the audit cannot speak yet:
+ *  a pointer-less manual seat is the staff's choice (never a lie), a read
+ *  still in flight proves nothing, and a FAILED read stays silent — the
+ *  board never invents an alarm it could not prove. */
+function holdVerdictFor(
+  t: DiningTable,
+  windowOrders: Map<string, Order>,
+  audit: Map<string, Order | null>,
+  failed: Set<string>,
+): HoldVerdict | null {
+  if (t.status !== 'occupied' && t.status !== 'billing') return null;
+  if (!t.active_order_id) return null;
+  const inWindow = windowOrders.get(t.active_order_id);
+  if (inWindow) return classifyHoldTicket(inWindow);
+  if (audit.has(t.active_order_id)) {
+    const o = audit.get(t.active_order_id) || null;
+    return o ? classifyHoldTicket(o) : 'ghost';
+  }
+  return null; // still auditing, or the read failed — silence, not invention
+}
+
+/** The alarm's one voice — the same sentence in the card strip, the hover
+ *  title, and the aria label, so a screen reader hears exactly what the
+ *  sighted owner reads. */
+const HOLD_ALARM: Record<Exclude<HoldVerdict, 'live'>, { card: string; aria: (t: string) => string }> = {
+  ghost: {
+    card: 'The ticket behind this hold is gone — the table never let go.',
+    aria: (t) => `Table ${t} holds a ghost: its ticket no longer exists. Free the table.`,
+  },
+  settled: {
+    card: 'The bill was paid — the table never let go.',
+    aria: (t) => `Table ${t}'s bill was paid but the table is still held. Free the table.`,
+  },
+  'closed-unpaid': {
+    card: 'Ticket closed, money still pending — settle, then free.',
+    aria: (t) => `Table ${t}'s ticket closed without payment. Settle at the counter, then free the table.`,
+  },
+};
+
+/* ── The book (v5.38.0) — reservation status tones + booking-clock slot labels.
+   5.105.0 — the promise's voice moves to the DB's clock (bookingday.ts): the
+   reminder bell's body is composed in Asia/Kolkata by migrations 030/032, so
+   the book, the echo and the guest drawer must all speak THAT hour or the
+   echo matcher breaks on non-IST reporting timezones. On IST devices the
+   words are byte-identical to what appTimezone() said — which was IST. ── */
 
 const RES_META: Record<ReservationStatus, { label: string; bg: string; fg: string }> = {
   booked: { label: 'Booked', bg: '#FBF3E1', fg: '#8A5A00' },
@@ -289,22 +350,82 @@ const RES_META: Record<ReservationStatus, { label: string; bg: string; fg: strin
   cancelled: { label: 'Cancelled', bg: '#EAF0EC', fg: '#6B6B6B' },
 };
 
-/** "7:30 pm" IST 12-hour label for a booking slot. */
-function istSlotLabel(iso: string): string {
-  return new Intl.DateTimeFormat('en-IN', {
-    timeZone: IST_TZ,
-    hour: 'numeric',
-    minute: '2-digit',
-    hour12: true,
-  })
-    .format(new Date(iso))
-    .toLowerCase();
+/** "7:30 pm" booking-clock 12-hour label for a booking slot. */
+const istSlotLabel = bookingSlotLabel;
+
+/* ── The board keeps the book (v5.84.0) — a table's next promise. The book
+   panel lists rows; the BOARD tells the host who is coming to WHICH table
+   without opening anything. Only `booked` advertises: a seated, no-show or
+   cancelled row never speaks, and yesterday's promises have already kept
+   (or broken) themselves — they don't either. An unread book (null) is
+   silence, never an invented calm. ── */
+
+/** A promise that still advertises: `booked`, TODAY in the booking clock, slot not yet gone. */
+function isLivePromise(r: Reservation, nowMs: number, todayKey: string): boolean {
+  if (r.status !== 'booked') return false;
+  if (bookingDayKey(r.slot_at) !== todayKey) return false;
+  return new Date(r.slot_at).getTime() >= nowMs;
 }
 
-/** "Today · 3 Oct" / "Tomorrow · 4 Oct" / "Mon · 6 Oct" for book day groups. */
+/** v5.86.0 — a promise that WENT QUIET: still `booked`, still today in the
+ *  booking clock, but the promised hour has passed without anyone sitting
+ *  them down. The board does not call it a no-show — a party can be ten
+ *  minutes late, and
+ *  the verdict is the host's, not the clock's. It just refuses to pretend
+ *  the hour is still ahead. */
+function isQuietPromise(r: Reservation, nowMs: number, todayKey: string): boolean {
+  if (r.status !== 'booked') return false;
+  if (bookingDayKey(r.slot_at) !== todayKey) return false;
+  return new Date(r.slot_at).getTime() < nowMs;
+}
+
+/** Minutes until the slot, rounded up (a slot 30s away is still 1 min). */
+function minsUntil(iso: string, nowMs: number): number {
+  return Math.max(0, Math.ceil((new Date(iso).getTime() - nowMs) / 60000));
+}
+
+/** The card/panel promise chip: gold while the hour is comfortable, amber
+ *  once the party is due within 45 minutes, grey when the hour has gone by
+ *  unkept — “went quiet”, never “no-show”: the clock does not convict. One
+ *  voice, three tones. */
+function PromiseChip({
+  p,
+}: {
+  p: { r: Reservation; mins: number; dueSoon: boolean; quiet: boolean };
+}): React.ReactElement {
+  const tone = p.quiet
+    ? { bg: '#F1F4F1', fg: '#6B6B6B' }
+    : p.dueSoon
+      ? { bg: '#FDF3E4', fg: '#8A5A16' }
+      : { bg: '#FBF3E1', fg: '#8A5A00' };
+  const due = p.dueSoon ? ` — due in ${p.mins} min` : '';
+  const quiet = p.quiet ? ' — the promised hour went by, still booked' : '';
+  /* 5.105.0 — when the reporting timezone is not the booking clock, the
+   * label carries its zone so nobody misreads which clock speaks. */
+  const zone = bookingTzIsForeign() ? ' IST' : '';
+  const title = `${p.r.guest_name} · party of ${p.r.party_size} · promised ${istSlotLabel(p.r.slot_at)}${zone}${due}${quiet}. From the floor's book — booked rows only.`;
+  return (
+    <span
+      className="inline-flex items-center gap-1.5 self-start rounded-full px-2.5 py-1 text-[10.5px] font-bold"
+      style={{ background: tone.bg, color: tone.fg }}
+      title={title}
+      aria-label={title}
+    >
+      <CalendarClock size={11} className="shrink-0" aria-hidden />
+      <span className="whitespace-nowrap tabular-nums">{istSlotLabel(p.r.slot_at)}{zone}</span>
+      <span className="truncate font-semibold opacity-90">· {p.r.guest_name}</span>
+      <span className="whitespace-nowrap opacity-80">· {p.r.party_size}p</span>
+      {p.quiet && <span className="whitespace-nowrap">· went quiet</span>}
+    </span>
+  );
+}
+
+/** "Today · 3 Oct" / "Tomorrow · 4 Oct" / "Mon · 6 Oct" for book day groups.
+ *  5.105.0 — day keys follow the booking clock (the DB's word). IST has no
+ *  DST, so now+24h is always the next calendar day there — exact. */
 function istDayHeading(dateKey: string): string {
-  const today = istTodayIsoFloor();
-  const tomorrow = istDateKey(new Date(istDayStartFloor(today) + 24 * 3600 * 1000).toISOString());
+  const today = bookingTodayKey();
+  const tomorrow = bookingDayKey(new Date(Date.now() + 24 * 3600 * 1000).toISOString());
   const weekday = new Intl.DateTimeFormat('en-IN', {
     timeZone: 'UTC',
     weekday: 'short',
@@ -368,12 +489,7 @@ const SESSION_TONE: Record<SessionState, { dot: string; fg: string; label: strin
 
 /** "20:49" IST wall clock for a session window row. */
 function istHM(iso: string): string {
-  return new Intl.DateTimeFormat('en-GB', {
-    timeZone: IST_TZ,
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  }).format(new Date(iso));
+  return appFormatters().hhmm.format(new Date(iso));
 }
 
 /** Relative text for the expiry moment: minutes left while live, ago once past. */
@@ -402,18 +518,12 @@ function AddTableDialog({
   const [capacity, setCapacity] = useState(String(initial?.capacity ?? 4));
   const [section, setSection] = useState(initial?.section ?? 'Main Floor');
   const capNum = Number.parseInt(capacity, 10);
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  /* v5.110.0 — Escape/trap/restore; Escape stands down while the table saves. */
+  const dlgRef = useDialogA11y<HTMLDivElement>(() => { if (!busy) onClose(); }, true);
 
   return (
-    <div className="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label={initial ? 'Edit table' : 'Add table'}>
-      <button type="button" aria-label="Close dialog" onClick={onClose} className="absolute inset-0 h-full w-full cursor-default bg-[#0F3D3E]/45" />
+    <div ref={dlgRef} className="fixed inset-0 z-50" style={{ animation: 'spFadeIn 160ms ease-out' }} role="dialog" aria-modal="true" aria-label={initial ? 'Edit table' : 'Add table'}>
+      <button type="button" aria-label="Close dialog" onClick={onClose} className="absolute inset-0 h-full w-full cursor-default bg-[#0F3D3E]/45 focus-visible:outline-none" />
       <div className="absolute inset-x-2 top-1/2 mx-auto max-w-[420px] -translate-y-1/2 rounded-3xl bg-white p-5 shadow-2xl sm:inset-x-0">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-[15px] font-bold text-[#1A1A1A]">{initial ? `Edit table ${initial.number}` : 'Add a table'}</h2>
@@ -479,16 +589,31 @@ function AddTableDialog({
       (which table), and any note. slot_at is composed as IST wall-clock
       with an explicit +05:30 offset — IST has no DST, so the instant is
       exact. Past slots are allowed (the book tolerates backfill); the
-      party>capacity nudge is honest information, not a block. ── */
+      party>capacity nudge is honest information, not a block.
+      v5.87.0 — the book keeps itself honest at WRITE time: before the
+      promise is inked, the dialog names what the table already holds —
+      a standing promise inside the 90-minute turn, or a live ticket on
+      the table right now. Both are whispers, never blocks: the host
+      reads the truth and writes anyway if the hour is right. The clash
+      rule is pure |Δ| < 90 min (no day filter) so a party at 11:45 pm
+      honestly collides with one at 12:15 am — the turn crosses midnight.
+      An unread book (null) is silence, never an invented all-clear. ── */
+
+/** v5.87.0 — a table's turn: how long one party realistically holds it.
+ *  Two promises inside this window are one table asked to hold two
+ *  parties; the dialog says so before the ink dries. */
+const TABLE_TURN_MS = 90 * 60 * 1000;
 
 function BookingDialog({
   tables,
+  reservations,
   busy,
   error,
   onTake,
   onClose,
 }: {
   tables: DiningTable[];
+  reservations: Reservation[] | null;
   busy: boolean;
   error: string | null;
   onTake: (input: ReservationInput) => void;
@@ -503,23 +628,50 @@ function BookingDialog({
   const [note, setNote] = useState('');
   const partyNum = Number.parseInt(party, 10);
   const picked = tables.find((t) => t.id === tableId) || null;
+  /* v5.110.0 — Escape/trap/restore; Escape stands down while the promise is written. */
+  const dlgRef = useDialogA11y<HTMLDivElement>(() => { if (!busy) onClose(); }, true);
 
+  /* 5.98.0 — the promise is written in the OWNER'S clock: the wall time the
+     host picks composes through src/lib/appday.ts (Settings › Timezone) —
+     on every Indian device that is +05:30, exactly as before; a floor
+     running another zone books the hour its own wall shows. */
   const slotMs = useMemo(() => {
     if (!date || !time) return NaN;
-    return new Date(`${date}T${time}:00+05:30`).getTime();
+    return appWallToInstant(date, time);
   }, [date, time]);
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  /* v5.87.0 — the clash list: every standing promise (`booked`) on the
+   *  picked table whose hour sits inside this one's 90-minute turn.
+   *  Quiet rows still count — a party twenty minutes late is still
+   *  expected; seated/no-show/cancelled rows don't (their promise is
+   *  already resolved). Earliest first; the note names it. */
+  const clashes = useMemo(() => {
+    if (!picked || !Number.isFinite(slotMs) || !reservations) return null;
+    const hits = reservations
+      .filter(
+        (r) =>
+          r.table_id === picked.id &&
+          r.status === 'booked' &&
+          Math.abs(new Date(r.slot_at).getTime() - slotMs) < TABLE_TURN_MS,
+      )
+      .sort((a, b) => new Date(a.slot_at).getTime() - new Date(b.slot_at).getTime());
+    return hits.length ? hits : null;
+  }, [picked, slotMs, reservations]);
+
+  /* v5.87.0 — the table is holding a live ticket RIGHT NOW and the new
+   *  promise lands inside the hour: the table frees only when that
+   *  ticket is billed, so the hour presumes a departure. Backfilled
+   *  history (slots long past) never nags. */
+  const heldNow = useMemo(() => {
+    if (!picked || !Number.isFinite(slotMs)) return false;
+    if (picked.status !== 'occupied' && picked.status !== 'billing') return false;
+    const delta = slotMs - Date.now();
+    return delta > -5 * 60000 && delta < 60 * 60000;
+  }, [picked, slotMs]);
 
   return (
-    <div className="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label="Take a booking">
-      <button type="button" aria-label="Close dialog" onClick={onClose} className="absolute inset-0 h-full w-full cursor-default bg-[#0F3D3E]/45" />
+    <div ref={dlgRef} className="fixed inset-0 z-50" style={{ animation: 'spFadeIn 160ms ease-out' }} role="dialog" aria-modal="true" aria-label="Take a booking">
+      <button type="button" aria-label="Close dialog" onClick={onClose} className="absolute inset-0 h-full w-full cursor-default bg-[#0F3D3E]/45 focus-visible:outline-none" />
       <div className="absolute inset-x-2 top-1/2 mx-auto max-h-[92vh] max-w-[460px] -translate-y-1/2 overflow-y-auto rounded-3xl bg-white p-5 shadow-2xl sm:inset-x-0">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="flex items-center gap-2 text-[15px] font-bold text-[#1A1A1A]">
@@ -560,11 +712,11 @@ function BookingDialog({
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label htmlFor="bk-date" className="mb-1 block text-[12px] font-medium text-[#6B6B6B]">Day (IST)</label>
+              <label htmlFor="bk-date" className="mb-1 block text-[12px] font-medium text-[#6B6B6B]">Day ({appTzTag()})</label>
               <input id="bk-date" type="date" value={date} onChange={(e) => setDate(e.target.value)} className="sp-input h-11 w-full px-3 text-[13.5px]" />
             </div>
             <div>
-              <label htmlFor="bk-time" className="mb-1 block text-[12px] font-medium text-[#6B6B6B]">Arrives (IST)</label>
+              <label htmlFor="bk-time" className="mb-1 block text-[12px] font-medium text-[#6B6B6B]">Arrives ({appTzTag()})</label>
               <input id="bk-time" type="time" value={time} onChange={(e) => setTime(e.target.value)} className="sp-input h-11 w-full px-3 text-[13.5px]" />
             </div>
           </div>
@@ -582,6 +734,20 @@ function BookingDialog({
           {picked && Number.isFinite(partyNum) && partyNum > picked.capacity && (
             <p className="rounded-xl bg-[#FBF3E1] px-3 py-2 text-[12px] font-medium text-[#8A5A00]" role="note">
               Party of {partyNum} at {picked.table_number} ({picked.capacity} seats) — pull chairs over, or split across two tables.
+            </p>
+          )}
+          {picked && clashes && (
+            <p className="rounded-xl bg-[#FBF3E1] px-3 py-2 text-[12px] font-medium text-[#8A5A00]" role="note">
+              {picked.table_number} already holds {clashes[0].guest_name} at {istSlotLabel(clashes[0].slot_at)}
+              {clashes.length > 1
+                ? ` — ${clashes.length} promises fall inside this table's 90-minute turn`
+                : ' — one table, two parties'}
+              . Choose another hour or table, or write it in anyway.
+            </p>
+          )}
+          {picked && heldNow && (
+            <p className="rounded-xl bg-[#FBF3E1] px-3 py-2 text-[12px] font-medium text-[#8A5A00]" role="note">
+              {picked.table_number} is still holding a live ticket — book this hour only if that party is settling up; otherwise choose a later hour.
             </p>
           )}
           <div>
@@ -690,13 +856,20 @@ function ItemLines({ items }: { items: OrderItem[] }): React.ReactElement {
 function TableDrill({
   table,
   order,
+  hold,
+  promises,
+  onSeat,
+  onNoShow,
   sessions,
+  candidates,
   cutArmId,
   cutBusyId,
   onCutArm,
   onCut,
   bulkCutBusy,
   onCutAll,
+  onMove,
+  moveBusy,
   onEdit,
   onRemove,
   removeBusy,
@@ -704,13 +877,30 @@ function TableDrill({
 }: {
   table: DiningTable;
   order: Order | undefined;
+  /** v5.83.0 — the hold audit rides into the drill: the same verdict the card
+   *  shows, so the panel the owner opens to investigate carries the alarm too. */
+  hold?: HoldVerdict | null;
+  /** v5.84.0 — the table's still-standing promises for today (booked, IST,
+   *  slot not yet gone), earliest first. Empty array = silence, not a zero.
+   *  v5.86.0 — quiet rows (hour passed unkept) ride along in grey with the
+   *  host's three real paths as actions. */
+  promises: Reservation[];
+  /** v5.86.0 — seat a quiet promise's latecomers (booking seated + table
+   *  occupied — the card's own gesture, one tap from the drill). */
+  onSeat: (r: Reservation) => void;
+  /** v5.86.0 — record the no-show (the book's own flip; the EOD already
+   *  counts these at day close). */
+  onNoShow: (r: Reservation) => void;
   sessions: TableSession[];
+  candidates: DiningTable[];
   cutArmId: string | null;
   cutBusyId: string | null;
   onCutArm: (sessionId: string) => void;
   onCut: (sessionId: string) => void;
   bulkCutBusy: boolean;
   onCutAll: (sessionIds: string[]) => void;
+  onMove: (targetTableId: string) => void;
+  moveBusy: boolean;
   onEdit: () => void;
   onRemove: () => void;
   removeBusy: boolean;
@@ -722,7 +912,13 @@ function TableDrill({
   const [shown, setShown] = useState(false);
   const [bulkArm, setBulkArm] = useState(false);
   const [removeArmed, setRemoveArmed] = useState(false);
+  /* v5.59.0 — the party moves: picker expansion + the one armed target.
+     Same 3s disarm discipline as the bulk cut and the remove confirm. */
+  const [moveOpen, setMoveOpen] = useState(false);
+  const [armTarget, setArmTarget] = useState<string | null>(null);
   const url = guestUrlOf(table);
+  /* v5.110.0 — the table drawer holds the door (replaces the hand-rolled Escape listener). */
+  const dlgRef = useDialogA11y<HTMLDivElement>(onClose, true);
   const isLive = table.status === 'occupied' || table.status === 'billing';
   /* A table that still holds an order (or a reservation) can't be retired —
      the guard is honest: the hint names what to do first. */
@@ -747,17 +943,17 @@ function TableDrill({
     return () => window.clearTimeout(t);
   }, [removeArmed]);
 
+  /* the move target disarms itself too — a relocation is still a write */
+  useEffect(() => {
+    if (!armTarget) return;
+    const t = window.setTimeout(() => setArmTarget((cur) => (cur === armTarget ? null : cur)), 3000);
+    return () => window.clearTimeout(t);
+  }, [armTarget]);
+
   useEffect(() => {
     const raf = requestAnimationFrame(() => setShown(true));
     return () => cancelAnimationFrame(raf);
   }, []);
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
   useEffect(() => {
     let alive = true;
     qrDataUrl(url)
@@ -800,12 +996,12 @@ function TableDrill({
   }, [table, onClose]);
 
   return (
-    <div className="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label={`Table ${table.table_number}`}>
+    <div ref={dlgRef} className="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label={`Table ${table.table_number}`}>
       <button
         type="button"
         aria-label="Close panel"
         onClick={onClose}
-        className={`absolute inset-0 h-full w-full cursor-default bg-[#0F3D3E]/45 transition-opacity duration-300 ${shown ? 'opacity-100' : 'opacity-0'}`}
+        className={`absolute inset-0 h-full w-full cursor-default bg-[#0F3D3E]/45 focus-visible:outline-none transition-opacity duration-300 ${shown ? 'opacity-100' : 'opacity-0'}`}
       />
       <aside
         className={`absolute right-0 top-0 flex h-full w-full max-w-md flex-col bg-[#F6F5F2] shadow-2xl transition-transform duration-300 ease-out ${shown ? 'translate-x-0' : 'translate-x-full'}`}
@@ -845,6 +1041,131 @@ function TableDrill({
 
         {/* body */}
         <div className="flex-1 space-y-3 overflow-y-auto p-4">
+          {hold && hold !== 'live' && (
+            <div
+              role="status"
+              aria-label={HOLD_ALARM[hold].aria(table.table_number)}
+              title={HOLD_ALARM[hold].aria(table.table_number)}
+              className="flex items-center gap-2 rounded-xl px-3 py-2.5 text-[12px] font-semibold leading-snug"
+              style={{ background: '#FDF3F2', color: '#B4483C', boxShadow: 'inset 0 0 0 1px #F0D5D1' }}
+            >
+              <CircleAlert size={14} className="shrink-0" aria-hidden />
+              <span>{HOLD_ALARM[hold].card}</span>
+            </div>
+          )}
+          {/* v5.84.0 — the panel the host opens before seating now carries
+              the table's promises: who lands here, at what hour, how big. */}
+          {promises.length > 0 && (
+            <div className="rounded-2xl border border-[#E3E7E0] bg-white p-4 shadow-sm">
+              <p className="flex items-center gap-2 text-[12px] font-bold uppercase tracking-wide text-[#8A5A00]">
+                <CalendarClock size={13} aria-hidden /> Promised today
+              </p>
+              {/* v5.85.0 — the host moment: the party is due while the table
+                  still holds a ticket. No new writes — just the two real
+                  paths named honestly (settle the ticket, or move the
+                  party); the seat button would be a lie while a hold lives.
+                  v5.86.0 — keyed on the first FUTURE promise: a quiet row
+                  speaks in its own grey below, not in the due voice. */}
+              {(() => {
+                const nowMs = Date.now();
+                const firstFuture = promises.find((r) => new Date(r.slot_at).getTime() >= nowMs);
+                if (!firstFuture || (table.status !== 'occupied' && table.status !== 'billing')) return null;
+                if (minsUntil(firstFuture.slot_at, nowMs) > 45) return null;
+                return (
+                  <p
+                    className="mt-2 flex items-center gap-2 rounded-xl px-3 py-2 text-[12px] font-semibold leading-snug"
+                    style={{ background: '#FDF3E4', color: '#8A5A16', boxShadow: 'inset 0 0 0 1px #F3E3C3' }}
+                  >
+                    <CalendarClock size={13} className="shrink-0" aria-hidden />
+                    <span>
+                      {firstFuture.guest_name}&rsquo;s party is due {istSlotLabel(firstFuture.slot_at)}
+                      {bookingTzIsForeign() ? ' IST' : ''}
+                      {order ? <> — the table still holds #{order.order_number}. Settle the ticket, or move the party.</> : ' — the table is still busy. Settle, or move the party.'}
+                    </span>
+                  </p>
+                );
+              })()}
+              <ul className="mt-2.5 space-y-1.5">
+                {promises.map((r) => {
+                  const nowMs = Date.now();
+                  const future = new Date(r.slot_at).getTime() >= nowMs;
+                  const mins = minsUntil(r.slot_at, nowMs);
+                  const dueSoon = future && mins <= 45;
+                  const quiet = !future;
+                  return (
+                    <li
+                      key={r.id}
+                      className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-[12.5px]"
+                      style={{
+                        background: quiet ? '#F1F4F1' : dueSoon ? '#FDF3E4' : '#FBF3E1',
+                        color: quiet ? '#6B6B6B' : dueSoon ? '#8A5A16' : '#8A5A00',
+                      }}
+                      title={`${r.guest_name} · party of ${r.party_size} · promised ${istSlotLabel(r.slot_at)}${quiet ? ' — the promised hour went by, still booked' : ''}${r.note ? ` · note: ${r.note}` : ''}. From the floor's book.`}
+                    >
+                      <span className="w-16 shrink-0 font-bold tabular-nums">{istSlotLabel(r.slot_at)}</span>
+                      <span className="min-w-0 flex-1 truncate font-semibold">{r.guest_name}</span>
+                      <span className="shrink-0 tabular-nums opacity-80">{r.party_size}p</span>
+                      {dueSoon && <span className="shrink-0 rounded-full bg-white/60 px-2 py-0.5 text-[10px] font-bold">due {mins}m</span>}
+                      {quiet && (
+                        <>
+                          <span className="shrink-0 rounded-full bg-white/60 px-2 py-0.5 text-[10px] font-bold">went quiet</span>
+                          {/* v5.86.0 — the three real paths for an unkept hour:
+                              call them, give up the table's claim, or seat the
+                              latecomers. "They're here" only when the table
+                              can actually take them. The clock never writes
+                              "no-show" by itself — the host's tap does. */}
+                          {r.phone && (
+                            <a
+                              href={`tel:${r.phone}`}
+                              onClick={(e) => e.stopPropagation()}
+                              className="flex h-7 shrink-0 items-center gap-1 rounded-full bg-white/70 px-2 text-[10.5px] font-bold hover:bg-white"
+                              aria-label={`Call ${r.guest_name} at ${r.phone}`}
+                              title={`Call ${r.guest_name}`}
+                            >
+                              <Phone size={11} aria-hidden /> Call
+                            </a>
+                          )}
+                          {(table.status === 'available' || table.status === 'reserved') && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onSeat(r);
+                              }}
+                              className="flex h-7 shrink-0 items-center gap-1 rounded-full bg-[#0F3D3E] px-2 text-[10.5px] font-bold text-white disabled:opacity-50"
+                              aria-label={`Seat ${r.guest_name} — they arrived late; marks their booking seated and the table occupied`}
+                              title="They walked in — seat them now"
+                            >
+                              <Users size={11} aria-hidden /> They&rsquo;re here
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onNoShow(r);
+                            }}
+                            className="flex h-7 shrink-0 items-center gap-1 rounded-full bg-white/70 px-2 text-[10.5px] font-bold text-[#B3261E] hover:bg-white disabled:opacity-50"
+                            aria-label={`Mark ${r.guest_name} as a no-show — the book records it, the day's close will count it`}
+                            title="They never came — record the no-show"
+                          >
+                            <CircleAlert size={11} aria-hidden /> No-show
+                          </button>
+                        </>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+              {promises.some((r) => r.note) && (
+                <p className="mt-2 space-y-0.5 text-[11px] leading-snug text-[#6B6B6B]">
+                  {promises.filter((r) => r.note).map((r) => (
+                    <span key={`n-${r.id}`} className="block truncate">&ldquo;{r.note}&rdquo; — {r.guest_name}</span>
+                  ))}
+                </p>
+              )}
+            </div>
+          )}
           {isLive && order && (
             <>
               <div className="rounded-2xl border border-[#E3E7E0] bg-white p-4 shadow-sm">
@@ -879,6 +1200,70 @@ function TableDrill({
                     </span>
                   )}
                 </p>
+              </div>
+
+              {/* v5.59.0 — the party moves: the ticket follows the guests to
+                 another table; the 011 trigger re-seats it on the floor. */}
+              <div className="rounded-2xl border border-[#E3E7E0] bg-white p-4 shadow-sm">
+                <button
+                  type="button"
+                  disabled={moveBusy}
+                  onClick={() => {
+                    setMoveOpen((o) => !o);
+                    setArmTarget(null);
+                  }}
+                  aria-expanded={moveOpen}
+                  className="flex h-8 w-full items-center justify-between rounded-full px-1 text-left disabled:opacity-50"
+                >
+                  <span className="flex items-center gap-2 text-[12.5px] font-semibold text-[#0F3D3E]">
+                    <ArrowLeftRight size={13} aria-hidden /> Move the party to another table
+                  </span>
+                  <span className="text-[11px] font-bold text-[#6B6B6B]">
+                    {candidates.length > 0 ? `${candidates.length} free` : 'no free tables'}
+                  </span>
+                </button>
+                {moveOpen && (
+                  <div className="mt-3 space-y-1.5 border-t border-[#E3E7E0] pt-3">
+                    {candidates.length === 0 ? (
+                      <p className="rounded-xl border border-dashed border-[#E3E7E0] bg-[#FBFBF9] px-3 py-3 text-center text-[12px] text-[#6B6B6B]">
+                        No free table right now — the party stays seated here.
+                      </p>
+                    ) : (
+                      candidates.map((c) => {
+                        const armed = armTarget === c.id;
+                        return (
+                          <div key={c.id} className="flex items-center justify-between gap-2 rounded-xl bg-[#FBFBF9] px-3 py-2">
+                            <p className="flex min-w-0 items-center gap-2 text-[12.5px] text-[#1A1A1A]">
+                              <span className="font-bold">Table {c.table_number}</span>
+                              <span className="truncate text-[11.5px] text-[#6B6B6B]">
+                                {c.capacity} seats{c.section ? ` · ${c.section}` : ''}
+                              </span>
+                            </p>
+                            <button
+                              type="button"
+                              disabled={moveBusy}
+                              onClick={() => {
+                                if (armed) {
+                                  setArmTarget(null);
+                                  onMove(c.id);
+                                } else {
+                                  setArmTarget(c.id);
+                                }
+                              }}
+                              aria-label={armed ? `Confirm moving this party to table ${c.table_number}` : `Move this party to table ${c.table_number}`}
+                              className={`h-7 shrink-0 rounded-full px-3 text-[11.5px] font-bold disabled:opacity-50 ${armed ? 'bg-[#0F3D3E] text-white' : 'border border-[#E3E7E0] text-[#0F3D3E] hover:bg-[#EEF3F1]'}`}
+                            >
+                              {armed ? 'Confirm move?' : 'Move here'}
+                            </button>
+                          </div>
+                        );
+                      })
+                    )}
+                    <p className="px-1 pt-0.5 text-[10.5px] leading-relaxed text-[#969696]">
+                      The ticket moves with the party; guest scans stay in the old table's trail.
+                    </p>
+                  </div>
+                )}
               </div>
             </>
           )}
@@ -1143,6 +1528,10 @@ function TableDrill({
 
 export function FloorScreen(): React.ReactElement {
   const { tenant, tenantId, error: tenantError, loading } = useTenant();
+  /* 5.98.0 — the floor's clocks follow the owner's word live: a Settings
+     save re-renders the book, the rhythm and the dialog's zone tag. */
+  const [, forceTzTick] = useState(0);
+  useEffect(() => subscribePrefs(() => forceTzTick((n) => n + 1)), []);
   const [tables, setTables] = useState<DiningTable[] | null>(null);
   const [orders, setOrders] = useState<Order[]>([]);
   const [sessions, setSessions] = useState<TableSession[]>([]);
@@ -1167,6 +1556,14 @@ export function FloorScreen(): React.ReactElement {
   /** v5.38.0 — the book: reservations, their fail-soft load error, the
    *  booking dialog, and the past-week toggle for the archive rows. */
   const [reservations, setReservations] = useState<Reservation[] | null>(null);
+  /* v5.84.0 — the promise clock: a 30s tick so a promise's "due soon" tone
+   *  turns on by itself while the board sits open. The 30s poll refetches
+   *  data; this only moves the hands between fetches. */
+  const [promiseTick, setPromiseTick] = useState(0);
+  useEffect(() => {
+    const t = window.setInterval(() => setPromiseTick((n) => n + 1), 30000);
+    return () => window.clearInterval(t);
+  }, []);
   const [bookError, setBookError] = useState<string | null>(null);
   const [bookOpen, setBookOpen] = useState(false);
   const [showPast, setShowPast] = useState(false);
@@ -1292,6 +1689,30 @@ export function FloorScreen(): React.ReactElement {
     [reload],
   );
 
+  /* v5.59.0 — the party moves. runAction owns the busy/error surface; the
+     optimistic repaint keeps the cards instant while realtime confirms, and
+     the drill closes because the ticket no longer lives at this table. */
+  const handleMoveParty = useCallback(
+    async (fromTable: DiningTable, orderId: string, targetId: string) => {
+      if (!tenantId) return;
+      await runAction(fromTable.id, async () => {
+        await moveOrderTable(orderId, fromTable.id, targetId, tenantId);
+        setTables(
+          (prev) =>
+            prev?.map((t) =>
+              t.id === fromTable.id
+                ? { ...t, status: 'available' as const, active_order_id: null }
+                : t.id === targetId
+                  ? { ...t, status: 'occupied' as const, active_order_id: orderId }
+                  : t,
+            ) ?? prev,
+        );
+        setDrillId(null);
+      });
+    },
+    [runAction, tenantId],
+  );
+
   const copyLink = useCallback(async (t: DiningTable) => {
     try {
       await navigator.clipboard.writeText(guestUrlOf(t));
@@ -1334,6 +1755,109 @@ export function FloorScreen(): React.ReactElement {
     return m;
   }, [orders]);
 
+  /* v5.82.0 — the hold audit. The board's window is the latest 100 tickets;
+     a hold pointing outside it (or at a deleted ticket) gets ONE targeted
+     read, kept in `holdAudit` (an Order means the in-window rules judge it;
+     null means ghost, proven). `holdFailed` keeps reads that errored — those
+     tables stay silent. The maps only grow on genuine ghosts: bounded, tiny. */
+  const [holdAudit, setHoldAudit] = useState<Map<string, Order | null>>(new Map());
+  const [holdFailed, setHoldFailed] = useState<Set<string>>(new Set());
+  const holdInFlight = useRef<Set<string>>(new Set());
+
+  const heldPointerIds = useMemo(
+    () =>
+      (tables || [])
+        .filter((t) => (t.status === 'occupied' || t.status === 'billing') && t.active_order_id)
+        .map((t) => t.active_order_id as string),
+    [tables],
+  );
+
+  useEffect(() => {
+    if (!tenantId) return;
+    const misses = heldPointerIds.filter(
+      (id) => !orderByTable.has(id) && !holdAudit.has(id) && !holdFailed.has(id) && !holdInFlight.current.has(id),
+    );
+    if (misses.length === 0) return;
+    misses.forEach((id) => {
+      holdInFlight.current.add(id);
+      fetchOrderById(tenantId, id)
+        .then((o) => setHoldAudit((prev) => (prev.has(id) ? prev : new Map(prev).set(id, o))))
+        .catch(() => setHoldFailed((prev) => (prev.has(id) ? prev : new Set(prev).add(id))))
+        .finally(() => {
+          holdInFlight.current.delete(id);
+        });
+    });
+    // No unsubscribe needed: every state write is idempotent (guarded by
+    // has()) and each path removes its own in-flight marker, so StrictMode's
+    // double-invoke dedupes on holdInFlight instead of double-charging a read.
+  }, [tenantId, heldPointerIds, orderByTable, holdAudit, holdFailed]);
+
+  /* v5.84.0 — the board keeps the book: tableId → that table's NEXT promise
+   *  (the earliest still-standing `booked` row for TODAY, IST). Untabled
+   *  rows pin nowhere — they stay in the book panel where the host assigns
+   *  them. promiseTick rides the deps so due-soon flips without a fetch.
+   *  v5.86.0 — when every promise for a table has gone quiet (the hour
+   *  passed unkept), the card speaks the most recent quiet one instead:
+   *  the future gets first claim, the unkept debt gets the rest. */
+  const nextPromiseByTable = useMemo(() => {
+    const map = new Map<string, { r: Reservation; mins: number; dueSoon: boolean; quiet: boolean }>();
+    if (!reservations) return map;
+    const nowMs = Date.now();
+    const todayKey = bookingTodayKey();
+    const nextFuture = new Map<string, Reservation>();
+    const lastQuiet = new Map<string, Reservation>();
+    for (const r of reservations) {
+      if (!r.table_id) continue;
+      if (isLivePromise(r, nowMs, todayKey)) {
+        const prev = nextFuture.get(r.table_id);
+        if (!prev || new Date(prev.slot_at).getTime() > new Date(r.slot_at).getTime()) nextFuture.set(r.table_id, r);
+      } else if (isQuietPromise(r, nowMs, todayKey)) {
+        const prev = lastQuiet.get(r.table_id);
+        if (!prev || new Date(prev.slot_at).getTime() < new Date(r.slot_at).getTime()) lastQuiet.set(r.table_id, r);
+      }
+    }
+    for (const [id, r] of nextFuture) {
+      const mins = minsUntil(r.slot_at, nowMs);
+      map.set(id, { r, mins, dueSoon: mins <= 45, quiet: false });
+    }
+    for (const [id, r] of lastQuiet) {
+      if (!map.has(id)) map.set(id, { r, mins: 0, dueSoon: false, quiet: true });
+    }
+    return map;
+  }, [reservations, promiseTick]);
+
+  /* v5.84.0 — the drill's fuller list: EVERY still-standing promise for a
+   *  table today, earliest first (the card keeps only the next one). Same
+   *  honesty rules as the chip: booked-only, IST-today. v5.86.0 — quiet
+   *  rows (the hour passed unkept) stay on the list in their own grey, so
+   *  the host sees the debt and can act on it; seated/no-show/cancelled
+   *  still never speak. */
+  const promisesByTable = useMemo(() => {
+    const map = new Map<string, Reservation[]>();
+    if (!reservations) return map;
+    const nowMs = Date.now();
+    const todayKey = bookingTodayKey();
+    for (const r of reservations) {
+      if (!r.table_id) continue;
+      if (!isLivePromise(r, nowMs, todayKey) && !isQuietPromise(r, nowMs, todayKey)) continue;
+      const list = map.get(r.table_id);
+      if (list) list.push(r);
+      else map.set(r.table_id, [r]);
+    }
+    for (const [, list] of map) list.sort((a, b) => new Date(a.slot_at).getTime() - new Date(b.slot_at).getTime());
+    return map;
+  }, [reservations, promiseTick]);
+
+  /* The header's honesty chip: how many holds the ledger just disproved. */
+  const staleHoldCount = useMemo(
+    () =>
+      (tables || []).filter((t) => {
+        const v = holdVerdictFor(t, orderByTable, holdAudit, holdFailed);
+        return v !== null && v !== 'live';
+      }).length,
+    [tables, orderByTable, holdAudit, holdFailed],
+  );
+
   const stats = useMemo(() => {
     const list = tables || [];
     const seats = list.reduce((s, t) => s + t.capacity, 0);
@@ -1367,6 +1891,12 @@ export function FloorScreen(): React.ReactElement {
   const drillOrder = useMemo(
     () => (drillTable?.active_order_id ? orderByTable.get(drillTable.active_order_id) : undefined),
     [drillTable, orderByTable],
+  );
+  /* v5.59.0 — honest move targets: free tables only, never this one. A
+     reserved table is promised to someone else and never appears here. */
+  const drillCandidates = useMemo(
+    () => (tables || []).filter((t) => t.status === 'available' && t.id !== drillTable?.id),
+    [tables, drillTable],
   );
   const visibleCount = useMemo(
     () => (filter ? sections.reduce((n, [, list]) => n + list.length, 0) : (tables || []).length),
@@ -1441,7 +1971,7 @@ export function FloorScreen(): React.ReactElement {
      reserved and orderless. The 011 trigger owns everything else — an
      occupied/billing table is never touched from here. */
   const flipReservation = useCallback(
-    async (r: Reservation, status: ReservationStatus) => {
+    async (r: Reservation, status: ReservationStatus, thenTicket = false) => {
       if (!tenantId) return;
       setActionError(null);
       setBusyId(`res-${r.id}`);
@@ -1457,6 +1987,27 @@ export function FloorScreen(): React.ReactElement {
             }
           }
         }
+        /* v5.60.0 — "Seat & order": the fast path for a party that has sat
+           down and is ready to key their round. The book row seats them,
+           holds the table, then hands the counter a cart already bound to
+           the right table (the drill tap-through's exact gesture, started
+           one leg earlier). Guest count prefills the PARTY size — they told
+           us how many are coming; the drawer's stepper can correct it. */
+        if (thenTicket && status === 'seated' && r.table_id) {
+          const t = (tables ?? []).find((x) => x.id === r.table_id);
+          if (t) {
+            const c = useCart.getState();
+            c.setOrderType('dine_in');
+            c.setTableId(t.id);
+            c.setTableLabel(t.table_number);
+            c.setGuestCount(r.party_size);
+            /* the booking already knows who is sitting down — the counter
+               should never re-key a name the book is holding */
+            if (r.guest_name) c.setCustomerName(r.guest_name);
+            if (r.phone) c.setCustomerPhone(r.phone);
+            useUi.getState().goSection('food', ['Food & Drinks']);
+          }
+        }
       } catch (err) {
         setActionError(err instanceof Error ? err.message : 'Could not update the booking.');
       } finally {
@@ -1467,14 +2018,33 @@ export function FloorScreen(): React.ReactElement {
     [tables, tenantId, reload],
   );
 
-  /* The book's day groups: from today IST forward (or the past week when
-     the archive toggle is on), grouped by IST day, rows ascending within a
-     day. Days without bookings render nothing — honest silence, not a wall
-     of empty headers. */
+  /* v5.85.0 — the promise arrives. The card-side gesture for the moment the
+   *  party is standing in front of the host: the booking flips seated (the
+   *  book, the source of truth, acknowledges the arrival FIRST) and the
+   *  table goes straight to occupied — no reserve limbo when the guests are
+   *  already here. The book's own row keeps its gentler Seat (→ reserved)
+   *  for the party still walking over. Order matters and errors surface:
+   *  a failed table write leaves a seated booking and a free table, both
+   *  truths the host can see and act on. */
+  const seatThePromise = useCallback(
+    async (r: Reservation): Promise<void> => {
+      if (!tenantId || !r.table_id) return;
+      await updateReservationStatus(r.id, 'seated');
+      await updateTable(r.table_id, tenantId, { status: 'occupied' });
+    },
+    [tenantId],
+  );
+
+  /* The book's day groups: from today in the booking clock forward (or the
+     past week when the archive toggle is on), grouped by booking-clock day,
+     rows ascending within a day. 5.105.0 — the keys and the window bounds
+     are the DB's clock (the bell's clock): a promise the bell calls TODAY
+     is a row this book calls TODAY, on every device. Days without bookings
+     render nothing — honest silence, not a wall of empty headers. */
   const book = useMemo(() => {
     const rows = reservations ?? [];
-    const today = istTodayIsoFloor();
-    const startMs = istDayStartFloor(today);
+    const today = bookingTodayKey();
+    const startMs = bookingDayStartMs(today);
     const weekMs = startMs - 7 * 24 * 3600 * 1000;
     const inScope = rows
       .filter((r) => {
@@ -1484,15 +2054,25 @@ export function FloorScreen(): React.ReactElement {
       .sort((a, b) => new Date(a.slot_at).getTime() - new Date(b.slot_at).getTime());
     const map = new Map<string, Reservation[]>();
     for (const r of inScope) {
-      const k = istDateKey(r.slot_at);
+      const k = bookingDayKey(r.slot_at);
       const list = map.get(k);
       if (list) list.push(r);
       else map.set(k, [r]);
     }
     const pastCount = rows.filter((r) => new Date(r.slot_at).getTime() < startMs).length;
-    const bookedToday = rows.filter((r) => istDateKey(r.slot_at) === today && r.status === 'booked').length;
+    const bookedToday = rows.filter((r) => bookingDayKey(r.slot_at) === today && r.status === 'booked').length;
     return { groups: [...map.entries()], pastCount, bookedToday, total: rows.length };
   }, [reservations, showPast]);
+
+  /* v5.87.0 — the book speaks the board's language: a booked row whose hour
+     is due soon wears the amber tone, one whose hour went by wears the grey
+     "went quiet" tone — the same three voices the cards advertise, so chip,
+     drill and book read as one instrument. Tones are IST-today only (the
+     board refuses to speak across days, and so does the book); every other
+     status keeps its own RES_META voice. Recomputed on the 30s promise
+     clock, so a row flips between fetches without one. */
+  const rowNowMs = Date.now();
+  const rowTodayKey = bookingTodayKey();
 
   if (loading) {
     return <SkeletonBoard />;
@@ -1512,7 +2092,16 @@ export function FloorScreen(): React.ReactElement {
         <div>
           <h1 className="font-serif text-[28px] italic leading-tight text-[#0F3D3E]">Floor</h1>
           <p className="mt-0.5 text-[13px] text-[#6B6B6B]">
-            {tenant?.name} · {stats.seatsUsed}/{stats.seats} seats busy · tables hold themselves when orders land
+            {tenant?.name} · {stats.seatsUsed}/{stats.seats} seats busy{' '}
+            {staleHoldCount > 0 && (
+              <span
+                className="mx-1 rounded-full bg-[#FDF3F2] px-2 py-0.5 font-bold text-[#B4483C]"
+                title="A hold whose ticket is gone or already paid — free the table."
+              >
+                · {staleHoldCount} stale hold{staleHoldCount === 1 ? '' : 's'}
+              </span>
+            )}{' '}
+            · tables hold themselves when orders land
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -1637,6 +2226,29 @@ export function FloorScreen(): React.ReactElement {
                 const busy = busyId === `res-${r.id}`;
                 const res = RES_META[r.status];
                 const table = r.table_id ? (tables ?? []).find((t) => t.id === r.table_id) : null;
+                const promise =
+                  r.status === 'booked' && bookingDayKey(r.slot_at) === rowTodayKey
+                    ? (() => {
+                        const t = new Date(r.slot_at).getTime();
+                        if (t < rowNowMs)
+                          return {
+                            bg: '#F1F4F1',
+                            fg: '#6B6B6B',
+                            label: 'Booked · went quiet',
+                            title:
+                              'The promised hour went by — the party is still booked. Seat them or mark the no-show; the clock does not convict.',
+                          };
+                        const mins = minsUntil(r.slot_at, rowNowMs);
+                        if (mins <= 45)
+                          return {
+                            bg: '#FDF3E4',
+                            fg: '#8A5A16',
+                            label: 'Booked · due soon',
+                            title: `The party is due in about ${mins} minutes — the table's hour is close.`,
+                          };
+                        return null;
+                      })()
+                    : null;
                 return (
                   <div
                     key={r.id}
@@ -1661,8 +2273,12 @@ export function FloorScreen(): React.ReactElement {
                       </a>
                     )}
                     {r.note && <span className="basis-full text-[12px] italic text-[#6B6B6B]">“{r.note}”</span>}
-                    <span className="ml-auto rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide" style={{ background: res.bg, color: res.fg }}>
-                      {res.label}
+                    <span
+                      className="ml-auto rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide"
+                      style={{ background: promise?.bg ?? res.bg, color: promise?.fg ?? res.fg }}
+                      title={promise?.title}
+                    >
+                      {promise?.label ?? res.label}
                     </span>
                     <span className="flex items-center gap-1.5">
                       {r.status === 'booked' && (
@@ -1677,6 +2293,17 @@ export function FloorScreen(): React.ReactElement {
                           >
                             <Users size={12} aria-hidden /> Seat
                           </button>
+                          {r.table_id && (
+                            <button
+                              type="button"
+                              disabled={busy}
+                              onClick={() => void flipReservation(r, 'seated', true)}
+                              aria-label={`Seat ${r.guest_name} and start their ticket at their table`}
+                              className="flex h-8 items-center gap-1 rounded-full border border-[#E3E7E0] px-2.5 text-[12px] font-semibold text-[#0F3D3E] hover:bg-[#EEF3F1] disabled:opacity-50"
+                            >
+                              <Plus size={12} aria-hidden /> Seat &amp; order
+                            </button>
+                          )}
                           <button
                             type="button"
                             disabled={busy}
@@ -1762,7 +2389,7 @@ export function FloorScreen(): React.ReactElement {
           <h2 className="text-[15px] font-bold text-[#1A1A1A]">Floor rhythm</h2>
           <div className="flex items-center gap-2">
             <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#6B6B6B]">
-              <Clock size={11} aria-hidden /> IST hours · last 7 days
+              <Clock size={11} aria-hidden /> {appTzTag()} hours · last 7 days
             </span>
             <div
               className="inline-flex rounded-full border border-[#E3E7E0] bg-white p-0.5"
@@ -1958,6 +2585,10 @@ export function FloorScreen(): React.ReactElement {
               const busy = busyId === t.id;
               const armed = confirmId === t.id;
               const isLive = t.status === 'occupied' || t.status === 'billing';
+              const hold = holdVerdictFor(t, orderByTable, holdAudit, holdFailed);
+              const staleHold = hold && hold !== 'live' ? hold : null;
+              /* v5.84.0 — this table's next promise, from the book. */
+              const nextPromise = nextPromiseByTable.get(t.id);
               return (
                 <div
                   key={t.id}
@@ -2015,6 +2646,26 @@ export function FloorScreen(): React.ReactElement {
                     </div>
                   )}
 
+                  {/* v5.84.0 — the board keeps the book: the table's next
+                      promise speaks right on the card, gold while the hour
+                      is comfortable, amber once the party is due. */}
+                  {nextPromise && <PromiseChip p={nextPromise} />}
+
+                  {/* v5.82.0 — the stale-hold alarm: the ledger disproved this
+                      hold, and the card says so in the pulled-alarm grammar. */}
+                  {staleHold && (
+                    <div
+                      role="status"
+                      aria-label={HOLD_ALARM[staleHold].aria(t.table_number)}
+                      title={HOLD_ALARM[staleHold].aria(t.table_number)}
+                      className="flex items-center gap-2 rounded-xl px-3 py-2 text-[12px] font-semibold leading-snug"
+                      style={{ background: '#FDF3F2', color: '#B4483C', boxShadow: 'inset 0 0 0 1px #F0D5D1' }}
+                    >
+                      <CircleAlert size={13} className="shrink-0" aria-hidden />
+                      <span>{HOLD_ALARM[staleHold].card}</span>
+                    </div>
+                  )}
+
                   {/* guest link / QR token */}
                   <div className="flex items-center gap-2 rounded-xl border border-[#E3E7E0] bg-[#FBFBF9] px-3 py-2">
                     <QrCode size={14} className="shrink-0 text-[#6B6B6B]" aria-hidden />
@@ -2050,18 +2701,40 @@ export function FloorScreen(): React.ReactElement {
                   <div className="mt-auto flex flex-wrap gap-1.5">
                     {t.status === 'available' && (
                       <>
-                        <button
-                          type="button"
-                          disabled={busy}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            void runAction(t.id, () => updateTable(t.id, tenantId, { status: 'occupied' }));
-                          }}
-                          className="flex h-10 flex-1 items-center justify-center gap-1.5 rounded-full px-3 text-[12.5px] font-semibold text-white disabled:opacity-50"
-                          style={{ background: '#0F3D3E' }}
-                        >
-                          <Users size={13} aria-hidden /> Seat guests
-                        </button>
+                        {/* v5.85.0 — the promise arrives: when the card knows
+                            WHO is coming, the seat button says their name —
+                            one tap flips the booking seated and seats the
+                            table (the book's own row keeps its gentler
+                            reserve path for a party still walking over). */}
+                        {nextPromise ? (
+                          <button
+                            type="button"
+                            disabled={busy}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              void runAction(t.id, () => seatThePromise(nextPromise.r));
+                            }}
+                            className="flex h-10 flex-1 items-center justify-center gap-1.5 rounded-full px-3 text-[12.5px] font-semibold text-white disabled:opacity-50"
+                            style={{ background: nextPromise.dueSoon ? '#8A5A16' : '#0F3D3E' }}
+                            title={`The party is here — marks ${nextPromise.r.guest_name}'s booking seated and seats ${t.table_number}.`}
+                            aria-label={`Seat ${nextPromise.r.guest_name} at table ${t.table_number} — marks their booking seated and the table occupied`}
+                          >
+                            <Users size={13} aria-hidden /> Seat {nextPromise.r.guest_name}
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            disabled={busy}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              void runAction(t.id, () => updateTable(t.id, tenantId, { status: 'occupied' }));
+                            }}
+                            className="flex h-10 flex-1 items-center justify-center gap-1.5 rounded-full px-3 text-[12.5px] font-semibold text-white disabled:opacity-50"
+                            style={{ background: '#0F3D3E' }}
+                          >
+                            <Users size={13} aria-hidden /> Seat guests
+                          </button>
+                        )}
                         <button
                           type="button"
                           disabled={busy}
@@ -2077,18 +2750,37 @@ export function FloorScreen(): React.ReactElement {
                     )}
                     {t.status === 'reserved' && (
                       <>
-                        <button
-                          type="button"
-                          disabled={busy}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            void runAction(t.id, () => updateTable(t.id, tenantId, { status: 'occupied' }));
-                          }}
-                          className="flex h-10 flex-1 items-center justify-center gap-1.5 rounded-full px-3 text-[12.5px] font-semibold text-white disabled:opacity-50"
-                          style={{ background: '#0F3D3E' }}
-                        >
-                          <Users size={13} aria-hidden /> Seat guests
-                        </button>
+                        {/* v5.85.0 — a held table whose promise has a name
+                            says it too: same gesture, same truth. */}
+                        {nextPromise ? (
+                          <button
+                            type="button"
+                            disabled={busy}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              void runAction(t.id, () => seatThePromise(nextPromise.r));
+                            }}
+                            className="flex h-10 flex-1 items-center justify-center gap-1.5 rounded-full px-3 text-[12.5px] font-semibold text-white disabled:opacity-50"
+                            style={{ background: nextPromise.dueSoon ? '#8A5A16' : '#0F3D3E' }}
+                            title={`The party is here — marks ${nextPromise.r.guest_name}'s booking seated and seats ${t.table_number}.`}
+                            aria-label={`Seat ${nextPromise.r.guest_name} at table ${t.table_number} — marks their booking seated and the table occupied`}
+                          >
+                            <Users size={13} aria-hidden /> Seat {nextPromise.r.guest_name}
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            disabled={busy}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              void runAction(t.id, () => updateTable(t.id, tenantId, { status: 'occupied' }));
+                            }}
+                            className="flex h-10 flex-1 items-center justify-center gap-1.5 rounded-full px-3 text-[12.5px] font-semibold text-white disabled:opacity-50"
+                            style={{ background: '#0F3D3E' }}
+                          >
+                            <Users size={13} aria-hidden /> Seat guests
+                          </button>
+                        )}
                         <button
                           type="button"
                           disabled={busy}
@@ -2124,8 +2816,9 @@ export function FloorScreen(): React.ReactElement {
                             if (armed) void runAction(t.id, () => updateTable(t.id, tenantId, { status: 'available', active_order_id: null }));
                             else armConfirm(t.id);
                           }}
-                          aria-label={armed ? `Confirm free table ${t.table_number}` : `Free table ${t.table_number}`}
-                          className={`h-10 rounded-full px-3 text-[12.5px] font-bold ${armed ? 'bg-[#B4483C] text-white' : 'border border-[#E3E7E0] text-[#B4483C] hover:bg-[#F6E8E6]'}`}
+                          aria-label={armed ? `Confirm free table ${t.table_number}` : staleHold ? `Free table ${t.table_number} — stale hold` : `Free table ${t.table_number}`}
+                          title={staleHold ? 'Nothing left to settle — the table can go.' : undefined}
+                          className={`h-10 rounded-full px-3 text-[12.5px] font-bold ${armed || staleHold === 'ghost' || staleHold === 'settled' ? 'bg-[#B4483C] text-white' : 'border border-[#E3E7E0] text-[#B4483C] hover:bg-[#F6E8E6]'}`}
                         >
                           {armed ? 'Confirm free?' : 'Free'}
                         </button>
@@ -2235,6 +2928,7 @@ export function FloorScreen(): React.ReactElement {
       {bookOpen && (
         <BookingDialog
           tables={tables ?? []}
+          reservations={reservations}
           busy={busyId === 'booking'}
           error={actionError}
           onClose={() => {
@@ -2262,13 +2956,23 @@ export function FloorScreen(): React.ReactElement {
         <TableDrill
           table={drillTable}
           order={drillOrder}
+          hold={drillTable ? holdVerdictFor(drillTable, orderByTable, holdAudit, holdFailed) : null}
+          promises={promisesByTable.get(drillTable.id) ?? []}
+          onSeat={(r) => void runAction(`res-${r.id}`, () => seatThePromise(r))}
+          onNoShow={(r) => void runAction(`res-${r.id}`, () => updateReservationStatus(r.id, 'no_show'))}
           sessions={sessionsByTable.get(drillTable.id) ?? []}
+          candidates={drillCandidates}
           cutArmId={cutArmId}
           cutBusyId={cutBusyId}
           onCutArm={armCut}
           onCut={(id) => void cutSession(id)}
           bulkCutBusy={bulkCutBusy === drillTable.id}
           onCutAll={(ids) => void cutAllSessions(drillTable.id, ids)}
+          onMove={(targetId) => {
+            if (!drillOrder) return; // the drill only offers the move on a live ticket
+            void handleMoveParty(drillTable, drillOrder.id, targetId);
+          }}
+          moveBusy={busyId === drillTable.id}
           onEdit={() => {
             setActionError(null);
             setEditTable(drillTable);
