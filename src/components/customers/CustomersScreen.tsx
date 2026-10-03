@@ -3,6 +3,7 @@ import {
   BadgePercent,
   CalendarClock,
   Crown,
+  Download,
   Gift,
   Loader2,
   Pencil,
@@ -38,6 +39,8 @@ import {
   type ReservationStatus,
 } from '../../lib/api';
 import { formatMoney } from '../../lib/prefs';
+import { downloadCsv } from '../../lib/csv';
+import { appTodayIso } from '../../lib/appday';
 import { bookingSlotLabel, bookingDayKey, bookingTodayKey, bookingTzIsForeign } from '../../lib/bookingday';
 import { useTenant } from '../../lib/tenant';
 import { computeUsual, isPaidTicket, USUAL_WINDOW } from '../../lib/usual';
@@ -116,12 +119,27 @@ function avatarTone(phone: string): { bg: string; text: string; ring: string } {
   return AVATAR_TONES[h % AVATAR_TONES.length];
 }
 
-/** Loyalty tier from LEDGER truth: only paid visits and paid rupees count. */
-function tierOf(visits: number, spent: number): { label: string; cls: string } {
-  if (visits >= 5 || spent >= 5000)
-    return { label: 'VIP', cls: 'bg-[#B88E2F]/12 text-[#8A5A00] border-[#B88E2F]/30' };
-  if (visits >= 2) return { label: 'Regular', cls: 'bg-[#E8F3E9] text-[#2E7D32] border-[#CBE3CD]' };
-  return { label: 'New', cls: 'bg-[#F6F5F2] text-[#6B6B6B] border-[#E3E7E0]' };
+/** Loyalty tier from LEDGER truth: only paid visits and paid rupees count.
+ * 5.129.0 — the key and its metadata split apart so the tiles, the row
+ * predicate, the miss voices and the CSV all read ONE definition
+ * (tierKeyOf); the badge stays tierOf. */
+type TierKey = 'new' | 'regular' | 'vip';
+
+const TIER_META: Record<TierKey, { label: string; cls: string }> = {
+  vip: { label: 'VIP', cls: 'bg-[#B88E2F]/12 text-[#8A5A00] border-[#B88E2F]/30' },
+  regular: { label: 'Regular', cls: 'bg-[#E8F3E9] text-[#2E7D32] border-[#CBE3CD]' },
+  new: { label: 'New', cls: 'bg-[#F6F5F2] text-[#6B6B6B] border-[#E3E7E0]' },
+};
+
+function tierKeyOf(visits: number, spent: number): TierKey {
+  if (visits >= 5 || spent >= 5000) return 'vip';
+  if (visits >= 2) return 'regular';
+  return 'new';
+}
+
+function tierOf(visits: number, spent: number): { key: TierKey; label: string; cls: string } {
+  const key = tierKeyOf(visits, spent);
+  return { key, ...TIER_META[key] };
 }
 
 function offerBadgeLabel(o: Offer): string {
@@ -146,6 +164,42 @@ const istSlotLabelBook = bookingSlotLabel;
  *  same guest. Empty stays empty: an empty phone never matches. */
 function phoneDigits(p: string | null | undefined): string {
   return (p || '').replace(/\D/g, '');
+}
+
+/* ── CSV export (v5.129.0 — the book, carried out; shared lib/csv.ts since
+ * 5.8.0). Exports the CURRENTLY NARROWED list — the tiles and the search
+ * decide what the counter is looking at, the file carries exactly that (the
+ * Bills house law: the counter exports what they see). Rows travel in the
+ * list's own order — most-valuable regulars first. */
+function exportGuestsCsv(rows: GuestRow[]): void {
+  if (rows.length === 0) return;
+  const header = [
+    'Name',
+    'Phone',
+    'Tier',
+    'Paid visits',
+    'Paid total (INR)',
+    'Last visit',
+    'On the book since',
+    'Email',
+    'Notes',
+  ];
+  const lines: unknown[][] = [header];
+  for (const { g, s } of rows) {
+    const tier = TIER_META[tierKeyOf(s?.visits ?? 0, Number(s?.total_spent ?? 0))].label;
+    lines.push([
+      g.name || '',
+      g.phone,
+      tier,
+      s?.visits ?? 0,
+      Number(s?.total_spent ?? 0).toFixed(2),
+      s?.last_visit_at ? new Date(s.last_visit_at).toLocaleString() : '',
+      new Date(g.created_at).toLocaleString(),
+      g.email || '',
+      g.notes || '',
+    ]);
+  }
+  downloadCsv(`servepoint-guests-${appTodayIso()}.csv`, lines);
 }
 
 export interface BookVoice {
@@ -278,6 +332,10 @@ const GuestsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry })
   const [error, setError] = useState<string | null>(null);
   const [rt, setRt] = useState<RealtimeState>('connecting');
   const [busyId, setBusyId] = useState<string | null>(null);
+  /* 5.129.0 — the tier tiles' filter: null = the whole book; a tier narrows
+   * the list to guests whose LEDGER truth (tierKeyOf) matches. The tiles'
+   * numbers above stay whole-book, always. */
+  const [tier, setTier] = useState<TierKey | null>(null);
   /* v5.116.0 — the guest search joins the shell-search contract: the
    * header box and the tab's own box are two doors to one state. */
   const query = useUi((s) => s.search);
@@ -486,6 +544,9 @@ const GuestsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry })
         );
       })
       .map((g) => ({ g, s: stats.get(g.phone) || null }))
+      /* 5.129.0 — the tier tile's word decides who survives; the same
+       * tierKeyOf the badge and the tiles count with. */
+      .filter(({ s }) => !tier || tierKeyOf(s?.visits ?? 0, Number(s?.total_spent ?? 0)) === tier)
       .sort((a, b) => {
         // most valuable regulars float up: visits, then spend, then recency
         const va = a.s?.visits ?? 0;
@@ -496,7 +557,7 @@ const GuestsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry })
         if (sa !== sb) return sb - sa;
         return (a.s?.last_visit_at || a.g.created_at) > (b.s?.last_visit_at || b.g.created_at) ? -1 : 1;
       });
-  }, [guests, stats, query]);
+  }, [guests, stats, query, tier]);
 
   const kpis = useMemo(() => {
     let regulars = 0;
@@ -577,13 +638,29 @@ const GuestsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry })
             <RefreshCw size={15} aria-hidden />
           </button>
           {tab === 'guests' ? (
-            <button
-              type="button"
-              onClick={() => setGuestForm({ mode: 'new', customer: null, open: true })}
-              className="sp-cta inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-[13px] font-semibold"
-            >
-              <Plus size={15} aria-hidden /> Add guest
-            </button>
+            <>
+              {/* 5.129.0 — the book, carried out: the narrowed list IS the
+                  file. Disabled while the current narrowing shows nothing —
+                  an empty narrowing exports an empty file, so it refuses. */}
+              <button
+                type="button"
+                onClick={() => exportGuestsCsv(rows)}
+                disabled={rows.length === 0}
+                aria-label="Export guests as CSV"
+                title="Export the filtered list as CSV (opens in Excel / Sheets)"
+                className="flex h-9 items-center gap-1.5 rounded-xl border border-[#E3E7E0] bg-white px-3 text-[12px] font-bold text-[#0F3D3E] transition hover:border-[#B88E2F] hover:text-[#B88E2F] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#B88E2F] disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <Download size={14} aria-hidden />
+                CSV
+              </button>
+              <button
+                type="button"
+                onClick={() => setGuestForm({ mode: 'new', customer: null, open: true })}
+                className="sp-cta inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-[13px] font-semibold"
+              >
+                <Plus size={15} aria-hidden /> Add guest
+              </button>
+            </>
           ) : (
             <button
               type="button"
@@ -644,6 +721,8 @@ const GuestsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry })
           kpis={kpis}
           query={query}
           setQuery={setQuery}
+          tier={tier}
+          setTier={setTier}
           loading={loading}
           onEdit={(g) => setGuestForm({ mode: 'edit', customer: g, open: true })}
           onDelete={doDeleteGuest}
@@ -712,6 +791,10 @@ const GuestsTab: React.FC<{
   kpis: { total: number; regulars: number; vip: number; topName: string; topSpent: number };
   query: string;
   setQuery: (q: string) => void;
+  /* 5.129.0 — the tiles' filter (null = whole book), lifted to GuestsInner
+   * so the list, the whisper and the misses read one state. */
+  tier: TierKey | null;
+  setTier: (t: TierKey | null) => void;
   loading: boolean;
   onEdit: (g: Customer) => void;
   onDelete: (g: Customer) => void;
@@ -722,7 +805,7 @@ const GuestsTab: React.FC<{
   /* 5.90.0 — the book's voices, keyed by guest id (null = the CRM has not
      read the book: every row stays silent, never an invented all-clear). */
   bookVoices: Map<string, BookVoice> | null;
-}> = ({ rows, total, kpis, query, setQuery, loading, onEdit, onDelete, deleteArm, setDeleteArm, busyId, onOpenDetail, bookVoices }) => {
+}> = ({ rows, total, kpis, query, setQuery, tier, setTier, loading, onEdit, onDelete, deleteArm, setDeleteArm, busyId, onOpenDetail, bookVoices }) => {
   if (loading) {
     return (
       <div className="space-y-3 px-6 py-5">
@@ -734,22 +817,56 @@ const GuestsTab: React.FC<{
   }
   return (
     <div className="px-6 py-5">
-      {/* KPI strip */}
+      {/* KPI strip — 5.129.0: the Regulars and VIPs tiles follow the Floor's
+       * tile grammar (5.128.0): tap to narrow the list to that tier, tap
+       * again to release. The numbers stay whole-book — the tiles COUNT the
+       * book; the list below shows the narrowing, and the whisper says so. */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <div className="sp-card px-4 py-3.5">
           <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#969696]">Guests on the books</p>
           <p className="mt-1 text-2xl font-bold text-[#1A1A1A]">{kpis.total}</p>
         </div>
-        <div className="sp-card px-4 py-3.5">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#969696]">Regulars · 2+ visits</p>
-          <p className="mt-1 text-2xl font-bold text-[#2E7D32]">{kpis.regulars}</p>
-        </div>
-        <div className="sp-card px-4 py-3.5">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#969696]">VIPs</p>
-          <p className="mt-1 flex items-center gap-1.5 text-2xl font-bold text-[#8A5A00]">
-            <Crown size={17} aria-hidden /> {kpis.vip}
-          </p>
-        </div>
+        {(
+          [
+            {
+              key: 'regular' as TierKey,
+              label: 'Regulars · 2+ visits',
+              count: kpis.regulars,
+              valueCls: 'text-[#2E7D32]',
+              icon: null,
+            },
+            {
+              key: 'vip' as TierKey,
+              label: 'VIPs',
+              count: kpis.vip,
+              valueCls: 'text-[#8A5A00]',
+              icon: <Crown size={17} aria-hidden />,
+            },
+          ]
+        ).map((t) => {
+          const active = tier === t.key;
+          return (
+            <button
+              key={t.key}
+              type="button"
+              aria-pressed={active}
+              onClick={() => setTier(active ? null : t.key)}
+              title={
+                active
+                  ? `Showing ${t.label.split(' ·')[0].toLowerCase()} only — tap again for the whole book`
+                  : `Tap to show ${t.label.split(' ·')[0].toLowerCase()} only`
+              }
+              className={`rounded-2xl border bg-white px-4 py-3.5 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#967221] ${
+                active ? 'border-[#B88E2F] ring-2 ring-[#B88E2F]/30' : 'border-[#E3E7E0]'
+              }`}
+            >
+              <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#969696]">{t.label}</p>
+              <p className={`mt-1 flex items-center gap-1.5 text-2xl font-bold ${t.valueCls}`}>
+                {t.icon} {t.count}
+              </p>
+            </button>
+          );
+        })}
         <div className="sp-card px-4 py-3.5">
           <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#969696]">Top spender</p>
           <p className="mt-1 truncate text-[15px] font-bold text-[#1A1A1A]">{kpis.topName}</p>
@@ -770,45 +887,84 @@ const GuestsTab: React.FC<{
         />
       </div>
 
-      {/* v5.122.0 — the count line (Bills' house pattern, aria-live):
-          while the search narrows the book, say how much of it the term
-          captured — the whole-book KPIs above stay untouched by design. */}
-      {query.trim() && (
+      {/* 5.129.0 — the whisper (the 5.122.0 count line grows into the
+          Floor's 5.128.0 grammar): while the search or a tier tile narrows
+          the book, say how much of it survived — and admit the tiles above
+          still count the WHOLE book. The narrowing never rewrites the
+          headline. */}
+      {(query.trim() || tier) && (
         <p
           aria-live="polite"
-          className="mt-3 flex items-center gap-2 text-[12px] font-medium text-[#0F3D3E]"
+          className="mt-3 flex flex-wrap items-center gap-2 text-[12px] font-medium text-[#0F3D3E]"
         >
           <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[#0F3D3E] px-1.5 text-[10.5px] font-bold tabular-nums text-white">
             {rows.length}
           </span>
           <span className="text-[#6B6B6B]">
-            of {total} {total === 1 ? 'guest' : 'guests'}{' '}
-            {rows.length === 1 || total === 1 ? 'matches' : 'match'} “{query.trim()}”
+            Showing {rows.length} of {total} {total === 1 ? 'guest' : 'guests'}
+            {query.trim() && <> for “{query.trim()}”</>} — the tiles above still
+            count the whole book
           </span>
         </p>
       )}
 
       {/* list */}
       {rows.length === 0 ? (
-        query ? (
-          /* v5.123.0 — the book's miss says why (the 5.119.0 contract
-           * reaches its second-to-last generic voice): the term is
-           * named, the reach is named — including emails, which the
-           * hay always read but the old placeholder never admitted —
-           * and the gold way-out clears BOTH doors of the search. */
-          <EmptyState
-            icon={Search}
-            title={`No guest matches “${query.trim()}”`}
-            body="Search reads names, phones, notes, and emails — an email match keeps its row without a gold mark; open the guest to see the address."
-            action={
-              <button
-                onClick={() => setQuery('')}
-                className="rounded-lg bg-[#F3E8CF] px-3 py-1.5 text-[12px] font-semibold text-[#1A1A1A] transition hover:bg-[#E9D9AF]"
-              >
-                Clear search
-              </button>
-            }
-          />
+        query.trim() || tier ? (
+          /* 5.129.0 — the miss says why (the Floor's either-can-miss
+           * grammar reaches the book): the search's word, the tile's word
+           * with its ledger definition, or both. The catalog truth below
+           * ("No guests yet") stays its own sentence — an empty book is
+           * not a filtered one. */
+          query.trim() ? (
+            <EmptyState
+              icon={Search}
+              title={`No guest matches “${query.trim()}”`}
+              body={
+                <>
+                  Search reads names, phones, notes, and emails — an email match keeps its row
+                  without a gold mark; open the guest to see the address.
+                  {tier && (
+                    <> The {TIER_META[tier].label} tile is also in play — either can miss.</>
+                  )}
+                </>
+              }
+              action={
+                <button
+                  onClick={() => {
+                    setQuery('');
+                    if (tier) setTier(null);
+                  }}
+                  className="rounded-lg bg-[#F3E8CF] px-3 py-1.5 text-[12px] font-semibold text-[#1A1A1A] transition hover:bg-[#E9D9AF]"
+                >
+                  {tier ? 'Clear both' : 'Clear search'}
+                </button>
+              }
+            />
+          ) : (
+            <EmptyState
+              icon={tier === 'vip' ? Crown : Users}
+              title={tier === 'vip' ? 'No VIPs to show' : 'No regulars to show'}
+              body={
+                <>
+                  The book holds {total} {total === 1 ? 'guest' : 'guests'} — none of them{' '}
+                  {tier === 'vip' ? 'a VIP yet' : 'a regular yet'} (
+                  {tier === 'vip'
+                    ? 'a VIP has 5+ paid visits or ₹5,000 paid'
+                    : 'a regular has 2+ paid visits'}
+                  ). Tap the tile again, or show the whole book.
+                </>
+              }
+              action={
+                <button
+                  onClick={() => setTier(null)}
+                  className="rounded-lg bg-[#F3E8CF] px-3 py-1.5 text-[12px] font-semibold text-[#1A1A1A] transition hover:bg-[#E9D9AF]"
+                >
+                  Show the whole book
+                </button>
+              }
+            />
+          )
         ) : (
           /* catalog truth: an empty book is a different sentence from a
            * filtered one — it keeps its own voice, now in the shared

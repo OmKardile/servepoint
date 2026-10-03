@@ -35,6 +35,7 @@ import { useSession, useUi } from '../../store/session';
 import { useChatUnread } from '../../store/chatUnread';
 import { useTenant } from '../../lib/tenant';
 import { MarkHit } from '../shell/MarkHit';
+import { EmptyState } from '../shell/EmptyState';
 import type { ChatMessage, Conversation } from '../../types';
 
 /**
@@ -847,38 +848,51 @@ const MessagesContent: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetr
             {listLoading ? (
               <ListSkeleton />
             ) : conversations.length === 0 ? (
-              <div className="flex flex-1 flex-col items-center justify-center py-10 text-center">
-                <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#EAF0EC] text-[#0F3D3E]">
-                  <Users size={22} aria-hidden />
-                </span>
-                <p className="mt-3 max-w-[200px] text-[12.5px] leading-relaxed text-[#6B6B6B]">
-                  No rooms yet — the house seeds them when the workspace is provisioned.
-                </p>
-              </div>
+              /* 5.129.0 — the no-rooms truth moves onto the shared EmptyState
+               * (compact register): same words, the house's miss shape. */
+              <EmptyState
+                compact
+                icon={Users}
+                title="No rooms yet"
+                body="The house seeds them when the workspace is provisioned."
+              />
             ) : visibleRooms.length === 0 ? (
               /* v5.115.0 — the filter came up empty; distinguish it from the
                   no-rooms-yet voice and own what the filter does NOT do
-                  (full-history search). */
-              <div className="flex flex-1 flex-col items-center justify-center py-10 text-center">
-                <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#EAF0EC] text-[#0F3D3E]">
-                  <Search size={22} aria-hidden />
-                </span>
-                <p className="mt-3 max-w-[240px] text-[12.5px] leading-relaxed text-[#6B6B6B]">
-                  {unreadOnly && !q
-                    ? 'No unread lines — the house is quiet.'
-                    : `No room matches “${roomQuery.trim()}” — filters names and last lines, not the whole history.`}
-                </p>
-                <button
-                  onClick={() => {
-                    setRoomQuery('');
-                    setUnreadOnly(false);
-                    roomFilterRef.current?.focus();
-                  }}
-                  className="mt-3 rounded-lg bg-[#F3E8CF] px-3 py-1.5 text-[12px] font-semibold text-[#1A1A1A] transition hover:bg-[#E9D9AF]"
-                >
-                  Clear filter
-                </button>
-              </div>
+                  (full-history search). 5.129.0 — the shape is the shared
+                  EmptyState's compact register; the words stay this room's
+                  own, and the Unread toggle owns its side of either-can-miss. */
+              <EmptyState
+                compact
+                icon={Search}
+                title={
+                  unreadOnly && !q
+                    ? 'No unread lines'
+                    : `No room matches “${roomQuery.trim()}”`
+                }
+                body={
+                  unreadOnly && !q
+                    ? 'The house is quiet — every line has been read.'
+                    : (
+                      <>
+                        Filters names and last lines, not the whole history.
+                        {unreadOnly && <> The Unread toggle is also in play.</>}
+                      </>
+                    )
+                }
+                action={
+                  <button
+                    onClick={() => {
+                      setRoomQuery('');
+                      setUnreadOnly(false);
+                      roomFilterRef.current?.focus();
+                    }}
+                    className="rounded-lg bg-[#F3E8CF] px-3 py-1.5 text-[12px] font-semibold text-[#1A1A1A] transition hover:bg-[#E9D9AF]"
+                  >
+                    Clear filter
+                  </button>
+                }
+              />
             ) : (
               <ul className="min-h-0 flex-1 space-y-1.5 overflow-y-auto">
                 {visibleRooms.map((cv) => {

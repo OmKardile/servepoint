@@ -56,6 +56,7 @@ import { useDialogA11y } from '../../lib/useDialogA11y';
 import { useTenant } from '../../lib/tenant';
 import { useUi } from '../../store/session';
 import { MarkHit } from '../shell/MarkHit';
+import { EmptyState } from '../shell/EmptyState';
 import type { MenuItem } from '../../types';
 
 /**
@@ -740,22 +741,25 @@ const InventoryInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
               <ul className="flex flex-col gap-2.5" aria-label="Ingredient stock list">
               {items.length > 0 && visibleShelf.length === 0 ? (
                 /* v5.117.0 — the search came up empty; own what it reads
-                    (names) and offer the way back. */
-                <li className="flex flex-col items-center justify-center py-10 text-center">
-                  <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#EAF0EC] text-[#0F3D3E]">
-                    <Search size={22} aria-hidden />
-                  </span>
-                  <p className="mt-3 max-w-[240px] text-[12.5px] leading-relaxed text-[#6B6B6B]">
-                    No ingredient matches “{shelfQuery.trim()}” — the shelf counts stay whole-shelf.
-                  </p>
-                  <button
-                    onClick={() => {
-                      setShelfQuery('');
-                    }}
-                    className="mt-3 rounded-lg bg-[#F3E8CF] px-3 py-1.5 text-[12px] font-semibold text-[#1A1A1A] transition hover:bg-[#E9D9AF]"
-                  >
-                    Clear search
-                  </button>
+                    (names) and offer the way back. 5.129.0 — the shape is
+                    the shared EmptyState's compact register; words stay. */
+                <li>
+                  <EmptyState
+                    compact
+                    icon={Search}
+                    title={`No ingredient matches “${shelfQuery.trim()}”`}
+                    body="The shelf counts stay whole-shelf."
+                    action={
+                      <button
+                        onClick={() => {
+                          setShelfQuery('');
+                        }}
+                        className="rounded-lg bg-[#F3E8CF] px-3 py-1.5 text-[12px] font-semibold text-[#1A1A1A] transition hover:bg-[#E9D9AF]"
+                      >
+                        Clear search
+                      </button>
+                    }
+                  />
                 </li>
               ) : visibleShelf.map((it) => {
                 const tone = levelTone(it.current_stock, it.reorder_point);

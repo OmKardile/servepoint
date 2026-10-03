@@ -19,20 +19,42 @@ export const EmptyState: React.FC<{
   title: string;
   body?: React.ReactNode;
   action?: React.ReactNode;
-}> = ({ icon: Icon, title, body, action }) => (
-  <div className="flex flex-col items-center justify-center px-6 py-16 text-center">
-    <span
-      aria-hidden
-      className="flex h-20 w-20 items-center justify-center rounded-full bg-[#EAF0EC] text-[#0F3D3E]"
-    >
-      <Icon size={34} strokeWidth={1.6} />
-    </span>
-    <h3 className="mt-4 text-base font-bold text-[#1A1A1A]">{title}</h3>
-    {body && (
-      <p className="mt-1 max-w-sm text-[13px] leading-relaxed text-[#6B6B6B]">
-        {body}
-      </p>
-    )}
-    {action && <div className="mt-4">{action}</div>}
-  </div>
-);
+  /** v5.129.0 — the sidebar/in-list register: a smaller chip (h-14,
+   * rounded-2xl) and tighter air for misses that live inside a rail, a
+   * sidebar, or another component's list — the same anatomy, half the
+   * voice. Full-size stays the default; main-screen misses keep it. */
+  compact?: boolean;
+}> = ({ icon: Icon, title, body, action, compact }) =>
+  compact ? (
+    <div className="flex flex-col items-center justify-center px-4 py-10 text-center">
+      <span
+        aria-hidden
+        className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#EAF0EC] text-[#0F3D3E]"
+      >
+        <Icon size={22} strokeWidth={1.8} />
+      </span>
+      <h3 className="mt-3 text-[13px] font-bold text-[#1A1A1A]">{title}</h3>
+      {body && (
+        <p className="mt-1 max-w-[240px] text-[12.5px] leading-relaxed text-[#6B6B6B]">
+          {body}
+        </p>
+      )}
+      {action && <div className="mt-3">{action}</div>}
+    </div>
+  ) : (
+    <div className="flex flex-col items-center justify-center px-6 py-16 text-center">
+      <span
+        aria-hidden
+        className="flex h-20 w-20 items-center justify-center rounded-full bg-[#EAF0EC] text-[#0F3D3E]"
+      >
+        <Icon size={34} strokeWidth={1.6} />
+      </span>
+      <h3 className="mt-4 text-base font-bold text-[#1A1A1A]">{title}</h3>
+      {body && (
+        <p className="mt-1 max-w-sm text-[13px] leading-relaxed text-[#6B6B6B]">
+          {body}
+        </p>
+      )}
+      {action && <div className="mt-4">{action}</div>}
+    </div>
+  );
