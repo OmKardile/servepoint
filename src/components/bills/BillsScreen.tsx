@@ -1133,6 +1133,15 @@ const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRet
                     if (logoUrl) await preloadPrintImage(logoUrl);
                     printReceipt({
                       storeName: tenant?.name || 'ServePoint store',
+                      // Task 90 — the legal identity rides the paper: GSTIN
+                      // turns the printout into a TAX INVOICE, FSSAI is the
+                      // food licence the law wants shown. Absent → the
+                      // pre-5.51 receipt, byte for byte.
+                      legalName: tenant?.legal_name || null,
+                      gstNumber: tenant?.gst_number || null,
+                      fssaiNumber: tenant?.fssai_number || null,
+                      address: tenant?.address || null,
+                      phone: tenant?.owner_phone || null,
                       orderNumber: selected.order_number,
                       orderType: String(selected.order_type || ''),
                       tableLabel: selected.table_label,

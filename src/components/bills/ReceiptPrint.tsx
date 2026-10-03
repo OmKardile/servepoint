@@ -46,6 +46,15 @@ export interface ReceiptOpts {
    *  placeholder. A dead URL hides its own tile at print time (onerror), and
    *  the caller preloads the image so a cold remote never prints a hole. */
   logoUrl?: string | null;
+  /** Task 90 — the legal identity block. Every field is optional and only
+   *  prints when present; with ALL absent the receipt is byte-identical to
+   *  the pre-5.51 header. GSTIN present → the document becomes a TAX
+   *  INVOICE (India: a bill carrying GSTIN is a tax invoice). */
+  legalName?: string | null;
+  gstNumber?: string | null;
+  fssaiNumber?: string | null;
+  address?: string | null;
+  phone?: string | null;
 }
 
 const esc = (s: string): string =>
@@ -128,12 +137,40 @@ export function buildReceiptHtml(opts: ReceiptOpts): string {
     opts.customerName ? esc(opts.customerName) : '',
   ].filter(Boolean);
 
+  /* Task 90 — legal identity lines. Order reads like an Indian bill: who
+   * (trade name) → the entity behind it → where → how to reach → the two
+   * licence numbers the law wants on paper. Only present fields print; the
+   * GSTIN/FSSAI codes carry extra letter-spacing so a hand-keyed digit is
+   * visible at arm's length. */
+  const legalName =
+    opts.legalName && opts.legalName.trim() !== '' && opts.legalName.trim() !== opts.storeName
+      ? `<div style="margin-top:2px;font-size:11px;font-weight:600;">${esc(opts.legalName.trim())}</div>`
+      : '';
+  const address =
+    opts.address && opts.address.trim() !== ''
+      ? `<div style="margin-top:2px;font-size:10.5px;color:#333;">${esc(opts.address.trim())}</div>`
+      : '';
+  const phone =
+    opts.phone && opts.phone.trim() !== ''
+      ? `<div style="margin-top:1px;font-size:10.5px;color:#333;">${esc(opts.phone.trim())}</div>`
+      : '';
+  const gstin =
+    opts.gstNumber && opts.gstNumber.trim() !== ''
+      ? `<div style="margin-top:4px;font-size:10.5px;letter-spacing:1px;font-variant-numeric:tabular-nums;">GSTIN: ${esc(opts.gstNumber.trim().toUpperCase())}</div>`
+      : '';
+  const fssai =
+    opts.fssaiNumber && opts.fssaiNumber.trim() !== ''
+      ? `<div style="margin-top:1px;font-size:10.5px;letter-spacing:1px;font-variant-numeric:tabular-nums;">FSSAI Lic. No: ${esc(opts.fssaiNumber.trim())}</div>`
+      : '';
+  const docTitle = opts.gstNumber && opts.gstNumber.trim() !== '' ? 'TAX INVOICE' : 'CUSTOMER RECEIPT';
+
   return `<!doctype html><html><head><meta charset="utf-8"><title>Receipt #${esc(String(opts.orderNumber))}</title></head>
 <body style="font-family:'Courier New',monospace;color:#000;margin:0;padding:16px 12px;width:302px;font-size:12px;">
   <div style="text-align:center;border-bottom:1px dashed #000;padding-bottom:8px;margin-bottom:8px;">
     ${opts.logoUrl ? `<img src="${esc(opts.logoUrl)}" alt="" onerror="this.style.display='none'" style="display:block;margin:0 auto 6px;max-height:44px;max-width:120px;object-fit:contain;"/>` : ''}
     <div style="font-size:15px;font-weight:800;letter-spacing:1px;">${esc(opts.storeName)}</div>
-    <div style="margin-top:2px;">CUSTOMER RECEIPT</div>
+    ${legalName}${address}${phone}${gstin}${fssai}
+    <div style="margin-top:2px;">${docTitle}</div>
     <div>#${esc(String(opts.orderNumber))}${metaBits.length > 0 ? ` · ${metaBits.join(' · ')}` : ''}</div>
     <div>${istDateTime(opts.createdAt)} IST</div>
   </div>

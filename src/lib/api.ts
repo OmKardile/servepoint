@@ -1400,6 +1400,44 @@ export async function fetchTenantBySlug(slug: string): Promise<Tenant | null> {
   return (data as Tenant) || null;
 }
 
+/* ── Business profile (Task 90) ─────────────────────────────────────────────
+ * The tenant's LEGAL identity — legal_name / gst_number / fssai_number /
+ * address / owner_phone. Written directly against tenants: migration 001's
+ * "Tenant read access" + the owner UPDATE policy (added alongside the logo
+ * policies) already gate this write to the tenant OWNER via RLS — staff and
+ * superadmins writing other tenants get a 42501, surfaced verbatim.
+ * Empty string normalizes to null (the logo precedent: clearing is honest). */
+export interface TenantLegalInput {
+  legalName?: string | null;
+  gstNumber?: string | null;
+  fssaiNumber?: string | null;
+  address?: string | null;
+  phone?: string | null;
+}
+
+const nullIfBlank = (v: string | null | undefined): string | null => {
+  const t = (v ?? '').trim();
+  return t === '' ? null : t;
+};
+
+export async function updateTenantLegal(
+  tenantId: string,
+  input: TenantLegalInput,
+): Promise<void> {
+  requireCloud();
+  const { error } = await supabase
+    .from('tenants')
+    .update({
+      legal_name: nullIfBlank(input.legalName),
+      gst_number: nullIfBlank(input.gstNumber),
+      fssai_number: nullIfBlank(input.fssaiNumber),
+      address: nullIfBlank(input.address),
+      owner_phone: nullIfBlank(input.phone),
+    })
+    .eq('id', tenantId);
+  if (error) throw error;
+}
+
 export async function fetchSubscriptions(): Promise<Subscription[]> {
   requireCloud();
   const { data, error } = await supabase

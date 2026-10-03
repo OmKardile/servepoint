@@ -3,6 +3,21 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.51.0] — 2026-10-03 — The bill speaks legal: Business profile + the TAX INVOICE receipt
+
+### Added — the legal identity travels from Settings to the printed paper (no migration, no API schema change)
+- The tenants table has carried `legal_name`, `gst_number`, `fssai_number`, `address` and `owner_phone` since migration 001 — but there was nowhere to edit them and the thermal receipt never printed them. For an Indian café that is a compliance gap, not a nicety: a bill carrying a GSTIN is legally a **tax invoice**, and the FSSAI licence is required on food-business paperwork. The round closes the loop end to end:
+  - **Settings → Business profile** (owner-only, the same `isTenantOwner` gate as Café brand): five fields — legal entity name, GSTIN (15-char shape check), FSSAI licence (14-digit shape check), address, phone. Both licence checks warn softly and never hard-block — the DB is not the place to outsmart a valid edge GSTIN the government actually issued. Writes go through `updateTenantLegal` straight against `tenants`, gated by the existing owner-only UPDATE RLS policy (the same grant that lets Café brand save the logo); empty string saves as null, so clearing is honest.
+  - **The receipt grows a legal identity block** (ReceiptPrint): legal name (only when it differs from the trade name), address, phone, then `GSTIN: …` and `FSSAI Lic. No: …` in letter-spaced tabular digits a hand-keyed typo can't hide in — and the document title becomes **TAX INVOICE** the moment a GSTIN exists, falling back to CUSTOMER RECEIPT when it doesn't. Every field is optional; with all absent the receipt is byte-identical to the pre-5.51 header (the v5.29 logo precedent).
+  - **Bills** passes the tenant's legal fields into the print — one caller, the house's single receipt door.
+
+### Styling — what you save is what the guest holds
+- The section's centerpiece is a **thermal preview card**: a mini receipt (dashed hairline frame on the cream floor, monospace, centered) that re-renders from the drafts on every keystroke — trade name, legal name, address, phone, GSTIN/FSSAI lines, and the document title chip flipping between a green TAX INVOICE and a gray CUSTOMER RECEIPT with an honest one-line hint underneath ("No GSTIN yet — bills print as plain customer receipts…"). The GSTIN/FSSAI inputs render in mono uppercase with tracking, matching the paper they will print on.
+
+### Verified
+- E2E (real UI, owner session): Business profile nav row sits beside Café brand; empty state renders the gray CUSTOMER RECEIPT preview with Save disabled; typing the GSTIN flips the preview to green TAX INVOICE live; all five fields saved ("Saved" chip), **survived a full reload**, then cleared through the same UI (keyboard-driven — synthetic `fill` turns out to bypass React's onChange on controlled inputs; real keystrokes don't) and the preview flipped back honestly. Receipt builder asserted in-page with the REAL stored values: TAX INVOICE + GSTIN + FSSAI + legal name + address + phone all present, escaping injection-safe, and the all-absent call falls back to the exact pre-5.51 CUSTOMER RECEIPT. The printed paper itself screenshotted via iframe (`scripts/qa90-receipt-legal.png`) next to the filled Settings section (`scripts/qa90-settings-business.png`). 13/13 routes, 0 console errors on full reloads, tsc 0. (One stale HMR-window `pingPresence is not defined` in the session console history predates this round and does not reproduce on any fresh reload.)
+- Cloud truth (`scripts/qa90-truth.mjs`): TRUTH OK — legal fields restored to null, orders 36 / bells 3 / chat 5 / presence owner-only / menu-photos bucket 0, tenants schema untouched at 20 columns, the owner UPDATE policy intact. Zero migration, zero schema drift, honest exit state.
+
 ## [5.50.0] — 2026-10-03 — Every section speaks CSV: the numbers can leave the building
 
 ### Added — the five chart-only sections get their exit (no migration, no API change)

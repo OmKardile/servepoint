@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   Bell,
+  Building2,
   Check,
   ChevronDown,
   CookingPot,
@@ -24,6 +25,7 @@ import {
 import type { LucideIcon } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { authService } from '../../lib/authService';
+import { updateTenantLegal } from '../../lib/api';
 import { dbErrorHint } from '../../lib/dbErrors';
 import { canPerformAction, getRoleMeta } from '../../lib/rbac';
 import { getPrefs, setPrefs, subscribePrefs } from '../../lib/prefs';
@@ -52,6 +54,7 @@ import type { Employee } from '../../types';
 type SettingsSection =
   | 'profile'
   | 'brand'
+  | 'business'
   | 'notification'
   | 'appearance'
   | 'checkout'
@@ -62,6 +65,7 @@ type SettingsSection =
 const SECTION_TITLES: Record<SettingsSection, string> = {
   profile: 'Profile',
   brand: 'Café brand',
+  business: 'Business profile',
   notification: 'Notification',
   appearance: 'Appearance',
   checkout: 'Checkout Settings',
@@ -1319,6 +1323,262 @@ const CafeBrandSection: React.FC = () => {
   );
 };
 
+/* ───────────────────────── 6.5 · Business profile ─────────────────── */
+
+/**
+ * Business profile (Task 90): the tenant's LEGAL identity — the fields the
+ * printed bill must carry for an Indian café to hand paper over the counter
+ * legally. GSTIN turns the thermal receipt into a TAX INVOICE (ReceiptPrint
+ * swaps the document title the moment a GSTIN exists); FSSAI is the food
+ * business licence; legal_name/address/phone finish the who-and-where.
+ *
+ * Writes go through updateTenantLegal (api.ts) straight against tenants —
+ * the owner-only UPDATE policy (same grant that lets Café brand save the
+ * logo) is the gate; this section is nav-hidden for staff and superadmins,
+ * and a leaked write would bounce on RLS anyway. Empty string saves as
+ * null — clearing is honest.
+ *
+ * The styling centerpiece is the thermal PREVIEW: a mini receipt card that
+ * re-renders from the drafts on every keystroke — what you save is exactly
+ * what the guest holds. The two licence inputs warn softly (shape only,
+ * never a hard block — the DB is not the place to outsmart a valid edge
+ * GSTIN the government issued).
+ */
+
+const GSTIN_RE = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/;
+const FSSAI_RE = /^[0-9]{14}$/;
+
+interface LegalDraft {
+  legalName: string;
+  gst: string;
+  fssai: string;
+  address: string;
+  phone: string;
+}
+
+const trimDraft = (d: LegalDraft): LegalDraft => ({
+  legalName: d.legalName.trim(),
+  gst: d.gst.trim(),
+  fssai: d.fssai.trim(),
+  address: d.address.trim(),
+  phone: d.phone.trim(),
+});
+
+const BusinessProfileSection: React.FC = () => {
+  const { tenantId } = useTenant();
+  const [loading, setLoading] = useState<boolean>(() => !!tenantId);
+  const [storeName, setStoreName] = useState('');
+  const [draft, setDraft] = useState<LegalDraft>({
+    legalName: '',
+    gst: '',
+    fssai: '',
+    address: '',
+    phone: '',
+  });
+  const [saved, setSaved] = useState<LegalDraft | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [ok, fireOk] = useTransientFlag(2400);
+
+  useEffect(() => {
+    let alive = true;
+    if (!tenantId) {
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    void supabase
+      .from('tenants')
+      .select('name, legal_name, gst_number, fssai_number, address, owner_phone')
+      .eq('id', tenantId)
+      .single()
+      .then(({ data, error }) => {
+        if (!alive) return;
+        if (!error && data) {
+          const d = data as {
+            name: string;
+            legal_name: string | null;
+            gst_number: string | null;
+            fssai_number: string | null;
+            address: string | null;
+            owner_phone: string | null;
+          };
+          setStoreName(d.name || '');
+          const next: LegalDraft = {
+            legalName: d.legal_name || '',
+            gst: d.gst_number || '',
+            fssai: d.fssai_number || '',
+            address: d.address || '',
+            phone: d.owner_phone || '',
+          };
+          setDraft(next);
+          setSaved(next);
+        }
+        setLoading(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [tenantId]);
+
+  const t = trimDraft(draft);
+  const s = saved ? trimDraft(saved) : null;
+  const dirty = !!s && (t.legalName !== s.legalName || t.gst !== s.gst || t.fssai !== s.fssai || t.address !== s.address || t.phone !== s.phone);
+  const gstWarn = t.gst !== '' && !GSTIN_RE.test(t.gst.toUpperCase());
+  const fssaiWarn = t.fssai !== '' && !FSSAI_RE.test(t.fssai);
+
+  const persist = async () => {
+    if (!tenantId || busy || !dirty) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      await updateTenantLegal(tenantId, {
+        legalName: t.legalName,
+        gstNumber: t.gst,
+        fssaiNumber: t.fssai,
+        address: t.address,
+        phone: t.phone,
+      });
+      setSaved(t);
+      fireOk();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'unknown error';
+      setErr(`Could not save — ${dbErrorHint(msg) || msg}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const previewGst = t.gst.toUpperCase();
+  const isTaxInvoice = previewGst !== '';
+
+  const legalRow = (label: string, value: string, id: string, opts?: {
+    description?: string;
+    placeholder?: string;
+    warn?: string;
+    mono?: boolean;
+    maxLength?: number;
+  }): React.ReactNode => (
+    <div>
+      <label htmlFor={id} className="block text-[13px] font-semibold text-[#1A1A1A]">
+        {label}
+      </label>
+      {opts?.description && (
+        <p className="mt-1 text-[12px] leading-snug text-[#6B6B6B]">{opts.description}</p>
+      )}
+      <input
+        id={id}
+        type="text"
+        value={value}
+        maxLength={opts?.maxLength ?? 80}
+        placeholder={opts?.placeholder}
+        autoComplete="off"
+        onChange={(e) => setDraft((d) => ({ ...d, [id === 'business-legal-name' ? 'legalName' : id === 'business-gstin' ? 'gst' : id === 'business-fssai' ? 'fssai' : id === 'business-address' ? 'address' : 'phone']: e.target.value }))}
+        className={`sp-input mt-1.5 h-11 w-full px-3.5 text-[14px] ${opts?.mono ? 'font-mono tracking-wider uppercase' : ''}`}
+      />
+      {opts?.warn && (
+        <p role="alert" className="mt-1.5 text-[12px] font-medium text-[#B3261E]">
+          {opts.warn}
+        </p>
+      )}
+    </div>
+  );
+
+  return (
+    <div>
+      <SectionHeading
+        title="Business profile"
+        description="The legal identity your printed bills carry — a GSTIN turns every receipt into a tax invoice."
+      />
+
+      <div className="mt-6 space-y-5 border-t border-[#E3E7E0] pt-5">
+        {legalRow('Legal entity name', draft.legalName, 'business-legal-name', {
+          description: 'Printed under the trade name when it differs — the entity the invoice legally belongs to.',
+          placeholder: 'Qrflow Hospitality Pvt Ltd',
+        })}
+        {legalRow('GSTIN', draft.gst, 'business-gstin', {
+          description: '15-character GST identification. Present GSTIN → bills print TAX INVOICE with the number.',
+          placeholder: '29ABCDE1234F1Z5',
+          warn: gstWarn ? 'That does not match the 15-character GSTIN shape — check it before the first print.' : undefined,
+          mono: true,
+          maxLength: 15,
+        })}
+        {legalRow('FSSAI licence number', draft.fssai, 'business-fssai', {
+          description: 'The 14-digit food business licence printed on every bill.',
+          placeholder: '11223344556677',
+          warn: fssaiWarn ? 'FSSAI licence numbers are 14 digits — check it before the first print.' : undefined,
+          mono: true,
+          maxLength: 14,
+        })}
+        {legalRow('Address', draft.address, 'business-address', {
+          description: 'The counter\u2019s address as the bill should show it.',
+          placeholder: '12 Marine Street, Bengaluru 560001',
+        })}
+        {legalRow('Phone', draft.phone, 'business-phone', {
+          description: 'Printed on the bill for guests who need to reach you.',
+          placeholder: '+91 98000 00000',
+        })}
+      </div>
+
+      {err && (
+        <div className="mt-4">
+          <Note tone="error">{err}</Note>
+        </div>
+      )}
+
+      {/* The thermal preview — what you save is what the guest holds. */}
+      <div className="mt-6 rounded-2xl border border-[#E3E7E0] bg-[#F6F5F2] p-4">
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-[#969696]">
+          What the printed bill will carry
+        </p>
+        <div className="mt-3 rounded-xl border border-dashed border-[#C9CFC5] bg-white px-4 py-3.5 text-center font-mono text-[11px] leading-relaxed text-[#1A1A1A]">
+          <div className="text-[13px] font-extrabold tracking-[1px]">
+            {storeName || 'Your café'}
+          </div>
+          {t.legalName !== '' && t.legalName !== storeName && (
+            <div className="text-[10px] font-semibold">{t.legalName}</div>
+          )}
+          {t.address !== '' && <div className="text-[10px] text-[#444]">{t.address}</div>}
+          {t.phone !== '' && <div className="text-[10px] text-[#444]">{t.phone}</div>}
+          {isTaxInvoice && (
+            <div className="mt-1 text-[10px] tracking-[1px]">GSTIN: {previewGst}</div>
+          )}
+          {t.fssai !== '' && (
+            <div className="text-[10px] tracking-[1px]">FSSAI Lic. No: {t.fssai}</div>
+          )}
+          <div className={`mt-1.5 text-[10px] font-bold tracking-wide ${isTaxInvoice ? 'text-[#2E7D32]' : 'text-[#969696]'}`}>
+            {isTaxInvoice ? 'TAX INVOICE' : 'CUSTOMER RECEIPT'}
+          </div>
+        </div>
+        <p className="mt-2.5 text-[11.5px] leading-snug text-[#6B6B6B]">
+          {isTaxInvoice
+            ? 'Every bill prints as a tax invoice while a GSTIN is saved. Clear it to fall back to a plain receipt.'
+            : 'No GSTIN yet — bills print as plain customer receipts. Add the number to make each one a tax invoice.'}
+        </p>
+      </div>
+
+      <div className="mt-5 flex flex-wrap items-center gap-3">
+        <button
+          type="button"
+          disabled={busy || !dirty || loading}
+          onClick={() => void persist()}
+          className="sp-cta min-h-[44px] flex-1 py-2.5 text-[14px] disabled:opacity-50"
+        >
+          {busy ? 'Saving…' : 'Save Changes'}
+        </button>
+        {ok && (
+          <span
+            role="status"
+            className="inline-flex items-center gap-1.5 rounded-full bg-[#E8F5EC] px-3.5 py-2 text-[12px] font-semibold text-[#2E7D32]"
+          >
+            <Check size={14} aria-hidden /> Saved
+          </span>
+        )}
+      </div>
+    </div>
+  );
+};
+
 /* ─────────────────────────────── screen ─────────────────────────────── */
 
 const NAV_ITEMS: { id: SettingsSection; label: string; icon: LucideIcon }[] = [
@@ -1355,10 +1615,14 @@ export const SettingsScreen: React.FC = () => {
   // Café brand is an owner decision about THEIR tenant — superadmins run the
   // platform, staff run tickets; only the tenant owner sees the section.
   if (isTenantOwner) items.splice(1, 0, { id: 'brand', label: 'Café brand', icon: ImagePlus });
+  // Business profile (Task 90) — the legal twin of brand, same owner gate.
+  if (isTenantOwner) items.splice(2, 0, { id: 'business', label: 'Business profile', icon: Building2 });
   if (canManageStaff) items.push({ id: 'staff', label: 'Staff accounts', icon: Users });
 
   const effective: SettingsSection =
-    (active === 'staff' && !canManageStaff) || (active === 'brand' && !isTenantOwner)
+    (active === 'staff' && !canManageStaff) ||
+    (active === 'brand' && !isTenantOwner) ||
+    (active === 'business' && !isTenantOwner)
       ? 'checkout'
       : active;
 
@@ -1398,6 +1662,7 @@ export const SettingsScreen: React.FC = () => {
         <div className="sp-card w-full min-w-0 flex-1 p-5 sm:p-6">
           {effective === 'profile' && <ProfileSection />}
           {effective === 'brand' && <CafeBrandSection />}
+          {effective === 'business' && <BusinessProfileSection />}
           {effective === 'notification' && <NotificationSection />}
           {effective === 'appearance' && <AppearanceSection />}
           {effective === 'checkout' && <CheckoutSection />}

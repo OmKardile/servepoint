@@ -153,6 +153,13 @@ export interface Tenant {
   status: string;
   city?: string | null;
   owner_email?: string | null;
+  owner_phone?: string | null;
+  /** Legal identity — printed on the thermal receipt (Task 90): GSTIN turns
+   *  a receipt into a tax invoice; FSSAI is the food-business licence. */
+  legal_name?: string | null;
+  gst_number?: string | null;
+  fssai_number?: string | null;
+  address?: string | null;
   logo_url?: string | null;
   created_at: string;
 }
