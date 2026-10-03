@@ -24,6 +24,7 @@ import { formatMoney } from '../../lib/prefs';
 import { useUi } from '../../store/session';
 import { cartTotal, offerDiscount, useCart } from '../../store/cart';
 import { ItemDetailModal } from './ItemDetailModal';
+import { VegMark } from '../shell/VegMark';
 
 /**
  * Food & Drinks (Figma Food_&_Drinks_219-30044 / 219-29357 / Add_to_Order_219-30062 /
@@ -195,7 +196,9 @@ const ItemCard: React.FC<{
       aria-label={
         unavailable
           ? `${item.name}, unavailable`
-          : `${item.name}, ${formatMoney(item.price)}${selected ? ', selected' : ''}`
+          : `${item.name}, ${formatMoney(item.price)}${
+              item.is_veg === true ? ', vegetarian' : item.is_veg === false ? ', non-vegetarian' : ''
+            }${selected ? ', selected' : ''}`
       }
       onClick={() => !unavailable && onSelect(item)}
       onKeyDown={handleKeyDown}
@@ -233,7 +236,8 @@ const ItemCard: React.FC<{
           Unavailable
         </span>
       )}
-      <span className={`mt-1 text-lg font-bold ${selected ? 'text-[#1A1A1A]' : 'text-[#B88E2F]'}`}>
+      <span className={`mt-1 flex items-center justify-center gap-1.5 text-lg font-bold ${selected ? 'text-[#1A1A1A]' : 'text-[#B88E2F]'}`}>
+        <VegMark veg={item.is_veg} size={14} />
         {formatMoney(item.price)}
       </span>
       {selected && !unavailable && (
@@ -616,6 +620,9 @@ const FoodDrinksInner: React.FC<{ onRetry: () => void }> = ({ onRetry }) => {
   const breadcrumb = useUi((s) => s.breadcrumb);
   const setBreadcrumb = useUi((s) => s.setBreadcrumb);
   const search = useUi((s) => s.search);
+  /* Veg-only (v5.53.0) — the counter speaks the same leaf the guest menu
+     speaks: a phone order saying "veg only" filters in one tap. */
+  const [vegOnly, setVegOnly] = useState(false);
 
   const [categories, setCategories] = useState<Category[]>([]);
   const [items, setItems] = useState<MenuItem[]>([]);
@@ -686,9 +693,19 @@ const FoodDrinksInner: React.FC<{ onRetry: () => void }> = ({ onRetry }) => {
   );
   const visibleItems = useMemo(() => {
     if (!isItemsLevel) return [];
-    const inCategory = activeCategory ? items.filter((i) => i.category_id === activeCategory.id) : [];
+    let inCategory = activeCategory ? items.filter((i) => i.category_id === activeCategory.id) : [];
+    if (vegOnly) inCategory = inCategory.filter((i) => i.is_veg === true);
     return q ? inCategory.filter((i) => i.name.toLowerCase().includes(q)) : inCategory;
-  }, [items, activeCategory, isItemsLevel, q]);
+  }, [items, activeCategory, isItemsLevel, q, vegOnly]);
+
+  /* honest counts for the toggle chip — veg dishes in the OPEN category, or
+     across the whole menu when no category is open (search-all level) */
+  const vegCount = useMemo(() => {
+    const pool = activeCategory && isItemsLevel
+      ? items.filter((i) => i.category_id === activeCategory.id)
+      : items;
+    return pool.filter((i) => i.is_veg === true).length;
+  }, [items, activeCategory, isItemsLevel]);
 
   const openCategory = useCallback(
     (c: Category) => {
@@ -776,6 +793,48 @@ const FoodDrinksInner: React.FC<{ onRetry: () => void }> = ({ onRetry }) => {
         {isItemsLevel ? activeCategoryName || 'Items' : 'Categories'}
       </h1>
 
+      {/* Veg-only filter (v5.53.0) — items level only; the chip shows the
+          honest veg count for the pool it filters. */}
+      {isItemsLevel && (
+        <div className="mb-4 flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setVegOnly((v) => !v)}
+            aria-pressed={vegOnly}
+            title="Show vegetarian items only"
+            className={`flex h-9 items-center gap-2 rounded-full border px-3.5 text-[12.5px] font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[#967221] ${
+              vegOnly
+                ? 'border-[#2E7D32] bg-[#EAF4EB] text-[#1F5C26]'
+                : 'border-[#E3E7E0] bg-white text-[#6B6B6B] hover:border-[#2E7D32]'
+            }`}
+          >
+            <span
+              aria-hidden
+              className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border ${
+                vegOnly ? 'border-[#2E7D32]' : 'border-[#9AA8A0]'
+              }`}
+            >
+              <span className="h-2 w-2 rounded-full bg-[#2E7D32]" />
+            </span>
+            Veg only
+            {vegCount > 0 && (
+              <span
+                className={`rounded-full px-1.5 py-px text-[10.5px] font-bold ${
+                  vegOnly ? 'bg-white/80 text-[#1F5C26]' : 'bg-[#EAF4EB] text-[#1F5C26]'
+                }`}
+              >
+                {vegCount}
+              </span>
+            )}
+          </button>
+          {vegOnly && (
+            <span className="text-[11.5px] text-[#969696]">
+              showing vegetarian items only
+            </span>
+          )}
+        </div>
+      )}
+
       {/* Counter gate (v5.3.0): fresh tickets wait HERE for an Ok — the KDS
           never sees `new`. Self-contained band; vanishes when empty. */}
       <div className="mb-5">
@@ -810,8 +869,12 @@ const FoodDrinksInner: React.FC<{ onRetry: () => void }> = ({ onRetry }) => {
           {visibleItems.length === 0 ? (
             <EmptyState
               icon={PackageOpen}
-              title="No items in this category"
-              body="Menu items added to this category will show up here."
+              title={vegOnly ? 'No vegetarian items here' : 'No items in this category'}
+              body={
+                vegOnly
+                  ? 'Every item in this category is marked non-vegetarian — turn the Veg only filter off to see them.'
+                  : 'Menu items added to this category will show up here.'
+              }
             />
           ) : (
             <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-4">

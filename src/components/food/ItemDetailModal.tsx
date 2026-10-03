@@ -3,6 +3,7 @@ import { Minus, Plus, UtensilsCrossed, X } from 'lucide-react';
 import type { MenuItem, MenuItemAddon } from '../../types';
 import { useCart } from '../../store/cart';
 import { formatMoney } from '../../lib/prefs';
+import { VegMark } from '../shell/VegMark';
 
 /**
  * Item detail modal (Figma Frame_30_219-30083):
@@ -109,7 +110,10 @@ export const ItemDetailModal: React.FC<ItemDetailModalProps> = ({ item, onClose,
 
           {/* Name / weight / price */}
           <div className="px-5 pt-4 text-center">
-            <h2 className="text-lg font-bold text-[#1A1A1A]">{item.name}</h2>
+            <h2 className="flex items-center justify-center gap-2 text-lg font-bold text-[#1A1A1A]">
+              <VegMark veg={item.is_veg} size={15} />
+              {item.name}
+            </h2>
             {detail && <p className="mt-0.5 truncate text-xs text-[#969696]">{detail}</p>}
             <p className="mt-1.5 text-xl font-bold text-[#B88E2F]">{formatMoney(item.price)}</p>
 

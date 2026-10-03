@@ -484,6 +484,10 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
     }
   });
   const [query, setQuery] = useState('');
+  /* Veg-only (v5.53.0) — India's dietary identity is a filter, not a footnote.
+     Guests scanning the table QR decide with it; the mark grammar below is
+     the same square-and-dot the rows already speak. */
+  const [vegOnly, setVegOnly] = useState(false);
   const [openItemId, setOpenItemId] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [customerName, setCustomerName] = useState('');
@@ -621,11 +625,24 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
   const filtered = useMemo(() => {
     if (!menu?.categories) return [];
     const q = query.trim().toLowerCase();
-    if (!q) return menu.categories;
-    return menu.categories
+    let cats = menu.categories;
+    if (vegOnly) {
+      cats = cats
+        .map((c) => ({ ...c, items: c.items.filter((i) => i.is_veg) }))
+        .filter((c) => c.items.length > 0);
+    }
+    if (!q) return cats;
+    return cats
       .map((c) => ({ ...c, items: c.items.filter((i) => `${i.name} ${i.description || ''}`.toLowerCase().includes(q)) }))
       .filter((c) => c.items.length > 0);
-  }, [menu, query]);
+  }, [menu, query, vegOnly]);
+
+  /* honest count of vegetarian dishes across the whole menu — the toggle's
+     count chip only ever shows what the kitchen actually said is veg */
+  const vegCount = useMemo(
+    () => (menu?.categories ?? []).reduce((s, c) => s + c.items.filter((i) => i.is_veg).length, 0),
+    [menu],
+  );
 
   const cartCount = lines.reduce((s, l) => s + l.qty, 0);
   const cartSubtotal = round2(lines.reduce((s, l) => s + lineUnit(l) * l.qty, 0));
@@ -784,6 +801,36 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
               className="h-12 w-full rounded-full border border-white/15 bg-white pl-10 pr-4 text-[14px] text-[#1A1A1A] shadow-sm placeholder:text-[#9A9A9A] focus:outline focus:outline-2 focus:outline-[#B88E2F]"
             />
           </div>
+          {/* Veg-only (v5.53.0): the FSSAI square-and-dot as a filter — ON
+              fills the green tint; the count chip only ever shows dishes the
+              kitchen actually marked veg. */}
+          <button
+            type="button"
+            onClick={() => setVegOnly((v) => !v)}
+            aria-pressed={vegOnly}
+            aria-label={t('vegOnlyAria')}
+            title={t('vegOnlyAria')}
+            className={`flex h-12 shrink-0 items-center gap-2 rounded-full border bg-white pl-3 pr-3.5 text-[13px] font-semibold shadow-sm transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[#B88E2F] ${
+              vegOnly
+                ? 'border-[#2E7D32] text-[#1F5C26]'
+                : 'border-[#E3E7E0] text-[#6B6B6B] hover:border-[#2E7D32]'
+            }`}
+          >
+            <span
+              aria-hidden
+              className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border ${
+                vegOnly ? 'border-[#2E7D32] bg-[#EAF4EB]' : 'border-[#9AA8A0]'
+              }`}
+            >
+              <span className="h-2 w-2 rounded-full bg-[#2E7D32]" />
+            </span>
+            {t('vegOnly')}
+            {vegOnly && vegCount > 0 && (
+              <span className="rounded-full bg-[#EAF4EB] px-1.5 py-px text-[10.5px] font-bold text-[#1F5C26]">
+                {vegCount}
+              </span>
+            )}
+          </button>
           <LangSwitcher dark />
         </div>
       </header>
@@ -902,7 +949,15 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
           </div>
         )}
 
-        {phase === 'ready' && filtered.length === 0 && <p className="mt-10 text-center text-[13.5px] text-[#6B6B6B]">{t('nothingMatches', { q: query })}</p>}
+        {phase === 'ready' && filtered.length === 0 && (
+          <p className="mt-10 text-center text-[13.5px] text-[#6B6B6B]">
+            {vegOnly
+              ? query.trim()
+                ? t('nothingMatchesVeg', { q: query })
+                : t('vegEmpty')
+              : t('nothingMatches', { q: query })}
+          </p>
+        )}
 
         {filtered.map((cat) => (
           <section key={cat.id} id={`cat-${cat.id}`} data-cat={cat.id} className="mt-5 scroll-mt-16" aria-label={cat.name}>

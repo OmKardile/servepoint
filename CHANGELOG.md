@@ -3,6 +3,21 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.53.0] — 2026-10-03 — The menu respects the leaf: veg-only filter on the guest phone and the counter
+
+### Added — the dietary filter India actually asks for (no migration, no API change — `is_veg` already rode every payload)
+- India's veg/non-veg line is dietary identity, not preference — every Indian food app carries a veg toggle front and centre, and this POS served Indian cafés without one. The payload was honest all along (`is_veg` rides the guest RPCs since 024 and `MenuItem` since 001) and both surfaces already PRINTED the mark — but nothing could FILTER by it. The round closes that gap at both ends where the decision happens:
+  - **Guest QR menu** (`GuestPages.tsx`): a veg-only toggle beside the search bar — the FSSAI square-and-dot as a filter. ON fills the green tint and appends an honest count chip of the dishes the kitchen actually marked veg; filtering composes with the existing search, and the sticky category rail re-flows with the same filtered set. The empty state speaks honestly in three languages: a bare veg menu says "No vegetarian dishes on this menu yet.", a veg+search miss says "Nothing vegetarian matches "{q}"." — the pre-existing `nothingMatches` stays for the unfiltered miss. All four strings added to EN / हिंदी / ಕನ್ನಡ (`guest-i18n.ts`).
+  - **Counter POS** (`FoodDrinksScreen.tsx`): the counter now speaks the same leaf — every `ItemCard` carries the mark beside the price (green veg / brown-red non-veg; `is_veg` NULL stays silent — the mark never invents a dietary fact the kitchen didn't give), the item-detail modal carries it beside the name, the card's aria-label announces "vegetarian / non-vegetarian", and a "Veg only" pill at the items level filters the open category with an honest count chip plus a "showing vegetarian items only" hint. The empty state names the cause: "No vegetarian items here" with a one-line way out.
+  - **`VegMark`** (`shell/VegMark.tsx`): the shared mark component — one geometry, one source of truth, imported by card and modal (kept out of `FoodDrinksScreen` to spare the import cycle).
+
+### Styling — the FSSAI mark as the filter's face
+- Both toggles wear the mark INSTEAD of a checkbox: a 16px rounded-square border with the centered dot, green `#2E7D32` — the same geometry the guest rows have printed since v5.7, so the filter doesn't introduce a new symbol, it OPERATES the existing one. ON state: green border + `#EAF4EB` tint + dark-green text; OFF: hairline gray with a green hover invitation. Guest toggle is `h-12` to sit flush with the search bar; POS pill is `h-9` in the house chip grammar with the gold focus ring. Counts are honest everywhere (the chip never shows a number the menu didn't earn).
+
+### Verified
+- E2E (real UI, both surfaces, full stage→clean): staged "Chicken Keema Pav" (non-veg, ₹180, Food) through the owner Menu UI → guest menu showed 4 rows, veg-only ON hid the chicken and showed the count chip "3" (`scripts/qa92-guest-veg.png`); POS Food category showed the red mark on the card + modal (`scripts/qa92-pos-veg.png`, `scripts/qa92-pos-modal.png`) and the toggle hid it with the hint line. Deleted through the same owner UI → menu back to 3 veg items. TOOLING LESSON: the armed delete auto-disarms after 3s — arm and confirm clicks must fire back-to-back with no snapshot between (three polite flows failed before the instant double-click landed).
+- 14/14 screens land with correct titles, zero page errors on fresh reloads, tsc 0. Cloud truth (read-only census): menu back to 3 items all veg, orders 36 / bells 3 / chat 5 / bucket 0 — the round's only writes were the staged fixture, fully cleaned through the UI.
+
 ## [5.52.0] — 2026-10-03 — The guest sees the licence: the legal identity reaches the QR menu and the track page
 
 ### Added — migration 037: the two public RPCs carry the legal trio (owner's fields → every guest phone)
