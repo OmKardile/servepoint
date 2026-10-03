@@ -3,6 +3,16 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.52.0] — 2026-10-03 — The guest sees the licence: the legal identity reaches the QR menu and the track page
+
+### Added — migration 037: the two public RPCs carry the legal trio (owner's fields → every guest phone)
+- Task 90 gave the owner a place to TYPE the legal identity (Settings → Business profile) and a printed bill that carries it — but the two guest-facing surfaces never showed it. In India the FSSAI licence number on a menu is a trust marker guests (and aggregators) expect to find; the GSTIN belongs beside it. Migration `037_guest_legal_footer.sql` extends both public RPCs — `sp_get_public_menu` (024 lineage) and `sp_get_public_order` (025 lineage) — so each `tenant` object now carries `legal_name`, `gst_number` and `fssai_number` beside the name and logo. Everything else in both functions is byte-for-byte the LIVE definition (dumped via `pg_get_functiondef` before editing — no drift). Applied via `scripts/apply-037.mjs`: 7 proofs green, including a self-cleaning probe (stage a legal identity in SQL → both live RPCs return it → reset to NULL → honest absence restored) and the anon-execute privilege check (guest phones never need a session).
+- **GuestFooter grows a licence strip**: the receipt's legal block spoken at glass scale — legal entity name (only when it differs from the trade name), then `GSTIN: … · FSSAI Lic. No: …` in letter-spaced tabular digits a hand-keyed typo can't hide in, on a cream strip above the ServePoint row. Renders ONLY when the owner saved something in Business profile; an all-NULL payload leaves the footer byte-identical to the pre-5.52 footer (the v5.29 logo precedent). Wired on the two surfaces where a guest reads something the café "issued" — the QR menu and the track page; the gate/error states keep the bare footer (a spinner needs no licence).
+
+### Verified
+- E2E (real UI, both directions): staged the trio through the owner UI (keyboard-driven — Task 90's synthetic-fill lesson), guest menu at `/menu/<T1-token>` rendered "Qrflow Hospitality Pvt Ltd" + "GSTIN: 29ABCDE1234F1Z5 · FSSAI Lic. No: 11223344556677" (`scripts/qa91-guest-menu-footer.png`); the track page for a live order rendered the same strip (`scripts/qa91-track-footer.png`); cleared through the same UI → both footers went back to bare (honest absence, zero matches). 13/13 routes, tsc 0.
+- Cloud truth (`scripts/qa91-truth.mjs`): TRUTH OK — legal fields back to NULL, orders 36 / bells 3 / chat 5 / presence 1 / bucket 0, both RPC definitions hold the new payload fields, tenants schema untouched at 20 columns.
+
 ## [5.51.0] — 2026-10-03 — The bill speaks legal: Business profile + the TAX INVOICE receipt
 
 ### Added — the legal identity travels from Settings to the printed paper (no migration, no API schema change)

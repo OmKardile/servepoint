@@ -20,6 +20,12 @@ export interface GuestTenantInfo {
   slug: string;
   /** Owner-set café logo (migration 024) — NULL/absent renders the text-only hero. */
   logo_url?: string | null;
+  /** Legal identity (migration 037) — the licence line in the guest footer.
+   *  All optional: an owner who never filled Business profile sends NULLs
+   *  and the footer simply doesn't render a licence line (honest absence). */
+  legal_name?: string | null;
+  gst_number?: string | null;
+  fssai_number?: string | null;
 }
 
 /** The café brand a guest sees on their ticket page (migration 025): name on
@@ -29,6 +35,10 @@ export interface GuestTenantInfo {
 export interface GuestTenantBrand {
   name: string | null;
   logo_url: string | null;
+  /** Migration 037 — same legal trio as the menu payload. */
+  legal_name?: string | null;
+  gst_number?: string | null;
+  fssai_number?: string | null;
 }
 
 export interface GuestVariant {

@@ -2478,3 +2478,25 @@ Stage Summary:
 - Remaining parked: drawer movements CSV (only if asked); CounterInbox bulk "Ok all" (risky); DS showcase links (owner OK pending); EOD Z-report logo (deliberate); URL write-back (non-goal); storage folder silting report (someday); KDS bump-back recall (deliberate); chat→bell pings (deliberate, 031); notifications digest/quiet hours (someday — still no push channel to quiet); guest-menu legal footer (someday — the fields now exist to show FSSAI/GSTIN on the QR menu too).
 - Watch items carried: DB password ROTATION (owner decision); #67/#68/#69/#96 active-unpaid QA-era leftovers (owner decision).
 - Crons: 15-min webDevReview (job 430321) + DAILY deep pass (job 431587, 09:00 IST).
+
+---
+Task ID: 91 (completion — 15-min webDevReview round, trace 202610030855)
+Agent: glm-5.3 (cron webDevReview round)
+Task: Post-5.51.0 orientation + QA sweep, then the round's pair: the guest sees the licence (migration 037 — both public RPCs carry the legal trio) + the guest footer licence strip.
+
+Work Log:
+- Orientation clean (origin/main = 939dd60 = 5.51.0, fetch-verified; tsc 0; dev 200). Task 90 confirmed fully closed. QA sweep: 13/13 routes, correct titles, 0 new console errors (the stale pingPresence HMR artifact from history does not reproduce). Stable round.
+- Focus rationale: Task 90's own parked seed — "guest-menu legal footer (someday — the fields now exist to show)". Audited alternatives first: Reports ALREADY speaks "GST collected" in its headline + per-day CSV (a whole GST section would duplicate), guest offers banner already renders (016), FSSAI/GSTIN display on guest surfaces is the India trust marker aggregators normalize. Taken as the round: the legal arc reaches the guest's phone.
+- MIGRATION 037_guest_legal_footer.sql: CREATE OR REPLACE both public RPCs — sp_get_public_menu (024 lineage) + sp_get_public_order (025 lineage); each tenant object += legal_name/gst_number/fssai_number. Bodies are the LIVE definitions (dumped via pg_get_functiondef first — no textual drift, no surprises). Applied via scripts/apply-037.mjs — 7 proofs green: both definitions carry the fields; a SELF-CLEANING probe staged a legal identity in SQL, called both LIVE RPCs, asserted the trio rides the payload, reset to NULL (finally-block, honest absence restored); anon execute privilege intact (guest phones need no session); tenants still 20 columns.
+- Types (guest.ts): GuestTenantInfo + GuestTenantBrand grow the optional trio — an owner who never filled Business profile sends NULLs.
+- UI (GuestPages.tsx): GuestFooterLegal — the receipt's legal block at glass scale: legal entity name (only when it differs from the trade name) + "GSTIN: … · FSSAI Lic. No: …" in mono tracked tabular digits on a cream strip above the ServePoint row; ALL-absent → footer byte-identical to pre-5.52 (v5.29 logo precedent). GuestFooter takes legalTenant; wired on the two surfaces where the guest reads something the café issued — menu ready state + track ready state; gate/error/cart-drawer states keep the bare footer (a spinner needs no licence).
+- E2E (real UI, both directions): staged the trio through the owner UI (keyboard-driven, Task 90's synthetic-fill lesson held) → /menu/<T1-token> footer rendered legal name + licence line (scripts/qa91-guest-menu-footer.png) → /track/<live-order> rendered the same strip (scripts/qa91-track-footer.png) → cleared through the same UI → both footers bare again (honest absence, zero rg matches). 13/13 routes, tsc 0.
+- DB truth (scripts/qa91-truth.mjs): TRUTH OK — legal fields NULL (round's only writes cleaned), orders 36 / bells 3 / chat 5 / presence 1 / bucket 0, both RPC definitions hold the payload fields (migration held), schema untouched.
+- Cloud state: zero permanent rows/objects; the RPC payloads grew (the round's actual product); sw servepoint-v5.52.0-r1; CHANGELOG [5.52.0].
+
+Stage Summary:
+- 5.52.0 — the guest sees the licence. Surfaces: supabase/migrations/037_guest_legal_footer.sql + scripts/apply-037.mjs + scripts/qa91-truth.mjs + src/lib/guest.ts + src/components/guest/GuestPages.tsx + public/sw.js + CHANGELOG.md + worklog.md (+2 screenshots).
+- The legal arc is now CLOSED END TO END: owner types it (5.51.0 Business profile) → the printed bill proves it (5.51.0 TAX INVOICE) → the guest's phone sees it (5.52.0 footer strip). One identity, three doors.
+- Remaining parked: drawer movements CSV (only if asked); CounterInbox bulk "Ok all" (risky); DS showcase links (owner OK pending); EOD Z-report logo (deliberate); URL write-back (non-goal); storage folder silting report (someday); KDS bump-back recall (deliberate); chat→bell pings (deliberate, 031); notifications digest/quiet hours (someday — still no push channel to quiet).
+- Watch items carried: DB password ROTATION (owner decision); #67/#68/#69/#96 active-unpaid QA-era leftovers (owner decision).
+- Crons: 15-min webDevReview (job 430321) + DAILY deep pass (job 431587, 09:00 IST).

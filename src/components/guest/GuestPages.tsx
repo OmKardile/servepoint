@@ -85,10 +85,50 @@ function twoToneChime(): void {
   }
 }
 
-function GuestFooter(): React.ReactElement {
+/** The licence line (migration 037): the receipt's legal block spoken at
+ *  glass scale — centered, small, tabular digits a hand-keyed typo can't
+ *  hide in. Renders ONLY when the owner saved something in Business
+ *  profile; an all-NULL payload leaves the footer byte-identical to the
+ *  pre-5.52 footer (the v5.29 logo precedent, one row down). */
+function GuestFooterLegal({
+  tenant,
+}: {
+  tenant?: { name?: string | null; legal_name?: string | null; gst_number?: string | null; fssai_number?: string | null } | null;
+}): React.ReactElement | null {
+  const legalName =
+    tenant?.legal_name && tenant.legal_name.trim() !== '' && tenant.legal_name.trim() !== tenant.name
+      ? tenant.legal_name.trim()
+      : null;
+  const gst = tenant?.gst_number?.trim() ? tenant.gst_number.trim().toUpperCase() : null;
+  const fssai = tenant?.fssai_number?.trim() ? tenant.fssai_number.trim() : null;
+  if (!legalName && !gst && !fssai) return null;
+  return (
+    <div className="border-t border-[#E3E7E0]/70 bg-[#F6F5F2] px-4 py-2.5 text-center">
+      {legalName && <div className="text-[10.5px] font-semibold text-[#1A1A1A]">{legalName}</div>}
+      {(gst || fssai) && (
+        <div className="mt-0.5 font-mono text-[10px] tracking-[0.08em] text-[#6B6B6B]">
+          {gst && (
+            <span className="tabular-nums">
+              GSTIN: {gst}
+              {fssai ? ' · ' : ''}
+            </span>
+        )}
+          {fssai && <span className="tabular-nums">FSSAI Lic. No: {fssai}</span>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function GuestFooter({
+  legalTenant,
+}: {
+  legalTenant?: { name?: string | null; legal_name?: string | null; gst_number?: string | null; fssai_number?: string | null } | null;
+}): React.ReactElement {
   const { t } = useGuestLang();
   return (
     <footer className="mt-auto border-t border-[#E3E7E0] bg-white">
+      <GuestFooterLegal tenant={legalTenant} />
       <div className="mx-auto flex max-w-xl items-center justify-between px-4 py-3 text-[11px] text-[#6B6B6B]">
         <span className="font-semibold uppercase tracking-[0.14em]" style={{ color: brand.teal }}>
           ServePoint
@@ -1102,7 +1142,7 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
         </div>
       )}
 
-      <GuestFooter />
+      <GuestFooter legalTenant={menu?.tenant ?? null} />
     </div>
   );
 }
@@ -1562,7 +1602,7 @@ export function GuestTrackPage({ orderId }: { orderId: string }): React.ReactEle
           </>
         )}
       </main>
-      <GuestFooter />
+      <GuestFooter legalTenant={tenant} />
     </div>
   );
 }
