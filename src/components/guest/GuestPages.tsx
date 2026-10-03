@@ -235,6 +235,47 @@ function SessionRibbon({ session }: { session: TableSession }): React.ReactEleme
   );
 }
 
+/* The dish's face (v5.49.0, pairs with migration 036): menu items can carry a
+   photo, and the guest's phone is the whole reason the owner took it. Rules
+   borrowed from the café logo tile (v5.27): a URL that fails to load hides
+   its own tile — never a broken-image glyph on a menu a guest is holding.
+   The box is FIXED-SIZE with a cream floor, so the row never reflows while
+   the bytes arrive; loading="lazy" because a phone on café wifi should not
+   fetch forty photos to show one category. */
+function DishPhoto({ url, alt, shape }: { url: string; alt: string; shape: 'thumb' | 'banner' }): React.ReactElement | null {
+  const [broken, setBroken] = useState(false);
+  useEffect(() => {
+    setBroken(false);
+  }, [url]);
+  if (broken) return null;
+  if (shape === 'banner') {
+    return (
+      <span className="mb-3 block overflow-hidden rounded-2xl border border-[#E3E7E0] bg-[#F6F5F2] shadow-sm">
+        <img
+          src={url}
+          alt={alt}
+          loading="lazy"
+          decoding="async"
+          className="h-28 w-full object-cover sm:h-32"
+          onError={() => setBroken(true)}
+        />
+      </span>
+    );
+  }
+  return (
+    <span className="relative block h-14 w-14 shrink-0 overflow-hidden rounded-2xl border border-[#E3E7E0] bg-[#F6F5F2] shadow-sm transition-colors group-hover:border-[#D9C48A]">
+      <img
+        src={url}
+        alt={alt}
+        loading="lazy"
+        decoding="async"
+        className="h-full w-full object-cover"
+        onError={() => setBroken(true)}
+      />
+    </span>
+  );
+}
+
 function Customizer({ item, onAdd, locked }: { item: GuestMenuItem; onAdd: (l: Omit<CartLine, 'key'>) => void; locked?: boolean }): React.ReactElement {
   const { t } = useGuestLang();
   const [variantId, setVariantId] = useState<string | null>(null);
@@ -248,6 +289,7 @@ function Customizer({ item, onAdd, locked }: { item: GuestMenuItem; onAdd: (l: O
 
   return (
     <div className="mt-3 rounded-2xl border border-[#E3E7E0] bg-[#FBFBF9] p-3">
+      {item.image_url && <DishPhoto url={item.image_url} alt={item.name} shape="banner" />}
       {item.variants.length > 0 && (
         <fieldset className="mb-3">
           <legend className="mb-1.5 text-[11.5px] font-semibold uppercase tracking-wide text-[#6B6B6B]">{t('chooseOne')}</legend>
@@ -834,7 +876,7 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
                       type="button"
                       aria-expanded={open}
                       onClick={() => setOpenItemId(open ? null : item.id)}
-                      className="flex w-full items-start gap-3 px-4 py-3.5 text-left transition-colors hover:bg-[#FBFBF9] focus-visible:outline focus-visible:outline-2 focus-visible:outline-inset focus-visible:outline-[#B88E2F]"
+                      className="group flex w-full items-start gap-3 px-4 py-3.5 text-left transition-colors hover:bg-[#FBFBF9] focus-visible:outline focus-visible:outline-2 focus-visible:outline-inset focus-visible:outline-[#B88E2F]"
                     >
                       <span
                         className="mt-1 flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border"
@@ -864,6 +906,7 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
                           )}
                         </span>
                       </span>
+                      {item.image_url && <DishPhoto url={item.image_url} alt={item.name} shape="thumb" />}
                     </button>
                     {open && (
                       <div className="px-4 pb-4">

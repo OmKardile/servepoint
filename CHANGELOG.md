@@ -3,6 +3,20 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.49.0] — 2026-10-03 — The guest sees the face: QR menu photos go live
+
+### Added — the fifth surface, and the one that mattered (no migration)
+- 5.48.0 gave every dish a face — but only the house could see it. The upload loop closed on the owner's Menu screen, and `image_url` already rode four internal surfaces, yet the phone the photo was really taken for — the guest's, scanning the table QR — never showed it: `sp_get_public_menu` has carried `image_url` in its payload since migration 024 and the `GuestMenuItem` type declared it, but `GuestPages.tsx` never rendered it. The round's audit caught the gap and closed it with pure UI (no schema change, no RPC change — the payload was already honest).
+- **Row thumb** (`DishPhoto shape="thumb"`): a fixed 56×56 tile at the right edge of every item row that has a photo — name, price and description stay left, the way delivery menus read. Rows without a photo render exactly as before (no empty box, no layout shift): a photo-less house's menu is pixel-identical to 5.48.
+- **Customizer banner** (`DishPhoto shape="banner"`): open an item and the photo fronts the panel above CHOOSE ONE — you see what you're ordering before the variant pills.
+
+### Styling — the guest photo language
+- Same grammar as the logo tile that taught it (v5.27): a URL that fails to load **hides its own tile** — never a broken-image glyph on a menu a guest is holding (verified live: a staged dead URL rendered zero photo imgs, the row reflowed honestly). The box is FIXED-SIZE with a cream floor (`#F6F5F2`) behind the bytes, so the row never shifts while the image arrives. `loading="lazy"` + `decoding="async"` — a phone on café wifi fetches photos as the category scrolls to them, not forty at once. Hairline `#E3E7E0` ring, `rounded-2xl`, soft shadow; on row hover the ring warms to gold (`group-hover` `#D9C48A`) — the owner-side PhotoTile's gold hover, spoken quietly on the guest side. `alt` is the dish name: the photo IS the dish.
+
+### Verified
+- E2E (real UI, both sides): owner uploaded a PNG to Flat White through the Menu PhotoTile (in-page DataTransfer + dispatch — 5.48's lesson, reused); guest menu at `/menu/<T1-token>` rendered the row thumb (54×54, lazy, object-cover) within the page load, and the opened customizer showed the banner (482×128 at `sm:h-32`). Photo-less rows (Blueberry Muffin, Veg Grilled Sandwich) confirmed unchanged in the same viewport. Broken-URL stage→verify: tile hid, row intact, no glyph. Clear via the owner UI's ✕ → `image_url` null. One QA-induced lesson: staging the broken URL OVER the real one before clearing orphans the real object (the ✕ removes the URL's target, which no longer existed) — the orphan went home through the Storage API (`scripts/qa87-remove-photo.mjs` doubling as the member-delete-policy proof, again). Screenshots `scripts/qa88-guest-photo.png` + `scripts/qa88-guest-customizer.png`. 13/13 routes, 0 console errors, tsc 0.
+- DB truth (`scripts/qa88-truth.mjs`): TRUTH OK — bucket zero objects, every `image_url` null, orders 36 / bells 3 / chat 5 untouched, presence owner-only, 036 and 035 intact.
+
 ## [5.48.0] — 2026-10-03 — The dishes get their faces: menu photos close the loop
 
 ### Added — an upload path for a column that always rendered (migration 036)
