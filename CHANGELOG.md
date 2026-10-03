@@ -3,6 +3,23 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.129.0] — 2026-10-04 — The book answers
+
+### Added — Guests: tier tiles filter, and the book can be carried out
+
+- **The tier tiles speak the Floor's grammar** (`src/components/customers/CustomersScreen.tsx`): the Regulars and VIPs tiles — passive counters since the CRM was born — are now filter tiles (`aria-pressed`, gold ring + hover lift, the 5.128.0 tile dialect). Tap to narrow the book to that tier, tap again to release. The definition lives in ONE place: `tierKeyOf`/`TIER_META` (split from `tierOf`) — tiles, list predicate, badge and CSV all read the same ledger truth (2+ paid visits = regular; 5+ or ₹5,000 = VIP).
+- **The whisper grows honest**: the 5.122.0 count line now speaks the Floor's sentence — *"Showing 1 of 3 guests for 'maya' — the tiles above still count the whole book"* — the tiles' numbers stay whole-book; the narrowing never rewrites the headline.
+- **The miss says why, with the ledger's definition**: a tier-only miss names its bar — *"No regulars to show — the book holds 3 guests — none of them a regular yet (a regular has 2+ paid visits). Tap the tile again, or show the whole book."*; a VIP miss carries the Crown and the ₹5,000 clause; search + tile together say *"either can miss"* with one gold **Clear both**. The empty-book truth ("No guests yet") stays its own sentence — an empty book is not a filtered one.
+- **The book, carried out** (CSV, shared `lib/csv.ts`): a header CSV button exports the CURRENTLY NARROWED list — tiles and search decide what the counter is looking at, the file carries exactly that (Bills' house law). Columns: Name, Phone, Tier, Paid visits, Paid total (INR), Last visit, On the book since, Email, Notes — injection-safe + UTF-8 BOM from the shared lib. Refuses to run while the narrowing shows nothing — an empty narrowing exports an empty file, so the button disables.
+
+### Styled — the compact register joins the shared EmptyState
+
+- `EmptyState` (5.121.0) gains a **`compact`** variant — the h-14 rounded-2xl chip, half the air — for misses that live inside a sidebar or another component's list. Three private shapes retire into it: Messages' no-rooms truth and filter-miss (the Unread toggle now owns its side of "either can miss"), and Inventory's shelf search-miss. Words stay per-screen; the shape is the house's. Main-screen misses keep the full-size default.
+
+### Verified
+
+- tsc EXIT=0 (×2 across the round); build EXIT=0. Live E2E (QR Flow book, 3 guests · 0 regulars · 0 VIPs): Regulars tile → gold ring + "No regulars to show" + definition + Show the whole book; VIPs tile → Crown miss; tile + query "zz" → "either can miss" + Clear both; release → whole book restored; whisper arithmetic live; CSV button disabled under an empty narrowing. Compact EmptyStates verified in Messages (room filter "zzqx") and Inventory (shelf search "zz"). Console delta ZERO. Round note: cloud reads only (CRM reads + one realtime subscribe); the CSV export is a local file build — no cloud writes.
+
 ## [5.128.0] — 2026-10-04 — The floor answers
 
 ### Added — Floor joins the shell-search contract
