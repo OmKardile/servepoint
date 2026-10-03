@@ -3,6 +3,22 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.48.0] — 2026-10-03 — The dishes get their faces: menu photos close the loop
+
+### Added — an upload path for a column that always rendered (migration 036)
+- `menu_items.image_url` has been rendered everywhere since the beginning — the counter POS item modal, the guest dish thumbs, Dashboard's Trending Dishes — but NOTHING could ever put a photo there: no upload UI, no storage bucket, no API. The dishes had frames but no faces. Migration `036_menu_photo_storage.sql` (no table changes — a Storage bucket, mirroring 026's tenant-logos pattern with two deliberate differences):
+  - **FOLDER = TENANT, not user**: every object lives under `menu-photos/<tenant_id>/<menu_item_id>-<timestamp>.<ext>`, and the write policies scope by TENANT MEMBERSHIP (003's owner/staff, is_active) on that first folder — the same member gate every operational table uses. 026 scoped by auth.uid because a logo is the account's face; a dish photo is the house's.
+  - **NO SVG**: dish photos are photographs — svg+xml is a script-injection vector when served publicly and no phone photo is ever svg. The mime allowlist is png/jpeg/webp/avif only; 2 MiB (photos are bigger than logos, thermal receipts still stay light). Applied via `scripts/apply-036.mjs`, four proofs green (bucket shape, the 4 policies, member scoping on the upload policy's WITH CHECK, idempotent re-apply).
+- **API (api.ts)**: `uploadMenuItemPhoto` (mime/size guards restated as friendly errors → storage upload → public URL), `removeMenuItemPhoto` (best-effort object removal, foreign URLs ignored), and `imageUrl` joins `MenuItemInput`/`updateMenuItem` (null clears). **Replacing a photo removes the replaced object** — the old face leaves the bucket in the same breath as the new one lands.
+- **UI (MenuScreen)**: a `PhotoTile` at the head of every item row. Empty: a dashed sage tile with an ImagePlus glyph that warms to gold on hover. Filled: the photo, soft-ringed, with a small rose ✕ badge bottom-right to clear it (the same corner the presence dot speaks from — one corner language). Uploading: a spinner ring over a fixed 44px box — the row never shifts. Upload is immediate on pick: one honest write per pick (storage object → image_url patch → row refetch), no draft state to lose, no "Save" to forget.
+
+### Styling — the tile language
+- Dashed sage → gold-on-hover for "no face yet"; soft-ringed photo with the rose corner ✕ for "dressed"; the spinner ring for "in flight". A broken URL dims the image instead of showing a broken-image glyph — the tile stays honest even when a photo dies.
+
+### Verified
+- E2E (real UI, full cycle): a generated 2.3 KB PNG uploaded through the row's file input → `menu_items.image_url` set, one `storage.objects` row under the tenant folder, the tile flipped to the photo with its ✕ badge, the public URL fetched **200 image/png** with no session (guest phones will load it), and the counter POS item-detail modal rendered the photo header. Clear via the row's ✕ → tile back to dashed, `image_url` null, bucket back to **zero objects** — upload, display, and clear all through the real UI. Two tooling lessons en route: `agent-browser upload` set the file but never fired React's change (the in-page DataTransfer + dispatch path did — and the diagnostic's TypeError was actually the handler clearing the input mid-eval); direct DELETE on storage.objects is platform-blocked, so the QA orphan went home through the Storage API with the owner's session — which doubles as a live proof of 036's member delete policy. Screenshots `scripts/qa87-phototile.png` + `scripts/qa87-pos-modal.png`. 14/14 screens, 0 console errors, tsc 0.
+- DB truth (`scripts/qa87-truth.mjs`): TRUTH OK — bucket at zero objects, every `image_url` null, orders 36 / bells 3 / chat 5 untouched, presence owner-only, 036 (public 2 MiB bucket + 4 member policies) and 035 both intact.
+
 ## [5.47.0] — 2026-10-03 — Needs you now: the morning mirror earns its doors
 
 ### Added — the landing screen's honest "what needs me" (no migration)

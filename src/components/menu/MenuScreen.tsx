@@ -3,6 +3,7 @@ import {
   BookOpenText,
   Check,
   CircleAlert,
+  ImagePlus,
   Layers,
   Loader2,
   Pencil,
@@ -27,8 +28,10 @@ import {
   fetchMenuItems,
   fetchMenuVariants,
   renameCategory,
+  removeMenuItemPhoto,
   setItemAddons,
   updateMenuItem,
+  uploadMenuItemPhoto,
   type Addon,
   type Category,
   type MenuVariant,
@@ -312,6 +315,117 @@ function VariantsModal({
 
 /* ── the screen ─────────────────────────────────────────────────────── */
 
+/**
+ * PhotoTile (v5.48.0 — the dishes get their faces; migration 036).
+ *
+ * One tile per menu row, at the row's head. Empty state: a dashed sage tile
+ * with an ImagePlus glyph that darkens to gold on hover — "this dish has no
+ * face yet". Filled: the photo itself, soft-ringed, with a small rose X
+ * badge bottom-right to clear it (the same corner the presence dot speaks
+ * from — one corner language per app). Uploading: a spinner ring over the
+ * tile, the row stays put (fixed 44px box, never shifts).
+ *
+ * The upload is immediate on pick (one honest write per pick: storage
+ * object, then the image_url patch, then the row refetches) — no draft
+ * state to lose, no "Save" to forget. The storage API itself enforces the
+ * 2 MiB / raster-only rules; the API layer restates them as friendly errors.
+ */
+const PHOTO_INPUT_ID = (itemId: string) => `photo-${itemId}`;
+
+function PhotoTile({
+  item,
+  tenantId,
+  busy,
+  runAction,
+}: {
+  item: MenuItem;
+  tenantId: string;
+  busy: boolean;
+  runAction: (fn: () => Promise<unknown>, okMsg?: string) => Promise<boolean>;
+}) {
+  const [uploading, setUploading] = useState(false);
+  const url = item.image_url || null;
+
+  const onPick = async (file: File | undefined) => {
+    if (!file) return;
+    setUploading(true);
+    try {
+      await runAction(async () => {
+        const old = url;
+        const publicUrl = await uploadMenuItemPhoto(tenantId, item.id, file);
+        await updateMenuItem(item.id, tenantId, { imageUrl: publicUrl });
+        // replacing, not first-dressing: the old face leaves the bucket too
+        if (old) await removeMenuItemPhoto(old);
+      }, 'Photo added');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const onClear = () =>
+    void runAction(async () => {
+      const old = url;
+      await updateMenuItem(item.id, tenantId, { imageUrl: null });
+      if (old) await removeMenuItemPhoto(old);
+    }, 'Photo removed');
+
+  return (
+    <span className="relative inline-flex h-11 w-11 shrink-0 items-center justify-center">
+      {url ? (
+        <img
+          src={url}
+          alt={item.name}
+          className="h-11 w-11 rounded-xl border border-[#E3E7E0] object-cover"
+          onError={(e) => {
+            (e.target as HTMLImageElement).style.opacity = '0.25';
+          }}
+        />
+      ) : (
+        <label
+          htmlFor={PHOTO_INPUT_ID(item.id)}
+          title={`Add photo for ${item.name}`}
+          aria-label={`Add photo for ${item.name}`}
+          className={`flex h-11 w-11 cursor-pointer items-center justify-center rounded-xl border border-dashed transition-colors ${
+            busy || uploading
+              ? 'border-[#E3E7E0] bg-[#F6F5F2] text-[#969696]'
+              : 'border-[#B8C4BC] bg-[#FBFBF9] text-[#8A938C] hover:border-[#B88E2F] hover:bg-[#FDF9F0] hover:text-[#8A5A16]'
+          }`}
+        >
+          <ImagePlus size={16} aria-hidden />
+        </label>
+      )}
+      <input
+        id={PHOTO_INPUT_ID(item.id)}
+        type="file"
+        accept="image/png,image/jpeg,image/webp,image/avif"
+        className="sr-only"
+        disabled={busy || uploading}
+        onChange={(e) => {
+          void onPick(e.target.files?.[0]);
+          e.target.value = ''; // re-picking the same file must still fire
+        }}
+      />
+      {uploading && (
+        <span className="absolute inset-0 flex items-center justify-center rounded-xl bg-white/70" aria-hidden>
+          <Loader2 size={16} className="animate-spin text-[#0F3D3E]" />
+        </span>
+      )}
+      {url && !uploading && (
+        <button
+          type="button"
+          onClick={onClear}
+          disabled={busy}
+          aria-label={`Remove photo for ${item.name}`}
+          title={`Remove photo for ${item.name}`}
+          className="absolute -bottom-1.5 -right-1.5 flex h-5 w-5 items-center justify-center rounded-full border-2 border-white bg-[#B4483C] text-white transition-transform hover:scale-110 disabled:opacity-50"
+        >
+          <X size={10} aria-hidden />
+        </button>
+      )}
+    </span>
+  );
+}
+
 export function MenuScreen(): React.ReactElement {
   const { tenant, tenantId, error: tenantError, loading } = useTenant();
   const [tick, setTick] = useState(0);
@@ -382,7 +496,7 @@ export function MenuScreen(): React.ReactElement {
   }, [tenantId, tick]);
 
   const runAction = useCallback(async (fn: () => Promise<unknown>, okMsg?: string) => {
-    if (busyRef.current) return; // double-dispatch guard (batch-proof, unlike state)
+    if (busyRef.current) return false; // double-dispatch guard (batch-proof, unlike state)
     busyRef.current = true;
     setBusy(true);
     setActionError(null);
@@ -627,6 +741,7 @@ export function MenuScreen(): React.ReactElement {
                 const armed = confirmId === `item:${item.id}`;
                 return (
                   <div key={item.id} className="flex flex-wrap items-center gap-3 border-b border-[#F0F2EE] px-4 py-3 last:border-0 hover:bg-[#FBFBF9]">
+                    <PhotoTile item={item} tenantId={tenantId} busy={busy} runAction={runAction} />
                     <VegDot veg={item.is_veg !== false} />
                     <div className="min-w-0 flex-1">
                       <p className="flex items-center gap-2 truncate text-[14px] font-semibold text-[#1A1A1A]">

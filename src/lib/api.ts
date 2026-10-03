@@ -768,6 +768,9 @@ export interface MenuItemInput {
   categoryId: string | null;
   isVeg: boolean;
   isAvailable: boolean;
+  /** v5.48.0 — the dish's face: a public URL of the uploaded photo
+   * (menu-photos bucket, 036). null clears it. */
+  imageUrl?: string | null;
 }
 
 export async function createMenuItem(tenantId: string, input: MenuItemInput): Promise<MenuItem> {
@@ -801,8 +804,53 @@ export async function updateMenuItem(itemId: string, tenantId: string, patch: Pa
   if (patch.categoryId !== undefined) row.category_id = patch.categoryId;
   if (patch.isVeg !== undefined) row.is_veg = patch.isVeg;
   if (patch.isAvailable !== undefined) row.is_available = patch.isAvailable;
+  if (patch.imageUrl !== undefined) row.image_url = patch.imageUrl;
   const { error } = await supabase.from('menu_items').update(row).eq('id', itemId).eq('tenant_id', tenantId);
   if (error) throw error;
+}
+
+/** v5.48.0 — the dishes get their faces (migration 036): upload a photo into
+ * the tenant's own menu-photos folder and return its public URL. The path
+ * contract (`<tenantId>/<menuItemId>-<timestamp>.<ext>`) is what the member
+ * RLS policies scope on — folder[1] must be a tenant the caller belongs to.
+ * The storage API itself enforces 2 MiB and the raster-only mime allowlist. */
+export async function uploadMenuItemPhoto(
+  tenantId: string,
+  menuItemId: string,
+  file: File
+): Promise<string> {
+  requireCloud();
+  const extMap: Record<string, string> = {
+    'image/png': 'png',
+    'image/jpeg': 'jpg',
+    'image/webp': 'webp',
+    'image/avif': 'avif',
+  };
+  const ext = extMap[file.type];
+  if (!ext) throw new Error('Photos must be PNG, JPEG, WebP or AVIF.');
+  if (file.size > 2 * 1024 * 1024) throw new Error('Photos must be 2 MB or smaller.');
+  const path = `${tenantId}/${menuItemId}-${Date.now()}.${ext}`;
+  const { error } = await supabase.storage.from('menu-photos').upload(path, file, {
+    contentType: file.type,
+    upsert: false,
+  });
+  if (error) throw new Error(error.message);
+  const { data } = supabase.storage.from('menu-photos').getPublicUrl(path);
+  return data.publicUrl;
+}
+
+/** v5.48.0 — best-effort removal of a dish photo object from the bucket when
+ * the item's photo is cleared or replaced. Fire-and-forget: a failed delete
+ * leaves an orphaned object (the silting report remains parked) but never
+ * breaks the menu row. */
+export async function removeMenuItemPhoto(publicUrl: string): Promise<void> {
+  requireCloud();
+  const marker = '/object/public/menu-photos/';
+  const i = publicUrl.indexOf(marker);
+  if (i < 0) return; // a foreign URL — nothing of ours to remove
+  const path = publicUrl.slice(i + marker.length);
+  const { error } = await supabase.storage.from('menu-photos').remove([path]);
+  if (error) throw new Error(error.message);
 }
 
 export async function deleteMenuItem(itemId: string, tenantId: string): Promise<void> {
