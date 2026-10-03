@@ -3,6 +3,23 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.130.0] — 2026-10-04 — The shelf narrows
+
+### Added — Inventory: the LOW STOCK and OUT OF STOCK tiles take up the tile grammar
+
+- **The third crossover** (`src/components/inventory/InventoryScreen.tsx`): the Floor's filter-tile grammar (5.128.0) crossed to Guests last release (5.129.0); this release it reaches the shelf. The LOW STOCK and OUT OF STOCK stat tiles become filter tiles — tap narrows the shelf list to that ledger state, tap again releases (`aria-pressed`, gold ring + ring/30, hover lift). The tiles' numbers stay whole-shelf, always; the list below narrows, and the count line says so.
+- **One predicate, two readers**: the tile filter uses the SAME boundaries the tiles count with and the row chips wear (`low` = above zero but at/below reorder point; `out` = at/below zero) — the amber and red chips on rows and the tiles can never disagree.
+- **The whisper reaches the shelf**: the toolbar's count line (5.123.0 badge) now speaks the Floor's sentence — *"Showing 1 of 4 ingredients for 'co' — the tiles above still count the whole shelf"* — whenever the search or a tile narrows the list. The "4 ingredients on the shelf — every hand move lands in the diary" fact line stays for the unfiltered shelf.
+- **The miss says why, third register**: a tile-only miss speaks the shelf's health — *"No low ingredients — the shelf holds 4 ingredients — every one sits at or above its reorder point. Tap the tile again, or show the whole shelf."* / *"Nothing is out of stock — none has run dry."* (Package / PackageX icons); a search miss keeps its words and adds the either-can-miss clause when a tile is also in play, with one gold **Clear both**. The empty-shelf truth ("The shelf is empty") stays its own sentence.
+
+### Styled — one primitive, two registers
+
+- `StatCard` grows the filter register instead of the screen growing new tiles: when a card is handed `onToggle` it renders as the Floor's pressed button (gold ring, hover lift, focus ring); passive cards keep their `section` anatomy byte-for-byte. Ingredients and Stock value stay passive facts — they count, they don't cut.
+
+### Verified
+
+- tsc EXIT=0; build EXIT=0. Live E2E (QR Flow shelf, 4 healthy SKUs — 0 low, 0 out): Low stock tile → aria-pressed + "No low ingredients" + definition + Show the whole shelf; Out of stock tile → "Nothing is out of stock"; tile + query "zz" → either-can-miss + Clear both; release → 4 rows restored; search "co" → "Showing 2 of 4 ingredients for 'co' — the tiles above still count the whole shelf"; count line returns to the fact line on release. Console delta ZERO. READ-ONLY round — zero cloud writes.
+
 ## [5.129.0] — 2026-10-04 — The book answers
 
 ### Added — Guests: tier tiles filter, and the book can be carried out

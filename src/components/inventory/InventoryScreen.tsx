@@ -14,6 +14,7 @@ import {
   Package,
   PackageMinus,
   PackagePlus,
+  PackageX,
   Pencil,
   Plus,
   RefreshCw,
@@ -182,6 +183,11 @@ const InventoryInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
     return () => useUi.getState().setSearchMeta(null);
   }, []);
   const [tab, setTab] = useState<TabKey>('stock');
+  /* 5.130.0 — the tiles' filter (null = whole shelf): the LOW STOCK and OUT
+   * OF STOCK tiles take up the Floor's filter grammar (5.128.0, crossed to
+   * Guests in 5.129.0). The tiles keep counting the WHOLE shelf; the list
+   * below narrows, and the count line says so. */
+  const [shelfFilter, setShelfFilter] = useState<'low' | 'out' | null>(null);
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [recipes, setRecipes] = useState<RecipeLine[]>([]);
@@ -271,12 +277,22 @@ const InventoryInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
   }, [items]);
 
   /* v5.117.0 — the visible slice of the shelf under the search: names
-   * only, case-insensitive. The header chips above keep speaking the
-   * WHOLE shelf's truth — the filter narrows the list, never the story. */
+   * only, case-insensitive. 5.130.0 — the tile filter composes with it:
+   * the SAME predicates the stat tiles count with (low = above zero but
+   * at/below reorder point; out = at/below zero). The header chips above
+   * keep speaking the WHOLE shelf's truth — the filter narrows the list,
+   * never the story. */
   const shelfQ = shelfQuery.trim().toLowerCase();
   const visibleShelf = useMemo(
-    () => (shelfQ ? items.filter((i) => i.name.toLowerCase().includes(shelfQ)) : items),
-    [items, shelfQ]
+    () =>
+      items.filter((i) => {
+        if (shelfQ && !i.name.toLowerCase().includes(shelfQ)) return false;
+        if (shelfFilter === 'low' && !(i.current_stock > 0 && i.current_stock <= i.reorder_point))
+          return false;
+        if (shelfFilter === 'out' && i.current_stock > 0) return false;
+        return true;
+      }),
+    [items, shelfQ, shelfFilter]
   );
 
   /* v5.81.0 — THE SHELF'S ANSWER: for each of the room's favourites, how
@@ -556,11 +572,36 @@ const InventoryInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
         </div>
       )}
 
-      {/* ── stat strip ── */}
+      {/* ── stat strip — 5.130.0: LOW STOCK and OUT OF STOCK narrow the shelf
+          (Floor's tile grammar); the numbers stay whole-shelf always ── */}
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         <StatCard label="Ingredients" value={String(items.length)} sub="SKUs on the shelf" tone="#0F3D3E" />
-        <StatCard label="Low stock" value={String(stats.low)} sub="below reorder point" tone="#8A5A00" />
-        <StatCard label="Out of stock" value={String(stats.out)} sub="need ordering now" tone="#B3261E" />
+        <StatCard
+          label="Low stock"
+          value={String(stats.low)}
+          sub="below reorder point"
+          tone="#8A5A00"
+          onToggle={() => setShelfFilter((f) => (f === 'low' ? null : 'low'))}
+          active={shelfFilter === 'low'}
+          hint={
+            shelfFilter === 'low'
+              ? 'Showing low-stock SKUs only — tap again for the whole shelf'
+              : 'Tap to show low-stock SKUs only'
+          }
+        />
+        <StatCard
+          label="Out of stock"
+          value={String(stats.out)}
+          sub="need ordering now"
+          tone="#B3261E"
+          onToggle={() => setShelfFilter((f) => (f === 'out' ? null : 'out'))}
+          active={shelfFilter === 'out'}
+          hint={
+            shelfFilter === 'out'
+              ? 'Showing out-of-stock SKUs only — tap again for the whole shelf'
+              : 'Tap to show out-of-stock SKUs only'
+          }
+        />
         <StatCard label="Stock value" value={formatMoney(stats.value)} sub="qty × unit cost" tone="#0F3D3E" />
       </div>
 
@@ -715,14 +756,22 @@ const InventoryInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
                     className="h-9 w-44 rounded-full border border-[#E3E7E0] bg-white pl-8.5 pr-3 text-[12.5px] text-[#1A1A1A] outline-none transition placeholder:text-[#969696] hover:border-[#C9CFC9] focus:border-[#B88E2F] focus:ring-2 focus:ring-[#B88E2F]/25 [&::-webkit-search-cancel-button]:hidden"
                   />
                 </div>
-                {shelfQ ? (
-                  /* v5.123.0 — the count line wears the house badge (Bills'
-                      voice): same pill, same grammar, one family. */
-                  <p className="flex items-center gap-2 text-[11.5px] text-[#6B6B6B]" aria-live="polite">
+                {shelfQ || shelfFilter ? (
+                  /* 5.130.0 — the count line grows into the Floor's whisper
+                      (5.128.0, crossed to Guests in 5.129.0): while the
+                      search or a tile narrows the shelf, say how much
+                      survived — and admit the tiles above still count the
+                      WHOLE shelf. The narrowing never rewrites the story. */
+                  <p className="flex flex-wrap items-center gap-2 text-[11.5px] text-[#6B6B6B]" aria-live="polite">
                     <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[#0F3D3E] px-1.5 text-[10.5px] font-bold tabular-nums text-white">
                       {visibleShelf.length}
                     </span>
-                    of {items.length} ingredients match “{shelfQuery.trim()}”
+                    Showing {visibleShelf.length} of {items.length}{' '}
+                    {items.length === 1 ? 'ingredient' : 'ingredients'}
+                    {shelfQ ? (
+                      <> for “{shelfQuery.trim()}”</>
+                    ) : null}{' '}
+                    — the tiles above still count the whole shelf
                   </p>
                 ) : (
                   <p className="text-[11.5px] text-[#6B6B6B]">
@@ -742,21 +791,52 @@ const InventoryInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
               {items.length > 0 && visibleShelf.length === 0 ? (
                 /* v5.117.0 — the search came up empty; own what it reads
                     (names) and offer the way back. 5.129.0 — the shape is
-                    the shared EmptyState's compact register; words stay. */
+                    the shared EmptyState's compact register; words stay.
+                    5.130.0 — the tile's word joins the miss (the Floor's
+                    either-can-miss grammar, third surface): the search's
+                    reach, the tile's ledger definition, or both. */
                 <li>
                   <EmptyState
                     compact
-                    icon={Search}
-                    title={`No ingredient matches “${shelfQuery.trim()}”`}
-                    body="The shelf counts stay whole-shelf."
+                    icon={shelfQ ? Search : shelfFilter === 'out' ? PackageX : Package}
+                    title={
+                      shelfQ
+                        ? `No ingredient matches “${shelfQuery.trim()}”`
+                        : shelfFilter === 'low'
+                          ? 'No low ingredients'
+                          : 'Nothing is out of stock'
+                    }
+                    body={
+                      shelfQ ? (
+                        <>
+                          Search reads ingredient names — the shelf counts stay whole-shelf.
+                          {shelfFilter && (
+                            <> The {shelfFilter === 'low' ? 'Low stock' : 'Out of stock'} tile is also in play — either can miss.</>
+                          )}
+                        </>
+                      ) : shelfFilter === 'low' ? (
+                        <>
+                          The shelf holds {items.length}{' '}
+                          {items.length === 1 ? 'ingredient' : 'ingredients'} — every one sits at or above
+                          its reorder point. Tap the tile again, or show the whole shelf.
+                        </>
+                      ) : (
+                        <>
+                          The shelf holds {items.length}{' '}
+                          {items.length === 1 ? 'ingredient' : 'ingredients'} — none has run dry. Tap the
+                          tile again, or show the whole shelf.
+                        </>
+                      )
+                    }
                     action={
                       <button
                         onClick={() => {
-                          setShelfQuery('');
+                          if (shelfQ) setShelfQuery('');
+                          if (shelfFilter) setShelfFilter(null);
                         }}
                         className="rounded-lg bg-[#F3E8CF] px-3 py-1.5 text-[12px] font-semibold text-[#1A1A1A] transition hover:bg-[#E9D9AF]"
                       >
-                        Clear search
+                        {shelfQ && shelfFilter ? 'Clear both' : shelfQ ? 'Clear search' : 'Show the whole shelf'}
                       </button>
                     }
                   />
@@ -985,23 +1065,53 @@ const InventoryInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
 
 /* ─────────────────────────── small pieces ─────────────────────────────── */
 
-const StatCard: React.FC<{ label: string; value: string; sub?: string; tone: string }> = ({
-  label,
-  value,
-  sub,
-  tone,
-}) => (
-  <section className="sp-card p-4" aria-label={label}>
-    <p className="text-[10.5px] font-bold uppercase tracking-[0.08em] text-[#969696]">{label}</p>
-    <p
-      className="mt-1.5 truncate text-[19px] font-extrabold tabular-nums leading-tight"
-      style={{ color: tone }}
+const StatCard: React.FC<{
+  label: string;
+  value: string;
+  sub?: string;
+  tone: string;
+  /* 5.130.0 — the Floor's filter register (5.128.0): when onToggle is
+   * passed the card becomes a pressed button — gold ring when active,
+   * hover lift — while the passive cards keep their section anatomy. */
+  onToggle?: () => void;
+  active?: boolean;
+  hint?: string;
+}> = ({ label, value, sub, tone, onToggle, active, hint }) => {
+  if (!onToggle) {
+    return (
+      <section className="sp-card p-4" aria-label={label}>
+        <p className="text-[10.5px] font-bold uppercase tracking-[0.08em] text-[#969696]">{label}</p>
+        <p
+          className="mt-1.5 truncate text-[19px] font-extrabold tabular-nums leading-tight"
+          style={{ color: tone }}
+        >
+          {value}
+        </p>
+        {sub ? <p className="mt-0.5 truncate text-[10.5px] text-[#969696]">{sub}</p> : null}
+      </section>
+    );
+  }
+  return (
+    <button
+      type="button"
+      aria-pressed={!!active}
+      onClick={onToggle}
+      title={hint}
+      className={`rounded-2xl border bg-white p-4 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#967221] ${
+        active ? 'border-[#B88E2F] ring-2 ring-[#B88E2F]/30' : 'border-[#E3E7E0]'
+      }`}
     >
-      {value}
-    </p>
-    {sub ? <p className="mt-0.5 truncate text-[10.5px] text-[#969696]">{sub}</p> : null}
-  </section>
-);
+      <p className="text-[10.5px] font-bold uppercase tracking-[0.08em] text-[#969696]">{label}</p>
+      <p
+        className="mt-1.5 truncate text-[19px] font-extrabold tabular-nums leading-tight"
+        style={{ color: tone }}
+      >
+        {value}
+      </p>
+      {sub ? <p className="mt-0.5 truncate text-[10.5px] text-[#969696]">{sub}</p> : null}
+    </button>
+  );
+};
 
 const InventorySkeleton: React.FC = () => (
   <div className="flex flex-col gap-4 p-4" aria-busy="true" aria-label="Loading inventory">
