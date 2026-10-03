@@ -3,6 +3,24 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.128.0] — 2026-10-04 — The floor answers
+
+### Added — Floor joins the shell-search contract
+
+- **The gap**: six screens spoke the search contract (F&D, Bills, Menu, Guests, Inventory, Messages rooms) and the Floor — the counter's biggest board — sat outside it; the box appeared nowhere while a host scanning twenty sections had no way to cut to one.
+- **The board answers the query** (`src/components/floor/FloorScreen.tsx`): the header box now appears on Floor with the honest placeholder **"Search tables or sections…"**. A section whose NAME says the word keeps its whole list (the section is the hit); otherwise only tables whose number matches survive. A gold whisper keeps the record straight while survivors show: *"Showing 1 of 2 tables for 'patio' — the headline above still counts the whole floor"* — the seats-busy headline is the floor's global truth and does not silently become the view's count.
+- **The miss says why** (shared `EmptyState`): a search miss quotes the word and states its reach — *"Search reads table numbers and section names"*; a status-tile miss speaks the tile's word — *"No available tables — the floor holds 2 tables — none of them available. Tap the tile again, or show the whole floor."*; both together say *"either can miss"*, with one gold button that clears exactly what it names (Clear search / Show all tables / Clear both). The floor's truth state ("No tables yet") stays its own sentence — an empty floor is not a filtered one.
+- **Survivors say why**: section headings and table numbers glint through the shared `MarkHit` — the last list surface joins the glint sweep.
+
+### Fixed — a stale parked verdict, corrected
+
+- The parked list carried "menu-wide item search across categories (needs a design decision)" — audit this round found the behavior **already ships**: Menu's query filters every category group and keeps categories whose name matches (`MenuScreen.tsx` `catsWithItems`). Parked item closed with evidence; no code change.
+
+### Verified
+
+- Live (QR Flow floor, 2 tables): "patio" → Patio section whole + mark on "Patio" + whisper; "t2" → mark on card "T2"; "zzqx" → honest miss + Clear search; Available tile (0) → "No available tables" + Show all tables; both stacked → "either can miss" + Clear both; clear → board fully restored (2 cards, tile released, zero marks). tsc EXIT=0; build EXIT=0; console delta ZERO. READ-ONLY round — zero cloud writes.
+
+
 ## [5.127.0] — 2026-10-04 — The record hands over whole
 
 ### Added — Plan & billing, the calm record behind the clock

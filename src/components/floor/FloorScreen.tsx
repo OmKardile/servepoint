@@ -18,7 +18,9 @@ import {
   QrCode,
   RefreshCw,
   Scissors,
+  Search,
   Smartphone,
+  SlidersHorizontal,
   Trash2,
   Users,
   X,
@@ -79,6 +81,8 @@ import {
   bookingTzIsForeign,
 } from '../../lib/bookingday';
 import { useUi } from '../../store/session';
+import { MarkHit } from '../shell/MarkHit';
+import { EmptyState } from '../shell/EmptyState';
 import { useCart } from '../../store/cart';
 import type { Order, OrderItem } from '../../types';
 
@@ -1549,6 +1553,16 @@ export function FloorScreen(): React.ReactElement {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [drillId, setDrillId] = useState<string | null>(null);
   const [filter, setFilter] = useState<TableStatus | null>(null);
+  /* v5.128.0 — the floor joins the shell-search contract: the box says what
+   * it searches (table numbers and section names), a miss says why it
+   * missed, and every surviving card glints at the span that kept it. */
+  const query = useUi((s) => s.search);
+  const setQuery = useUi((s) => s.setSearch);
+  useEffect(() => {
+    useUi.getState().setSearchMeta({ placeholder: 'Search tables or sections…' });
+    return () => useUi.getState().setSearchMeta(null);
+  }, []);
+  const q = query.trim().toLowerCase();
   const [stickerBusy, setStickerBusy] = useState(false);
   /** v5.29.0 — floor rhythm compare: 'week' = this 7d alone (pre-5.29 view),
    *  'compare' = lay the prior 7d's hour-of-day rhythm under this one. */
@@ -1877,12 +1891,41 @@ export function FloorScreen(): React.ReactElement {
     (tables || []).forEach((t) => {
       if (filter && t.status !== filter) return;
       const key = t.section || 'Main Floor';
+      /* v5.128.0 — the query narrows the board: a section whose NAME says
+       * the word keeps its whole list (the section is the hit); otherwise
+       * only tables whose number matches survive. No word, no narrowing. */
+      if (q && !key.toLowerCase().includes(q) && !String(t.table_number).toLowerCase().includes(q)) return;
       const list = map.get(key) || [];
       list.push(t);
       map.set(key, list);
     });
     return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0]));
-  }, [tables, filter]);
+  }, [tables, filter, q]);
+  const matchedCount = useMemo(() => sections.reduce((n, [, list]) => n + list.length, 0), [sections]);
+
+  /* v5.128.0 — the miss says why: the search's word, the tile's word, or
+   * both — the same either-can-miss grammar the ledger (5.121.0) and the
+   * book (5.123.0) already speak. The floor's truth state ("No tables
+   * yet") stays its own sentence — an empty floor is not a filtered one. */
+  const missQ = query.trim();
+  const filterLabel = filter ? STATUS_META[filter].label : '';
+  const boardEmpty = (tables || []).length > 0 && matchedCount === 0 && !loadError;
+  const missTitle = missQ
+    ? `No table matches “${missQ}”`
+    : filterLabel
+      ? `No ${filterLabel.toLowerCase()} tables`
+      : 'No tables match';
+  const missBody = missQ ? (
+    <>
+      Search reads table numbers and section names.
+      {filterLabel && <> The {filterLabel} tile is also in play — either can miss.</>}
+    </>
+  ) : (
+    <>
+      The floor holds {(tables || []).length} tables — none of them {filterLabel.toLowerCase()}. Tap
+      the tile again, or show the whole floor.
+    </>
+  );
 
   const drillTable = useMemo(
     () => (tables || []).find((t) => t.id === drillId) || null,
@@ -2103,6 +2146,11 @@ export function FloorScreen(): React.ReactElement {
             )}{' '}
             · tables hold themselves when orders land
           </p>
+          {q && matchedCount > 0 && (
+            <p className="mt-0.5 text-[12px] text-[#8A6A1F]">
+              Showing {matchedCount} of {(tables || []).length} tables for “{query.trim()}” — the headline above still counts the whole floor.
+            </p>
+          )}
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <LiveChip state={rtState} />
@@ -2572,10 +2620,32 @@ export function FloorScreen(): React.ReactElement {
         </div>
       )}
 
+      {boardEmpty && (
+        <div role="listitem">
+          <EmptyState
+            icon={missQ ? Search : SlidersHorizontal}
+            title={missTitle}
+            body={missBody}
+            action={
+              <button
+                type="button"
+                onClick={() => {
+                  setQuery('');
+                  if (filterLabel) setFilter(null);
+                }}
+                className="rounded-lg bg-[#F3E8CF] px-3 py-1.5 text-[12px] font-semibold text-[#1A1A1A] transition hover:bg-[#E9D9AF]"
+              >
+                {missQ && filterLabel ? 'Clear both' : missQ ? 'Clear search' : 'Show all tables'}
+              </button>
+            }
+          />
+        </div>
+      )}
+
       {sections.map(([section, list]) => (
         <section key={section} aria-label={section}>
           <h2 className="mb-2 font-serif text-[19px] italic text-[#0F3D3E]">
-            {section}
+            <MarkHit text={section} query={query} />
             <span className="ml-2 rounded-full bg-[#F1F4F1] px-2 py-0.5 align-middle text-[10.5px] font-sans font-bold not-italic text-[#0F3D3E]">{list.length}</span>
           </h2>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
@@ -2609,7 +2679,7 @@ export function FloorScreen(): React.ReactElement {
                     <div>
                       <p className="flex items-center gap-2 text-[19px] font-bold leading-none text-[#1A1A1A]">
                         <Armchair size={17} style={{ color: meta.dot }} aria-hidden />
-                        {t.table_number}
+                        <MarkHit text={String(t.table_number)} query={query} />
                       </p>
                       <p className="mt-1.5 flex items-center gap-1.5 text-[12px] text-[#6B6B6B]">
                         <Users size={12} aria-hidden /> {t.capacity} seats
