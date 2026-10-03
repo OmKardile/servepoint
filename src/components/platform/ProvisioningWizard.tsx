@@ -245,6 +245,7 @@ export const ProvisioningWizard: React.FC<ProvisioningWizardProps> = ({
     const errors: Record<string, string> = {};
     if (target === 1) {
       if (!form.name.trim()) errors.name = 'Business name is required.';
+      if (!form.city.trim()) errors.city = 'City is required — the ledger stores it.';
       const slug = form.slug.trim();
       if (!slug) errors.slug = 'Slug is required.';
       else if (!SLUG_PATTERN.test(slug)) errors.slug = 'Use lowercase letters, numbers and dashes only.';
@@ -464,7 +465,9 @@ export const ProvisioningWizard: React.FC<ProvisioningWizardProps> = ({
                 </select>
               </div>
               <div>
-                <FieldLabel htmlFor="pw-city">City</FieldLabel>
+                <FieldLabel htmlFor="pw-city" required>
+                  City
+                </FieldLabel>
                 <input
                   id="pw-city"
                   type="text"
@@ -472,8 +475,11 @@ export const ProvisioningWizard: React.FC<ProvisioningWizardProps> = ({
                   value={form.city}
                   onChange={(e) => patch({ city: e.target.value })}
                   placeholder="e.g. Pune"
+                  aria-invalid={Boolean(stepErrors.city)}
+                  aria-describedby={stepErrors.city ? 'pw-city-error' : undefined}
                   className={inputClass}
                 />
+                <FieldError id="pw-city-error" message={stepErrors.city} />
               </div>
             </div>
 

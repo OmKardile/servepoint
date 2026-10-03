@@ -2,7 +2,9 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle,
   Building2,
+  Check,
   ChevronDown,
+  Copy,
   CreditCard,
   Hourglass,
   Inbox,
@@ -65,6 +67,68 @@ function formatDate(iso: string | null | undefined): string {
 function shortId(id: string): string {
   return id.length > 12 ? `${id.slice(0, 12)}…` : id;
 }
+
+/* v5.124.0 — the panel's IDs leave whole. The details panel truncates long
+ * values for layout; the clipboard always receives the full string. One tap,
+ * a two-second checkmark, and the operator never re-derives a UUID by hand. */
+async function copyPlain(text: string): Promise<boolean> {
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch {
+    /* fall through to the legacy path */
+  }
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    const ok = document.execCommand('copy');
+    document.body.removeChild(ta);
+    return ok;
+  } catch {
+    return false;
+  }
+}
+
+const CopyValueButton: React.FC<{ value: string; label: string }> = ({ value, label }) => {
+  const [copied, setCopied] = useState(false);
+  const timer = React.useRef<number | null>(null);
+  useEffect(() => () => {
+    if (timer.current !== null) window.clearTimeout(timer.current);
+  }, []);
+  return (
+    <button
+      type="button"
+      onClick={async () => {
+        const ok = await copyPlain(value);
+        if (!ok) return;
+        setCopied(true);
+        if (timer.current !== null) window.clearTimeout(timer.current);
+        timer.current = window.setTimeout(() => setCopied(false), 2000);
+      }}
+      aria-label={`${label} — copy to clipboard`}
+      className="inline-flex h-6 items-center gap-1 rounded-md px-1.5 text-[11px] font-semibold text-[#0F3D3E] transition-colors hover:bg-[#E3E7E0]"
+    >
+      {copied ? (
+        <>
+          <Check size={12} aria-hidden className="text-[#2E7D32]" />
+          <span className="text-[#2E7D32]">Copied</span>
+        </>
+      ) : (
+        <>
+          <Copy size={12} aria-hidden />
+          <span className="sr-only">Copy {label}</span>
+        </>
+      )}
+    </button>
+  );
+};
 
 function statusChipClass(status: string): string {
   switch (status) {
@@ -418,7 +482,10 @@ export const PlatformScreen: React.FC = () => {
     <dl className="grid grid-cols-1 gap-3 sm:grid-cols-3">
       <div>
         <dt className="text-[11px] font-medium uppercase tracking-wide text-[#969696]">Owner email</dt>
-        <dd className="mt-0.5 break-all text-[13px] font-medium text-[#1A1A1A]">{t.owner_email || '—'}</dd>
+        <dd className="mt-0.5 flex items-center gap-1">
+          <span className="break-all text-[13px] font-medium text-[#1A1A1A]">{t.owner_email || '—'}</span>
+          {t.owner_email && <CopyValueButton value={t.owner_email} label="Owner email" />}
+        </dd>
       </div>
       <div>
         <dt className="text-[11px] font-medium uppercase tracking-wide text-[#969696]">Status</dt>
@@ -428,7 +495,24 @@ export const PlatformScreen: React.FC = () => {
       </div>
       <div>
         <dt className="text-[11px] font-medium uppercase tracking-wide text-[#969696]">Business ID</dt>
-        <dd className="mt-0.5 text-[13px] font-medium text-[#1A1A1A]">{shortId(t.id)}</dd>
+        <dd className="mt-0.5 flex items-center gap-1">
+          <span className="text-[13px] font-medium text-[#1A1A1A]" title={t.id}>
+            {shortId(t.id)}
+          </span>
+          <CopyValueButton value={t.id} label="Business ID" />
+        </dd>
+      </div>
+      <div>
+        <dt className="text-[11px] font-medium uppercase tracking-wide text-[#969696]">Type</dt>
+        <dd className="mt-0.5 text-[13px] font-medium capitalize text-[#1A1A1A]">{t.business_type || '—'}</dd>
+      </div>
+      <div>
+        <dt className="text-[11px] font-medium uppercase tracking-wide text-[#969696]">City</dt>
+        <dd className="mt-0.5 text-[13px] font-medium text-[#1A1A1A]">{t.city || '—'}</dd>
+      </div>
+      <div>
+        <dt className="text-[11px] font-medium uppercase tracking-wide text-[#969696]">Created</dt>
+        <dd className="mt-0.5 whitespace-nowrap text-[13px] font-medium text-[#1A1A1A]">{formatDate(t.created_at)}</dd>
       </div>
     </dl>
   );

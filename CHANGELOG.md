@@ -3,6 +3,30 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.124.0] — 2026-10-04 — The reset, the recovery, and the panel that hands over whole
+
+### Fixed — the provisioning wizard can no longer save a business "locally only"
+
+- **The bug** (found live this round, by drill): the wizard's Step 1 treated **City** as optional — no asterisk, no validation — while `tenants.city` is `NOT NULL` in migration 001 and the api layer sends `city: input.city || null` (`src/lib/api.ts`), an explicit NULL that **overrides** the column's `DEFAULT 'Bengaluru'`. Any operator who left City blank got a scary cloud notice — "null value in column city … the business is saved locally only" — plus an orphaned owner auth user, and no tenant row.
+- **The fix**: City is now a first-class required field — red asterisk, `aria-invalid` + `aria-describedby` wiring, and the honest blocker **"City is required — the ledger stores it."** at Step 1. The form's contract now matches the ledger's. Verified live: empty city → Step 1 holds with the error; filled city → advances; wizard closed without provisioning, cloud untouched.
+
+### Recovered — environment reset restored from the snapshot copy (v5.57.0 → v5.123.0)
+
+- The container was reset to a stale 5.2.1-era snapshot: local `main` back at `9dfbccd`, worklog truncated at Task 37, and the 107 local commits (5.57.0 → 5.123.0, HEAD `ee28a48`) unrecoverable from git (fsck found only old-era dangling commits). Remote `origin/main` had been pushed through v5.56.0 (`a561a3b`) before the reset.
+- Recovery: fast-forwarded local main to v5.56.0, restored the v5.123.0 working tree from the environment's `/tmp` snapshot copy (worklog Tasks 38–162, CHANGELOG 5.57–5.123, migrations to 038, `.qa-screens`, qa scripts), quarantined 47 pre-rebuild ghost files (pos/, superadmin/, orders/, offers/, kds/, `data/seedData`, `lib/store.ts`, `common/Header`…) the partial sync had resurrected — they were outside the live 64-file import closure and broke tsc with 441 errors. `bun install` re-synced node_modules (qrcode was missing).
+- **VERIFIED: `tsc --noEmit` EXIT=0 and `vite build` EXIT=0.** History 5.57.0 → 5.123.0 stays compressed into one recovery commit; the CHANGELOG + worklog carry the full per-release narrative.
+- **PUSH BROKE THROUGH**: the recovery commit (`bd0de18`) is on GitHub — the first successful push after the round-spanning PUSH PENDING streak (×78). The owner also completed the repo rename (tsos-alt → **servepoint**): remote flipped via `git remote set-url`, per the standing Task-37 action item.
+
+### Added — Platform details panel hands over whole
+
+- **Copy buttons on the IDs**: the Businesses details panel truncates the Business ID for layout and offered no way to see or take the full value — yet every support/SQL workflow starts from that UUID. One tap copies the **full** UUID (clipboard fallback for non-secure contexts), with a two-second green checkmark. Owner email gets the same treatment (every cleanup script's `WHERE email = …` guard starts there).
+- **The panel is now the complete record**: it showed owner/status/ID but lacked the row's Type, City and Created — the details surface was *less* complete than the table row above it. Second grid row added (Type · City · Created), shared by the desktop table expansion and the mobile card.
+
+### Verified
+
+- Live drill: wizard City validation (blocked/pass/close), Businesses panel — expand CheeseBurg → six fields render, copy buttons on owner email + Business ID, checkmark feedback; businesses search miss state intact; /showcase + /index-help render; Platform KPIs honest (2 businesses, 1 active subscription). tsc EXIT=0 ×2; vite build EXIT=0; fresh-load console delta ZERO errors. Census READ-ONLY: 2 tenants (CheeseBurg · QR Flow Cafe), no new tenant rows. One orphaned auth user from the failed drill (`drill.owner@recoverydrill.in`, no membership, RLS-blind) awaits owner pooler cleanup — password is owner-private, unavailable this round.
+
+
 ## [5.123.0] — 2026-10-04 — The book's miss says why
 
 ### Fixed — Guests' search miss joins the honesty contract (and admits email)
