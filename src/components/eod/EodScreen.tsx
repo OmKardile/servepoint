@@ -348,22 +348,7 @@ function printZReport(opts: ZReportOpts): void {
   </div>
 </body></html>`;
 
-  const frame = document.createElement('iframe');
-  frame.style.position = 'fixed';
-  frame.style.right = '0';
-  frame.style.bottom = '0';
-  frame.style.width = '0';
-  frame.style.height = '0';
-  frame.style.border = '0';
-  document.body.appendChild(frame);
-  const doc = frame.contentWindow?.document;
-  if (!doc) return;
-  doc.open();
-  doc.write(html);
-  doc.close();
-  frame.contentWindow?.focus();
-  frame.contentWindow?.print();
-  setTimeout(() => document.body.removeChild(frame), 1500);
+  printHiddenFrame(html);
 }
 
 /* ─────────────────────────── cash drawer (020) ─────────────────────────── */
