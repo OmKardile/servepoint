@@ -38,6 +38,7 @@ import {
 } from 'recharts';
 import { fetchDashboard, fetchFeedbackStats, fetchInventory, fetchMenuItems, fetchOpenPaymentSums, fetchOrders, fetchReservations, fetchTables, fetchTodayCostMargin, type DiningTable, type FeedbackStats, type InventoryItem, type Reservation, type TodayCostMargin } from '../../lib/api';
 import { formatMoney } from '../../lib/prefs';
+import { CHART_TOOLTIP_LABEL, CHART_TOOLTIP_STYLE } from '../../lib/chartvoice';
 import { isSameLocalDay } from '../../lib/day';
 import { useTenant } from '../../lib/tenant';
 import { useUi } from '../../store/session';
@@ -65,16 +66,8 @@ const TYPE_COLORS: Record<string, string> = {
   Delivery: '#B42318',
 };
 
-const TOOLTIP_STYLE: React.CSSProperties = {
-  background: '#FFFFFF',
-  border: '1px solid #E3E7E0',
-  borderRadius: 12,
-  fontSize: 12,
-  color: '#1A1A1A',
-  boxShadow: '0 10px 28px rgba(15, 61, 62, 0.10)',
-  padding: '8px 12px',
-};
-
+/* v5.132.0 — the tooltip voice lives in lib/chartvoice now (one register for
+   all nine chart surfaces); this card's own const retired. */
 const compactTick = (v: number | string): string => {
   const n = Number(v);
   if (!Number.isFinite(n)) return String(v);
@@ -165,13 +158,31 @@ const ListEmptyRow: React.FC<{ message: string }> = ({ message }) => (
 
 /* ───────────────────────────── Card bodies ───────────────────────────── */
 
-const DailySalesCard: React.FC<{ data: DashboardData }> = ({ data }) => (
+const DailySalesCard: React.FC<{ data: DashboardData }> = ({ data }) => {
+  /* v5.132.0 — the chart's aria label composes the ledger's own sentence
+     (peak hour, running total) from the same buckets the lines render —
+     the hardcoded series list retired. */
+  const hourTotals = data.hourlySales.map((h) => ({
+    hour: h.hour,
+    total: h.dineIn + h.takeaway + h.delivery,
+  }));
+  const peakHour = hourTotals.reduce(
+    (best, h) => (h.total > best.total ? h : best),
+    hourTotals[0],
+  );
+  const dayTotal = hourTotals.reduce((s, h) => s + h.total, 0);
+  const dayAria = `Today's hourly sales for Dine-in, Takeaway and Delivery${
+    peakHour && peakHour.total > 0
+      ? ` — peak ${peakHour.hour} at ${formatMoney(peakHour.total)}, ${formatMoney(dayTotal)} so far today`
+      : ' — no sales yet today'
+  }`;
+  return (
   <section className="sp-card p-5 md:col-span-2 xl:col-span-2" aria-label="Daily Sales">
     <h2 className="text-[15px] font-semibold text-[#1A1A1A]">Daily Sales</h2>
     <div
       className="mt-3 h-[230px] w-full"
       role="img"
-      aria-label="Line chart of today's hourly sales for Dine-in, Takeaway and Delivery"
+      aria-label={dayAria}
     >
       <ResponsiveContainer width="100%" height="100%">
         <LineChart data={data.hourlySales} margin={{ top: 8, right: 8, bottom: 0, left: -14 }}>
@@ -192,8 +203,8 @@ const DailySalesCard: React.FC<{ data: DashboardData }> = ({ data }) => (
           />
           <Tooltip
             cursor={{ stroke: '#C9CFC9', strokeDasharray: '4 4' }}
-            contentStyle={TOOLTIP_STYLE}
-            labelStyle={{ color: '#6B6B6B', marginBottom: 4 }}
+            contentStyle={CHART_TOOLTIP_STYLE}
+            labelStyle={CHART_TOOLTIP_LABEL}
             formatter={(value) => formatMoney(Number(value))}
           />
           {SERIES.map((s) => (
@@ -213,7 +224,8 @@ const DailySalesCard: React.FC<{ data: DashboardData }> = ({ data }) => (
     </div>
     <LegendDots />
   </section>
-);
+  );
+};
 
 const TotalRevenueCard: React.FC<{ data: DashboardData }> = ({ data }) => {
   const [range, setRange] = useState<Range>('today');
@@ -255,8 +267,8 @@ const TotalRevenueCard: React.FC<{ data: DashboardData }> = ({ data }) => {
                 />
                 <Tooltip
                   cursor={{ fill: 'rgba(15, 61, 62, 0.06)' }}
-                  contentStyle={TOOLTIP_STYLE}
-                  labelStyle={{ color: '#6B6B6B', marginBottom: 4 }}
+                  contentStyle={CHART_TOOLTIP_STYLE}
+                  labelStyle={CHART_TOOLTIP_LABEL}
                   labelFormatter={(_, payload) =>
                     (payload?.[0]?.payload as { full?: string } | undefined)?.full ?? 'This week'
                   }
@@ -312,7 +324,7 @@ const TotalRevenueCard: React.FC<{ data: DashboardData }> = ({ data }) => {
                     <Cell key={seg.name} fill={TYPE_COLORS[seg.name] ?? '#D9E2DD'} />
                   ))}
                 </Pie>
-                <Tooltip contentStyle={TOOLTIP_STYLE} formatter={(value) => formatMoney(Number(value))} />
+                <Tooltip contentStyle={CHART_TOOLTIP_STYLE} labelStyle={CHART_TOOLTIP_LABEL} formatter={(value) => formatMoney(Number(value))} />
               </PieChart>
             </ResponsiveContainer>
             <div className="pointer-events-none absolute inset-0 flex items-center justify-center">

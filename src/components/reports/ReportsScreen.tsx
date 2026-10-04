@@ -64,6 +64,7 @@ import type {
 import type { Offer } from '../../types';
 import { formatMoney, subscribePrefs } from '../../lib/prefs';
 import { downloadCsv } from '../../lib/csv';
+import { CHART_TOOLTIP_LABEL, CHART_TOOLTIP_STYLE } from '../../lib/chartvoice';
 import {
   appTimezone,
   appTodayIso,
@@ -1562,12 +1563,8 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
                         />
                         <Tooltip
                           cursor={{ fill: 'rgba(184,142,47,0.08)' }}
-                          contentStyle={{
-                            borderRadius: 12,
-                            border: '1px solid #E3E7E0',
-                            fontSize: 12,
-                            boxShadow: '0 4px 14px rgba(15,61,62,0.10)',
-                          }}
+                          contentStyle={CHART_TOOLTIP_STYLE}
+                          labelStyle={CHART_TOOLTIP_LABEL}
                           formatter={(v: unknown, name: unknown) =>
                             name === 'gross'
                               ? [formatMoney(Number(v)), 'Gross']
@@ -1663,12 +1660,8 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
                       />
                       <Tooltip
                         cursor={{ stroke: '#B88E2F', strokeWidth: 1, strokeDasharray: '3 3' }}
-                        contentStyle={{
-                          borderRadius: 12,
-                          border: '1px solid #E3E7E0',
-                          fontSize: 12,
-                          boxShadow: '0 4px 14px rgba(15,61,62,0.10)',
-                        }}
+                        contentStyle={CHART_TOOLTIP_STYLE}
+                        labelStyle={CHART_TOOLTIP_LABEL}
                         formatter={(v: unknown) => [
                           v === null || v === undefined ? '—' : `${Number(v).toFixed(1)}★`,
                           'Avg rating',
@@ -1749,12 +1742,8 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
                     />
                     <Tooltip
                       cursor={{ fill: 'rgba(184,142,47,0.08)' }}
-                      contentStyle={{
-                        borderRadius: 12,
-                        border: '1px solid #E3E7E0',
-                        fontSize: 12,
-                        boxShadow: '0 4px 14px rgba(15,61,62,0.10)',
-                      }}
+                      contentStyle={CHART_TOOLTIP_STYLE}
+                      labelStyle={CHART_TOOLTIP_LABEL}
                       formatter={(v: unknown) => [formatMoney(Number(v)), 'Gross']}
                     />
                     <Bar dataKey="gross" radius={[4, 4, 0, 0]}>
@@ -1822,11 +1811,8 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
                           ))}
                         </Pie>
                         <Tooltip
-                          contentStyle={{
-                            borderRadius: 12,
-                            border: '1px solid #E3E7E0',
-                            fontSize: 12,
-                          }}
+                          contentStyle={CHART_TOOLTIP_STYLE}
+                          labelStyle={CHART_TOOLTIP_LABEL}
                           formatter={(v: unknown, n: unknown) => [
                             formatMoney(Number(v)),
                             METHOD_LABEL[String(n)] || String(n),
@@ -3084,12 +3070,8 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
                             />
                             <Tooltip
                               cursor={{ fill: 'rgba(184,142,47,0.08)' }}
-                              contentStyle={{
-                                borderRadius: 12,
-                                border: '1px solid #E3E7E0',
-                                fontSize: 12,
-                                boxShadow: '0 4px 14px rgba(15,61,62,0.10)',
-                              }}
+                              contentStyle={CHART_TOOLTIP_STYLE}
+                              labelStyle={CHART_TOOLTIP_LABEL}
                               formatter={(v: unknown) => [signedMoney(Number(v)), 'Variance']}
                             />
                             <ReferenceLine y={0} stroke="#C9D2CB" />

@@ -3,6 +3,21 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.132.0] — 2026-10-04 — The charts stand down
+
+### Added — keyboard dignity for every chart surface
+
+- **The focus leak closes** (`src/lib/chartvoice.ts` + `src/main.tsx`): recharts ships every chart `<svg>` with `tabindex="0"`, so a Tab from the KPI cards landed INSIDE the chart — a UA auto-outline dead stop in a figure that is either `aria-hidden` (decorative: the sibling text already speaks its numbers) or `role="img"` (labelled: the label IS the voice). In both cases the focusable internals were a stop with nothing to read and nothing to press — and in the aria-hidden case, a stop screen readers cannot even see. `installChartHush()` strips `svg[tabindex]` inside `.recharts-wrapper` the moment a chart mounts: one rAF-coalesced MutationObserver installed once from the app entry, so all nine surfaces (Reports ×5, Dashboard ×3, Floor ×1) are covered and every future chart inherits the discipline free.
+- **The Dashboard's Daily Sales card speaks its ledger**: the hardcoded "Line chart of today's hourly sales…" label retired; the aria sentence now composes from the same buckets the lines render — *"Today's hourly sales for Dine-in, Takeaway and Delivery — peak 5 pm at ₹X, ₹Y so far today"* (with an honest "no sales yet today" tail).
+
+### Styled — one tooltip voice for the whole house
+
+- The tooltip register (Dashboard's designed voice — white card, hairline #E3E7E0 border, radius 12, the deep 28px shadow, 8×12 padding, gray label line) is promoted to `CHART_TOOLTIP_STYLE` + `CHART_TOOLTIP_LABEL` in `src/lib/chartvoice.ts` and applied at every Tooltip. The drift heals: three Reports tooltips carried a weaker 14px shadow, one had none at all, and none spoke the gray label — now all nine surfaces are byte-identical, and the browser's default black outline is gone from the Tab flow.
+
+### Verified
+
+- tsc EXIT=0; build EXIT=0. Live E2E (dev, Reports + Floor): 5 chart svgs → 0 focusable after the hush; a 9-Tab walk from "Refresh report" lands on "Export payment mix as CSV" with `inChart: false` — the flow no longer falls into chart internals; hovered day-by-day tooltip reads label "28 Sept" in #6B6B6B + 4px margin, container border/radius/shadow/padding byte-identical to the canonical register; Floor rhythm svg hushed. The StatCard `tabIndex={0}` sections stay (deliberate: keyboard-triggered sparklines, v5.25.0 lineage). Console clean after a cleared-buffer reload (a dev-only createRoot message and a 0-size chart warning were HMR-transition artifacts, not app behavior). READ-ONLY round — zero cloud writes.
+
 ## [5.131.0] — 2026-10-04 — The book shows the way
 
 ### Added — Guests: the ledger learns to speak the distance to the next rung

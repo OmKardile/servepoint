@@ -1,6 +1,7 @@
 import { StrictMode, Component, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App.tsx';
+import { installChartHush } from './lib/chartvoice';
 import './index.css';
 
 /** Minimal production error boundary — honest failure screen, no demo content. */
@@ -38,6 +39,11 @@ createRoot(document.getElementById('root')!).render(
     </ProductionErrorBoundary>
   </StrictMode>,
 );
+
+/* v5.132.0 — the charts stand down: recharts ships every chart svg with
+   tabindex="0" (a UA-outline dead stop inside decorative/labelled figures);
+   one observer strips them wherever a chart mounts, for every surface. */
+installChartHush();
 
 /**
  * PWA service worker (v5.6.0) — PRODUCTION ONLY.

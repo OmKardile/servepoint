@@ -63,6 +63,7 @@ import {
 import { useTenant } from '../../lib/tenant';
 import { printHiddenFrame, preloadPrintImage } from '../../lib/printFrame';
 import { formatMoney, subscribePrefs } from '../../lib/prefs';
+import { CHART_TOOLTIP_LABEL, CHART_TOOLTIP_STYLE } from '../../lib/chartvoice';
 import { useDialogA11y } from '../../lib/useDialogA11y';
 import {
   appTodayIso,
@@ -2545,12 +2546,8 @@ export function FloorScreen(): React.ReactElement {
                   />
                   <Tooltip
                     cursor={{ fill: 'rgba(184,142,47,0.08)' }}
-                    contentStyle={{
-                      borderRadius: 12,
-                      border: '1px solid #E3E7E0',
-                      fontSize: 12,
-                      boxShadow: '0 4px 14px rgba(15,61,62,0.10)',
-                    }}
+                    contentStyle={CHART_TOOLTIP_STYLE}
+                    labelStyle={CHART_TOOLTIP_LABEL}
                     formatter={(v: unknown, name: unknown) => [
                       `${v} ticket${Number(v) === 1 ? '' : 's'}`,
                       String(name ?? 'Seated'),
