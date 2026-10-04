@@ -56,6 +56,7 @@ import { downloadCsv } from '../../lib/csv';
 import { appTodayIso, appFormatters, appTzTag } from '../../lib/appday';
 import { useDialogA11y } from '../../lib/useDialogA11y';
 import { useTenant } from '../../lib/tenant';
+import { bookingDayKey, bookingTodayKey } from '../../lib/bookingday';
 import { useUi } from '../../store/session';
 import { MarkHit } from '../shell/MarkHit';
 import { EmptyState } from '../shell/EmptyState';
@@ -123,6 +124,13 @@ function fmtQty(q: number): string {
   return Number(q).toLocaleString('en-IN', { maximumFractionDigits: 3 });
 }
 
+/** The rate register — burn per day never reads "22.857 g": the eye rounds
+ *  wrong at three decimals and the shelf doesn't measure that fine. One
+ *  decimal, honest ("22.9 g/day"). Data files keep full precision. */
+function fmtRate(q: number): string {
+  return Number(q).toLocaleString('en-IN', { maximumFractionDigits: 1 });
+}
+
 /** Level tone: red at/below zero, amber at/below reorder point, green above. */
 function levelTone(stock: number, reorder: number): {
   bar: string;
@@ -157,6 +165,62 @@ const REASON_META: Record<StockAdjustmentReason, { label: string; chip: string }
   damage: { label: 'Damaged', chip: 'bg-[#FBF3E1] text-[#8A5A00]' },
   correction: { label: 'Correction', chip: 'bg-[#FBF3E1] text-[#8A5A00]' },
 };
+
+/* ── The diary reads in days (v5.162.0) ─────────────────────────────
+   A flat feed of moves scans poorly at stocktake; the owner reads the
+   shelf's week in days. The clock is the booking clock's own IST day
+   key — the same one the bell feed groups on (5.159.0's grammar, now on
+   the house's second feed). Unreadable stamps land in "Earlier" (honest,
+   never dropped), each group keeps the feed's newest-first order, and
+   the tally counts ticket moves and hand moves separately — quantities
+   never sum across SKUs (g + ml + pcs is a lie). */
+export type DiaryDayKey = 'today' | 'yesterday' | 'earlier';
+
+export interface DiaryGroup {
+  key: DiaryDayKey;
+  label: string;
+  rows: DiaryRow[];
+  /** engine deductions — the tickets' own moves */
+  tickets: number;
+  /** hand-made 027 moves — deliveries, waste, corrections */
+  hands: number;
+}
+
+export function groupDiaryByDay(
+  rows: DiaryRow[],
+  todayKey: string,
+  yesterdayKey: string,
+): DiaryGroup[] {
+  const today: DiaryRow[] = [];
+  const yesterday: DiaryRow[] = [];
+  const earlier: DiaryRow[] = [];
+  for (const row of rows) {
+    let key: string | null = null;
+    try {
+      key = bookingDayKey(row.at);
+    } catch {
+      key = null; // an unreadable stamp never drops the move — Earlier holds it
+    }
+    if (key === todayKey) today.push(row);
+    else if (key === yesterdayKey) yesterday.push(row);
+    else earlier.push(row);
+  }
+  const groups: DiaryGroup[] = [];
+  const pack = (key: DiaryDayKey, label: string, list: DiaryRow[]): void => {
+    if (list.length === 0) return;
+    groups.push({
+      key,
+      label,
+      rows: list,
+      tickets: list.filter((r) => r.kind === 'ticket').length,
+      hands: list.filter((r) => r.kind === 'adjust').length,
+    });
+  };
+  pack('today', 'Today', today);
+  pack('yesterday', 'Yesterday', yesterday);
+  pack('earlier', 'Earlier', earlier);
+  return groups;
+}
 
 /* ─────────────────────────────── screen ────────────────────────────────── */
 
@@ -352,6 +416,16 @@ const InventoryInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
     ];
     return rows.sort((x, y) => (x.at < y.at ? 1 : x.at > y.at ? -1 : 0)).slice(0, 12);
   }, [deductions, adjustments]);
+
+  /* v5.162.0 — the diary's day rhythm: the same 12-row feed, now grouped on
+     the booking clock's IST day keys. Keys derive from the same clock the
+     bell feed groups on — one house, one clock, never two. */
+  const diaryGroups = useMemo<DiaryGroup[]>(() => {
+    if (diary.length === 0) return [];
+    const todayKey = bookingTodayKey();
+    const yesterdayKey = bookingDayKey(new Date(Date.now() - 86_400_000).toISOString());
+    return groupDiaryByDay(diary, todayKey, yesterdayKey);
+  }, [diary]);
 
   /* mutations ─────────────────────────────────────────────────────────── */
   const doRestock = useCallback(
@@ -950,59 +1024,82 @@ const InventoryInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
                   Nothing has moved yet — deliveries, waste and fired tickets will land here.
                 </p>
               ) : (
-                <ul className="flex flex-col divide-y divide-[#E3E7E0]">
-                  {diary.map((row) => {
-                    const ing = items.find((i) => i.id === row.itemId);
-                    const unit = ing?.unit ?? '';
-                    return (
-                      <li key={row.id} className="flex items-center justify-between gap-3 py-2">
-                        <span className="flex min-w-0 items-center gap-2">
-                          {row.kind === 'ticket' ? (
-                            <Minus size={12} className="shrink-0 text-[#B3261E]" aria-hidden />
-                          ) : row.qty > 0 ? (
-                            <Plus size={12} className="shrink-0 text-[#2E7D32]" aria-hidden />
-                          ) : (
-                            <PackageMinus size={12} className="shrink-0 text-[#B88E2F]" aria-hidden />
-                          )}
-                          <span className="truncate text-[12.5px] font-semibold text-[#1A1A1A]">
-                            {ing ? ing.name : 'Ingredient'}
-                          </span>
-                          {row.kind === 'ticket' ? (
-                            <span className="shrink-0 rounded-full bg-[#EAF0EC] px-2 py-0.5 text-[10px] font-bold text-[#0F3D3E]">
-                              Ticket
-                            </span>
-                          ) : (
-                            <span
-                              className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold ${REASON_META[row.reason].chip}`}
-                            >
-                              {REASON_META[row.reason].label}
-                            </span>
-                          )}
-                          {row.kind === 'adjust' && row.note && (
-                            <span className="hidden min-w-0 truncate text-[11px] italic text-[#969696] md:block">
-                              “{row.note}”
-                            </span>
-                          )}
+                <div className="flex flex-col gap-4">
+                  {diaryGroups.map((group) => (
+                    <section key={group.key} aria-label={`${group.label}: ${group.rows.length} moves`}>
+                      {/* the bell feed's day-header grammar (5.159.0): gold
+                          small-caps label + tally + hairline — one house,
+                          one reading rhythm. Quantities never sum across
+                          SKUs (g + ml + pcs is a lie); the tally counts. */}
+                      <div className="flex items-center gap-2" role="presentation">
+                        <h3 className="text-[11px] font-bold uppercase tracking-wider text-[#8A5A00]">
+                          {group.label}
+                        </h3>
+                        <span className="text-[11px] tabular-nums text-[#969696]">
+                          {group.rows.length} move{group.rows.length === 1 ? '' : 's'}
+                          {group.tickets > 0 ? ` · ${group.tickets} ticket` : ''}
+                          {group.tickets > 1 ? 's' : ''}
+                          {group.hands > 0 ? ` · ${group.hands} hand` : ''}
+                          {group.hands > 1 ? 's' : ''}
                         </span>
-                        <span className="flex shrink-0 items-center gap-2 text-[11.5px] tabular-nums text-[#6B6B6B]">
-                          <span
-                            className={
-                              row.qty > 0
-                                ? 'font-bold text-[#2E7D32]'
-                                : row.kind === 'ticket'
-                                  ? 'font-bold text-[#B3261E]'
-                                  : 'font-bold text-[#8A5A00]'
-                            }
-                          >
-                            {row.qty > 0 ? '+' : '−'}
-                            {fmtQty(Math.abs(row.qty))} {unit}
-                          </span>
-                          {new Date(row.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        </span>
-                      </li>
-                    );
-                  })}
-                </ul>
+                        <span className="h-px flex-1 bg-[#E3E7E0]" aria-hidden />
+                      </div>
+                      <ul className="mt-1 flex flex-col divide-y divide-[#E3E7E0]">
+                        {group.rows.map((row) => {
+                          const ing = items.find((i) => i.id === row.itemId);
+                          const unit = ing?.unit ?? '';
+                          return (
+                            <li key={row.id} className="flex items-center justify-between gap-3 py-2">
+                              <span className="flex min-w-0 items-center gap-2">
+                                {row.kind === 'ticket' ? (
+                                  <Minus size={12} className="shrink-0 text-[#B3261E]" aria-hidden />
+                                ) : row.qty > 0 ? (
+                                  <Plus size={12} className="shrink-0 text-[#2E7D32]" aria-hidden />
+                                ) : (
+                                  <PackageMinus size={12} className="shrink-0 text-[#B88E2F]" aria-hidden />
+                                )}
+                                <span className="truncate text-[12.5px] font-semibold text-[#1A1A1A]">
+                                  {ing ? ing.name : 'Ingredient'}
+                                </span>
+                                {row.kind === 'ticket' ? (
+                                  <span className="shrink-0 rounded-full bg-[#EAF0EC] px-2 py-0.5 text-[10px] font-bold text-[#0F3D3E]">
+                                    Ticket
+                                  </span>
+                                ) : (
+                                  <span
+                                    className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold ${REASON_META[row.reason].chip}`}
+                                  >
+                                    {REASON_META[row.reason].label}
+                                  </span>
+                                )}
+                                {row.kind === 'adjust' && row.note && (
+                                  <span className="hidden min-w-0 truncate text-[11px] italic text-[#969696] md:block">
+                                    “{row.note}”
+                                  </span>
+                                )}
+                              </span>
+                              <span className="flex shrink-0 items-center gap-2 text-[11.5px] tabular-nums text-[#6B6B6B]">
+                                <span
+                                  className={
+                                    row.qty > 0
+                                      ? 'font-bold text-[#2E7D32]'
+                                      : row.kind === 'ticket'
+                                        ? 'font-bold text-[#B3261E]'
+                                        : 'font-bold text-[#8A5A00]'
+                                  }
+                                >
+                                  {row.qty > 0 ? '+' : '−'}
+                                  {fmtQty(Math.abs(row.qty))} {unit}
+                                </span>
+                                {new Date(row.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                              </span>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </section>
+                  ))}
+                </div>
               )}
             </section>
           )}
@@ -2209,7 +2306,7 @@ const ReorderBoard: React.FC<{
                         </span>
                       </div>
                       <p className="mt-1 text-[10.5px] font-semibold text-[#969696]">
-                        burn {fmtQty(r.burnPerDay)} {r.item.unit}/day · shelf {fmtQty(Number(r.item.current_stock))}{' '}
+                        burn {fmtRate(r.burnPerDay)} {r.item.unit}/day · shelf {fmtQty(Number(r.item.current_stock))}{' '}
                         {r.item.unit} · reorder at {fmtQty(Number(r.item.reorder_point))} {r.item.unit}
                       </p>
                     </div>
@@ -2274,7 +2371,7 @@ const ReorderBoard: React.FC<{
                     <span className={`font-bold ${tone.text}`}>
                       {r.daysLeft == null ? '—' : `${r.daysLeft.toFixed(1)}d`}
                     </span>{' '}
-                    · {fmtQty(r.burnPerDay)} {r.item.unit}/day
+                    · {fmtRate(r.burnPerDay)} {r.item.unit}/day
                   </span>
                 </li>
               );

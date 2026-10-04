@@ -3,6 +3,20 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.162.0] — 2026-10-04 — The diary reads in days: the 027 stock diary takes up the bell feed's day rhythm — Today / Yesterday / Earlier with move tallies — and the burn register stops reading three-decimal floats
+
+### Added — day groups on the stock diary (`src/components/inventory/InventoryScreen.tsx`)
+
+The house's second feed learns the first feed's grammar. `groupDiaryByDay(rows, todayKey, yesterdayKey)` (exported pure, unit-asserted) buckets the 027 diary's merged feed — engine ticket deductions and hand-made moves — on the booking clock's own IST day keys, the same clock 5.159.0 taught the bell feed: one house, one clock, never two. Each group reads under a gold small-caps label with a hairline and an honest tally — "4 moves · 3 tickets · 1 hand" — and the tally COUNTS, it never sums quantities (g + ml + pcs is a lie the shelf refuses to tell). Within a group the feed's newest-first order is preserved; an unreadable stamp lands in "Earlier" (honest, never dropped); a hands-only day says "0 tickets". The live E2E reads a real Yesterday group — the shelf's actual week, grouped.
+
+### Fixed — the burn register (`src/components/inventory/InventoryScreen.tsx`)
+
+The reorder board's watching rows read "22.857 g/day" — three decimals the eye rounds wrong and the shelf doesn't measure. `fmtRate` speaks the rate register (one decimal, "22.9 g/day") at both burn voices; data files keep full precision.
+
+### Verified
+
+`tsc` EXIT=0; `node --check` OK (`servepoint-v5.162.0-r1`); build EXIT=0; unit suite `scripts/unit201.mjs` 7/7 (same-clock yesterday derivation, empty shape, single-day feed, reading order with tallies, unreadable→Earlier, no row lost in bucketing, hands-only tally) plus regression suites unit197/198/199/200 ALL PASS; live E2E — the diary renders grouped with tallies on real data; console buffer delta stable on fresh loads, zero live.
+
 ## [5.161.0] — 2026-10-04 — The room's breathing: Reports grows a Table turnover card — turns per table and seated spans read off the hop ledger the kitchen stopwatch already rides
 
 ### Added — Table turnover (`src/components/reports/ReportsScreen.tsx`)
