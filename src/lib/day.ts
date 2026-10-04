@@ -75,8 +75,15 @@ function nowKeyIn(tz: string, offsetDays = 0): string {
 }
 
 /** Local-day equality — the one test every "today" in the app uses. */
+/** v5.196.0 — the same local-day question with an EXPLICIT clock, so
+ * suites can own now (228's rule) and pure predicates stay deterministic.
+ * The bare one-arg form delegates here — ONE arithmetic, two registers. */
+export function isSameLocalDayAs(iso: string, nowMs: number): boolean {
+  return new Date(iso).toDateString() === new Date(nowMs).toDateString();
+}
+
 export function isSameLocalDay(iso: string): boolean {
-  return new Date(iso).toDateString() === new Date().toDateString();
+  return isSameLocalDayAs(iso, Date.now());
 }
 
 /** True when the timestamp falls on yesterday's calendar day (local). */

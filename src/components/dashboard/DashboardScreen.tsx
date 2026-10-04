@@ -51,6 +51,12 @@ import { chaseAge, isSameLocalDay } from '../../lib/day';
 import { useTenant } from '../../lib/tenant';
 import { useUi } from '../../store/session';
 import { DoorChip } from '../shell/DoorChip';
+/* v5.196.0 — the ghost register: "on the board" is the KITCHEN's question,
+   so the dashboard asks the board's own screen — isOnRail is THE rail-active
+   set (pending/preparing/ready), one definition shared with Bills' ghost
+   chip. The old inline two-state array forked from the dashboard's own
+   oldest-wait clock in the same file; the fork is closed. */
+import { isOnRail } from '../kitchen/KitchenScreen';
 import type { DashboardData, MenuItem, Order } from '../../types';
 
 /**
@@ -1185,8 +1191,8 @@ const NeedsNow: React.FC = () => {
   const staleOlder = live.filter((o) => !isSameLocalDay(o.created_at));
   const newTickets = liveToday.filter((o) => o.status === 'new');
   const staleNew = staleOlder.filter((o) => o.status === 'new');
-  const inKitchen = liveToday.filter((o) => ['pending', 'preparing'].includes(o.status));
-  const staleKitchen = staleOlder.filter((o) => ['pending', 'preparing'].includes(o.status));
+  const inKitchen = liveToday.filter((o) => isOnRail(String(o.status)));
+  const staleKitchen = staleOlder.filter((o) => isOnRail(String(o.status)));
   const latePrep = liveToday.filter(
     (o) => o.status === 'preparing' && nowMs - new Date(o.created_at).getTime() >= LATE_PREP_MIN * 60000
   );
@@ -1194,7 +1200,7 @@ const NeedsNow: React.FC = () => {
      (queued/preparing/ready, the rail's activeWait grammar): the late card
      escalates amber at the 10-minute SLA and red at the 20-minute line. */
   const oldestWaitMin = liveToday.reduce((m, o) => {
-    if (!['pending', 'preparing', 'ready'].includes(o.status)) return m;
+    if (!isOnRail(String(o.status))) return m;
     return Math.max(m, (nowMs - new Date(o.created_at).getTime()) / 60000);
   }, 0);
   const unpaid = live.filter((o) => o.payment_status !== 'completed');

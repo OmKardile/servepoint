@@ -79,6 +79,19 @@ function stageOf(status: string): StageKey | null {
   return null; // `new` (counter inbox) + cancelled — hidden from the rail
 }
 
+/** v5.196.0 — THE rail-active set, exported so every surface asks the
+ * same question. "On the board" means the kitchen rail holds the ticket:
+ * queued (`pending`), preparing, or ready. `new` is the counter inbox's
+ * (the rail never sees it), `completed` and `cancelled` are done. The
+ * dashboard's stuck count and its today's-board count, and Bills' ghost
+ * chip, all read THIS — one set, no fork (the dashboard previously
+ * counted only pending/preparing while its own oldest-wait clock ran
+ * the three-state set: two answers to one question in one file). */
+export function isOnRail(status: string): boolean {
+  const s = String(status || '').toLowerCase();
+  return s === 'pending' || s === 'preparing' || s === 'ready';
+}
+
 /** Elapsed since created_at, KDS style: 0:42 under an hour, then 1:04:09. */
 function elapsed(createdIso: string, nowMs: number): string {
   const diff = Math.max(0, nowMs - new Date(createdIso).getTime());

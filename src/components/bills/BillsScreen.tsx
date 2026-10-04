@@ -17,7 +17,7 @@ import {
   Split,
   X,
 } from 'lucide-react';
-import { chaseAge, dayTime, isSameLocalDay } from '../../lib/day';
+import { chaseAge, dayTime, isSameLocalDay, isSameLocalDayAs } from '../../lib/day';
 import {
   advanceOrder,
   fetchOrderHistory,
@@ -37,6 +37,10 @@ import { downloadCsv } from '../../lib/csv';
 import { appTodayIso, appFormatters, appTzTag } from '../../lib/appday';
 import { useTenant } from '../../lib/tenant';
 import { useSession, useUi } from '../../store/session';
+/* v5.196.0 — the ghost chip asks the BOARD's own question: isOnRail is THE
+ * rail-active set (pending/preparing/ready), exported from the kitchen
+ * screen so the dashboard's stuck count and this chip can never fork. */
+import { isOnRail } from '../kitchen/KitchenScreen';
 import { MarkHit } from '../shell/MarkHit';
 import { EmptyState } from '../shell/EmptyState';
 import type { Order } from '../../types';
@@ -104,6 +108,34 @@ const STATUS_PILL: Record<string, string> = {
   paid: 'bg-[#2E7D32] text-white',
   cancelled: 'bg-[#B42318] text-white',
 };
+
+/* ── v5.196.0 — the ghost register ───────────────────────────────────
+ * The dashboard's strip counts "older stuck tickets off today's board"
+ * and points here — but a ghost (placed on an earlier day, still on the
+ * kitchen rail) used to be unnameable on this screen: the trio model
+ * shows the PAYMENT word (Active/Paid), so a paid-but-never-bumped
+ * ticket read settled, and the pointer died at the door. The ghost chip
+ * names them in the dashboard's own word, wearing the service-nudge
+ * amber. ONE population with the dashboard (isOnRail && an earlier
+ * local day), the rail set imported from the board's own screen —
+ * never re-decided here. Both predicates take an explicit clock so the
+ * suite owns now (228's rule). */
+export function isGhostTicket(
+  o: Pick<Order, 'status' | 'created_at'>,
+  nowMs: number,
+): boolean {
+  return isOnRail(String(o.status)) && !isSameLocalDayAs(o.created_at, nowMs);
+}
+
+/** The chip's words. An unpaid ghost already wears its chase age (the
+ * money register, 5.151) right beside — the chip says just "stuck", the
+ * kitchen register. A PAID ghost has no age voice anywhere, so the chip
+ * carries the age itself: "stuck 2d old". Cancelled never reaches —
+ * isOnRail already excludes it. */
+export function ghostChipWords(trio: string, createdAt: string, nowMs: number): string {
+  if (trio === 'paid') return `stuck ${chaseAge(createdAt, nowMs)}`;
+  return 'stuck';
+}
 
 const TYPE_LABEL: Record<string, string> = {
   dine_in: 'Dine-in',
@@ -1269,7 +1301,9 @@ const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRet
                         status === 'active' && Number(paidSums.get(o.id) ?? 0) > 0
                           ? `${formatMoney(paidSums.get(o.id) ?? 0)} of ${formatMoney(o.total)} in the ledger, `
                           : ''
-                      }${formatMoney(o.total)}`}
+                      }${formatMoney(o.total)}${
+                        isGhostTicket(o, Date.now()) ? ', stuck off the kitchen rail' : ''
+                      }`}
                       className={`relative w-full rounded-xl border-2 p-3.5 text-left transition ${
                         isSelected
                           ? 'border-[#B88E2F] bg-[#F3E8CF]'
@@ -1334,6 +1368,21 @@ const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRet
                               >
                                 <History size={10} aria-hidden />
                                 {chaseAge(o.created_at, Date.now())}
+                              </span>
+                            )}
+                            {/* v5.196.0 — the ghost chip: placed on an earlier day,
+                                still on the kitchen rail. The dashboard's stuck
+                                count points HERE — the chip is the name it was
+                                pointing at. Paid ghosts carry their own age
+                                (nothing else on the row speaks it); unpaid ghosts
+                                let the chase chip beside say the age. */}
+                            {isGhostTicket(o, Date.now()) && (
+                              <span
+                                title={`Placed ${dayTime(o.created_at)} and still ${String(o.status).replace('_', ' ')} on the kitchen rail — today's board holds today only, so it waits here named.`}
+                                className="inline-flex shrink-0 items-center gap-1 rounded bg-[#FDF3E4] px-1.5 py-px text-[10px] font-bold text-[#8A5A16]"
+                              >
+                                <History size={10} aria-hidden />
+                                {ghostChipWords(status, o.created_at, Date.now())}
                               </span>
                             )}
                           </p>
@@ -1526,6 +1575,16 @@ const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRet
                 <p className="mt-1.5 flex items-center gap-1.5 text-[12px] font-medium text-[#8A5A00]">
                   <History size={12} aria-hidden />
                   {dayTime(selected.created_at)} — from an earlier day
+                </p>
+              )}
+
+              {/* v5.196.0 — the pane names the ghost too: the row chip scans;
+                  this line SPEAKS the whole story (rail state + the absence
+                  the board cannot show). */}
+              {isGhostTicket(selected, Date.now()) && (
+                <p className="mt-1 flex items-center gap-1.5 text-[12px] font-semibold text-[#8A5A16]">
+                  <History size={12} aria-hidden />
+                  Still {String(selected.status).replace('_', ' ')} on the kitchen rail — stuck off today's board.
                 </p>
               )}
 
