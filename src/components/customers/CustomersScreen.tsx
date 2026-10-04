@@ -460,6 +460,28 @@ function orderRail(s: string): string {
   return '#C9950A';
 }
 
+/** v5.195.0 — the stamp's payment register. The drill's ticket rows wear
+ * the kitchen's own status chip (preparing / ready / completed) AND a
+ * stamp "when · payment" — but the stamp spoke the DB enum raw
+ * ("completed"), so a PAID ticket still in the kitchen read "preparing
+ * · completed": two registers colliding on one line, the plain reading
+ * a contradiction (5.191's rule — a label's plain reading must match
+ * its truth). This screen already speaks the money register everywhere
+ * else ("₹409.50 paid", "Paid visits", "Paid total"), so the stamp
+ * joins it: completed → paid, pending/blank → unpaid (Bills' own word
+ * for money still owed), refunded stays refunded, and an unseen enum
+ * passes through honest rather than renamed. 'completed' is BANNED
+ * from this register — that word belongs to the ticket's kitchen
+ * status, one word one owner; the suite sweeps every enum it can
+ * receive and holds the line. */
+export function paymentWords(ps: string | null | undefined): string {
+  const v = String(ps ?? '').toLowerCase();
+  if (v === 'completed') return 'paid';
+  if (v === 'refunded' || v === 'partially_refunded') return 'refunded';
+  if (!v || v === 'pending') return 'unpaid';
+  return v;
+}
+
 /* ─────────────────────────────── screen ────────────────────────────────── */
 
 export const CustomersScreen: React.FC = () => {
@@ -1985,7 +2007,18 @@ const GuestDetailDrawer: React.FC<{
                     {(o.items || []).map((it) => `${it.qty}× ${it.name}`).join(', ') || '—'}
                   </p>
                   <div className="mt-1.5 flex items-center justify-between text-[11.5px] text-[#969696]">
-                    <span>{fmtWhen(o.created_at)} · {String(o.payment_status || 'pending')}</span>
+                    <span>
+                      {fmtWhen(o.created_at)} ·{' '}
+                      <span
+                        className={
+                          paymentWords(o.payment_status) === 'unpaid'
+                            ? 'font-semibold text-[#8A5A00]'
+                            : undefined
+                        }
+                      >
+                        {paymentWords(o.payment_status)}
+                      </span>
+                    </span>
                     <span className="font-semibold text-[#1A1A1A] tabular-nums">
                       {Number(o.discount_amount) > 0 && (
                         <span className="mr-1.5 text-[#2E7D32]">−{formatMoney(Number(o.discount_amount))}</span>
