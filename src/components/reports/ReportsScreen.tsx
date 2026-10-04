@@ -578,6 +578,137 @@ function printRangeReport(opts: ReportOpts): void {
   printHiddenFrame(html);
 }
 
+/* ── v5.155.0 — the kitchen speed speaks in chat ────────────────────
+ * The share arc's tenth member: the stopwatch gets a pocket voice.
+ * "Is the kitchen slow today?" is the daily off-site owner question —
+ * the answer rides in the same chat where the day's money travels.
+ * The clock speaks only what the hop ledger proves: average, median,
+ * slowest, the SLA scoreboard, the tickets (top-5 slowest, the screen's
+ * own order) and the dish the pass waits for. Small samples say so in
+ * prose — the card's own honesty rides verbatim, and a clean sheet
+ * speaks its honest zero. Exported pure so E2E can assert the text
+ * without the clipboard. */
+export interface KitchenSpeedOpts {
+  storeName: string;
+  rangeLabel: string;
+  timed: number;
+  avgMin: number | null;
+  medianMin: number | null;
+  slowest: { orderNumber: number; minutes: number } | null;
+  breaches: number;
+  /** top-5 slowest, the screen's own descending order */
+  tickets: { orderNumber: number; minutes: number; firedAt: string; over: boolean }[];
+  dishes: {
+    name: string;
+    tickets: number;
+    avgMin: number;
+    slowestMin: number;
+    own: { avgMin: number; n: number } | null;
+    waitedFor: boolean;
+  }[];
+}
+
+export function buildKitchenSpeedText(opts: KitchenSpeedOpts): string {
+  const W = 32;
+  const hr = '-'.repeat(W);
+  // center() never breaks the frame: an over-long title truncates to W
+  // (ellipsis) before padding — a 40-char store name can't blow the col.
+  const center = (s: string): string => {
+    const t = s.length > W ? `${s.slice(0, W - 1)}…` : s;
+    return t.length >= W ? t : ' '.repeat(Math.floor((W - t.length) / 2)) + t;
+  };
+  const two = (l: string, r: string): string => {
+    const cut = Math.max(1, W - r.length - 1);
+    const left = l.length > cut ? `${l.slice(0, cut - 1)}…` : l;
+    return left.padEnd(W - r.length, ' ') + r;
+  };
+  const wrap = (s: string, width = W): string[] => {
+    const words = s.split(/\s+/).filter(Boolean);
+    const lines: string[] = [];
+    let cur = '';
+    for (const w of words) {
+      const t = cur ? `${cur} ${w}` : w;
+      if (t.length <= width) {
+        cur = t;
+        continue;
+      }
+      if (cur) lines.push(cur);
+      cur = w.length > width ? `${w.slice(0, width - 1)}…` : w;
+    }
+    if (cur) lines.push(cur);
+    return lines;
+  };
+  const detail = (segs: (string | false | null | undefined)[]): string[] => {
+    const lines: string[] = [];
+    let cur = '';
+    for (const raw of segs) {
+      if (!raw) continue;
+      const s = String(raw);
+      // an over-long segment wraps on its own words (at the W-3 detail
+      // width) instead of riding the packer past the frame — the 189/192
+      // prose lesson, detail edition.
+      if (s.length > W - 3) {
+        if (cur) {
+          lines.push(cur);
+          cur = '';
+        }
+        for (const w of wrap(s, W - 3)) lines.push(w);
+        continue;
+      }
+      const t = cur ? `${cur} · ${s}` : s;
+      if (t.length <= W - 3) {
+        cur = t;
+        continue;
+      }
+      if (cur) lines.push(cur);
+      cur = s;
+    }
+    if (cur) lines.push(cur);
+    return lines;
+  };
+
+  const out: string[] = [];
+  out.push(center(opts.storeName));
+  out.push(center(`KITCHEN SPEED · ${opts.rangeLabel.toUpperCase()}`));
+  out.push(hr);
+  if (opts.avgMin !== null) out.push(two('Average', fmtDuration(opts.avgMin)));
+  if (opts.medianMin !== null) out.push(two('Median', fmtDuration(opts.medianMin)));
+  if (opts.slowest)
+    out.push(two('Slowest', `#${opts.slowest.orderNumber} · ${fmtDuration(opts.slowest.minutes)}`));
+  out.push(two('Over the 10-min SLA', String(opts.breaches)));
+  out.push(hr);
+  for (const t of opts.tickets) {
+    out.push(two(`#${t.orderNumber}`, fmtDuration(t.minutes)));
+    for (const line of detail([`fired ${t.firedAt}`, t.over ? 'over SLA' : null]))
+      out.push(`   ${line}`);
+  }
+  if (opts.dishes.length > 0) {
+    out.push(hr);
+    out.push('THE SLOW DISH');
+    opts.dishes.forEach((d, i) => {
+      out.push(two(`${i + 1}. ${d.name}`, fmtDuration(d.avgMin)));
+      const segs = [
+        d.waitedFor ? 'the pass waits for this' : null,
+        `${d.tickets} ticket${d.tickets === 1 ? '' : 's'}`,
+        `slowest ${fmtDuration(d.slowestMin)}`,
+        d.own ? `own clock avg ${fmtDuration(d.own.avgMin)}` : null,
+        d.own ? `${d.own.n} ticked` : null,
+      ];
+      for (const line of detail(segs)) out.push(`   ${line}`);
+    });
+  }
+  out.push(hr);
+  out.push(two(`${opts.timed} ticket${opts.timed === 1 ? '' : 's'} timed`, `${opts.breaches} over SLA`));
+  if (opts.timed > 0 && opts.timed < 3) {
+    out.push('');
+    for (const line of wrap('small sample — the clock needs more timed tickets before it says anything loud'))
+      out.push(line);
+  }
+  out.push(center(`Shared ${appFormatters().hhmm.format(new Date())} ${appTzTag()}`));
+  out.push(center('· · · end of kitchen speed · · ·'));
+  return out.join('\n');
+}
+
 /* ── Kitchen speed (5.67.0) — the clock reads the hop ledger ──────────────── */
 
 interface SpeedTicket {
@@ -1495,6 +1626,53 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
     }
     downloadCsv(`servepoint-kitchen-speed-${appTodayIso()}.csv`, rows);
   }, [kitchen]);
+
+  /* v5.155.0 — one assembly feeds Copy + WhatsApp (5.146.0 rule, kitchen
+   * edition): built from the same kitchen memo the screen renders. Hooks
+   * stay above the early returns — the 192 rule. The card's honesty rides
+   * verbatim: top-5 slowest in the screen's own order, the waited-for dish
+   * first, own-clock only when the check ledger has one, small-sample
+   * prose under three timed tickets. */
+  const kitchenShareOpts = useMemo<KitchenSpeedOpts>(() => ({
+    storeName: tenant?.name || 'ServePoint store',
+    rangeLabel: RANGE_LABEL[range],
+    timed: kitchen.sample.length,
+    avgMin: kitchen.avgMin,
+    medianMin: kitchen.medianMin,
+    slowest: kitchen.slowest
+      ? { orderNumber: kitchen.slowest.orderNumber, minutes: kitchen.slowest.minutes }
+      : null,
+    breaches: kitchen.breaches.length,
+    tickets: [...kitchen.sample]
+      .sort((a, b) => b.minutes - a.minutes)
+      .slice(0, 5)
+      .map((t) => ({
+        orderNumber: t.orderNumber,
+        minutes: t.minutes,
+        firedAt: appFormatters().dt.format(t.firedAt),
+        over: t.minutes > 10,
+      })),
+    dishes: kitchen.items.slice(0, 5).map((d, i) => ({
+      name: d.name,
+      tickets: d.tickets,
+      avgMin: d.avgMin,
+      slowestMin: d.slowestMin,
+      own: d.own ? { avgMin: d.own.avgMin, n: d.own.n } : null,
+      waitedFor: i === 0,
+    })),
+  }), [tenant?.name, range, kitchen]);
+  const kitchenSpeedText = kitchen.sample.length > 0 ? buildKitchenSpeedText(kitchenShareOpts) : '';
+  const [kitchenCopyState, setKitchenCopyState] = useState<'idle' | 'ok' | 'fail'>('idle');
+  const copyKitchenSpeed = async () => {
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error('clipboard unavailable');
+      await navigator.clipboard.writeText(kitchenSpeedText);
+      setKitchenCopyState('ok');
+    } catch {
+      setKitchenCopyState('fail');
+    }
+    window.setTimeout(() => setKitchenCopyState('idle'), 1800);
+  };
 
   /* ── drawer honesty (020) — sealed shifts only, variance is STORED truth ── */
 
@@ -3002,15 +3180,48 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
                 <Flame size={14} aria-hidden className="text-[#B3261E]" />
                 Kitchen speed
               </h2>
-              <button
-                onClick={exportKitchenSpeed}
-                disabled={kitchen.sample.length === 0}
-                aria-label="Export kitchen speed as CSV"
-                title="Export the range's fire-to-ready timings as CSV"
-                className="inline-flex h-7 items-center rounded-lg border border-[#B88E2F]/45 bg-[#FDF9F0] px-2.5 text-[11px] font-bold text-[#8A5A00] transition hover:bg-[#B88E2F] hover:text-white active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                CSV
-              </button>
+              {kitchen.sample.length > 0 && (
+                <div className="flex shrink-0 items-center gap-1.5">
+                  <button
+                    onClick={copyKitchenSpeed}
+                    aria-live="polite"
+                    aria-label="Copy the kitchen speed as text"
+                    title="Copy the kitchen's stopwatch as text"
+                    className="inline-flex h-7 items-center gap-1 rounded-lg border border-[#B88E2F]/45 bg-[#FDF9F0] px-2.5 text-[11px] font-bold text-[#8A5A00] transition hover:bg-[#B88E2F] hover:text-white active:scale-[0.97]"
+                  >
+                    {kitchenCopyState === 'ok' ? (
+                      <Check size={12} aria-hidden />
+                    ) : (
+                      <Copy size={12} aria-hidden />
+                    )}
+                    {kitchenCopyState === 'ok'
+                      ? 'Copied'
+                      : kitchenCopyState === 'fail'
+                        ? 'Copy blocked'
+                        : 'Copy'}
+                  </button>
+                  <a
+                    href={`https://wa.me/?text=${encodeURIComponent(kitchenSpeedText)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label="Share the kitchen speed on WhatsApp"
+                    title="Share the kitchen's stopwatch on WhatsApp"
+                    className="inline-flex h-7 items-center gap-1 rounded-lg border border-[#B88E2F]/45 bg-[#FDF9F0] px-2.5 text-[11px] font-bold text-[#8A5A00] transition hover:bg-[#B88E2F] hover:text-white active:scale-[0.97]"
+                  >
+                    <MessageCircle size={12} aria-hidden />
+                    WhatsApp
+                  </a>
+                  <button
+                    onClick={exportKitchenSpeed}
+                    disabled={kitchen.sample.length === 0}
+                    aria-label="Export kitchen speed as CSV"
+                    title="Export the range's fire-to-ready timings as CSV"
+                    className="inline-flex h-7 items-center rounded-lg border border-[#B88E2F]/45 bg-[#FDF9F0] px-2.5 text-[11px] font-bold text-[#8A5A00] transition hover:bg-[#B88E2F] hover:text-white active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    CSV
+                  </button>
+                </div>
+              )}
             </div>
             <p className="mb-4 text-[11.5px] text-[#969696]">
               How long each ticket really took from the counter's Ok to the pass —
@@ -3072,20 +3283,26 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
                   </div>
                 </div>
                 <div
-                  className="mt-3 h-2 overflow-hidden rounded-full bg-[#FCEBEA]"
+                  className={`mt-3 h-2 overflow-hidden rounded-full ${kitchen.breaches.length > 0 ? 'bg-[#FCEBEA]' : 'bg-[#EAF0EC]'}`}
                   role="meter"
                   aria-valuenow={Math.round((kitchen.breaches.length / kitchen.sample.length) * 100)}
                   aria-valuemin={0}
                   aria-valuemax={100}
                   aria-label="Share of timed tickets over the 10-minute SLA"
+                  title={
+                    kitchen.breaches.length > 0
+                      ? `${kitchen.breaches.length} of ${kitchen.sample.length} timed tickets over the 10-minute line`
+                      : 'every timed ticket finished inside the 10-minute line'
+                  }
                 >
                   <div
-                    className="h-full rounded-full bg-[#B3261E]"
+                    className={`h-full rounded-full ${kitchen.breaches.length > 0 ? 'bg-[#B3261E]' : 'bg-[#2E7D32]'}`}
                     style={{
-                      width: `${Math.max(
-                        2,
-                        (kitchen.breaches.length / kitchen.sample.length) * 100,
-                      )}%`,
+                      width: `${
+                        kitchen.breaches.length > 0
+                          ? Math.max(2, (kitchen.breaches.length / kitchen.sample.length) * 100)
+                          : 0
+                      }%`,
                     }}
                   />
                 </div>

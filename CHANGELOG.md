@@ -3,6 +3,20 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.155.0] — 2026-10-04 — The kitchen speed speaks in chat
+
+### Added — the stopwatch gets a pocket voice (`src/components/reports/ReportsScreen.tsx`)
+
+The share arc's tenth member: `buildKitchenSpeedText(opts)` (exported pure, E2E-assertable) answers the daily off-site owner question — "is the kitchen slow today?" — in the same chat where the day's money travels. The clock speaks only what the hop ledger proves, from the same `kitchen` memo the screen renders (the 5.146.0 one-assembly rule): average, median, slowest with its ticket number, the over-the-10-minute-SLA scoreboard, the top-5 slowest tickets in the screen's own descending order (fired time as detail, `over SLA` badge voice only on breaches — the minority marked, never the majority), and THE SLOW DISH block with the waited-for badge on the first row plus the own-clock voice (fire → the dish's last ticked line) only when the check ledger has one. Small samples say so in prose — the card's own "small sample — the clock needs more timed tickets before it says anything loud" rides verbatim under three timed tickets; a clean sheet speaks its honest zero (`Over the 10-min SLA · 0`, `0 over SLA`). Builder-hardened beyond its siblings: `center()` truncates an over-long store heading to the 32-column frame (ellipsis) instead of blowing it, and `detail()` word-wraps any over-long single segment at the detail width instead of riding the packer past the frame — the 189/192 prose lesson, detail edition. Unit asserts 29/29 across three literal cases (breach sheet, healthy zero-breach sheet with own clock, truncation torture).
+
+### Changed — the Kitchen speed card gains a share row, and the SLA meter stops telling lies at zero
+
+Copy + WhatsApp chips join the CSV chip in the card header (the card's own `h-7 rounded-lg` cream-gold grammar), rendered only when timed tickets exist. Copy rides the honest tri-state (`aria-live="polite"`, 1.8s reset); WhatsApp is the house PICKER (`wa.me/?text=`). The SLA meter's honesty fix: it used to draw a `Math.max(2, …)` red fill — so a ZERO-breach day still showed a red sliver claiming something was late. Now the meter carries the card's color storytelling: pale-red track with a scaled red fill only when tickets actually ran over the line, pale-green track with a zero-width fill when every ticket finished inside it, plus a hover title that states the truth in words ("every timed ticket finished inside the 10-minute line").
+
+### Verified
+
+`tsc` EXIT=0 · `vite build` EXIT=0 · node --check sw.js OK · unit asserts (vite-node, literals) 29/29: breach sheet, zero-breach honest zeros, own-clock presence/absence gating, waited-for badge only on the first dish, small-sample prose only under 3 timed tickets, 32-column frame held under truncation torture · E2E on the live Reports screen (Last 7 days): chips render on fresh load, the wa.me href decodes to the exact builder text — QR Flow Cafe / KITCHEN SPEED · LAST 7 DAYS / Average 1h 16m / Median 1h 16m / Slowest #55 · 1h 16m / Over the 10-min SLA 1 / #55 · fired 2 Oct, 5:45 pm · over SLA / THE SLOW DISH / 1. Flat White · Large 1h 16m · the pass waits for this / 1 ticket timed · 1 over SLA / the small-sample prose — every number matching the screen's tiles to the minute, Copy honest tri-state with the 1.8s reset, SLA meter renders the breach story (pale-red track, scaled red fill, truthful title), console delta 0 across two fresh loads (2 stale HMR-recovery entries from the mid-edit module cycle attributed, zero live).
+
 ## [5.154.0] — 2026-10-04 — The offer scorecard speaks in chat
 
 ### Added — the promo review gets a pocket voice (`src/components/reports/ReportsScreen.tsx`)
