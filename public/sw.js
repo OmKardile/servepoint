@@ -15,7 +15,7 @@
  * Release discipline: bump VERSION on every shell-changing deploy so old
  * caches are evicted on activate.
  */
-const VERSION = 'servepoint-v5.143.0-r1';
+const VERSION = 'servepoint-v5.144.0-r1';
 const SHELL_CACHE = `${VERSION}-shell`;
 const ASSET_CACHE = `${VERSION}-assets`;
 const FONT_CACHE = `${VERSION}-fonts`;
@@ -85,7 +85,15 @@ async function precacheAll() {
     ...SHELL_ASSETS.filter((url) => url !== '/').map((url) => put(assets, url)),
     ...BUILD_ASSETS.map((url) => put(assets, url)),
   ]);
-  await self.skipWaiting();
+  /**
+   * v5.144.0 — the worker now WAITS, as v5.7.0's contract always said it
+   * did. Until now a stray self-skipWaiting() (an original v5.6.0 line
+   * never reconciled with the v5.7.0 waiting design) let an update take
+   * control the moment its precache finished — clients.claim() then fired
+   * controllerchange and the page yanked itself mid-task, the exact thing
+   * the update toast exists to prevent. The ONLY skip path is the
+   * SP_CHECK_UPDATE message from the user's Refresh tap.
+   */
 }
 
 /**

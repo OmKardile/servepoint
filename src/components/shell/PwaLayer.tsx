@@ -24,6 +24,12 @@ import brandMark from '../../assets/brand/mark.png';
  * brief sage whisper ("Back online — live updates resumed.") confirms the
  * recovery, then silence again — the banner spoke the fall, the whisper
  * speaks the landing; silence stays the healthy voice.
+ *
+ * v5.144.0 — the update toast joins the house register ("The house has
+ * grown.", serif-italic teal over white, honest sub-line, gold Refresh,
+ * quiet Later) — and with the sw.js self-skip finally removed the toast
+ * is no longer dead code: an update really does WAIT now, and this
+ * surface is the only door that lets it in.
  */
 
 type Mode = 'staff' | 'public' | 'guest';
@@ -137,6 +143,12 @@ export function PwaLayer() {
   // reloads once. Awaiting worker is also probed on mount (covers a reload
   // that happened while an update already waited).
   const [waitingWorker, setWaitingWorker] = useState<ServiceWorker | null>(null);
+  /* v5.144.0 — "Later" dismisses THIS episode only; a genuinely newer
+   * worker (waitingWorker changes) reopens the door. */
+  const [updateDismissed, setUpdateDismissed] = useState(false);
+  useEffect(() => {
+    setUpdateDismissed(false);
+  }, [waitingWorker]);
   useEffect(() => {
     const onWaiting = (e: Event) => setWaitingWorker((e as CustomEvent<ServiceWorker>).detail || null);
     window.addEventListener('sp:sw-waiting', onWaiting);
@@ -267,30 +279,52 @@ export function PwaLayer() {
         </div>
       )}
 
-      {/* ── New-version toast (all surfaces, once an update waits) ────────── */}
-      {waitingWorker && (
+      {/* ── New-version card (all surfaces, once an update waits) ────────── */}
+      {/* v5.144.0 — the register upgrade: the old dark pill flashed and the
+          page yanked itself (sw.js self-skipped, so this surface was dead
+          code). Now the episode is honest end to end: the worker WAITS,
+          the card asks in the house voice, and the tap — not the SW —
+          moves the house in. Cream-chip mark with the pinging gold dot
+          echoes the offline page's brand chip; teal serif-italic echoes
+          the porch headings. "Later" dismisses this episode only. */}
+      {waitingWorker && !updateDismissed && (
         <div
           role="status"
           className="fixed inset-x-0 bottom-4 z-[95] flex justify-center px-3 sm:bottom-6"
           style={{ animation: 'spPwaRise 320ms cubic-bezier(0.22, 1, 0.36, 1)' }}
         >
-          <div className="flex items-center gap-3 rounded-full border border-[#B88E2F]/40 bg-[#1A1A1A] py-2 pl-4 pr-2 shadow-xl shadow-black/25">
-            <span className="relative flex h-2 w-2">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#E7C878] opacity-60" />
-              <span className="relative inline-flex h-2 w-2 rounded-full bg-[#E7C878]" />
+          <div className="flex items-center gap-3.5 rounded-2xl border border-[#E3E7E0] bg-white py-3 pl-4 pr-3 shadow-2xl shadow-[#1A1A1A]/15">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#F6F1E9]">
+              <span className="relative flex h-2.5 w-2.5">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#B88E2F] opacity-60" />
+                <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-[#B88E2F]" />
+              </span>
             </span>
-            <span className="whitespace-nowrap text-xs font-medium tracking-wide text-[#F6F5F2]">
-              New version ready
-            </span>
-            <button
-              onClick={applyUpdate}
-              className="ml-1 flex items-center gap-1.5 rounded-full bg-[#B88E2F] px-3.5 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-[#967221]"
-            >
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <path d="M21 12a9 9 0 1 1-2.64-6.36M21 3v6h-6" />
-              </svg>
-              Refresh
-            </button>
+            <div className="min-w-0">
+              <p className="font-serif text-[16px] italic leading-snug text-[#0F3D3E]">
+                The house has grown.
+              </p>
+              <p className="mt-0.5 text-[11.5px] leading-snug text-[#6B6B6B]">
+                A newer ServePoint is ready — refresh when the counter is quiet; nothing will be lost.
+              </p>
+            </div>
+            <div className="ml-1 flex shrink-0 items-center gap-1">
+              <button
+                onClick={applyUpdate}
+                className="sp-cta flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-xs font-semibold"
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M21 12a9 9 0 1 1-2.64-6.36M21 3v6h-6" />
+                </svg>
+                Refresh
+              </button>
+              <button
+                onClick={() => setUpdateDismissed(true)}
+                className="rounded-lg px-2.5 py-1.5 text-xs font-medium text-[#6B6B6B] transition-colors hover:bg-[#F6F5F2] hover:text-[#1A1A1A]"
+              >
+                Later
+              </button>
+            </div>
           </div>
         </div>
       )}

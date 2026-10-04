@@ -3,6 +3,25 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.144.0] — 2026-10-04 — The update episode learns its ending
+
+### Fixed — the waiting contract is finally true (`public/sw.js`)
+
+v5.7.0 documented the update flow as "a newly installed worker WAITS (sw.js never self-skips)… No mid-task page yanks" — but `precacheAll()` had been ending with `await self.skipWaiting()` since the ORIGINAL v5.6.0 SW (git blame; the v5.7.0 design was aspirational and never true). An update therefore took control the moment its precache finished; `clients.claim()` fired `controllerchange`; and `main.tsx`'s safety reload yanked the page mid-task — the exact thing the update toast existed to prevent, and the toast itself was dead code (a worker that self-skips never lingers in the waiting state). The stray skip is REMOVED: the worker now installs, precaches, and WAITS; the ONLY skip path is the `SP_CHECK_UPDATE` message from the user's Refresh tap. Old worker keeps serving until a person moves the house in.
+
+### Added — the house notices deploys on its own (`src/main.tsx`)
+
+An SPA never navigates, so a browser's own SW update triggers (navigations, functional events) almost never fire on a counter tablet that stays open for days — a deploy could sit unnoticed until the next manual reload. The registration now drives the check itself: once ~2 minutes after boot, then every 30 minutes while the tab lives (`reg.update()`, failures swallowed — offline checks are silent and the toast is only ever an honest signal).
+
+### Changed — the update toast joins the house register (`src/components/shell/PwaLayer.tsx`)
+
+The old dark pill ("New version ready" + Refresh) is now a white house-voiced card: cream chip with the pinging gold dot (echoing the offline page's brand chip), teal serif-italic "The house has grown." (echoing the porch headings), an honest operator-true sub-line ("A newer ServePoint is ready — refresh when the counter is quiet; nothing will be lost."), the gold Refresh door, and a quiet "Later" that dismisses THIS episode only (a genuinely newer worker reopens the door).
+
+### Verified
+
+node --check sw.js OK; tsc EXIT=0 (/tmp/tsc183a.log); build EXIT=0 (/tmp/build183a.log). PROD live-fire drill (vite preview 4174, unauthenticated — zero cloud writes): loaded with v5.143.0-r1 controlling (Task 182's drill left it registered); the browser's own update check installed v5.144.0-r1, which WAITED — page marker survived (NO mid-task yank) and the new card rendered with the register copy (screenshot qa183-update-card.png; first DOM sample at ~2 s predates the install — the card appears when install completes, ~3 s). Refresh tap → one controlled reload → caches re-keyed to servepoint-v5.144.0-r1-{shell,assets,fonts} with the v5.143.0-r1 caches evicted; post-reload boot clean. Drill hygiene: preview killed, dev :3000 verified untouched (200). READ-ONLY round (zero cloud writes).
+
+
 ## [5.143.0] — 2026-10-04 — The app boots with what the boot needs
 
 ### Added — screen-level code splitting (`src/App.tsx`, new `src/components/shell/ScreenSkeleton.tsx`)

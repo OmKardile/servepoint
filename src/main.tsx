@@ -87,6 +87,18 @@ if (import.meta.env.PROD && 'serviceWorker' in navigator) {
           refreshing = true;
           window.location.reload();
         });
+        /* v5.144.0 — the SPA never navigates, so the browser's own SW
+         * update triggers (navigations, functional events) almost never
+         * fire on a counter tablet that stays open for days. We drive the
+         * check ourselves: once shortly after boot, then every 30 minutes
+         * while the tab lives. A found update installs and WAITS (sw.js
+         * never self-skips) — PwaLayer's toast carries the tap. Offline
+         * checks fail quietly; the toast is only ever an honest signal. */
+        const driveUpdateCheck = () => {
+          reg.update().catch(() => undefined);
+        };
+        window.setTimeout(driveUpdateCheck, 2 * 60 * 1000);
+        window.setInterval(driveUpdateCheck, 30 * 60 * 1000);
       })
       .catch((err) => {
         console.warn('[ServePoint] service worker registration skipped:', err);
