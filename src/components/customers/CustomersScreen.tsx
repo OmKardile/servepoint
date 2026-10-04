@@ -361,7 +361,11 @@ function exportGuestsCsv(rows: GuestRow[]): void {
     'Tier',
     'Paid visits',
     'Paid total (INR)',
-    'Last visit',
+    /* v5.201.0 — "Last ticket": the column carries the billed stamp (any
+     * non-cancelled ticket on the phone), so it wears the ledger's word
+     * for that population — the row cell and the file now say the same
+     * thing the drill's All tickets counts. */
+    'Last ticket',
     'On the book since',
     'Email',
     'Notes',
@@ -1086,7 +1090,15 @@ const GuestsTab: React.FC<{
           [
             {
               key: 'regular' as TierKey,
-              label: 'Regulars · 2+ visits',
+              /* v5.201.0 — the tile names its register: the tier counts PAID
+               * visits (the view's FILTER payment_status = 'completed'), and
+               * the ladder line beside every row already says "paid visits"
+               * — the tile borrows the family's own words instead of leaving
+               * the reader to guess which visits open the Regular door
+               * (5.198's grammar: a headline may keep its truth if it NAMES
+               * it). The narrow-whisper splits on ' ·' so it still says
+               * just "regulars". */
+              label: 'Regulars · 2+ paid visits',
               count: kpis.regulars,
               valueCls: 'text-[#2E7D32]',
               icon: null,
@@ -1296,19 +1308,33 @@ const GuestsTab: React.FC<{
                       </span>
                     )}
                   </button>
+                  {/* v5.201.0 — the row speaks the drill's registers: the
+                   * drill (5.199) named every figure — Paid visits, Paid
+                   * total, All tickets, Recent tickets — while the row
+                   * beside it said bare "Visits / Spent / Last visit", two
+                   * of them PAID numbers and one BILLED (last_visit_at is
+                   * MAX(created_at) over NON-CANCELLED tickets, unpaid
+                   * included) — the same word "visit" owning two truths one
+                   * cell apart. Each label now borrows the ledger's own
+                   * word for its population: the paid cells say what the
+                   * drill says (Paid visits, Paid total), and the billed
+                   * stamp says what the drill calls that population (Last
+                   * ticket — the last row of All tickets). No data changed:
+                   * the register was always this; the words just catch up
+                   * (5.198: name the truth, don't re-populate it). */}
                   <div className="hidden shrink-0 items-center gap-7 sm:flex">
                     <div className="text-right">
-                      <p className="text-[10.5px] font-semibold uppercase tracking-wide text-[#969696]">Visits</p>
+                      <p className="text-[10.5px] font-semibold uppercase tracking-wide text-[#969696]">Paid visits</p>
                       <p className={`text-[14px] font-bold ${visits > 0 ? 'text-[#1A1A1A]' : 'text-[#C9CFC9]'}`}>{visits}</p>
                     </div>
                     <div className="text-right">
-                      <p className="text-[10.5px] font-semibold uppercase tracking-wide text-[#969696]">Spent</p>
+                      <p className="text-[10.5px] font-semibold uppercase tracking-wide text-[#969696]">Paid total</p>
                       <p className={`text-[14px] font-bold ${spent > 0 ? 'text-[#2E7D32]' : 'text-[#C9CFC9]'}`}>
                         {formatMoney(spent)}
                       </p>
                     </div>
                     <div className="hidden w-24 text-right lg:block">
-                      <p className="text-[10.5px] font-semibold uppercase tracking-wide text-[#969696]">Last visit</p>
+                      <p className="text-[10.5px] font-semibold uppercase tracking-wide text-[#969696]">Last ticket</p>
                       <p className="text-[12.5px] font-semibold text-[#1A1A1A]">{fmtWhen(s?.last_visit_at ?? null)}</p>
                     </div>
                   </div>
