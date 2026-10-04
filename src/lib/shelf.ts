@@ -204,3 +204,34 @@ export function shelfDaysClause(
   }
   return `~${Math.floor(d / 7)} weeks at this ${noun}`;
 }
+
+/** ── v5.187.0 — the shelf's last touch ───────────────────────────────
+ *  A count you can't date is a count you can't trust: the shelf row now
+ *  speaks how long since ANY write moved it (a sale's guarded deduction,
+ *  a delivery, a hand move, a correction — updated_at is the trigger-
+ *  bumped truth, ONE writer). The arithmetic is chaseAge's (day.ts,
+ *  5.151/5.185 — the same max(0,·) clamp and floor-of-days); the WORDS
+ *  are the shelf's own register: debts stand ("Nd old"), shelf events
+ *  pass ("Nd ago") — deliberate, named, never mixed.
+ *  Stale at SHELF_STALE_DAYS — the amber line names the drift the
+ *  owner's watch list carries. */
+export const SHELF_STALE_DAYS = 7;
+
+export interface ShelfTouch {
+  /** whole days since the last write (0 = today) */
+  days: number;
+  /** the shelf's own register: 'today' | 'Nd ago' */
+  words: string;
+  /** days >= SHELF_STALE_DAYS — the count may no longer be trusted */
+  stale: boolean;
+}
+
+export function shelfTouch(updatedIso: string, nowMs: number): ShelfTouch {
+  const hours = Math.max(0, (nowMs - new Date(updatedIso).getTime()) / 36e5);
+  const days = Math.floor(hours / 24);
+  return {
+    days,
+    words: days === 0 ? 'today' : `${days}d ago`,
+    stale: days >= SHELF_STALE_DAYS,
+  };
+}

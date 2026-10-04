@@ -9,6 +9,7 @@ import {
   Clock,
   Copy,
   Download,
+  History,
   Layers,
   Loader2,
   MessageCircle,
@@ -51,7 +52,7 @@ import {
 } from '../../lib/api';
 import { computePaceByItem, computeTopMovers, MOVER_WINDOW_DAYS, type Mover } from '../../lib/movers';
 import { formatMoney } from '../../lib/prefs';
-import { LOW_COVER, computeBurnByIngredient, shelfCoverage, shelfDays, shelfDaysClause } from '../../lib/shelf';
+import { LOW_COVER, computeBurnByIngredient, shelfCoverage, shelfDays, shelfDaysClause, shelfTouch } from '../../lib/shelf';
 import { downloadCsv } from '../../lib/csv';
 import { appTodayIso, appFormatters, appTzTag } from '../../lib/appday';
 import { useDialogA11y } from '../../lib/useDialogA11y';
@@ -1254,11 +1255,18 @@ const InventoryInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
                 const binClause = shelfDaysClause(it.current_stock, burnByIngredient.get(it.id) ?? null, 'burn');
                 const binDaysN = binDays.get(it.id) ?? null;
                 const binUrgent = binDaysN !== null && binDaysN <= 7;
+                /* v5.187.0 — the shelf's last touch: how long since any
+                   write moved this row (a sale's guarded deduction, a
+                   delivery, a hand move — updated_at, ONE writer). Quiet
+                   grey while fresh; the house amber once the count goes
+                   stale (>= 7 days) — the drift the watch list carries,
+                   named where you can fix it. */
+                const touch = shelfTouch(it.updated_at, Date.now());
                 return (
                   <li
                     key={it.id}
                     className="sp-card flex flex-wrap items-center gap-3 p-4"
-                    aria-label={`${it.name}: ${fmtQty(it.current_stock)} ${it.unit}`}
+                    aria-label={`${it.name}: ${fmtQty(it.current_stock)} ${it.unit}, shelf moved ${touch.words}`}
                   >
                     <div className="min-w-0 flex-1 basis-52">
                       <div className="flex items-center gap-2">
@@ -1296,6 +1304,18 @@ const InventoryInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
                           {binClause}
                         </p>
                       )}
+                      {/* v5.187.0 — the shelf's last touch: the PAST beside the
+                          bin's future (cover). Amber only when stale — the
+                          title names what refreshes the clock. */}
+                      <p
+                        className={`mt-1 flex items-center gap-1 text-[10.5px] font-semibold ${touch.stale ? 'text-[#8A5A00]' : 'text-[#969696]'}`}
+                        title={touch.stale
+                          ? `Nothing has touched this shelf in ${touch.days} days — the count may not be trusted. A delivery, waste or correction refreshes it.`
+                          : `Last shelf write ${touch.words} — sales, deliveries and hand moves all count.`}
+                      >
+                        <History size={10} aria-hidden />
+                        moved {touch.words}
+                      </p>
                     </div>
                     <div className="flex shrink-0 items-center gap-2">
                       <span className="hidden text-[11px] text-[#969696] sm:block">
