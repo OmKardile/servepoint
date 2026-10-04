@@ -50,6 +50,7 @@ import {
   type ReservationStatus,
 } from '../../lib/api';
 import { formatMoney } from '../../lib/prefs';
+import { offerBadgeLabel } from '../../lib/offerLabel';
 import { downloadCsv } from '../../lib/csv';
 import { dayTime, usedAgo } from '../../lib/day';
 import { appTodayIso, appFormatters, appTzTag } from '../../lib/appday';
@@ -188,12 +189,6 @@ const RUNG_TONE: Record<TierKey, string> = {
   regular: '#2E7D32',
   vip: '#B88E2F',
 };
-
-function offerBadgeLabel(o: Offer): string {
-  return o.discount_type === 'percent'
-    ? `${Number(o.discount_value)}% off`
-    : `${formatMoney(Number(o.discount_value))} off`;
-}
 
 /* ── v5.149.0 — the offer speaks in chat ─────────────────────────────────
  * The share arc's fourth member: the bill (5.145.0), the day (5.146.0),

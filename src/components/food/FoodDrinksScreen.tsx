@@ -31,6 +31,7 @@ import { CounterInbox } from './CounterInbox';
 import { useTenant } from '../../lib/tenant';
 import { useDialogA11y } from '../../lib/useDialogA11y';
 import { formatMoney } from '../../lib/prefs';
+import { offerRuleLabel } from '../../lib/offerLabel';
 import { computeUsual, USUAL_WINDOW } from '../../lib/usual';
 import { useUi } from '../../store/session';
 import { cartTotal, offerDiscount, useCart } from '../../store/cart';
@@ -204,6 +205,72 @@ const ORDER_TYPES: { value: OrderType; label: string }[] = [
 ];
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
+
+/* ── v5.210.0 — the cart hears the offers ────────────────────────────
+ * The counter builds an order on this screen and the only surface that
+ * ever mentioned offers was the review drawer's picker — a fit the
+ * counter had to discover by opening things. The order pill now
+ * whispers the offer's fit for the line set AS IT STANDS: an offer the
+ * cart already qualifies for speaks "applies", a threshold just out of
+ * reach speaks "add ₹X more", and an offer already applied speaks its
+ * confirmation. Exported pure so the suite owns the fit (228's
+ * billsCsvRows pattern). The arithmetic is the store's own
+ * offerDiscount — the SAME number the drawer's discount line speaks
+ * when the offer is applied (one arithmetic, never a second one). The
+ * best take wins among eligible offers (ties keep the read's order —
+ * no sort, a loop); among unlocks the CLOSEST threshold speaks (a
+ * smaller min is nearer). Null offers (unread or failed) and an empty
+ * line set → null: the pill stays silent — an unread register never
+ * becomes a fabricated "no offers", and an empty cart has no fit to
+ * speak of. */
+export interface OfferFit {
+  kind: 'applied' | 'applies' | 'unlock';
+  offer: Offer;
+  /** the money this offer takes off the CURRENT line set (applied/applies) */
+  take: number;
+  /** the rupees still short of the threshold (unlock only) */
+  missing: number;
+  /** the offer's full spoken rule — "₹50 off over ₹300" (the lib's own composer) */
+  rule: string;
+}
+
+export function offerFit(
+  offers: Offer[] | null | undefined,
+  subtotal: number,
+  appliedId: string | null,
+): OfferFit | null {
+  if (!offers || offers.length === 0 || !(subtotal > 0)) return null;
+  const eligible = offers.filter((o) => subtotal >= Number(o.min_order_amount));
+  if (eligible.length > 0) {
+    let best = eligible[0];
+    let bestTake = offerDiscount(best, subtotal);
+    for (const o of eligible.slice(1)) {
+      const t = offerDiscount(o, subtotal);
+      if (t > bestTake) {
+        best = o;
+        bestTake = t;
+      }
+    }
+    return {
+      kind: appliedId && best.id === appliedId ? 'applied' : 'applies',
+      offer: best,
+      take: bestTake,
+      missing: 0,
+      rule: offerRuleLabel(best),
+    };
+  }
+  let closest = offers[0];
+  for (const o of offers.slice(1)) {
+    if (Number(o.min_order_amount) < Number(closest.min_order_amount)) closest = o;
+  }
+  return {
+    kind: 'unlock',
+    offer: closest,
+    take: 0,
+    missing: round2(Number(closest.min_order_amount) - subtotal),
+    rule: offerRuleLabel(closest),
+  };
+}
 
 /** What the drawer knows about the phone being keyed — CRM identity +
  *  ledger facts + the guest's most-ordered dish, matched against the live menu.
@@ -462,17 +529,22 @@ const OrderDrawer: React.FC<{
   /** The live menu — the recognition well matches the guest's usual dish
    *  against it, so "add their usual" can only ever sell what exists today. */
   items: MenuItem[];
+  /* v5.210.0 — the ACTIVE offers, the screen's own state (null = the read
+   * hasn't landed or failed: the picker hides — an unread register never
+   * becomes a fabricated "no offers"). The drawer no longer reads offers
+   * itself: the pill and the picker quote ONE register, they can never
+   * disagree. The screen refreshes the read on every drawer open. */
+  offers: Offer[] | null;
   /** Variant-bearing usuals open the item modal — the drawer can't reach the
    *  parent's modal state, so the parent hands down the gesture. */
   onChooseItem: (item: MenuItem) => void;
   onClose: () => void;
   onPlaced: (orderNumber: number) => void;
-}> = ({ open, tenantId, items, onChooseItem, onClose, onPlaced }) => {
+}> = ({ open, tenantId, items, offers, onChooseItem, onClose, onPlaced }) => {
   const cart = useCart();
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [tables, setTables] = useState<DiningTable[] | null>(null);
-  const [offers, setOffers] = useState<Offer[]>([]);
   const panelRef = useRef<HTMLDivElement>(null);
   /* v5.110.0 — the order drawer holds the door (replaces the hand-rolled Escape
      listener + manual panel focus; Escape stands down once the order posts). */
@@ -574,7 +646,10 @@ const OrderDrawer: React.FC<{
     onChooseItem(regUsual.item);
   }, [regUsual, onClose, onChooseItem]);
 
-  // floor list + active offers — loaded when the drawer opens
+  // floor list — loaded when the drawer opens. The offers ride the
+  // SCREEN's state (v5.210.0): the parent refreshes its read on every
+  // open, so the picker quotes the freshest register without holding a
+  // second one of its own.
   useEffect(() => {
     if (!open || !tenantId) return;
     let alive = true;
@@ -585,13 +660,6 @@ const OrderDrawer: React.FC<{
       })
       .catch(() => {
         if (alive) setTables([]);
-      });
-    fetchOffers(tenantId)
-      .then((o) => {
-        if (alive) setOffers(o.filter((x) => x.is_active));
-      })
-      .catch(() => {
-        if (alive) setOffers([]);
       });
     return () => {
       alive = false;
@@ -1010,8 +1078,12 @@ const OrderDrawer: React.FC<{
               {submitError}
             </p>
           )}
-          {/* Offer picker (016) — active offers, min-order aware, live discount */}
-          {offers.length > 0 && (
+          {/* Offer picker (016) — active offers, min-order aware, live discount.
+              v5.210.0 — the offers are the screen's own state (the prop):
+              the pill and this picker quote ONE register, and a failed or
+              unfinished read hides the picker — silence, never a
+              fabricated "no offers". */}
+          {offers && offers.length > 0 && (
             <div className="mb-3">
               <label htmlFor="od-offer" className="mb-1 block text-[12px] font-medium text-[#6B6B6B]">
                 Offer
@@ -1121,10 +1193,39 @@ const FoodDrinksInner: React.FC<{ onRetry: () => void }> = ({ onRetry }) => {
      movers' window, WHOLE menu (the item sheet opens any dish). Set
      alongside the shortlist from the same paid rows; null = not read. */
   const [pace, setPace] = useState<Map<string, number> | null>(null);
+  /* v5.210.0 — the ACTIVE offers, the screen's own register: ONE read
+     feeding BOTH the order pill's fit whisper and the review drawer's
+     picker (the drawer's own fetch retired — two readers of one state
+     can never disagree, and the picker quotes the same words the pill
+     does). Refreshed on mount and on every drawer open (the picker must
+     meet offers created mid-shift). null = the read hasn't landed (or
+     failed): the pill stays silent, the picker hides — an unread
+     register never becomes a fabricated "no offers". */
+  const [offers, setOffers] = useState<Offer[] | null>(null);
+  const [offersTick, setOffersTick] = useState(0);
+  useEffect(() => {
+    if (!tenantId) return;
+    let alive = true;
+    fetchOffers(tenantId)
+      .then((o) => {
+        if (alive) setOffers(o.filter((x) => x.is_active));
+      })
+      .catch(() => {
+        if (alive) setOffers(null);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [tenantId, offersTick]);
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detailItem, setDetailItem] = useState<MenuItem | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  useEffect(() => {
+    // every drawer open re-reads: the picker is the applying surface, it
+    // deserves the freshest register the cloud holds.
+    if (drawerOpen) setOffersTick((t) => t + 1);
+  }, [drawerOpen]);
   const [toast, setToast] = useState<{
     kind: 'added' | 'placed' | 'repeated' | 'pulled' | 'returned' | 'failed';
     message: string;
@@ -1428,6 +1529,22 @@ const FoodDrinksInner: React.FC<{ onRetry: () => void }> = ({ onRetry }) => {
   const lines = useCart((s) => s.lines);
   const lineCount = useMemo(() => lines.reduce((sum, l) => sum + l.qty, 0), [lines]);
   const linesTotal = useMemo(() => cartTotal(lines), [lines]);
+  /* v5.210.0 — the pill's fit whisper: the best live offer for this line
+     set, computed from the screen's ONE offers register with the store's
+     own offerDiscount arithmetic (the same number the drawer's discount
+     line speaks when the offer is applied). */
+  const appliedOfferId = useCart((s) => s.offer?.id ?? null);
+  const fit = useMemo(
+    () => offerFit(offers, linesTotal, appliedOfferId),
+    [offers, linesTotal, appliedOfferId],
+  );
+  const fitVoice =
+    fit &&
+    (fit.kind === 'applied'
+      ? `${formatMoney(fit.take)} off applied`
+      : fit.kind === 'applies'
+        ? `${fit.rule} applies`
+        : `Add ${formatMoney(fit.missing)} more for ${fit.rule}`);
 
   /* ── Tenant loading → skeleton (frame 26844) ── */
   if (tenant.loading || (tenantId && dataLoading && categories.length === 0 && items.length === 0)) {
@@ -1763,14 +1880,20 @@ const FoodDrinksInner: React.FC<{ onRetry: () => void }> = ({ onRetry }) => {
         />
       )}
 
-      {/* Floating order pill */}
+      {/* Floating order pill (v5.210.0 — the pill hears the offers: the
+          fit whisper rides the line set as it stands — "applies" is the
+          money on the table (loud, the white inversion), "applied" the
+          quiet confirmation, "add ₹X more" the upsell whisper; silence
+          when the register is unread, empty, or nothing fits). The tap
+          stays the drawer — the picker that applies the offer is one tap
+          behind the whisper that named it. */}
       {lineCount > 0 && (
         <button
           type="button"
           onClick={() => setDrawerOpen(true)}
           aria-label={`Review order, ${lineCount} ${lineCount === 1 ? 'item' : 'items'}, ${formatMoney(
             linesTotal
-          )}`}
+          )}${fit ? `, ${fitVoice}` : ''}`}
           className="fixed bottom-5 right-5 z-40 flex h-12 items-center gap-2 rounded-full bg-[#B88E2F] px-5 text-[13.5px] font-semibold text-white shadow-lg transition-colors hover:bg-[#967221] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#967221]"
         >
           <ShoppingBag size={16} aria-hidden />
@@ -1778,6 +1901,17 @@ const FoodDrinksInner: React.FC<{ onRetry: () => void }> = ({ onRetry }) => {
             {lineCount} {lineCount === 1 ? 'item' : 'items'} · {formatMoney(linesTotal)} ·
             Review order
           </span>
+          {fit && (
+            <span
+              className={`hidden whitespace-nowrap rounded-full px-2.5 py-1 text-[11px] font-bold sm:inline-flex ${
+                fit.kind === 'applies'
+                  ? 'bg-white text-[#967221] shadow-sm'
+                  : 'bg-white/20 text-white'
+              }`}
+            >
+              {fitVoice}
+            </span>
+          )}
         </button>
       )}
 
@@ -1786,6 +1920,7 @@ const FoodDrinksInner: React.FC<{ onRetry: () => void }> = ({ onRetry }) => {
         open={drawerOpen}
         tenantId={tenantId}
         items={items}
+        offers={offers}
         onChooseItem={(item) => {
           setDrawerOpen(false);
           setSelectedId(item.id);
