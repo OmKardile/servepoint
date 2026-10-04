@@ -66,7 +66,13 @@ import type {
   WasteMove,
 } from '../../lib/api';
 import type { Offer } from '../../types';
-import { formatMoney, subscribePrefs } from '../../lib/prefs';
+import {
+  clampTurnAfterMin,
+  DEFAULT_TURN_AFTER_MIN,
+  formatMoney,
+  getPrefs,
+  subscribePrefs,
+} from '../../lib/prefs';
 import { downloadCsv } from '../../lib/csv';
 import { printHiddenFrame } from '../../lib/printFrame';
 import { CHART_TOOLTIP_LABEL, CHART_TOOLTIP_STYLE } from '../../lib/chartvoice';
@@ -1181,6 +1187,10 @@ export interface TurnoverAgg {
   hours: TurnoverHour[];
   /** hour with the most finished spans, ties to the earlier hour; null when no span */
   peakHour: number | null;
+  /** v5.164.0 — the house line audit: how many timed seats ran PAST the turn
+   *  line the floor camps by (the same >= boundary as the camping pill), and
+   *  their share of all timed spans (null when nothing has finished). */
+  line: { turnAfterMin: number; past: number; share: number | null };
 }
 
 /** The floor's TimeAgo register for seated spans ("45m" · "1h 5m") — the
@@ -1200,7 +1210,14 @@ export function turnoverSpanLabel(minutes: number): string {
  *  guesses. A hop older than the ticket itself would wind the clock
  *  backwards and is skipped, never negative. The day shape (v5.163.0)
  *  buckets each finished span into the hour its table actually freed. */
-export function tableTurnover(rows: Order[], hopRows: StatusHop[]): TurnoverAgg {
+export function tableTurnover(
+  rows: Order[],
+  hopRows: StatusHop[],
+  turnAfterMin: number = DEFAULT_TURN_AFTER_MIN,
+): TurnoverAgg {
+  /* the line arrives through the prefs layer's own validator — one house,
+   * one validator, never a private reports number (5.160.0 doctrine). */
+  const line = clampTurnAfterMin(turnAfterMin);
   const dineIn = rows.filter(
     (o) => o.table_id && String(o.status || '').toLowerCase() !== 'cancelled',
   );
@@ -1265,6 +1282,12 @@ export function tableTurnover(rows: Order[], hopRows: StatusHop[]): TurnoverAgg 
   for (const c of hourCells) {
     if (c.timed > 0 && (peakHour === null || c.timed > hourCells[peakHour].timed)) peakHour = c.hour;
   }
+  /* v5.164.0 — the line audit: a span is PAST the house line at the same
+   * boundary the floor's camping pill uses (>= the turn line, never a
+   * private reports definition of "too long"). A live seat donates a turn
+   * and never a breach; only finished seats can be audited. */
+  const past = spans.filter((s) => s.minutes >= line).length;
+  const share = n > 0 ? past / n : null;
   const tables: TurnoverTable[] = [...perTable.entries()]
     .map(([tableLabel, cell]) => ({
       tableLabel,
@@ -1290,6 +1313,7 @@ export function tableTurnover(rows: Order[], hopRows: StatusHop[]): TurnoverAgg 
     longest,
     hours,
     peakHour,
+    line: { turnAfterMin: line, past, share },
   };
 }
 
@@ -2058,7 +2082,10 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
   /* v5.161.0 — the room's breathing, off the same two streams the kitchen
    * stopwatch reads (inRange + hop ledger): zero new fetches. Hooks stay
    * above the early returns — the 192 rule. */
-  const turnover = useMemo(() => tableTurnover(inRange, hops), [inRange, hops]);
+  const turnover = useMemo(
+    () => tableTurnover(inRange, hops, getPrefs().floor.turnAfterMin),
+    [inRange, hops],
+  );
 
   const exportTurnover = useCallback(() => {
     if (turnover.tickets === 0) return;
@@ -2069,6 +2096,8 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
       ['Spans timed', turnover.spans.n],
       ['Average span', turnover.spans.avgMin != null ? fmtDuration(turnover.spans.avgMin) : '—'],
       ['Median span', turnover.spans.medianMin != null ? fmtDuration(turnover.spans.medianMin) : '—'],
+      ['House line (min)', turnover.line.turnAfterMin],
+      ['Spans past the line', turnover.line.past],
       [
         'Longest span',
         turnover.longest
@@ -4054,6 +4083,52 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
                     </p>
                   </div>
                 </div>
+                {turnover.spans.n > 0 && (
+                  <div
+                    className={`mb-4 rounded-xl px-3.5 py-3 ${turnover.line.past > 0 ? 'bg-[#FCEBEA]' : 'bg-[#EAF0EC]'}`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-[10.5px] font-semibold uppercase tracking-wide text-[#6B6B6B]">
+                        The house line · {turnover.line.turnAfterMin}m
+                      </p>
+                      <p
+                        className={`text-[11px] font-bold ${turnover.line.past > 0 ? 'text-[#B3261E]' : 'text-[#0F3D3E]'}`}
+                      >
+                        {turnover.line.past > 0
+                          ? `${turnover.line.past} of ${turnover.spans.n} ran past it`
+                          : 'every timed seat beat it'}
+                      </p>
+                    </div>
+                    <div
+                      className={`mt-2 h-1.5 overflow-hidden rounded-full ${turnover.line.past > 0 ? 'bg-[#F5D5D1]' : 'bg-[#DDE5DE]'}`}
+                      role="meter"
+                      aria-valuenow={Math.round((turnover.line.share ?? 0) * 100)}
+                      aria-valuemin={0}
+                      aria-valuemax={100}
+                      aria-label={`Share of timed seats that ran past the ${turnover.line.turnAfterMin}-minute house line`}
+                      title={
+                        turnover.line.past > 0
+                          ? `${turnover.line.past} of ${turnover.spans.n} timed seats stayed past the ${turnover.line.turnAfterMin}-minute line`
+                          : `every timed seat finished inside the ${turnover.line.turnAfterMin}-minute line`
+                      }
+                    >
+                      <div
+                        className="h-full rounded-full"
+                        style={{
+                          width: `${Math.round((turnover.line.share ?? 0) * 100)}%`,
+                          background: turnover.line.past > 0 ? '#B3261E' : '#0F3D3E',
+                        }}
+                      />
+                    </div>
+                    <p className="mt-1.5 text-[11px] leading-relaxed text-[#969696]">
+                      A seat reads past the line at {turnover.line.turnAfterMin}m — the same
+                      boundary the floor's camping pill uses. Set it in Settings → Floor &amp;
+                      service.
+                      {turnover.spans.n < 5 &&
+                        ' Small sample — the line needs more timed seats before it says anything loud.'}
+                    </p>
+                  </div>
+                )}
                 <ul className="space-y-2.5">
                   {turnover.perTable.slice(0, 6).map((t) => {
                     const maxTurns = turnover.perTable[0]?.turns || 1;

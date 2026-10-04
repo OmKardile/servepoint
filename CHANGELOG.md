@@ -3,6 +3,16 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.164.0] — 2026-10-04 — The house line, audited: the turn line the floor camps by now meets the spans ledger in Reports — a meter reads how many timed seats ran past it, at the camping pill's own boundary, through the prefs layer's own validator
+
+### Added — the line audit (`src/components/reports/ReportsScreen.tsx`)
+
+The seam's third question. 5.160.0 let the house set its turn line; 5.158.0 made live seats answer to it; 5.161.0 put the finished spans on the reports page — but nothing asked whether the finished seats respected the line. `tableTurnover` now takes the turn line as a third argument, reads through the prefs layer's own validator (`clampTurnAfterMin` — one house, one validator, never a private reports number), and returns `line: { turnAfterMin, past, share }`: a span is PAST the line at `>= turnAfterMin` minutes — the exact boundary the floor's camping pill uses, never a private definition of "too long". The card renders the audit as a kitchen-SLA-meter sibling between the tiles and the per-table rows: "THE HOUSE LINE · 90m" with the count ("0 of 1 ran past it" / "every timed seat beat it"), a `role="meter"` share bar (calm teal track when the line held, red-tinted when it didn't), and the doctrine line with a pointer to Settings → Floor & service. Small-sample honesty inherited from the kitchen clock: under five timed seats, the meter whispers before it speaks. The turnover CSV carries the line and the past-count as data rows. Live seats donate a turn and never a breach — only finished seats can be audited.
+
+### Verified
+
+`tsc` EXIT=0; `node --check` OK (`servepoint-v5.164.0-r1`); build EXIT=0; unit suite `scripts/unit203.mjs` 9/9 (doctrine default, >= boundary equals the camping pill, Settings line obeyed, unreadable→90, extreme→240 clamp, live-seat silence, empty-room shape, honest mixed share, same-walk coexistence) plus regression suites unit197/198/199/200/201/202 ALL PASS (unit200's living empty-shape assert grew the line field); live E2E — the audit renders on real data with the small-sample whisper; console buffer delta stable on fresh loads, zero live.
+
 ## [5.163.0] — 2026-10-04 — When the room lets go: the Table turnover card grows a day shape — 24 hour-of-day buckets of finished spans on the app clock, a gold peak, and the CSV carrying the median plus the full hour ledger
 
 ### Added — the day shape (`src/components/reports/ReportsScreen.tsx`)

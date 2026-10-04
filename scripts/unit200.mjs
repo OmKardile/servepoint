@@ -129,7 +129,8 @@ assert.deepEqual(empty, {
   longest: null,
   hours: Array.from({ length: 24 }, (_, hour) => ({ hour, timed: 0, avgMin: null })),
   peakHour: null,
+  line: { turnAfterMin: 90, past: 0, share: null },
 });
-ok('empty range: a silent room, honestly shaped (incl. the 5.163.0 day shape)');
+ok('empty range: a silent room, honestly shaped (incl. the 5.163.0 day shape + 5.164.0 line audit)');
 
 console.log(`\n${n} asserts PASS`);
