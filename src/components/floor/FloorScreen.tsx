@@ -76,6 +76,7 @@ import {
   appFormatters,
   appTzTag,
   appWallToInstant,
+  formatWindowLeft,
 } from '../../lib/appday';
 import {
   bookingSlotLabel,
@@ -586,10 +587,10 @@ function TimeAgo({ iso }: { iso: string }): React.ReactElement {
 
 type SessionState = 'live' | 'expired' | 'consumed' | 'revoked';
 
-function sessionState(s: TableSession): SessionState {
+function sessionState(s: TableSession, nowMs: number = Date.now()): SessionState {
   if (s.status === 'consumed') return 'consumed';
   if (s.status === 'revoked') return 'revoked';
-  return new Date(s.expires_at).getTime() > Date.now() ? 'live' : 'expired';
+  return new Date(s.expires_at).getTime() > nowMs ? 'live' : 'expired';
 }
 
 const SESSION_TONE: Record<SessionState, { dot: string; fg: string; label: string }> = {
@@ -603,8 +604,8 @@ const SESSION_TONE: Record<SessionState, { dot: string; fg: string; label: strin
  *  Same clock-derived rule as sessionState; the free button names how many
  *  windows end with the seating, so the owner confirms with both effects in
  *  view, never a surprise cut. */
-function liveWindowsOf(rows: TableSession[], tableId: string): TableSession[] {
-  return rows.filter((s) => s.table_id === tableId && sessionState(s) === 'live');
+function liveWindowsOf(rows: TableSession[], tableId: string, nowMs: number = Date.now()): TableSession[] {
+  return rows.filter((s) => s.table_id === tableId && sessionState(s, nowMs) === 'live');
 }
 
 /** "20:49" IST wall clock for a session window row. */
@@ -984,6 +985,7 @@ function TableDrill({
   onSeat,
   onNoShow,
   sessions,
+  now,
   candidates,
   cutArmId,
   cutBusyId,
@@ -1028,6 +1030,10 @@ function TableDrill({
    *  counts these at day close). */
   onNoShow: (r: Reservation) => void;
   sessions: TableSession[];
+  /** 5.218.0 — the parent's heartbeat instant. The trail's countdown, its
+   *  live/expired verdicts and the cut-all count all read THIS number, so a
+   *  row's display and its verdict can never disagree inside one render. */
+  now: number;
   candidates: DiningTable[];
   cutArmId: string | null;
   cutBusyId: string | null;
@@ -1068,10 +1074,12 @@ function TableDrill({
   const canRemove = table.status === 'available' && !table.active_order_id;
 
   /* Live windows on THIS table (clock-derived, same rule as the rows). Two or
-     more earns the bulk cut — with one, the row's own cut is the honest tool. */
+     more earns the bulk cut — with one, the row's own cut is the honest tool.
+     5.218.0 — re-anchored on the parent's tick, so the armed count names the
+     windows that are actually open, not the ones that were open at refresh. */
   const liveIds = useMemo(
-    () => sessions.filter((s) => sessionState(s) === 'live').map((s) => s.id),
-    [sessions],
+    () => sessions.filter((s) => sessionState(s, now) === 'live').map((s) => s.id),
+    [sessions, now],
   );
   useEffect(() => {
     if (!bulkArm) return;
@@ -1538,10 +1546,18 @@ function TableDrill({
               <>
                 <ul className="mt-2 space-y-1.5">
                   {sessions.slice(0, 6).map((s) => {
-                    const st = sessionState(s);
+                    const st = sessionState(s, now);
                     const tone = SESSION_TONE[st];
                     const armed = cutArmId === s.id;
                     const cutting = cutBusyId === s.id;
+                    /* 5.218.0 — verdict and countdown read the SAME instant:
+                       the row flips to expired on the very tick its window
+                       dies, never a frame of "0:00 · menu open". Under three
+                       minutes the countdown speaks the ribbon's warm amber —
+                       the owner sees the window dying before the guest's
+                       menu locks. */
+                    const msLeft = st === 'live' ? new Date(s.expires_at).getTime() - now : 0;
+                    const warm = st === 'live' && msLeft < 180_000;
                     return (
                       <li
                         key={s.id}
@@ -1559,8 +1575,20 @@ function TableDrill({
                         <span className="min-w-0 flex-1 truncate font-mono text-[11px] tabular-nums text-[#6B6B6B]">
                           {istHM(s.created_at)} → {istHM(s.expires_at)}
                         </span>
-                        <span className="shrink-0 text-[10.5px] tabular-nums text-[#969696]">
-                          {st === 'live' || st === 'expired' ? expiryRel(s.expires_at) : tone.label}
+                        <span
+                          className={`shrink-0 text-[10.5px] tabular-nums ${
+                            st === 'live'
+                              ? warm
+                                ? 'font-semibold text-[#8A5A16]'
+                                : 'font-medium text-[#0F3D3E]'
+                              : 'text-[#969696]'
+                          }`}
+                        >
+                          {st === 'live'
+                            ? `ends in ${formatWindowLeft(msLeft)}`
+                            : st === 'expired'
+                              ? expiryRel(s.expires_at)
+                              : tone.label}
                         </span>
                         {st === 'live' && (
                           <button
@@ -1750,6 +1778,23 @@ export function FloorScreen(): React.ReactElement {
      the census is a glance, never a load-bearing read. */
   const [settleByOrder, setSettleByOrder] = useState<Map<string, string> | null>(null);
   const [sessions, setSessions] = useState<TableSession[]>([]);
+  /* 5.218.0 — the drill's own heartbeat. The trail, the cut-all count and the
+     cards' "N open" pill all read the clock, but nothing re-rendered them —
+     a live row said "4m left" frozen at render time and kept saying "menu
+     open" after the window died. One captured `now` per tick re-anchors every
+     consumer on the SAME instant: display and verdict are one arithmetic.
+     expires_at is the server's word written at creation (002's fixed window),
+     so the tick interpolates between the drill's refreshes — the guest
+     ribbon's discipline, scoped to the floor's own clock rule. Cadence 1s
+     while any window is live; when the last one dies the very next tick
+     flips the gate and the heartbeat re-arms at 30s (the ago-forms stay
+     honest without a per-second battery cost on a quiet board). */
+  const [nowTick, setNowTick] = useState(() => Date.now());
+  const hasLiveWindow = sessions.some((s) => sessionState(s, nowTick) === 'live');
+  useEffect(() => {
+    const t = window.setInterval(() => setNowTick(Date.now()), hasLiveWindow ? 1000 : 30000);
+    return () => window.clearInterval(t);
+  }, [hasLiveWindow]);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [rtState, setRtState] = useState<RealtimeState>('connecting');
@@ -3038,8 +3083,9 @@ export function FloorScreen(): React.ReactElement {
               const armed = confirmId === t.id;
               /* 5.217.0 — live windows on THIS table: the free confirm names
                  how many QR windows end with the seating, so the cut is
-                 never a surprise. */
-              const liveNow = liveWindowsOf(sessions, t.id).length;
+                 never a surprise. 5.218.0 — re-anchored on the drill's own
+                 tick, so a pill can never outlive its window. */
+              const liveNow = liveWindowsOf(sessions, t.id, nowTick).length;
               const isLive = t.status === 'occupied' || t.status === 'billing';
               const hold = holdVerdictFor(t, orderByTable, holdAudit, holdFailed);
               const staleHold = hold && hold !== 'live' ? hold : null;
@@ -3493,6 +3539,7 @@ export function FloorScreen(): React.ReactElement {
           onSeat={(r) => void runAction(`res-${r.id}`, () => seatThePromise(r))}
           onNoShow={(r) => void runAction(`res-${r.id}`, () => updateReservationStatus(r.id, 'no_show'))}
           sessions={sessionsByTable.get(drillTable.id) ?? []}
+          now={nowTick}
           candidates={drillCandidates}
           cutArmId={cutArmId}
           cutBusyId={cutBusyId}

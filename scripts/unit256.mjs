@@ -63,7 +63,7 @@ ok('the session read is fresh, fail-soft to the cached rows');
 const lwIdx = floor.indexOf('function liveWindowsOf');
 const lwBody = floor.slice(lwIdx, floor.indexOf('function istHM('));
 assert.ok(lwBody.length > 100, 'liveWindowsOf slice resolved');
-assert.ok(lwBody.includes("s.table_id === tableId && sessionState(s) === 'live'"),
+assert.ok(lwBody.includes("s.table_id === tableId && sessionState(s, nowMs) === 'live'"),
   'liveWindowsOf filters on table_id + the clock-derived sessionState');
 ok('liveWindowsOf rides the drill sessionState — no second liveness rule');
 

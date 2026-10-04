@@ -3,6 +3,24 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.218.0] — 2026-10-05 — The drill's clock runs: the Floor's session trail was a frozen clock — a live window said "4m left" at render time and the row kept saying "menu open" after the window died, because nothing re-rendered it; the same frozen instant fed the cut-all count and the cards' "N open" pill. One heartbeat now owns the drill
+
+### Changed — one captured `now`, every consumer (`src/components/floor/FloorScreen.tsx`)
+
+A heartbeat born at the drill's owner: one interval whose cadence flips on `hasLiveWindow` — **1s while any window is live, 30s when the board is quiet** (the ago-forms stay honest without a per-second battery cost), cleaned up and re-armed on the flip. `hasLiveWindow` is deliberately NOT memoized — it is recomputed on every render, so the very tick that kills the last live window also flips the cadence. `sessionState` and `liveWindowsOf` grew an optional `nowMs` (default `Date.now()` keeps every existing call site valid); the trail rows, the `liveIds` cut-all count and the cards' "N open" pill all read the SAME captured instant — display and verdict are one arithmetic, the guest ribbon's 5.216.0 discipline scoped to the floor's own documented clock rule. `expires_at` is the server's word written at creation (002's fixed 10-minute window), so the tick interpolates between the drill's refreshes — never a frame of "0:00 · menu open".
+
+### Changed — the trail speaks the countdown, in the ribbon's own grammar
+
+A live row now says "**ends in 9:33**" at second granularity (`tabular-nums`, deep ink at ease `#0F3D3E` font-medium) and flips to expired on the very tick its window dies. Under three minutes it speaks the guest ribbon's warm amber (`#8A5A16`, semibold) — the owner sees the window dying before the guest's menu locks. Expired rows keep their ago-form; consumed/revoked keep their labels. The m:ss voice itself moved to `lib/appday`'s new `formatWindowLeft` (clamped at 0:00 — a dead window never reads as time owed; seconds padded, minutes unpadded, no hour rollover) and the guest ribbon now speaks THROUGH it — one window grammar, two rooms, never two dialects.
+
+### Tests
+
+`scripts/unit257.mjs` born — 19 checks: `formatWindowLeft` behavior (the ribbon's own E2E number 597000 → "9:57", the pad, the clamp on zero/negatives, no hour rollover on a 10-minute window); the optional `nowMs` on both clock helpers; exactly ONE dynamic-cadence interval with cleanup + re-arm on `[hasLiveWindow]`; `hasLiveWindow` not memoized (the flip must happen on the killing tick); the pill and the cut-all count threading the tick; the drill's `now` prop typed and threaded; the trail's verdict and countdown on the same instant; the warm amber and deep-ink bytes; the countdown gated on the verdict; the guest ribbon importing the shared formatter with the inline mm/ss retired. unit256's `liveWindowsOf` pin evolved to the new byte (`sessionState(s, nowMs)`) — the liveness rule itself unchanged, no second liveness rule. Regression battery unit194–257 ALL PASS by exit code (63 suites); tsc EXIT=0 ×2; build EXIT=0 (43 assets, VERSION → servepoint-v5.218.0-r1).
+
+### E2E (dev, live, read-only — no cut confirmed)
+
+A fresh guest scan opened a live window, then the Floor read it: T1's card showed "**1 open**"; the drill's live row spoke "**ends in 9:33**" and four seconds later "**ends in 9:29**" — the clock runs. The guest ribbon re-verified through the shared formatter ("ends in 9:12" on a rescan). Console zero errors. Screenshot: `download/qa257-floor-drill-clock-runs.png`.
+
 ## [5.217.0] — 2026-10-05 — Freeing the table ends its windows: the Floor's "Free table" only flipped the table's row while the guests' live QR sessions sailed on — the order RPC gates on the TENANT's status and the session's life, never the table's own status, so a freed table could keep taking a stale window's orders and migration 011's hold trigger would re-hold the freed table from the ghost order
 
 ### Changed — the free action composes the cut (`src/components/floor/FloorScreen.tsx`)

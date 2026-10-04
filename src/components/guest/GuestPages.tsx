@@ -73,6 +73,7 @@ import { offerDiscount } from '../../store/cart';
    dialects). The bar's own total already includes the discount when one
    is applied — '₹40.00 off applied' explains why the number moved. */
 import { offerFit, offerFitVoice } from '../../lib/offerFit';
+import { formatWindowLeft } from '../../lib/appday';
 
 /**
  * Guest QR surfaces (v5.3.0) — the customer side of the main flow.
@@ -315,23 +316,23 @@ function SessionRibbon({
     return () => window.clearInterval(t2);
   }, [session.expires_at, serverRemaining]);
   const totalSec = Math.max(0, Math.floor(msLeft / 1000));
-  const mm = String(Math.floor(totalSec / 60));
-  const ss = String(totalSec % 60).padStart(2, '0');
   const ended = totalSec === 0;
   const warm = totalSec < 180 && !ended;
+  /* 5.218.0 — the m:ss voice moved to lib/appday's formatWindowLeft: the
+     owner's Floor drill now speaks the SAME grammar (one window arithmetic,
+     never two — the cross-screen rule). */
+  const left = formatWindowLeft(msLeft);
   return (
     <div
       className="flex flex-wrap items-center justify-center gap-2 px-4 py-2 text-center text-[12.5px] font-semibold"
       style={{ background: ended ? '#F1F4F1' : warm ? '#FBF3E4' : brand.teal, color: ended ? '#6B6B6B' : warm ? '#8A5A16' : '#FFFFFF' }}
       role="status"
-      aria-label={t('ariaEnds', { t: `${mm}:${ss}` })}
+      aria-label={t('ariaEnds', { t: left })}
     >
       <Clock size={14} aria-hidden />
       <span>{ended ? t('windowEnded') : warm ? t('endingSoon') : t('orderingWindow')}</span>
       {!ended && (
-        <span className="font-mono tabular-nums">
-          {mm}:{ss}
-        </span>
+        <span className="font-mono tabular-nums">{left}</span>
       )}
       <span className="text-[11.5px] font-medium opacity-90">{ended ? t('windowEndedHint') : t('rescanHint')}</span>
     </div>

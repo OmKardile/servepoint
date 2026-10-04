@@ -195,6 +195,17 @@ export function appTzTag(tz: string = appTimezone()): string {
   }
 }
 
+/** The ONE window countdown grammar (5.218.0) — guest ribbon and the owner's
+ *  Floor drill speak the same voice: "9:57", minutes unpadded, seconds padded,
+ *  floored at 0:00. `msLeft` may be negative (a drifted clock, a stale tick) —
+ *  the clamp is the honesty: a dead window never reads as time owed. */
+export function formatWindowLeft(msLeft: number): string {
+  const totalSec = Math.max(0, Math.floor(msLeft / 1000));
+  const mm = String(Math.floor(totalSec / 60));
+  const ss = String(totalSec % 60).padStart(2, '0');
+  return `${mm}:${ss}`;
+}
+
 /** UTC ms of a wall-clock time ("HH:MM") on `dateIso` in `tz` — the instant
  *  the OWNER'S clock means (5.98.0: bookings speak the reporting clock too).
  *  DST-safe: with a constant offset the noon-anchored midnight plus the
