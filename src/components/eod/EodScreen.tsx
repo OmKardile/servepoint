@@ -241,6 +241,14 @@ const PayChip: React.FC<{ order: DayOrder; paidIn?: number }> = ({ order, paidIn
 
 /* ───────────────────────────── z-report print ──────────────────────────── */
 
+/** v5.180.0 — the Z's drawer block: ONE builder feeds print + chat twin. */
+export interface ZDrawerBlock {
+  title: string;
+  rows: [string, string][];
+  strongLast?: boolean;
+  strongRows?: number[];
+}
+
 interface ZReportOpts {
   storeName: string;
   dateIso: string;
@@ -257,7 +265,7 @@ interface ZReportOpts {
   sections?: { name: string; amount: number; units: number; pct: number }[] | null;
   cancelled: number;
   printedBy: string;
-  drawer?: { title: string; rows: [string, string][]; strongLast?: boolean } | null;
+  drawer?: ZDrawerBlock | null;
   /** v5.79.0 — the close sees the bin: the day's waste in the Z's own
    *  language. Undefined = the read never happened (the block stays off;
    *  the Z never claims an honest zero it didn't verify). */
@@ -265,6 +273,99 @@ interface ZReportOpts {
   /** v5.83.0 — the close sees the floor: the day's rounds, computed from
    *  the SAME day orders the Z already counts (no extra read to trust). */
   floor?: { rounds: number; rupees: number; busiest: string | null; noShows: number | null } | null;
+}
+
+/* v5.180.0 — the day's shifts: the Z's drawer block speaks EVERY shift the
+ *  day closed, not just the first the ledger hands back — the .find() era
+ *  named one shift and, when a shift was open NOW, the if/else dropped the
+ *  sealed one entirely. Two shifts in one day (morning barista, evening
+ *  closer) each carried cash the day's own closing document never named.
+ *  Sealed shifts read oldest→newest — the BUILDER owns the order (the GST
+ *  register's chronological convention; the ledger arrives newest-first)
+ *  and unreadable closes sink to the end; single-sealed and open-only
+ *  shapes stay byte-identical
+ *  with the .find() era (same title, rows, strongLast). DAY TOTAL rows
+ *  appear from two sealed shifts and sum counted/variance over SEALED
+ *  shifts only — the open shift's money is expected, not counted, and the
+ *  two truths never mix (the money doctrine's population rule on the
+ *  drawer's own paper). */
+export interface ZSealedShift {
+  closed_at: string | null;
+  closed_by_email: string | null;
+  opening_float: number;
+  expected_cash: number | null;
+  counted_cash: number | null;
+  variance: number | null;
+}
+
+export interface ZOpenShift {
+  opened_at: string;
+  opened_by_email: string | null;
+  opening_float: number;
+  cashIn: number;
+  moveSum: number;
+}
+
+export function buildZDrawerRows(
+  sealed: ZSealedShift[],
+  open: ZOpenShift | null,
+  fmt: (n: number) => string,
+  stamp: (iso: string) => string,
+): ZDrawerBlock | null {
+  if (sealed.length === 0 && !open) return null;
+  const signed = (n: number) => `${n < 0 ? '-' : n > 0 ? '+' : ''}${fmt(Math.abs(n))}`;
+  const who = (e: string | null) => e || 'counter';
+  const when = (iso: string | null) => (iso ? stamp(iso) : '—');
+  const loneSealed = sealed.length === 1 && !open;
+  const ordered = [...sealed].sort((a, b) => {
+    if (!a.closed_at) return 1; // unreadable closes sink to the end
+    if (!b.closed_at) return -1;
+    return a.closed_at < b.closed_at ? -1 : a.closed_at > b.closed_at ? 1 : 0;
+  });
+  const title = open
+    ? sealed.length === 0
+      ? 'CASH DRAWER · OPEN SHIFT'
+      : `CASH DRAWER · ${sealed.length} CLOSED + OPEN`
+    : sealed.length === 1
+      ? 'CASH DRAWER · LAST SHIFT'
+      : `CASH DRAWER · ${sealed.length} SHIFTS CLOSED`;
+
+  const rows: [string, string][] = [];
+  ordered.forEach((s, i) => {
+    // expected − float is the shift's NET (cash-in minus payouts/drops)
+    // since 021 — it was pure cash-in under 020; the label must say so
+    const net = Number(s.expected_cash || 0) - Number(s.opening_float);
+    rows.push([
+      loneSealed ? `Closed ${when(s.closed_at)}` : `Shift ${i + 1} · closed ${when(s.closed_at)}`,
+      who(s.closed_by_email),
+    ]);
+    rows.push(['Float', fmt(Number(s.opening_float))]);
+    rows.push(['Net cash (in − out)', signed(net)]);
+    rows.push(['Counted', fmt(Number(s.counted_cash || 0))]);
+    rows.push(['VARIANCE', signed(Number(s.variance || 0))]);
+  });
+
+  if (open) {
+    rows.push([
+      sealed.length === 0 ? `Opened ${when(open.opened_at)}` : `Open shift · opened ${when(open.opened_at)}`,
+      who(open.opened_by_email),
+    ]);
+    rows.push(['Float', fmt(Number(open.opening_float))]);
+    rows.push(['Cash in (ledger)', fmt(open.cashIn)]);
+    if (open.moveSum > 0) rows.push(['Payouts/drops', `-${fmt(open.moveSum)}`]);
+    rows.push(['IN DRAWER (expected)', fmt(Number(open.opening_float) + open.cashIn - open.moveSum)]);
+  }
+
+  if (sealed.length >= 2) {
+    const tc = sealed.reduce((a, s) => a + Number(s.counted_cash || 0), 0);
+    const tv = sealed.reduce((a, s) => a + Number(s.variance || 0), 0);
+    rows.push(['DAY TOTAL · COUNTED', fmt(tc)]);
+    rows.push(['DAY TOTAL · VARIANCE', signed(tv)]);
+  }
+
+  return sealed.length >= 2
+    ? { title, rows, strongRows: [rows.length - 2, rows.length - 1] }
+    : { title, rows, strongLast: true };
 }
 
 function printZReport(opts: ZReportOpts): void {
@@ -286,7 +387,12 @@ function printZReport(opts: ZReportOpts): void {
     <div style="font-weight:800;padding-bottom:3px;">${opts.drawer.title}</div>
     ${opts.drawer.rows
       .map(([l, r], i) =>
-        row(l, r, opts.drawer?.strongLast && i === opts.drawer!.rows.length - 1),
+        row(
+          l,
+          r,
+          opts.drawer?.strongRows?.includes(i) ||
+            (opts.drawer?.strongLast && i === opts.drawer!.rows.length - 1),
+        ),
       )
       .join('')}
   </div>`
@@ -437,7 +543,9 @@ export function buildZReportText(opts: ZReportOpts): string {
     out.push(hr);
     out.push(opts.drawer.title);
     opts.drawer.rows.forEach(([l, r], i) => {
-      const strong = opts.drawer?.strongLast && i === opts.drawer!.rows.length - 1;
+      const strong =
+        opts.drawer?.strongRows?.includes(i) ||
+        (opts.drawer?.strongLast && i === opts.drawer!.rows.length - 1);
       out.push(strong ? two(l.toUpperCase(), r) : two(l, r));
     });
   }
@@ -783,6 +891,14 @@ const DrawerCard: React.FC<{
   const moveSum = movements.reduce((s, m) => s + Number(m.amount || 0), 0);
   const expected = active ? Number(active.opening_float) + cashIn - moveSum : 0;
   const last = history[0];
+  /* v5.180.0 — the day's shifts on the SCREEN too: when two or more shifts
+   *  seal today, the chip names the count (the Z's drawer block names them
+   *  all now — screen and paper agree). One sealed shift: silent — the
+   *  chip would repeat what the card already says. */
+  const todayBounds = istDayBounds(istTodayIso());
+  const shiftsToday = history.filter(
+    (h) => h.closed_at && h.closed_at >= todayBounds.startIso && h.closed_at < todayBounds.endIso,
+  ).length;
 
   return (
     <section aria-label="Cash drawer" className="rounded-2xl border border-[#E3E7E0] bg-white p-4">
@@ -803,6 +919,14 @@ const DrawerCard: React.FC<{
             not open
           </span>
         )}
+        {shiftsToday >= 2 ? (
+          <span
+            className="inline-flex items-center rounded-full bg-[#FDF9F0] px-2.5 py-0.5 text-[10.5px] font-bold text-[#8A5A16]"
+            title={`Shifts sealed today — each carries its own float, count and variance; the day's z-report names them all`}
+          >
+            {shiftsToday} sealed today
+          </span>
+        ) : null}
         <div className="ml-auto flex items-center gap-2">
           {active ? (
             <>
@@ -1395,41 +1519,30 @@ const EodScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
     /* CASH DRAWER block — only when a shift actually touches this day.
        Open shift: float + ledger cash-in → expected (marked as such, never
        counted). Sealed shifts CLOSED today: stored counted/variance. */
-    let drawer: ZReportOpts['drawer'] = null;
-    if (drawerActive) {
-      drawer = {
-        title: 'CASH DRAWER · OPEN SHIFT',
-        rows: [
-          [`Opened ${dayTime(drawerActive.opened_at, appTimezone())} ${appTzTag()}`, drawerActive.opened_by_email || 'counter'],
-          ['Float', formatMoney(Number(drawerActive.opening_float))],
-          ['Cash in (ledger)', formatMoney(cashIn)],
-          ...(moveSum > 0 ? [['Payouts/drops', `-${formatMoney(moveSum)}`] as [string, string]] : []),
-          ['IN DRAWER (expected)', formatMoney(Number(drawerActive.opening_float) + cashIn - moveSum)],
-        ],
-        strongLast: true,
-      };
-    } else if (drawerHistory.length > 0) {
-      const daySess = drawerHistory.find(
-        (h) => h.closed_at && h.closed_at >= istDayBounds(dateIso).startIso && h.closed_at < istDayBounds(dateIso).endIso,
-      );
-      if (daySess) {
-        const v = Number(daySess.variance || 0);
-        // expected − float is the shift's NET (cash-in minus payouts/drops)
-        // since 021 — it was pure cash-in under 020; the label must say so
-        const net = Number(daySess.expected_cash || 0) - Number(daySess.opening_float);
-        drawer = {
-          title: 'CASH DRAWER · LAST SHIFT',
-          rows: [
-            [`Closed ${daySess.closed_at ? dayTime(daySess.closed_at, appTimezone()) : '—'}`, daySess.closed_by_email || 'counter'],
-            ['Float', formatMoney(Number(daySess.opening_float))],
-            ['Net cash (in − out)', `${net < 0 ? '-' : net > 0 ? '+' : ''}${formatMoney(Math.abs(net))}`],
-            ['Counted', formatMoney(Number(daySess.counted_cash || 0))],
-            ['VARIANCE', `${v > 0 ? '+' : v < 0 ? '-' : ''}${formatMoney(Math.abs(v))}`],
-          ],
-          strongLast: true,
-        };
-      }
-    }
+    /* v5.180.0 — the day's shifts: every shift the day CLOSED speaks, not
+       just the first the ledger hands back (the .find() era), and an open
+       shift no longer excludes the sealed ones (the if/else was exclusive).
+       Chronological, oldest first; the ONE builder feeds print + chat twin. */
+    const drawerBounds = istDayBounds(dateIso);
+    const dayShifts = drawerHistory.filter(
+      (h) => h.closed_at && h.closed_at >= drawerBounds.startIso && h.closed_at < drawerBounds.endIso,
+    );
+    // chronological order is the BUILDER's property (unit219) — hand the
+    // day's slice verbatim, ledger order untouched
+    const drawer = buildZDrawerRows(
+      dayShifts,
+      drawerActive
+        ? {
+            opened_at: drawerActive.opened_at,
+            opened_by_email: drawerActive.opened_by_email,
+            opening_float: Number(drawerActive.opening_float),
+            cashIn,
+            moveSum,
+          }
+        : null,
+      formatMoney,
+      (iso) => `${dayTime(iso, appTimezone())} ${appTzTag()}`,
+    );
     return {
       storeName: tenant?.name || 'ServePoint store',
       dateIso,
