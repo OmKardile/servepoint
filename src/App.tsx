@@ -27,6 +27,7 @@ import ShowcasePage from './components/pages/ShowcasePage';
 import IndexHelpPage from './components/pages/IndexHelpPage';
 import { GuestGatePage, GuestMenuPage, GuestTrackPage } from './components/guest/GuestPages';
 import { PwaLayer } from './components/shell/PwaLayer';
+import { ScreenBoundary } from './components/shell/ScreenBoundary';
 import brandLockup from './assets/brand/lockup-light.png';
 
 /* v5.93.0 — the sidebar's words are the URLs. Two rail names differ from
@@ -147,20 +148,25 @@ const CafeApp: React.FC = () => {
 
   return (
     <AppShell>
-      {section === 'dashboard' && <DashboardScreen />}
-      {section === 'food' && <FoodDrinksScreen />}
-      {section === 'kitchen' && <KitchenScreen />}
-      {section === 'bills' && <BillsScreen />}
-      {section === 'eod' && <EodScreen />}
-      {section === 'reports' && <ReportsScreen />}
-      {section === 'inventory' && <InventoryScreen />}
-      {section === 'customers' && <CustomersScreen />}
-      {section === 'floor' && <FloorScreen />}
-      {section === 'menu' && <MenuScreen />}
-      {section === 'notifications' && <NotificationsScreen />}
-      {section === 'messages' && <MessagesScreen />}
-      {section === 'support' && <SupportScreen />}
-      {section === 'settings' && <SettingsScreen />}
+      {/* v5.138.0 — a screen breaks, the house keeps serving: one boundary per
+          screen (key={section} gives each door a fresh one), so a render error
+          takes the content card, never the shell. See ScreenBoundary's header. */}
+      <ScreenBoundary key={section} section={section}>
+        {section === 'dashboard' && <DashboardScreen />}
+        {section === 'food' && <FoodDrinksScreen />}
+        {section === 'kitchen' && <KitchenScreen />}
+        {section === 'bills' && <BillsScreen />}
+        {section === 'eod' && <EodScreen />}
+        {section === 'reports' && <ReportsScreen />}
+        {section === 'inventory' && <InventoryScreen />}
+        {section === 'customers' && <CustomersScreen />}
+        {section === 'floor' && <FloorScreen />}
+        {section === 'menu' && <MenuScreen />}
+        {section === 'notifications' && <NotificationsScreen />}
+        {section === 'messages' && <MessagesScreen />}
+        {section === 'support' && <SupportScreen />}
+        {section === 'settings' && <SettingsScreen />}
+      </ScreenBoundary>
     </AppShell>
   );
 };

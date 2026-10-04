@@ -10,6 +10,14 @@ class ProductionErrorBoundary extends Component<{ children: ReactNode }, { error
   static getDerivedStateFromError(error: Error) {
     return { error };
   }
+  /* v5.138.0 — the root boundary leaves a trace: until now a caught error
+   * vanished with no stack anywhere (state was set, nothing was logged).
+   * Diagnostics are part of containment — the screen-level boundaries log
+   * their catches too, but an error that reaches THIS line is one the
+   * screen boundaries never saw (auth, shell, guest surfaces). */
+  componentDidCatch(error: Error, info: React.ErrorInfo) {
+    console.error('[ServePoint] uncaught render error (root boundary):', error, info.componentStack);
+  }
   render() {
     if (this.state.error) {
       return (

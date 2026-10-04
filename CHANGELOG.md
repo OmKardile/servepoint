@@ -3,6 +3,24 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.138.0] — 2026-10-04 — A screen breaks, the house keeps serving
+
+### Added — screen-level error containment (`src/components/shell/ScreenBoundary.tsx`)
+
+Until this release the tree carried exactly ONE error boundary — the root one in `main.tsx` — so a render error anywhere (one malformed row in Kitchen, a bad date in Reports) replaced the entire POS: sidebar, presence heartbeat, unread feeds, everything gone until a full page reload re-ran session restore. Mid-service, one screen's bug evicted staff from the building. Now each staff screen is wrapped INSIDE the shell (`key={section}` — every door gets a fresh boundary, a fallen screen's error state never follows you across a rail): when a screen throws, an honest card takes only the content area — the rail keeps its badges, the heartbeat keeps pinging, and every other screen stays one tap away. Three doors, no demo content: **Try again** (reset; the screen remounts fresh), **Back to Dashboard** (in-app nav via the same `goSection` the rail uses), **Reload the whole app** (the last resort, muted). The card wears the 5.136.0 header register (`sp-screen-title`) and names the fallen screen — "Dashboard hit a snag", not a generic apology.
+
+### Changed — both boundaries leave a trace
+
+`componentDidCatch` logging added to the new screen boundary (`[ServePoint] <section> screen crashed:` with the stack) AND to the root boundary, which until now swallowed errors with no console trace at all — state was set, nothing was recorded. Diagnostics are part of containment, not a luxury.
+
+### Scope (deliberate)
+
+Staff screens only. Platform is a developer/operator console where the root screen is tolerable; the guest QR surfaces are stateless deep links — a reload recovers them fully because the capability lives in the URL. The cafe app is where mid-service state (section, watermarks, scroll) dies with a root reload, so it is the surface that earns containment.
+
+### Verified
+
+tsc EXIT=0, build EXIT=0. **Live-fire containment drill** (controlled experiment, reverted — tree clean after): `throw` injected at the top of `DashboardScreen` → reload → boundary card renders (`role=alert`, "Dashboard hit a snag", drill message shown), sidebar alive; **Kitchen opened mid-failure via the rail and rendered clean** — the shell survived; back to Dashboard → fallback again (fresh boundary, honest); **Try again while still broken → rethrow → fallback** (no fake recovery); throw reverted → **Try again → Dashboard recovered without a page reload** (h1 "Dashboard" 20px/700, alert gone). Console shows `[ServePoint] dashboard screen crashed:` traces with stacks. READ-ONLY round — zero cloud writes (the drill touched one render path, no data).
+
 ## [5.137.0] — 2026-10-04 — The toggle stops promising a density that was never built
 
 ### Fixed — Settings' five-month dead control
