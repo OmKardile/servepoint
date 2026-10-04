@@ -19,13 +19,16 @@ import {
   ArrowRight,
   BadgePercent,
   CalendarRange,
+  Check,
   CheckCircle2,
   Clock,
   Coins,
+  Copy,
   Download,
   Flame,
   HandCoins,
   HeartHandshake,
+  MessageCircle,
   Minus,
   MousePointerClick,
   QrCode,
@@ -227,6 +230,102 @@ function aggregateTickets(rows: Order[], cogsMap: Map<string, number>): RangeAgg
   const margin = paidNet - cogs;
   const marginPct = paidNet > 0 ? (margin / paidNet) * 100 : 0;
   return { gross, gst, net, placed, cancelled, items, avgTicket, paidNet, cogs, margin, marginPct, paidCount };
+}
+
+/* ── v5.147.0 — the range report's chat voice ────────────────────────────
+ *  The bill got a chat twin (5.145.0), the Z-report got one (5.146.0); the
+ *  range report is the third sibling. `ReportOpts` is fed from the SAME
+ *  memoized aggregates the screen renders — the headline strip, the money
+ *  mix, the item ranking, the day/hour shapes — so paper (CSV), screen and
+ *  chat can never disagree about the range. The chat twin is the POCKET
+ *  summary by design: the CSVs stay the complete export (all 24 hour
+ *  buckets, every day, every item); chat carries the range's shape —
+ *  headline money, cost & margin on collected tickets, how money arrived,
+ *  what sold (top 3), best day, peak hour. The sender's name is
+ *  deliberately absent — a chat message shows its sender inherently. */
+export interface ReportOpts {
+  storeName: string;
+  rangeLabel: string;
+  windowLabel: string;
+  tz: string;
+  gross: number;
+  gst: number;
+  net: number;
+  orders: number;
+  items: number;
+  avgTicket: number;
+  cancelled: number;
+  paidNet: number;
+  paidCount: number;
+  cogs: number;
+  margin: number;
+  marginPct: number;
+  mix: { method: string; count: number; amount: number }[];
+  unpaidAmt: number;
+  unpaid: number;
+  splitTickets: number;
+  top: { name: string; units: number; revenue: number }[];
+  bestDay: { label: string; gross: number } | null;
+  peakHour: { label: string; gross: number } | null;
+}
+
+/** The range report rendered as the house's aligned 32-column text register
+ *  — same frame as the receipt (5.145.0) and the Z-report (5.146.0), one
+ *  house text-voice across every surface that can be shared. Exported pure
+ *  so browser E2E can assert the share text without touching the clipboard. */
+export function buildReportText(opts: ReportOpts): string {
+  const W = 32;
+  const two = (l: string, r: string): string => {
+    const cut = Math.max(1, W - r.length - 1);
+    const left = l.length > cut ? `${l.slice(0, cut - 1)}…` : l;
+    return left.padEnd(W - r.length, ' ') + r;
+  };
+  const hr = '-'.repeat(W);
+  const center = (s: string): string =>
+    s.length >= W ? s : ' '.repeat(Math.floor((W - s.length) / 2)) + s;
+
+  const out: string[] = [];
+  out.push(center(opts.storeName));
+  out.push(center(`REPORT · ${opts.rangeLabel.toUpperCase()}`));
+  out.push(center(`${opts.windowLabel} · ${opts.tz}`));
+  out.push(hr);
+  out.push(two('Gross sales', formatMoney(opts.gross)));
+  out.push(two('GST collected', formatMoney(opts.gst)));
+  out.push(two('Net (ex-GST)', formatMoney(opts.net)));
+  out.push(two('Orders', String(opts.orders)));
+  out.push(two('Items sold', String(opts.items)));
+  out.push(two('Avg ticket', formatMoney(opts.avgTicket)));
+  if (opts.cancelled > 0) out.push(two('Cancelled (excluded)', String(opts.cancelled)));
+  out.push(hr);
+  out.push('COST & MARGIN · PAID TKTS');
+  out.push(two(`Paid net (${opts.paidCount} tkt)`, formatMoney(opts.paidNet)));
+  out.push(two('Ingredient cost', formatMoney(opts.cogs)));
+  out.push(two('GROSS MARGIN', `${formatMoney(opts.margin)} (${Math.round(opts.marginPct)}%)`));
+  out.push(hr);
+  out.push('MONEY ARRIVED');
+  if (opts.mix.length > 0) {
+    for (const m of opts.mix)
+      out.push(two(`${m.method.toUpperCase()} · ${m.count}`, formatMoney(m.amount)));
+  } else {
+    out.push('- (no payments)');
+  }
+  if (opts.splitTickets > 0) out.push(two('Split tickets', `${opts.splitTickets} in parts`));
+  if (opts.unpaid > 0) out.push(two('UNPAID', `${formatMoney(opts.unpaidAmt)} (${opts.unpaid} tkt)`));
+  if (opts.top.length > 0) {
+    out.push(hr);
+    out.push('WHAT SOLD · TOP 3');
+    opts.top.forEach((t, i) => out.push(two(`${i + 1}. ${t.name} · ${t.units}u`, formatMoney(t.revenue))));
+  }
+  if (opts.bestDay || opts.peakHour) {
+    out.push(hr);
+    out.push('THE SHAPE');
+    if (opts.bestDay) out.push(two('Best day', `${opts.bestDay.label} · ${formatMoney(opts.bestDay.gross)}`));
+    if (opts.peakHour) out.push(two('Peak hour', `${opts.peakHour.label} · ${formatMoney(opts.peakHour.gross)}`));
+  }
+  out.push(hr);
+  out.push(center(`Shared ${appFormatters().hhmm.format(new Date())} ${appTzTag()}`));
+  out.push(center('· · · end of report · · ·'));
+  return out.join('\n');
 }
 
 /* ── Kitchen speed (5.67.0) — the clock reads the hop ledger ──────────────── */
@@ -497,7 +596,7 @@ export const ReportsScreen: React.FC = () => {
 };
 
 const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }) => {
-  const { tenantId, loading: tenantLoading, error: tenantError } = useTenant();
+  const { tenantId, loading: tenantLoading, error: tenantError, tenant } = useTenant();
   const goSection = useUi((s) => s.goSection);
   const [range, setRange] = useState<RangeKey>('7d');
   const [orders, setOrders] = useState<Order[]>([]);
@@ -1173,6 +1272,64 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
     useUi.getState().goSection('eod', ['Reports', 'Close-out'], `day:${key}`);
   }, []);
 
+  /* ── v5.147.0 — the range report's chat voice: Copy + WhatsApp. The opts
+     come from the SAME memos the screen renders (agg / payMix / topItems /
+     daily / hourly) — one assembly, so chat can never quote a number the
+     screen disagrees with. WhatsApp opens the PICKER, like the Z-report's
+     twin: a business summary goes where the OWNER sends it — their
+     bookkeeper, their partners' group — never a guessed recipient. */
+  const buildRepOpts = (): ReportOpts => {
+    const peak = hourly.reduce<{ label: string; gross: number } | null>(
+      (best, h) => (h.gross > 0 && (!best || h.gross > best.gross) ? { label: h.label, gross: h.gross } : best),
+      null,
+    );
+    const windowLabel =
+      daily.length === 0
+        ? RANGE_LABEL[range].toLowerCase()
+        : daily.length === 1
+          ? daily[0].label
+          : `${daily[0].label} – ${daily[daily.length - 1].label}`;
+    return {
+      storeName: tenant?.name || 'ServePoint store',
+      rangeLabel: RANGE_LABEL[range],
+      windowLabel,
+      tz: appTimezone(),
+      gross: agg.gross,
+      gst: agg.gst,
+      net: agg.net,
+      orders: agg.placed,
+      items: agg.items,
+      avgTicket: agg.avgTicket,
+      cancelled: agg.cancelled,
+      paidNet: agg.paidNet,
+      paidCount: agg.paidCount,
+      cogs: agg.cogs,
+      margin: agg.margin,
+      marginPct: agg.marginPct,
+      mix: payMix.paid.map((m) => ({ method: m.method, count: m.count, amount: m.total })),
+      unpaidAmt: payMix.unpaidAmt,
+      unpaid: payMix.unpaid,
+      splitTickets: payMix.splitTickets,
+      top: topItems
+        .filter((t) => t.revenue > 0)
+        .slice(0, 3)
+        .map((t) => ({ name: t.name, units: t.units, revenue: t.revenue })),
+      bestDay,
+      peakHour: peak,
+    };
+  };
+  const [repCopyState, setRepCopyState] = useState<'idle' | 'ok' | 'fail'>('idle');
+  const copyReport = async () => {
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error('clipboard unavailable');
+      await navigator.clipboard.writeText(buildReportText(buildRepOpts()));
+      setRepCopyState('ok');
+    } catch {
+      setRepCopyState('fail');
+    }
+    window.setTimeout(() => setRepCopyState('idle'), 1800);
+  };
+
   /* ── 5.50.0 — the other five sections speak CSV too. Reports had exits for
      daily sales, item ranking and guest ratings since 5.3.x; the hour shape,
      the money's arrival, the margin, the service mix and the drawer's honesty
@@ -1454,6 +1611,42 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
           {...deltaProps(agg.items, priorAgg?.items ?? 0, (n) => String(Math.round(n)))}
         />
       </div>
+
+      {/* ── v5.147.0 — the range's chat voice: the owner's pocket carries the
+          whole range now, not just a day. The lead-in chip names the range
+          on view (Reports lives under four live ranges — a day summary's
+          context is obvious, a range's must be said). Ghost-gold grammar,
+          the bill's and the Z's share-row voice. Renders only when the
+          range holds live tickets — an empty range has nothing to share. ── */}
+      {agg.placed > 0 && !loading && (
+        <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Share this report">
+          <span className="inline-flex h-[38px] items-center rounded-xl bg-[#FDF6E3] px-3 text-[10.5px] font-bold uppercase tracking-[0.08em] text-[#8A5A00]">
+            {RANGE_LABEL[range]}
+          </span>
+          <button
+            onClick={copyReport}
+            aria-label={`Copy the ${RANGE_LABEL[range]} report as text`}
+            className="flex min-h-[38px] items-center gap-1.5 rounded-xl border border-[#E3E7E0] bg-white px-3.5 text-[12px] font-semibold text-[#0F3D3E] transition hover:border-[#0F3D3E]/40 hover:bg-[#F6F5F2] active:scale-[0.99]"
+          >
+            {repCopyState === 'ok' ? (
+              <Check size={14} className="text-[#2E7D32]" aria-hidden />
+            ) : (
+              <Copy size={14} aria-hidden />
+            )}
+            {repCopyState === 'ok' ? 'Copied' : repCopyState === 'fail' ? 'Copy blocked' : 'Copy report'}
+          </button>
+          <a
+            href={`https://wa.me/?text=${encodeURIComponent(buildReportText(buildRepOpts()))}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label={`Share the ${RANGE_LABEL[range]} report on WhatsApp`}
+            className="flex min-h-[38px] items-center gap-1.5 rounded-xl border border-[#E3E7E0] bg-white px-3.5 text-[12px] font-semibold text-[#0F3D3E] transition hover:border-[#0F3D3E]/40 hover:bg-[#F6F5F2] active:scale-[0.99]"
+          >
+            <MessageCircle size={14} aria-hidden />
+            WhatsApp
+          </a>
+        </div>
+      )}
 
       {range === 'all' && !loading && (
         <p className="px-1 text-[10.5px] text-[#969696]">

@@ -3,6 +3,17 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.147.0] — 2026-10-04 — The whole range rides in the owner's pocket
+
+### Added — Copy + WhatsApp share on Reports (`src/components/reports/ReportsScreen.tsx`)
+
+The share pattern's third sibling, filed the moment 5.146.0 shipped: the bill (5.145.0) and the day (5.146.0) both speak in chat; now the RANGE does. A new pure builder `buildReportText(opts)` renders the SAME memoized aggregates the screen renders — `agg` (headline money, cost & margin on collected tickets), `payMix` (how money arrived, splits, what's still out), `topItems` (WHAT SOLD · TOP 3 with units), `daily`/`hourly` (best day, peak hour) — into the house's 32-column text register, one text-voice across every shareable surface. Deliberately the POCKET summary: the CSVs stay the complete export (all 24 hour buckets, every day, every item); chat carries the range's shape. The share row sits under the headline strip — a cream lead-in chip names the range on view (a day summary's context is obvious; a range's must be said), then Copy report (inline honest feedback, the 1.8 s breath) and WhatsApp, which opens the PICKER like the Z's twin: a business summary goes where the OWNER sends it, never a guessed recipient. Renders only when the range holds live tickets — an empty range has nothing to share. The sender's name is deliberately absent from the text — a chat message shows its sender inherently.
+
+### Verified
+
+tsc EXIT=0; build EXIT=0 (/tmp/build186a.log); sw VERSION 5.147.0-r1. Live E2E (dev, Last 7 days — the loaded demo range): share text decoded from the real wa.me href cross-checked against the rendered KPI strip to the rupee (Gross ₹9,267.30 · GST ₹441.30 · Net ₹8,826.00 · Orders 29 · Avg ₹319.56 · UPI/Cash arrivals · best day 2 Oct); range switch to Today (order-less) hides the row honestly; Copy exercised to its fail path in the headless harness with the 1.8 s reset verified; zero console errors. READ-ONLY round (zero cloud writes). Screenshot .qa-screens/qa186-reports-share.png.
+
+
 ## [5.146.0] — 2026-10-04 — The day summary rides in the owner's pocket
 
 ### Added — Copy + WhatsApp share on the Close-out Z-report (`src/components/eod/EodScreen.tsx`)
