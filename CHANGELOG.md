@@ -3,6 +3,16 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.158.0] — 2026-10-04 — The camping clock: the floor's seats answer "how long have they been sitting?"
+
+### Added — the seat-time voice on every occupied table (`src/components/floor/FloorScreen.tsx`)
+
+The floor's most-asked walking question finally has a voice. `seatClockFor(placedAt, nowMs)` (exported pure, unit-asserted) reads the live round's own placed-at ledger and speaks the floor's TimeAgo register — "just sat" · "45m" · "1h 29m" · "5h 0m" — with `CAMPING_AFTER_MIN = 90` as the house turn line. Past the line, three voices light up in the promise-due amber family (never the broken-ledger red): the tile grows a `sat 1h 42m — camping` strip with the full story in its tooltip (placed-at stamp + the turn line named), the table drill's meta row swaps its tiny grey clock for the amber pill, and the header gains `· longest seat 5h 0m` — the floor's one-line answer to "is anyone camping?". The clock is provable-only: a seat speaks when its round is actually in hand (the board window, the hold audit's targeted read, or the drill's fetch); a manual seat stays honest-silent, a disproved hold's alarm owns the story instead, and a FAILED read never invents a number — the hold-audit discipline, now applied to time.
+
+### Verified
+
+`tsc` EXIT=0 · `vite build` EXIT=0 · node --check sw.js OK · unit suite (vite-node) 14/14 PASS — the 90-minute boundary sits ON the line (89 quiet, 90 camping), the label register pinned to TimeAgo's un-padded family, clock skew clamps to "just sat", unreadable/empty input returns null (silence, not invention) · E2E on the live floor: header chip `· longest seat 37h 51m`, T2's tile pill `sat 37h 51m — camping` with role="status" aria naming the check-on-them action, T2's drill pill `sat 37h 51m`, and T1 — whose active ticket the targeted read cannot prove — stays honestly silent (no invented clock, no false alarm) · console delta referee 21 → 21 → 21 across two fresh loads, zero live.
+
 ## [5.157.0] — 2026-10-04 — The drawer speaks in chat, and the arc's parked list closes
 
 ### Added — the drawer-honesty card gets a pocket voice (`src/components/reports/ReportsScreen.tsx`)

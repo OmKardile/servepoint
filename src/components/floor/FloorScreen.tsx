@@ -341,6 +341,38 @@ const HOLD_ALARM: Record<Exclude<HoldVerdict, 'live'>, { card: string; aria: (t:
   },
 };
 
+/* ── The camping clock (v5.158.0) — how long has this table been sitting? ─
+   The floor's most-asked walking question. The clock is the live round's
+   own placed-at ledger — provable only when that ticket is in hand (the
+   board window, the hold audit's targeted read, or the drill's fetch);
+   a seat with no ticket in hand stays silent, never inventing a number,
+   and a disproved hold's alarm owns the story instead. Past the house
+   turn line the card speaks up in amber: camping. */
+export const CAMPING_AFTER_MIN = 90;
+
+export interface SeatClock {
+  minutes: number;
+  label: string;
+  camping: boolean;
+}
+
+/** The seat clock from a round's placed-at instant, in the floor's own
+ *  TimeAgo register ("45m" · "1h 5m" · "just sat"). Null when the ledger
+ *  input is unreadable — silence, not invention. */
+export function seatClockFor(placedAt: string, nowMs: number): SeatClock | null {
+  const t = new Date(placedAt).getTime();
+  if (!Number.isFinite(t)) return null;
+  const minutes = Math.max(0, Math.floor((nowMs - t) / 60000));
+  const h = Math.floor(minutes / 60);
+  const label =
+    minutes < 1
+      ? 'just sat'
+      : h > 0
+        ? `${h}h ${minutes % 60}m`
+        : `${minutes}m`;
+  return { minutes, label, camping: minutes >= CAMPING_AFTER_MIN };
+}
+
 /* ── The book (v5.38.0) — reservation status tones + booking-clock slot labels.
    5.105.0 — the promise's voice moves to the DB's clock (bookingday.ts): the
    reminder bell's body is composed in Asia/Kolkata by migrations 030/032, so
@@ -925,6 +957,13 @@ function TableDrill({
   /* v5.110.0 — the table drawer holds the door (replaces the hand-rolled Escape listener). */
   const dlgRef = useDialogA11y<HTMLDivElement>(onClose, true);
   const isLive = table.status === 'occupied' || table.status === 'billing';
+  /* v5.158.0 — the drill's seat clock: the targeted read proves the round,
+     and the hold verdict gates the voice (a stale hold's alarm owns the
+     story; a manual seat with no ticket stays honest-silent). */
+  const seatD =
+    isLive && order && (!hold || hold === 'live')
+      ? seatClockFor(order.created_at, Date.now())
+      : null;
   /* A table that still holds an order (or a reservation) can't be retired —
      the guard is honest: the hint names what to do first. */
   const canRemove = table.status === 'available' && !table.active_order_id;
@@ -1027,9 +1066,18 @@ function TableDrill({
                 <Users size={11} aria-hidden /> {table.capacity} seats
               </span>
               {table.section && <span>{table.section}</span>}
-              {isLive && order && (
-                <span className="flex items-center gap-1 tabular-nums">
+              {isLive && order && seatD && !seatD.camping && (
+                <span className="flex items-center gap-1 tabular-nums" title="The round's placed-at clock">
                   <Clock size={11} aria-hidden /> <TimeAgo iso={order.created_at} />
+                </span>
+              )}
+              {isLive && order && seatD?.camping && (
+                <span
+                  className="flex items-center gap-1 rounded-full px-2 py-0.5 text-[10.5px] font-bold tabular-nums"
+                  style={{ background: '#FDF3E4', color: '#8A5A16' }}
+                  title={`The round was placed ${appFormatters().dt.format(new Date(order.created_at))} — ${seatD.label} ago, past the ${CAMPING_AFTER_MIN}-minute house turn line.`}
+                >
+                  <Clock size={11} aria-hidden /> sat {seatD.label}
                 </span>
               )}
             </p>
@@ -1873,6 +1921,25 @@ export function FloorScreen(): React.ReactElement {
     [tables, orderByTable, holdAudit, holdFailed],
   );
 
+  /* v5.158.0 — the header's camping voice: the longest PROVABLE seat on
+     the floor. Only rounds actually in hand speak (window or audit);
+     stale holds already own their alarm and stay out of this count.
+     promiseTick rides the deps so the label ages honestly. */
+  const longestSeat = useMemo(() => {
+    let longest: SeatClock | null = null;
+    for (const t of tables || []) {
+      if (t.status !== 'occupied' && t.status !== 'billing') continue;
+      if (!t.active_order_id) continue;
+      const v = holdVerdictFor(t, orderByTable, holdAudit, holdFailed);
+      if (v !== 'live') continue;
+      const o = orderByTable.get(t.active_order_id) ?? holdAudit.get(t.active_order_id);
+      if (!o) continue;
+      const c = seatClockFor(o.created_at, Date.now());
+      if (c && c.camping && (!longest || c.minutes > longest.minutes)) longest = c;
+    }
+    return longest;
+  }, [tables, orderByTable, holdAudit, holdFailed, promiseTick]);
+
   const stats = useMemo(() => {
     const list = tables || [];
     const seats = list.reduce((s, t) => s + t.capacity, 0);
@@ -2147,6 +2214,14 @@ export function FloorScreen(): React.ReactElement {
                 title="A hold whose ticket is gone or already paid — free the table."
               >
                 · {staleHoldCount} stale hold{staleHoldCount === 1 ? '' : 's'}
+              </span>
+            )}{' '}
+            {longestSeat && (
+              <span
+                className="mx-1 rounded-full bg-[#FDF3E4] px-2 py-0.5 font-bold text-[#8A5A16]"
+                title={`The longest provable seat on the floor — from the live round's own placed-at clock, past the ${CAMPING_AFTER_MIN}-minute house turn line.`}
+              >
+                · longest seat {longestSeat.label}
               </span>
             )}{' '}
             · tables hold themselves when orders land
@@ -2658,6 +2733,14 @@ export function FloorScreen(): React.ReactElement {
               const isLive = t.status === 'occupied' || t.status === 'billing';
               const hold = holdVerdictFor(t, orderByTable, holdAudit, holdFailed);
               const staleHold = hold && hold !== 'live' ? hold : null;
+              /* v5.158.0 — the tile's seat clock: the window proves the live
+                 round, the hold audit's targeted read proves the older one;
+                 a disproved hold's alarm owns the story instead. */
+              const seatOrder =
+                activeOrder ??
+                (t.active_order_id ? (holdAudit.get(t.active_order_id) ?? undefined) : undefined);
+              const seat =
+                isLive && seatOrder && !staleHold ? seatClockFor(seatOrder.created_at, Date.now()) : null;
               /* v5.84.0 — this table's next promise, from the book. */
               const nextPromise = nextPromiseByTable.get(t.id);
               return (
@@ -2692,7 +2775,7 @@ export function FloorScreen(): React.ReactElement {
                             <Smartphone size={10} aria-hidden /> {sessionsByTable.get(t.id)!.length} scan{sessionsByTable.get(t.id)!.length === 1 ? '' : 's'}
                           </span>
                         )}
-                        {isLive && activeOrder && (
+                        {isLive && activeOrder && !seat?.camping && (
                           <span className="ml-auto flex items-center gap-1 tabular-nums" title="Since the order was placed">
                             <Clock size={11} aria-hidden /> <TimeAgo iso={activeOrder.created_at} />
                           </span>
@@ -2714,6 +2797,22 @@ export function FloorScreen(): React.ReactElement {
                       <p className="mt-0.5 flex items-center gap-1.5">
                         <BadgeCheck size={11} aria-hidden /> {activeOrder.status} · placed <TimeAgo iso={activeOrder.created_at} /> ago
                       </p>
+                    </div>
+                  )}
+
+                  {/* v5.158.0 — the camping pill: past the house turn line,
+                      the card speaks up in amber — the promise-due family,
+                      a service nudge, never the broken-ledger red. */}
+                  {seat?.camping && seatOrder && (
+                    <div
+                      role="status"
+                      aria-label={`Table ${t.table_number} has been seated ${seat.label} — past the ${CAMPING_AFTER_MIN}-minute turn line. Check on them.`}
+                      title={`The round was placed ${appFormatters().dt.format(new Date(seatOrder.created_at))} — ${seat.label} ago, past the ${CAMPING_AFTER_MIN}-minute house turn line.`}
+                      className="flex items-center gap-2 rounded-xl px-3 py-2 text-[12px] font-semibold leading-snug"
+                      style={{ background: '#FDF3E4', color: '#8A5A16', boxShadow: 'inset 0 0 0 1px #F3E3C3' }}
+                    >
+                      <Clock size={13} className="shrink-0" aria-hidden />
+                      <span>sat {seat.label} — camping</span>
                     </div>
                   )}
 
