@@ -3,6 +3,24 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.215.0] — 2026-10-05 — The offers tab keeps the week's tally: the Guests → Offers chip said only the standing state ("2 live · 0 paused") and never answered the owner's actual weekly question — is the discount pulling its weight? The chip now grows the tab's own window voice: the week's rides and the money they gave away, from the SAME read the drawer doors slice
+
+### Added — the chip's window voice (`src/components/customers/CustomersScreen.tsx`)
+
+The header chip now reads "**2 live · 0 paused · 4 rides this week · ₹150.00 given away** — active offers show at the counter and on the guest QR menu." The week's bucket is **`ridesInWindow(rows, startMs, endMs)`** (exported pure — the suite owns the bucketing): the ledger's rows inside the window, the read's own newest-first order preserved (the `.order` IS the clock — a local re-sort would be a second one), malformed dates falling out of every window honestly (the echo never guesses a date). The window is **lib/appday's `lastNDaysMs(7)`** — the SAME week the movers' medallion and Reports' "Last n" quote, so two surfaces quoting the week can never fork (5.198's agreement, now at the CRM's door). The money register is **the family's own reducer** (`guestGiveaway` — one arithmetic across three surfaces), silent on an empty week exactly as the chip taught it (5.197: silence is not zero).
+
+### The honesty rules
+
+An unread ledger renders **no clause at all** (`null` tally — an unread ledger never becomes an invented zero, 5.206's discipline); a read ledger with an empty week speaks its honest "**no rides this week**" — the dead week is the fact the owner most needs to see (the offer scorecard's own rule). The 500-row read is capped NEWEST-FIRST, so the head of the array is precisely where the week's rows live — the cap cannot starve the window. The 30s CRM poll re-reads and the memo recomputes — the tally can never drift from the drawers below it.
+
+### Styling
+
+The week clause rides `tabular-nums` at the deep ink (#0F3D3E, `font-semibold`) against the prose gray — the numbers align like a table of their own across the clause — and arrives on the `spFadeIn` the honest lines speak (5.212's grammar, now at the counter's CRM door). The standing tail of the sentence is byte-identical to the old line.
+
+### Tests
+
+`scripts/unit254.mjs` born — 17 checks: the bucket's byte-cases (in-window kept, out-of-window + malformed dropped, inclusive boundaries, empty → empty, order preserved); the family agreement (given == guestGiveaway's sum over the window's rows, 22.5 + 50 = ₹72.50); the chip's three sentence states (rides / no rides / unread silence); source guards (ONE clock via lib/appday, the memo composes ridesInWindow + guestGiveaway — no second arithmetic, no second fetch, null-guard, tabular-nums + deep ink + spFadeIn, prop threading typed nullable, the ledger family 5.206/5.208/5.209 intact). Regression battery unit194–253 ALL PASS (60 suites with the born one).
+
 ## [5.214.0] — 2026-10-05 — The guest bar whispers the fit: the floating cart bar was the LAST silent offer surface on the guest side — it said "2 items · View order · ₹total" while the counter's pill whispered the offer's fit; the fit family moved to its cart-domain home and both surfaces now borrow ONE reducer and ONE sentence
 
 ### Changed — the fit family finds its home (`src/lib/offerFit.ts`, new)

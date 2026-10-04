@@ -53,7 +53,7 @@ import { formatMoney } from '../../lib/prefs';
 import { offerBadgeLabel } from '../../lib/offerLabel';
 import { downloadCsv } from '../../lib/csv';
 import { dayTime, usedAgo } from '../../lib/day';
-import { appTodayIso, appFormatters, appTzTag } from '../../lib/appday';
+import { appTodayIso, appFormatters, appTzTag, lastNDaysMs } from '../../lib/appday';
 import { bookingSlotLabel, bookingDayKey, bookingTodayKey, bookingTzIsForeign } from '../../lib/bookingday';
 import { useTenant } from '../../lib/tenant';
 import { computeUsual, isPaidTicket, USUAL_WINDOW } from '../../lib/usual';
@@ -354,6 +354,27 @@ export function redemptionsByPhone(
     m.set(d, list);
   }
   return m;
+}
+
+/** ── v5.215.0 — the tab's own window bucket ──────────────────────────
+ *  The chip asks "what did the week ride?" — this bucket answers with
+ *  the ledger's rows inside [startMs, endMs], preserving the read's own
+ *  newest-first order (the .order IS the clock — a local re-sort would
+ *  be a second one). The window comes from lib/appday's lastNDaysMs —
+ *  the SAME week the movers' medallion and Reports' "Last n" quote —
+ *  so two surfaces quoting the week can never fork (5.198's agreement,
+ *  now at the CRM's door). A row with an unparseable created_at falls
+ *  out of every window honestly (the echo never guesses a date).
+ *  Exported pure so the suite owns the bucketing. */
+export function ridesInWindow(
+  rows: OfferRedemptionRow[],
+  startMs: number,
+  endMs: number,
+): OfferRedemptionRow[] {
+  return rows.filter((r) => {
+    const t = Date.parse(r.createdAt);
+    return Number.isFinite(t) && t >= startMs && t <= endMs;
+  });
 }
 
 /** ── v5.206.0 — the drawer's footer arithmetic ──────────────────────
@@ -863,6 +884,24 @@ const GuestsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry })
     [redemptions],
   );
 
+  /* v5.215.0 — the tab's own window voice: the week's rides and the money
+   * they gave away, from the SAME read the drawer doors slice — no second
+   * fetch, no second clock (lastNDaysMs IS the week the movers and
+   * Reports quote). The money register is the family's own reducer
+   * (guestGiveaway — one arithmetic across three surfaces). null ledger →
+   * null tally: the clause never renders (an unread ledger never becomes
+   * an invented zero — 5.206's discipline). A read ledger with an empty
+   * week speaks its honest zero — the dead week is the fact the owner
+   * most needs to see (the scorecard's own rule). The read is capped at
+   * 500 rows NEWEST-FIRST, so the head of the array is precisely where
+   * the week's rows live — the cap cannot starve the window. */
+  const weekTally = useMemo(() => {
+    if (!redemptions) return null;
+    const w = lastNDaysMs(7);
+    const rows = ridesInWindow(redemptions, w.startMs, w.endMs);
+    return { count: rows.length, given: guestGiveaway(rows)?.given ?? null };
+  }, [redemptions]);
+
   /* mutations ─────────────────────────────────────────────────────────── */
 
   const saveGuest = useCallback(
@@ -1176,6 +1215,7 @@ const GuestsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry })
           lastUsed={lastUsed}
           givenAway={givenAway}
           ledgerByOffer={ledgerByOffer}
+          weekTally={weekTally}
         />
       )}
 
@@ -1573,7 +1613,11 @@ const OffersTab: React.FC<{
    * null = the ledger unread — every ledger door stays silent, an
    * offer with no key gets no door at all (silence is not zero). */
   ledgerByOffer: Map<string, OfferRedemptionRow[]> | null;
-}> = ({ offers, loading, onEdit, onToggle, onDelete, deleteArm, setDeleteArm, busyId, activeOffers, storeName, lastUsed, givenAway, ledgerByOffer }) => {
+  /* v5.215.0 — the tab's own window voice (the week's rides + the money
+   * they gave away); null = the ledger unread — the chip's week clause
+   * never renders (an unread ledger never becomes an invented zero). */
+  weekTally: { count: number; given: number | null } | null;
+}> = ({ offers, loading, onEdit, onToggle, onDelete, deleteArm, setDeleteArm, busyId, activeOffers, storeName, lastUsed, givenAway, ledgerByOffer, weekTally }) => {
   /* v5.149.0 — per-card copy feedback: one state cell keyed by offer id,
    * ok/fail honest (headless and denied-permission browsers say so), the
    * 1.8s reset the bill's copy button taught (5.145.0). */
@@ -1613,10 +1657,36 @@ const OffersTab: React.FC<{
   }
   return (
     <div className="px-6 py-5">
+      {/* v5.215.0 — the chip keeps the week's tally: live/paused are the
+          standing state, the week clause is the tab's own window voice
+          (rides + money, from the same read the drawers slice). The
+          clause rides tabular-nums — the numbers align like a table of
+          their own — and arrives on the spFadeIn the honest lines
+          speak (5.212's grammar, now at the counter's CRM door). An
+          unread ledger renders no clause (silence, never an invented
+          zero); a read ledger with an empty week speaks "no rides this
+          week" — the dead week is the fact the owner most needs to
+          see (the scorecard's own rule). */}
       <p className="text-[12.5px] text-[#6B6B6B]">
-        {offers.length === 0
-          ? 'Offers appear in the counter’s order drawer the moment you create one.'
-          : `${activeOffers} live · ${offers.length - activeOffers} paused — active offers show at the counter and on the guest QR menu.`}
+        {offers.length === 0 ? (
+          'Offers appear in the counter’s order drawer the moment you create one.'
+        ) : (
+          <>
+            {activeOffers} live · {offers.length - activeOffers} paused
+            {weekTally && (
+              <span
+                className="font-semibold tabular-nums text-[#0F3D3E]"
+                style={{ animation: 'spFadeIn 200ms ease-out' }}
+              >
+                {' · '}
+                {weekTally.count === 0 ? 'no' : weekTally.count}{' '}
+                {weekTally.count === 1 ? 'ride' : 'rides'} this week
+                {weekTally.given != null && ` · ${formatMoney(weekTally.given)} given away`}
+              </span>
+            )}
+            {' — active offers show at the counter and on the guest QR menu.'}
+          </>
+        )}
       </p>
       {offers.length === 0 ? (
         <div className="mt-4 rounded-2xl border border-dashed border-[#E3E7E0] bg-[#FBFAF7] px-6 py-12 text-center">
