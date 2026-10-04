@@ -25,6 +25,7 @@ import { SettingsScreen } from './components/settings/SettingsScreen';
 import { PlatformScreen } from './components/platform/PlatformScreen';
 import ShowcasePage from './components/pages/ShowcasePage';
 import IndexHelpPage from './components/pages/IndexHelpPage';
+import NotFoundPage from './components/pages/NotFoundPage';
 import { GuestGatePage, GuestMenuPage, GuestTrackPage } from './components/guest/GuestPages';
 import { PwaLayer } from './components/shell/PwaLayer';
 import { ScreenBoundary } from './components/shell/ScreenBoundary';
@@ -205,6 +206,21 @@ const AppRoutes: React.FC = () => {
   if (pathname.startsWith('/t/')) return <GuestGatePage qrToken={decodeURIComponent(pathname.split('/')[2] || '')} />;
   if (pathname.startsWith('/menu/')) return <GuestMenuPage qrToken={decodeURIComponent(pathname.split('/')[2] || '')} />;
   if (pathname.startsWith('/track/')) return <GuestTrackPage orderId={decodeURIComponent(pathname.split('/')[2] || '')} />;
+
+  /* v5.141.0 — no address goes unacknowledged. Every path that is not the
+   *  staff root, a porch page, a guest surface, or a staff deep link speaking
+   *  the v5.32.0 slug grammar (/:slug/:screen — last segment resolves) now
+   *  lands on an honest 404 in the porch's own register, instead of being
+   *  silently swallowed into login or the Dashboard. Known staff slugs keep
+   *  their old path: anonymous visitors still get the login gate, and after
+   *  sign-in the deep-link effect boots them into the bookmarked screen.
+   *  CafeApp's internal "unknown slug → Dashboard" fallback stays as a second
+   *  safety net, but the door itself now answers. */
+  const dlParts = pathname.split('/').filter(Boolean);
+  const dlSeg = dlParts.length >= 2 ? dlParts[1] : dlParts[0];
+  const knownDoor =
+    pathname === '/' || (dlSeg !== undefined && SECTION_SLUGS[dlSeg] !== undefined);
+  if (!knownDoor) return <NotFoundPage path={pathname} />;
 
   if (!session) {
     return (

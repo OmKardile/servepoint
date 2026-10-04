@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   ArrowRight,
   ChevronDown,
@@ -108,6 +108,11 @@ const FaqItem: React.FC<{ q: string; a: string; open: boolean; onToggle: () => v
 
 const IndexHelpPage: React.FC = () => {
   const [openFaq, setOpenFaq] = useState<number | null>(0);
+
+  // v5.141.0 — the tab strip joins the title register (porch pages were mute).
+  useEffect(() => {
+    document.title = 'Help · ServePoint';
+  }, []);
 
   return (
     <div className="flex min-h-screen flex-col bg-[#F6F5F2]">

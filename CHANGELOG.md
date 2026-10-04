@@ -3,6 +3,34 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.141.0] — 2026-10-04 — No address goes unacknowledged
+
+### Added — the honest 404 (`src/components/pages/NotFoundPage.tsx`)
+
+Until this release every unknown address was silently swallowed: `/nonexistent` rendered the login screen (anonymous) or the staff Dashboard (signed in) with zero acknowledgment — a visitor who followed a mistyped or retired link could not tell whether the product was broken or whether they merely needed to sign in. Now any path that is not the staff root, a porch page, a guest surface, or a staff deep link speaking the v5.32.0 slug grammar lands on an honest 404 in the porch's own register (cream canvas, gold kicker, serif-italic headline "No such room in this house.", the exact requested address echoed back in a mono chip, three real doors — Open the app / product tour / how-to — and a quiet history-back link). The router resolves the deep-link segment exactly as `CafeApp` does (`parts.length >= 2 ? parts[1] : parts[0]`), so every existing staff bookmark keeps working: known slugs still gate through login and boot into the bookmarked screen after sign-in, and `CafeApp`'s internal "unknown slug → Dashboard" fallback remains as a second safety net. **Behavior change, flagged honestly:** a signed-in user who types a retired screen name now gets the 404 register (with a one-tap "Open the app" to Dashboard) instead of a silent Dashboard — the door answers instead of shrugging.
+
+### Changed — the porch pages joined the tab-title register (`ShowcasePage`, `IndexHelpPage`)
+
+`document.title` was spoken by staff sections ("Bills · ServePoint", v5.32.0), the auth gate ("Sign in · ServePoint", v5.32.0) and both guest surfaces — but the two porch pages and the new 404 stayed mute, inheriting the static "ServePoint — smartPOS". The porch now reads "Product tour · ServePoint" / "Help · ServePoint", the 404 reads "Not found · ServePoint": a lost or restored tab identifies itself at a glance.
+
+### Fixed — the ledger repair: the 5.140.0 entry existed only in the worklog
+
+Task 179's worklog lists CHANGELOG.md among the surfaces it touched, but commit `79ceec3` never carried a `[5.140.0]` entry — the changelog jumped from 5.139.0 straight past the porch-census release. The missing entry is restored below, verbatim in spirit to the round's own record.
+
+### Verified
+
+tsc EXIT=0, build EXIT=0. Live E2E (fresh loads): `/nonexistent` renders the 404 register with the echoed path and honest copy; `/bills` (known slug, signed in) still boots straight into Bills; `/` still lands in the app; `/t/bogus-token` keeps its existing honest gate error; `/showcase` + `/index-help` tab titles read the new register. READ-ONLY round — zero cloud writes.
+
+## [5.140.0] — 2026-10-04 — The porch says what the house says *(ledger repair: entry restored in Task 180)*
+
+### Fixed — the public porch was 137 releases stale (`ShowcasePage`, `IndexHelpPage`)
+
+The public pages, last touched in the 5.2.1/5.2.2 era, carried four drifts against the live house: (1) "Settings → Team" ×3 on the help page — the live tab is "Staff accounts", so a new owner following the porch words found no such tab (all three pointers healed; the FAQ's reset claim verified TRUE against the live tab — the temp-password generation flow IS the reset path); (2)+(3) both footers read "© 2026 ServePoint · smartPOS · v5.2.0" — a frozen version token, stale for 137 releases. Deliberately NOT replaced with version plumbing: package.json says 0.0.0, release truth lives in CHANGELOG + sw.js, and a new define pipeline would be another unmaintained promise — both footers now read the sidebar's own line, "© 2026 ServePoint · smartPOS"; (4) the showcase's big numbers were frozen at the 5.2.2 census — prose "Ten idempotent migrations" + stat "10 migrations" + stat "2 guarded engine RPCs — the only write path for status & money" — while the tree carries 37 migration files (038 pending owner unblock) and 34 distinct guarded sp_ functions whose scope now covers drawers, stock, presence and guest capability paths, not just status & money. The brittle spelled count was dropped from the prose; the stat chips re-censused to 37 migrations / "34 guarded RPCs — every cloud write passes a database-side guard" / 0 mock paths (verified still true). The KDS step words, payment methods and feature paragraphs were audited against the tree and read TRUE — untouched.
+
+### Verified
+
+tsc EXIT=0 (/tmp/tsc179a.log), build EXIT=0 (/tmp/build179a.log). Live E2E: /index-help innerText — 0 "Settings → Team", "Settings → Staff accounts" present, footer healed; /showcase — stat chips render 37 / 34 / 0 with the new words. READ-ONLY round — zero cloud writes. Lesson banked: the porch rots the same way the banner did — public pages join the QA rotation.
+
 ## [5.139.0] — 2026-10-04 — Every rupee says its paise
 
 ### Fixed — the discount chip stopped rounding the customer's money (`BillsScreen`)

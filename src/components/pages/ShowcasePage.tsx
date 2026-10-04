@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import {
   ArrowRight,
   Building2,
@@ -71,6 +71,12 @@ const STACK: string[] = [
 ];
 
 const ShowcasePage: React.FC = () => {
+  // v5.141.0 — the tab strip joins the title register: the porch pages were
+  // the last surfaces still mute (staff sections, auth and guest all speak).
+  useEffect(() => {
+    document.title = 'Product tour · ServePoint';
+  }, []);
+
   return (
     <div className="flex min-h-screen flex-col bg-[#F6F5F2]">
       {/* ── Nav ── */}
