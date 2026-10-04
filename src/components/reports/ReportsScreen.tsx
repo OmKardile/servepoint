@@ -1160,6 +1160,16 @@ export interface TurnoverTable {
   longestSpanMin: number | null;
 }
 
+/** One hour-of-day bucket of the room's breathing: how many seated spans
+ *  FINISHED at that hour (the paid hop is the finish line) and their average
+ *  length. All 24 buckets always exist — the gaps are the quiet hours, and
+ *  a live seat never guesses its way into one. */
+export interface TurnoverHour {
+  hour: number;
+  timed: number;
+  avgMin: number | null;
+}
+
 export interface TurnoverAgg {
   /** dine-in tickets in range (a table_id on the ticket is the floor's truth) */
   tickets: number;
@@ -1167,6 +1177,10 @@ export interface TurnoverAgg {
   perTable: TurnoverTable[];
   spans: { n: number; avgMin: number | null; medianMin: number | null };
   longest: { orderNumber: number; tableLabel: string; minutes: number } | null;
+  /** v5.163.0 — the day shape of when tables free up (paid hour, app clock) */
+  hours: TurnoverHour[];
+  /** hour with the most finished spans, ties to the earlier hour; null when no span */
+  peakHour: number | null;
 }
 
 /** The floor's TimeAgo register for seated spans ("45m" · "1h 5m") — the
@@ -1184,7 +1198,8 @@ export function turnoverSpanLabel(minutes: number): string {
  *  placed → the earliest 'completed' hop; a ticket still at its table has
  *  no finish line, so it donates a TURN but never a span — the clock never
  *  guesses. A hop older than the ticket itself would wind the clock
- *  backwards and is skipped, never negative. */
+ *  backwards and is skipped, never negative. The day shape (v5.163.0)
+ *  buckets each finished span into the hour its table actually freed. */
 export function tableTurnover(rows: Order[], hopRows: StatusHop[]): TurnoverAgg {
   const dineIn = rows.filter(
     (o) => o.table_id && String(o.status || '').toLowerCase() !== 'cancelled',
@@ -1199,18 +1214,23 @@ export function tableTurnover(rows: Order[], hopRows: StatusHop[]): TurnoverAgg 
     const prev = doneAt.get(h.orderId);
     if (!prev || at < prev) doneAt.set(h.orderId, at);
   }
-  const spans: { orderNumber: number; tableLabel: string; minutes: number }[] = [];
+  const spans: { orderNumber: number; tableLabel: string; minutes: number; doneIso: string }[] = [];
   const perTable = new Map<string, { turns: number; spans: number[] }>();
   for (const o of dineIn) {
     const label = (o.table_label || '').trim() || 'Unnamed table';
     const cell = perTable.get(label) || { turns: 0, spans: [] as number[] };
     cell.turns += 1;
     const placed = new Date(o.created_at).getTime();
-    const done = doneAt.get(o.id)?.getTime();
-    if (Number.isFinite(placed) && done && done > placed) {
-      const minutes = (done - placed) / 60000;
+    const done = doneAt.get(o.id);
+    if (Number.isFinite(placed) && done && done.getTime() > placed) {
+      const minutes = (done.getTime() - placed) / 60000;
       cell.spans.push(minutes);
-      spans.push({ orderNumber: Number(o.order_number), tableLabel: label, minutes });
+      spans.push({
+        orderNumber: Number(o.order_number),
+        tableLabel: label,
+        minutes,
+        doneIso: done.toISOString(),
+      });
     }
     perTable.set(label, cell);
   }
@@ -1218,7 +1238,33 @@ export function tableTurnover(rows: Order[], hopRows: StatusHop[]): TurnoverAgg 
   const n = spans.length;
   const avgMin = n > 0 ? spans.reduce((s, t) => s + t.minutes, 0) / n : null;
   const medianMin = n > 0 ? spans[Math.floor((n - 1) / 2)].minutes : null;
-  const longest = n > 0 ? spans[n - 1] : null;
+  const last = n > 0 ? spans[n - 1] : null;
+  const longest = last
+    ? { orderNumber: last.orderNumber, tableLabel: last.tableLabel, minutes: last.minutes }
+    : null;
+  /* v5.163.0 — the day shape: each finished span lands in the hour its table
+   * actually freed (the paid hop's hour, app clock). The earliest completed
+   * hop is the truth, so a retry hop can't re-bucket a ticket; a skew hop
+   * never made a span, so it never lands in an hour. All 24 buckets always
+   * exist — the gaps are the quiet hours. Ties for peak go to the earlier
+   * hour (a strict-greater scan from midnight). */
+  const hourCells = Array.from({ length: 24 }, (_, hour) => ({ hour, timed: 0, sumMin: 0 }));
+  for (const s of spans) {
+    const h = appHour(s.doneIso);
+    if (h >= 0 && h < 24) {
+      hourCells[h].timed += 1;
+      hourCells[h].sumMin += s.minutes;
+    }
+  }
+  const hours: TurnoverHour[] = hourCells.map((c) => ({
+    hour: c.hour,
+    timed: c.timed,
+    avgMin: c.timed > 0 ? c.sumMin / c.timed : null,
+  }));
+  let peakHour: number | null = null;
+  for (const c of hourCells) {
+    if (c.timed > 0 && (peakHour === null || c.timed > hourCells[peakHour].timed)) peakHour = c.hour;
+  }
   const tables: TurnoverTable[] = [...perTable.entries()]
     .map(([tableLabel, cell]) => ({
       tableLabel,
@@ -1242,6 +1288,8 @@ export function tableTurnover(rows: Order[], hopRows: StatusHop[]): TurnoverAgg 
     perTable: tables,
     spans: { n, avgMin, medianMin },
     longest,
+    hours,
+    peakHour,
   };
 }
 
@@ -2020,6 +2068,7 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
       ['Tables touched', turnover.tablesTouched],
       ['Spans timed', turnover.spans.n],
       ['Average span', turnover.spans.avgMin != null ? fmtDuration(turnover.spans.avgMin) : '—'],
+      ['Median span', turnover.spans.medianMin != null ? fmtDuration(turnover.spans.medianMin) : '—'],
       [
         'Longest span',
         turnover.longest
@@ -2037,6 +2086,12 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
         t.avgSpanMin != null ? fmtDuration(t.avgSpanMin) : '—',
         t.longestSpanMin != null ? fmtDuration(t.longestSpanMin) : '—',
       ]);
+    }
+    /* v5.163.0 — the day shape rides along; all 24 buckets, zeros included
+     * (the gaps ARE the quiet hours — same doctrine as the sales CSV). */
+    rows.push([], ['Freed-up hour', 'Tables freed', 'Average span']);
+    for (const h of turnover.hours) {
+      rows.push([hourLabel(h.hour), h.timed, h.avgMin != null ? fmtDuration(h.avgMin) : '—']);
     }
     downloadCsv(`servepoint-table-turnover-${appTodayIso()}.csv`, rows);
   }, [turnover]);
@@ -4032,6 +4087,53 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
                     </li>
                   ) : null}
                 </ul>
+                {turnover.spans.n > 0 && (
+                  <div className="mt-4 border-t border-[#E3E7E0] pt-3">
+                    <div className="mb-2 flex items-center justify-between gap-2">
+                      <p className="text-[10.5px] font-semibold uppercase tracking-wide text-[#6B6B6B]">
+                        When tables free up
+                      </p>
+                      {turnover.peakHour != null && (
+                        <p className="text-[11px] font-bold text-[#8A5A00]">
+                          Peak {hourLabel(turnover.peakHour)}
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex h-12 items-end gap-[2px]">
+                      {(() => {
+                        const maxTimed = Math.max(1, ...turnover.hours.map((x) => x.timed));
+                        return turnover.hours.map((h) => {
+                          if (h.timed === 0) {
+                            return <div key={h.hour} className="h-[3px] flex-1 rounded-sm bg-[#E3E7E0]" />;
+                          }
+                          const isPeak = turnover.peakHour === h.hour;
+                          return (
+                            <div
+                              key={h.hour}
+                              className="flex-1 rounded-t-[3px]"
+                              role="img"
+                              aria-label={`${hourLabel(h.hour)}: ${h.timed} table${h.timed === 1 ? '' : 's'} freed up, average span ${turnoverSpanLabel(h.avgMin ?? 0)}`}
+                              title={`${hourLabel(h.hour)} — ${h.timed} freed · avg ${turnoverSpanLabel(h.avgMin ?? 0)}`}
+                              style={{
+                                height: `${Math.max(6, Math.round((h.timed / maxTimed) * 48))}px`,
+                                background: isPeak ? '#B88E2F' : '#0F3D3E',
+                              }}
+                            />
+                          );
+                        });
+                      })()}
+                    </div>
+                    <div className="mt-1 grid grid-cols-24 text-[9px] font-semibold text-[#969696]">
+                      {turnover.hours.map((h) => (
+                        <span key={h.hour}>{h.hour % 6 === 0 ? hourLabel(h.hour) : ''}</span>
+                      ))}
+                    </div>
+                    <p className="mt-1.5 text-[11px] leading-relaxed text-[#969696]">
+                      A bar counts only finished seats — the paid hop is the finish line; seats
+                      still at their table join when they pay.
+                    </p>
+                  </div>
+                )}
                 {turnover.spans.n === 0 && (
                   <p
                     className="mt-3 rounded-xl px-3.5 py-2.5 text-[12px] leading-relaxed text-[#8A5A0B]"

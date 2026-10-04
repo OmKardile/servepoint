@@ -3,6 +3,20 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.163.0] — 2026-10-04 — When the room lets go: the Table turnover card grows a day shape — 24 hour-of-day buckets of finished spans on the app clock, a gold peak, and the CSV carrying the median plus the full hour ledger
+
+### Added — the day shape (`src/components/reports/ReportsScreen.tsx`)
+
+The turnover card answered "how busy"; the owner's next question between lunch and dinner is "WHEN do tables free up?" — the staffing question. `tableTurnover` now rides the same single walk one step further: each provable span lands in the hour its table actually freed (the paid hop's hour on the app clock — the same clock the sales-by-hour chart reads, never UTC), producing `hours` (always 24 buckets, the gaps ARE the quiet hours) and `peakHour` (ties go to the earlier hour, a strict-greater scan from midnight). The card renders the shape as a compact 24-slot strip under "WHEN TABLES FREE UP" — teal bars, the peak in the house gold, zero-hours as honest stubs, every bar a labelled `role="img"` ("6p: 5 tables freed up, average span 45m"), and one line of doctrine under it: a bar counts only finished seats; seats still at their table join when they pay. The honesty rules ride unchanged from 5.161.0 — live seats donate nothing to an hour, retry hops can't re-bucket a ticket, skew hops never made a span so they never land in one.
+
+### Added — the hour ledger rides the CSV (`src/components/reports/ReportsScreen.tsx`)
+
+The turnover export now carries the median span (computed since 5.161.0 but never spoken) and the full freed-up-hour table — all 24 buckets, zeros included, same doctrine as the sales CSV.
+
+### Verified
+
+`tsc` EXIT=0; `node --check` OK (`servepoint-v5.163.0-r1`); build EXIT=0; unit suite `scripts/unit202.mjs` 11/11 (empty shape, paid-hour bucketing, IST-not-UTC clock, live-seat silence, takeaway/cancelled exclusion, retry earliest-wins, skew-hour silence, peak tie-to-earlier, strict max beats earlier, per-hour average, sort coexistence) plus regression suites unit197/198/199/200/201 ALL PASS (unit200's empty-shape assert extended with the new fields); live E2E — the strip renders on real data with the peak hour spoken; console buffer delta stable on fresh loads, zero live.
+
 ## [5.162.0] — 2026-10-04 — The diary reads in days: the 027 stock diary takes up the bell feed's day rhythm — Today / Yesterday / Earlier with move tallies — and the burn register stops reading three-decimal floats
 
 ### Added — day groups on the stock diary (`src/components/inventory/InventoryScreen.tsx`)

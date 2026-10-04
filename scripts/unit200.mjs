@@ -127,7 +127,9 @@ assert.deepEqual(empty, {
   perTable: [],
   spans: { n: 0, avgMin: null, medianMin: null },
   longest: null,
+  hours: Array.from({ length: 24 }, (_, hour) => ({ hour, timed: 0, avgMin: null })),
+  peakHour: null,
 });
-ok('empty range: a silent room, honestly shaped');
+ok('empty range: a silent room, honestly shaped (incl. the 5.163.0 day shape)');
 
 console.log(`\n${n} asserts PASS`);
