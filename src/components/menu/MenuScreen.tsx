@@ -4,9 +4,11 @@ import {
   BookOpenText,
   Check,
   CircleAlert,
+  Copy,
   ImagePlus,
   Layers,
   Loader2,
+  MessageCircle,
   Pencil,
   Plus,
   RefreshCw,
@@ -41,6 +43,7 @@ import {
   type MenuVariant,
 } from '../../lib/api';
 import { computeTopMovers, MOVER_WINDOW_DAYS, type Mover } from '../../lib/movers';
+import { appFormatters, appTzTag } from '../../lib/appday';
 import { useTenant } from '../../lib/tenant';
 import { formatMoney } from '../../lib/prefs';
 import { useDialogA11y } from '../../lib/useDialogA11y';
@@ -465,6 +468,88 @@ function PhotoTile({
   );
 }
 
+/* ── v5.152.0 — the menu speaks in chat ────────────────────────────────
+ * The share arc's seventh member and its first catalog: bill, day,
+ * range, offer, shopping list, chase list — and now the menu itself,
+ * because "send me the menu" is the most-asked-for document in a café's
+ * chat life. One assembly feeds Copy + WhatsApp. The chat menu is the
+ * GUEST view: prices, descriptions, sold-out honesty, the veg voice,
+ * size options — but never the house's own intelligence: costs,
+ * margins and paid-mover ranks stay on the screen. Sold-out dishes
+ * keep their line (the menu tells the truth about the shelf) and drop
+ * their prose (a pulled dish doesn't sell its poetry). A text menu
+ * needs no token and no link — no phantom sessions, no gate.
+ * Exported pure so E2E can assert the text without the clipboard. */
+export interface MenuTextItem {
+  name: string;
+  price: number;
+  description: string | null;
+  soldOut: boolean;
+  nonVeg: boolean;
+  options: string[];
+}
+
+export interface MenuTextCategory {
+  name: string;
+  items: MenuTextItem[];
+}
+
+export interface MenuTextOpts {
+  storeName: string;
+  cats: MenuTextCategory[];
+}
+
+export function buildMenuText(opts: MenuTextOpts): string {
+  const W = 32;
+  const hr = '-'.repeat(W);
+  const center = (s: string): string =>
+    s.length >= W ? s : ' '.repeat(Math.floor((W - s.length) / 2)) + s;
+  const two = (l: string, r: string): string => {
+    const cut = Math.max(1, W - r.length - 1);
+    const left = l.length > cut ? `${l.slice(0, cut - 1)}…` : l;
+    return left.padEnd(W - r.length, ' ') + r;
+  };
+  /* Prose never rides the money aligner (189/190): descriptions wrap
+   * word-by-word and hang indented under their item's name. */
+  const wrap = (s: string): string[] => {
+    const words = s.split(/\s+/).filter(Boolean);
+    const lines: string[] = [];
+    let cur = '';
+    for (const w of words) {
+      const t = cur ? `${cur} ${w}` : w;
+      if (t.length <= W - 3) {
+        cur = t;
+        continue;
+      }
+      if (cur) lines.push(cur);
+      cur = w.length > W - 3 ? `${w.slice(0, W - 4)}…` : w;
+    }
+    if (cur) lines.push(cur);
+    return lines;
+  };
+
+  const out: string[] = [];
+  out.push(center(opts.storeName));
+  out.push(center('MENU'));
+  out.push(hr);
+  for (const c of opts.cats) {
+    if (c.items.length === 0) continue;
+    out.push(c.name.toUpperCase());
+    for (const it of c.items) {
+      const mark = it.soldOut ? ' · sold out' : it.nonVeg ? ' · non-veg' : '';
+      out.push(two(`${it.name}${mark}`, formatMoney(it.price)));
+      if (!it.soldOut) {
+        if (it.description) for (const line of wrap(it.description)) out.push(`   ${line}`);
+        if (it.options.length > 0) out.push(`   ${it.options.join(', ')}`);
+      }
+    }
+  }
+  out.push(hr);
+  out.push(center(`Shared ${appFormatters().hhmm.format(new Date())} ${appTzTag()}`));
+  out.push(center('· · · end of menu · · ·'));
+  return out.join('\n');
+}
+
 export function MenuScreen(): React.ReactElement {
   const { tenant, tenantId, error: tenantError, loading } = useTenant();
   const [tick, setTick] = useState(0);
@@ -610,6 +695,60 @@ export function MenuScreen(): React.ReactElement {
       .filter((g) => g.list.length > 0 || (q && g.category && g.category.name.toLowerCase().includes(q)));
   }, [categories, items, q]);
 
+  /* v5.152.0 — one assembly feeds Copy + WhatsApp (5.146.0 rule, menu
+   * edition): the chat menu is built from the same categories, items
+   * and variants state the screen renders, so screen and chat can
+   * never disagree. Uncategorised items keep the screen's label. */
+  const menuOpts = useMemo<MenuTextOpts>(() => ({
+    storeName: tenant?.name || 'ServePoint store',
+    cats: [
+      ...categories.map((c) => ({
+        name: c.name,
+        items: items
+          .filter((i) => i.category_id === c.id)
+          .map((i) => ({
+            name: i.name,
+            price: Number(i.price),
+            description: i.description || null,
+            soldOut: i.is_available === false,
+            nonVeg: i.is_veg === false,
+            options: variants
+              .filter((v) => v.menu_item_id === i.id)
+              .map((v) => (v.price_delta > 0 ? `${v.name} +${formatMoney(v.price_delta)}` : v.name)),
+          })),
+      })),
+      ...((items.some((i) => !categories.some((c) => c.id === i.category_id))
+        ? [{
+            name: 'Uncategorised',
+            items: items
+              .filter((i) => !categories.some((c) => c.id === i.category_id))
+              .map((i) => ({
+                name: i.name,
+                price: Number(i.price),
+                description: i.description || null,
+                soldOut: i.is_available === false,
+                nonVeg: i.is_veg === false,
+                options: variants
+                  .filter((v) => v.menu_item_id === i.id)
+                  .map((v) => (v.price_delta > 0 ? `${v.name} +${formatMoney(v.price_delta)}` : v.name)),
+              })),
+          }]
+        : [])),
+    ],
+  }), [tenant?.name, categories, items, variants]);
+  const menuText = items.length > 0 ? buildMenuText(menuOpts) : '';
+  const [menuCopyState, setMenuCopyState] = useState<'idle' | 'ok' | 'fail'>('idle');
+  const copyMenu = async () => {
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error('clipboard unavailable');
+      await navigator.clipboard.writeText(menuText);
+      setMenuCopyState('ok');
+    } catch {
+      setMenuCopyState('fail');
+    }
+    window.setTimeout(() => setMenuCopyState('idle'), 1800);
+  };
+
   const editingItem = itemModal?.mode === 'edit' ? items.find((i) => i.id === itemModal.itemId) : null;
   const variantsItem = items.find((i) => i.id === variantsModalFor) || null;
 
@@ -674,6 +813,33 @@ export function MenuScreen(): React.ReactElement {
           >
             <Layers size={15} aria-hidden /> Category
           </button>
+          {items.length > 0 && (
+            <>
+              <button
+                type="button"
+                onClick={copyMenu}
+                aria-live="polite"
+                aria-label="Copy the menu as text"
+                className="flex h-11 items-center gap-1.5 rounded-full border border-[#E3E7E0] bg-white px-4 text-[13px] font-semibold text-[#0F3D3E] hover:border-[#B88E2F]"
+              >
+                {menuCopyState === 'ok' ? (
+                  <Check size={15} className="text-[#2E7D32]" aria-hidden />
+                ) : (
+                  <Copy size={15} aria-hidden />
+                )}
+                {menuCopyState === 'ok' ? 'Copied' : menuCopyState === 'fail' ? 'Copy blocked' : 'Copy'}
+              </button>
+              <a
+                href={`https://wa.me/?text=${encodeURIComponent(menuText)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Share the menu on WhatsApp"
+                className="flex h-11 items-center gap-1.5 rounded-full border border-[#E3E7E0] bg-white px-4 text-[13px] font-semibold text-[#0F3D3E] hover:border-[#B88E2F]"
+              >
+                <MessageCircle size={15} aria-hidden /> WhatsApp
+              </a>
+            </>
+          )}
           <button
             type="button"
             onClick={() => setItemModal({ mode: 'new' })}

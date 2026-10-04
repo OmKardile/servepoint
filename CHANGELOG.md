@@ -3,6 +3,20 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.152.0] — 2026-10-04 — The menu speaks in chat
+
+### Added — the catalog joins the share arc (`src/components/menu/MenuScreen.tsx`)
+
+The share arc's seventh member and its first catalog: bill, day, range, offer, shopping list, chase list — and now the menu itself, because "send me the menu" is the most-asked-for document in a café's chat life. `buildMenuText(opts)` (exported pure, E2E-assertable) speaks the house's 32-column register: centered store + MENU headline, one uppercase block per category, item lines with right-aligned prices, descriptions word-wrapped as indented prose (never the money aligner), size options joined with their `+₹` deltas, `· non-veg` marking, and `· sold out` honesty on pulled dishes — a shared menu never lies about the shelf. The chat menu is the GUEST view by design: costs, margins and paid-mover ranks stay on the screen. Uncategorised items keep the screen's own "Uncategorised" label. One assembly (`menuOpts`, built from the same categories/items/variants state the screen renders) feeds Copy + WhatsApp, so screen and chat can never disagree; empty menus hide the share row honestly. A text menu needs no token and no link — no phantom sessions, no gate.
+
+### Changed — the Menu header gains a share row
+
+Between Category and Add item: Copy and WhatsApp chips in the header's own grammar (`h-11 rounded-full`, house borders, gold hover). Copy rides the honest tri-state (idle / Copied / Copy blocked, `aria-live="polite"`, 1.8s reset); WhatsApp opens the house PICKER (`wa.me/?text=`) — the owner decides which chat receives the menu, no recipient ever guessed.
+
+### Verified
+
+`tsc` EXIT=0 · `vite build` EXIT=0 · node --check sw.js OK · E2E on the live Menu screen: share chips render with descriptive aria-labels, the wa.me href decodes to the exact builder text (QR Flow Cafe / MENU / COFFEE → Flat White ₹220.00 with wrapped description + its option, BAKERY → Blueberry Muffin ₹180.00, FOOD → both dishes with the honest veg voice), no cost or margin strings anywhere in the text, longest line ≤ 32 columns, Copy reports its honest headless state with the 1.8s reset, zero new console errors.
+
 ## [5.151.0] — 2026-10-04 — The chase list speaks in chat
 
 ### Added — the money still out gets a pocket voice (`src/components/bills/BillsScreen.tsx`)
