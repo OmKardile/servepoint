@@ -3,6 +3,20 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.139.0] — 2026-10-04 — Every rupee says its paise
+
+### Fixed — the discount chip stopped rounding the customer's money (`BillsScreen`)
+
+The Bills order card's discount chip hand-rolled `−₹{Number(o.discount_amount).toFixed(0)} off` — **rounding the customer's discount UP to a whole rupee** (a ₹99.50 offer read "−₹100 off": 50 paise fabricated in the customer's favor, on a money surface) while the SAME screen's detail drawer (line 1367), the totals rows, and the printed receipt (`ReceiptPrint` line 131) all spoke `formatMoney` 2dp truth — one rupee, two registers, and the chip's was the wrong one. The chip now speaks the screen's own already-imported helper: `−{formatMoney(...)} off`. Live census chips render "−₹44.00 off | −₹50.00 off" (previously "−₹44 off | −₹50 off"); today's discounts happen to be whole rupees, so the fix is prospective correctness plus register unity.
+
+### Changed — the add-on chips joined their own file's grammar (`MenuScreen`, `GuestPages`)
+
+Three add-on/variant displays hand-rolled `+₹{round2(price)}` inside files that already own a money voice: Menu's add-on chips (picker + editor rows) while Menu's variant deltas (281) and dish prices (863) speak `formatMoney`; Guest's add-on chip and variant-delta chip while Guest's dish prices, cart rows, and offer whispers speak the file's own `money()`. The defect was register ambiguity, not fabrication: a paise price entered as `49.5` (the editor allows step 0.01) read **"₹49.5"** — is that ₹49.50 or ₹49.05? Each display now calls its file's established helper — "₹49.50", separators included. Audited and deliberately LEFT: ItemDetailModal's whole-rupee elision (`% 1 === 0 ? raw : toFixed(2)`) — ambiguity-free for both whole and paise prices, a deliberate compact chip register, not drift.
+
+### Verified
+
+tsc EXIT=0 (/tmp/tsc178a.log, /tmp/tsc178b.log), build EXIT=0. Live E2E: Menu add-on rows render "Extra shot ₹60.00" on fresh load (was "₹60"); Bills order cards render "−₹44.00 off | −₹50.00 off" chips (was "−₹44 off"); guest chip verified by helper-equivalence — `money()` is the same file's proven renderer, and this round's token-retrieval paths (clipboard hook, print-sticker iframe) were not retrievable; recorded honestly. Full QA walk first: rail badges, prefs pruner holding, Support/Close-out/Reports header registers, keyboard focus ring present on rail buttons, Dashboard fetch-failure honesty audited (error → ErrorCard with retry; riders fail-soft by design). READ-ONLY round — zero cloud writes.
+
 ## [5.138.0] — 2026-10-04 — A screen breaks, the house keeps serving
 
 ### Added — screen-level error containment (`src/components/shell/ScreenBoundary.tsx`)

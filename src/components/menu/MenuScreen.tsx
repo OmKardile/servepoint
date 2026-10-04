@@ -335,7 +335,10 @@ function VariantsModal({
                   >
                     {on && <Check size={13} aria-hidden />}
                     {a.name}
-                    <span className={on ? 'text-[#E7C878]' : 'text-[#B88E2F]'}>+₹{round2(a.price)}</span>
+                    {/* 5.139.0 — the row speaks formatMoney like the variant deltas
+                        (line 281) and dish prices (863) already do: "₹49.5" was
+                        paise-ambiguous money text inside the file's own grammar. */}
+                    <span className={on ? 'text-[#E7C878]' : 'text-[#B88E2F]'}>+{formatMoney(a.price)}</span>
                   </button>
                 );
               })}
@@ -736,7 +739,7 @@ export function MenuScreen(): React.ReactElement {
               const armed = confirmId === `addon:${a.id}`;
               return (
                 <span key={a.id} className="flex h-9 items-center gap-2 rounded-full bg-[#FDF9F0] pl-3.5 pr-1.5 text-[12.5px] font-semibold text-[#8A5A16]">
-                  {a.name} ₹{round2(a.price)}
+                  {a.name} {formatMoney(a.price)}
                   <button
                     type="button"
                     onClick={() => {

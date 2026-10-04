@@ -975,7 +975,13 @@ const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRet
                             <MarkHit text={rowSubline(o)} query={billQ} />
                             {Number(o.discount_amount ?? 0) > 0 && (
                               <span className="inline-flex shrink-0 items-center rounded bg-[#E8F5EC] px-1.5 py-px text-[10px] font-bold text-[#2E7D32]">
-                                −₹{Number(o.discount_amount).toFixed(0)} off
+                                {/* 5.139.0 — paise-true: the hand-rolled toFixed(0)
+                                    rounded the CUSTOMER'S discount up (a ₹99.50
+                                    offer read "−₹100 off", 50p fabricated) while
+                                    the drawer row and the printed receipt said
+                                    formatMoney truth — one rupee, two registers.
+                                    The chip speaks the screen's own helper now. */}
+                                −{formatMoney(Number(o.discount_amount))} off
                               </span>
                             )}
                             {/* 5.63.0 — a part-split ticket wears its ledger on

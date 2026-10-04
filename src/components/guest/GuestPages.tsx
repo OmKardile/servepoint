@@ -352,7 +352,9 @@ function Customizer({ item, onAdd, locked }: { item: GuestMenuItem; onAdd: (l: O
                   {v.name}
                   {v.price_delta !== 0 && (
                     <span className={active ? 'text-[#E7C878]' : 'text-[#B88E2F]'}>
-                      {v.price_delta > 0 ? `+₹${round2(v.price_delta)}` : `−₹${round2(-v.price_delta)}`}
+                      {/* 5.139.0 — money() like every other price the guest file
+                          renders: "+₹10.5" was paise-ambiguous money text. */}
+                      {v.price_delta > 0 ? `+${money(v.price_delta)}` : `−${money(-v.price_delta)}`}
                     </span>
                   )}
                 </button>
@@ -381,7 +383,10 @@ function Customizer({ item, onAdd, locked }: { item: GuestMenuItem; onAdd: (l: O
                 >
                   {active && <Check size={13} aria-hidden />}
                   {a.name}
-                  <span className={active ? 'text-[#E7C878]' : 'text-[#B88E2F]'}>+₹{round2(a.price)}</span>
+                  {/* 5.139.0 — the chip speaks the file's own money() helper like
+                      the dish prices and cart rows already do: "₹49.5" was
+                      paise-ambiguous money text inside the file's own grammar. */}
+                  <span className={active ? 'text-[#E7C878]' : 'text-[#B88E2F]'}>+{money(a.price)}</span>
                 </button>
               );
             })}
