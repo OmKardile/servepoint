@@ -3,8 +3,11 @@ import { useUi } from '../../store/session';
 import {
   BookOpenText,
   Check,
+  ChefHat,
   CircleAlert,
+  CircleOff,
   Copy,
+  FileSpreadsheet,
   ImagePlus,
   Layers,
   Loader2,
@@ -15,6 +18,7 @@ import {
   Search,
   SlidersHorizontal,
   Trash2,
+  TrendingDown,
   Trophy,
   X,
 } from 'lucide-react';
@@ -43,9 +47,10 @@ import {
   type MenuVariant,
 } from '../../lib/api';
 import { computeTopMovers, MOVER_WINDOW_DAYS, type Mover } from '../../lib/movers';
-import { appFormatters, appTzTag } from '../../lib/appday';
+import { appFormatters, appTzTag, appTodayIso } from '../../lib/appday';
 import { useTenant } from '../../lib/tenant';
 import { formatMoney } from '../../lib/prefs';
+import { downloadCsv } from '../../lib/csv';
 import { useDialogA11y } from '../../lib/useDialogA11y';
 import { MarkHit } from '../shell/MarkHit';
 import type { MenuItem } from '../../types';
@@ -62,6 +67,13 @@ import type { MenuItem } from '../../types';
  * list speaks) and what it KEEPS — so thin margins show at the surface where
  * prices are set, not just in the back office. A dish without a recipe says
  * so honestly instead of pretending its cost is zero.
+ *
+ * v5.171.0 — the house catalog: the menu gains its private voice. The chat
+ * menu (5.152.0) is the guest's copy; the Catalog CSV is the owner's own
+ * spreadsheet — costs, kept margins, mover ranks and availability ride out
+ * together, and an unpriced dish leaves its cost cells EMPTY (never ₹0).
+ * The header strip reads the menu's health at a glance — sold out, no
+ * recipe, priced under cost, thin — with the names riding the tooltips.
  */
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
@@ -117,6 +129,30 @@ const MoverMedallion: React.FC<{ rank: number; units: number; tickets: number; p
     {pulled && ' · pulled'}
   </span>
 );
+
+/* v5.171.0 — one quiet chip per condition; the strip counts, the hover
+ * names names (up to four, then “+N more”). Silence when all zero — the
+ * strip never congratulates. */
+const HealthChip: React.FC<{
+  count: number;
+  names: string[];
+  label: string;
+  title: string;
+  icon: React.ReactNode;
+  className: string;
+}> = ({ count, names, label, title, icon, className }) => {
+  const shown = names.slice(0, 4).join(', ');
+  const more = names.length > 4 ? ` +${names.length - 4} more` : '';
+  return (
+    <span
+      title={names.length > 0 ? `${title} — ${shown}${more}` : title}
+      className={`flex h-6 items-center gap-1 rounded-full px-2.5 text-[10.5px] font-bold ${className}`}
+    >
+      {icon}
+      {count} {label}
+    </span>
+  );
+};
 
 /* ── modals ─────────────────────────────────────────────────────────────── */
 
@@ -552,6 +588,127 @@ export function buildMenuText(opts: MenuTextOpts): string {
   return out.join('\n');
 }
 
+/* ── v5.171.0 — the house catalog ─────────────────────────────────────
+ * The chat menu is the menu's public voice; the catalog is its private
+ * one — the owner's own spreadsheet, carrying the intelligence the chat
+ * menu withholds: costs, kept margins, mover ranks, availability. One
+ * builder feeds the file and the health strip reads the same math, so
+ * screen and sheet can never disagree. An unpriced dish leaves its cost
+ * cells EMPTY — never ₹0 (the 208 doctrine); a non-mover leaves its
+ * rank cells EMPTY — silence, not a dash pretending to be data.
+ * Exported pure so the suite can assert the file without the browser. */
+export interface CatalogOpts {
+  cats: { name: string; items: MenuItem[] }[];
+  variants: MenuVariant[];
+  links: Map<string, Set<string>>;
+  addonNames: Map<string, string>;
+  unitCosts: Map<string, number>;
+  moverInfo: Map<string, { rank: number; units: number; tickets: number }>;
+}
+
+export interface CatalogRow {
+  category: string;
+  name: string;
+  price: number;
+  cost: number | null; /* null = no recipe on file — EMPTY cell, never 0 */
+  kept: number | null;
+  keptPct: number | null; /* 0..1 fraction; the sheet prints percent */
+  options: number;
+  addons: string[];
+  available: boolean;
+  rank: number | null;
+  units: number | null;
+  tickets: number | null;
+}
+
+/* Order follows the screen: categories in their array order, items in
+ * fetch order within each — the sheet mirrors what the owner sees. */
+export function catalogRows(o: CatalogOpts): CatalogRow[] {
+  const rows: CatalogRow[] = [];
+  for (const c of o.cats) {
+    for (const i of c.items) {
+      const price = Number(i.price);
+      const costVal = o.unitCosts.get(i.id);
+      const cost = costVal !== undefined && Number.isFinite(costVal) ? costVal : null;
+      const keptPct = cost !== null && price > 0 ? (price - cost) / price : null;
+      const mover = o.moverInfo.get(i.id);
+      rows.push({
+        category: c.name,
+        name: i.name,
+        price,
+        cost,
+        kept: cost !== null ? price - cost : null,
+        keptPct,
+        options: o.variants.filter((v) => v.menu_item_id === i.id).length,
+        addons: [...(o.links.get(i.id) ?? [])]
+          .map((id) => o.addonNames.get(id) || '')
+          .sort((a, b) => a.localeCompare(b)),
+        available: i.is_available !== false,
+        rank: mover ? mover.rank : null,
+        units: mover ? mover.units : null,
+        tickets: mover ? mover.tickets : null,
+      });
+    }
+  }
+  return rows;
+}
+
+export function catalogCsvRows(o: CatalogOpts & { storeName: string }): unknown[][] {
+  const rows = catalogRows(o);
+  const priced = rows.filter((r) => r.cost !== null).length;
+  const out: unknown[][] = [
+    [`${o.storeName} — menu catalog`],
+    [`${rows.length} dishes · ${priced} priced from recipes · week ranks and units read the same paid ledger the counter's rail pins`],
+    [],
+    ['Category', 'Item', 'Price', 'Cost per serve', 'Kept', 'Kept %', 'Options', 'Add-ons', 'Availability', 'Week rank', 'Units (7d)', 'Tickets (7d)'],
+  ];
+  for (const r of rows) {
+    out.push([
+      r.category,
+      r.name,
+      r.price,
+      r.cost,
+      r.kept,
+      r.keptPct === null ? null : Math.round(r.keptPct * 1000) / 10,
+      r.options,
+      r.addons.join(', '),
+      r.available ? 'available' : 'SOLD OUT',
+      r.rank,
+      r.units,
+      r.tickets,
+    ]);
+  }
+  return out;
+}
+
+/* The menu's health at a glance — the same kept% bands the price chips
+ * speak (≥50% healthy, ≥25% thin, else priced under its own kitchen),
+ * plus the two silences: sold out, and no recipe on file. */
+export interface MenuHealth {
+  soldOut: string[];
+  noRecipe: string[];
+  underCost: string[];
+  thin: string[];
+}
+
+export function menuHealth(o: { items: MenuItem[]; unitCosts: Map<string, number> }): MenuHealth {
+  const h: MenuHealth = { soldOut: [], noRecipe: [], underCost: [], thin: [] };
+  for (const i of o.items) {
+    if (i.is_available === false) h.soldOut.push(i.name);
+    const price = Number(i.price);
+    const costVal = o.unitCosts.get(i.id);
+    if (costVal === undefined || !Number.isFinite(costVal)) {
+      h.noRecipe.push(i.name);
+      continue;
+    }
+    if (price <= 0) continue;
+    const keptPct = (price - costVal) / price;
+    if (keptPct < 0.25) h.underCost.push(i.name);
+    else if (keptPct < 0.5) h.thin.push(i.name);
+  }
+  return h;
+}
+
 export function MenuScreen(): React.ReactElement {
   const { tenant, tenantId, error: tenantError, loading } = useTenant();
   const [tick, setTick] = useState(0);
@@ -751,6 +908,31 @@ export function MenuScreen(): React.ReactElement {
     window.setTimeout(() => setMenuCopyState('idle'), 1800);
   };
 
+  /* v5.171.0 — the house catalog: the same menu state the screen renders,
+   * projected for the owner's spreadsheet (5.146.0 rule, menu edition —
+   * one assembly per document). The FULL catalog rides out, never the
+   * search box's current slice. */
+  const addonNames = useMemo(() => new Map(addons.map((a) => [a.id, a.name])), [addons]);
+  const catalogOpts = useMemo<CatalogOpts & { storeName: string }>(() => {
+    const grouped = categories.map((c) => ({ name: c.name, items: items.filter((i) => i.category_id === c.id) }));
+    const orphan = items.filter((i) => !categories.some((c) => c.id === i.category_id));
+    if (orphan.length > 0) grouped.push({ name: 'Uncategorised', items: orphan });
+    return {
+      storeName: tenant?.name || 'ServePoint store',
+      cats: grouped,
+      variants,
+      links,
+      addonNames,
+      unitCosts,
+      moverInfo,
+    };
+  }, [tenant?.name, categories, items, variants, links, addonNames, unitCosts, moverInfo]);
+  const health = useMemo(() => menuHealth({ items, unitCosts }), [items, unitCosts]);
+  const downloadCatalog = () => {
+    if (items.length === 0) return;
+    downloadCsv(`servepoint-menu-catalog-${appTodayIso()}.csv`, catalogCsvRows(catalogOpts));
+  };
+
   const editingItem = itemModal?.mode === 'edit' ? items.find((i) => i.id === itemModal.itemId) : null;
   const variantsItem = items.find((i) => i.id === variantsModalFor) || null;
 
@@ -789,6 +971,53 @@ export function MenuScreen(): React.ReactElement {
               <Trophy size={11} aria-hidden />
               Gold No.N marks this week's paid movers — the same list the counter's rail pins. A red “No.N · pulled” is a favourite gone sold out.
             </p>
+          )}
+          {/* v5.171.0 — the menu's health at a glance: the same kept% bands
+              the price chips speak, plus the two silences (sold out, no
+              recipe). Silence when all zero — the strip never congratulates. */}
+          {(health.soldOut.length > 0 || health.noRecipe.length > 0 || health.underCost.length > 0 || health.thin.length > 0) && (
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {health.soldOut.length > 0 && (
+                <HealthChip
+                  count={health.soldOut.length}
+                  names={health.soldOut}
+                  label="sold out"
+                  title="Marked unavailable — the counter, the kitchen and the QR all refuse it until the Available toggle returns."
+                  icon={<CircleOff size={11} aria-hidden />}
+                  className="bg-[#FDF3F2] text-[#B4483C]"
+                />
+              )}
+              {health.noRecipe.length > 0 && (
+                <HealthChip
+                  count={health.noRecipe.length}
+                  names={health.noRecipe}
+                  label="no recipe"
+                  title="No recipe on file (Inventory → Recipes) — the kitchen cost is unknown, so the margin stays silent rather than guessing."
+                  icon={<ChefHat size={11} aria-hidden />}
+                  className="bg-[#F1F4F1] text-[#6B6B6B]"
+                />
+              )}
+              {health.underCost.length > 0 && (
+                <HealthChip
+                  count={health.underCost.length}
+                  names={health.underCost}
+                  label="priced under cost"
+                  title="Keeps less than 25% of its bill at the price on file — priced under its own kitchen (Inventory → Recipes holds the costs)."
+                  icon={<TrendingDown size={11} aria-hidden />}
+                  className="bg-[#FDF3F2] text-[#B4483C]"
+                />
+              )}
+              {health.thin.length > 0 && (
+                <HealthChip
+                  count={health.thin.length}
+                  names={health.thin}
+                  label="thin"
+                  title="Keeps 25–50% of its bill — worth a look before the weekend prices go to print."
+                  icon={<CircleAlert size={11} aria-hidden />}
+                  className="bg-[#FDF9F0] text-[#8A5A16]"
+                />
+              )}
+            </div>
           )}
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -840,6 +1069,14 @@ export function MenuScreen(): React.ReactElement {
               >
                 <MessageCircle size={15} aria-hidden /> WhatsApp
               </a>
+              <button
+                type="button"
+                onClick={downloadCatalog}
+                aria-label="Download the menu catalog as CSV — the house's own copy, with costs and margins"
+                className="flex h-11 items-center gap-1.5 rounded-full border border-[#E3E7E0] bg-white px-4 text-[13px] font-semibold text-[#0F3D3E] hover:border-[#B88E2F]"
+              >
+                <FileSpreadsheet size={15} aria-hidden /> Catalog CSV
+              </button>
             </>
           )}
           <button
