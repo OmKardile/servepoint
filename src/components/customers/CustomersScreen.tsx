@@ -336,6 +336,31 @@ export function redemptionsByOffer(
   return m;
 }
 
+/** ── v5.208.0 — the ledger's GUEST side ──────────────────────────────
+ *  The drawer sliced the ledger by OFFER (5.206); the book's file slices
+ *  the same read by GUEST. The join is the CRM's identity key since v5.5:
+ *  both sides normalize through phoneDigits and only a non-empty digit
+ *  string may claim a guest — the echo never guesses, and a redemption on
+ *  an anonymous ticket stays out of every guest's bucket (it still speaks
+ *  in the offer registers — 5.206's orphan discipline, now at phone
+ *  scale: counted in the take, silent in the book). Buckets preserve the
+ *  read's own newest-first order (the .order IS the clock — a local
+ *  re-sort would be a second one). Exported pure so the suite owns the
+ *  join. */
+export function redemptionsByPhone(
+  rows: OfferRedemptionRow[],
+): Map<string, OfferRedemptionRow[]> {
+  const m = new Map<string, OfferRedemptionRow[]>();
+  for (const r of rows) {
+    const d = phoneDigits(r.customerPhone);
+    if (!d) continue; // an anonymous ticket never claims a guest
+    const list = m.get(d) || [];
+    list.push(r);
+    m.set(d, list);
+  }
+  return m;
+}
+
 /** ── v5.206.0 — the drawer's footer arithmetic ──────────────────────
  *  One offer's rows in, the drawer's average voice out: count, the
  *  given sum (the SAME sum offerGivenAway speaks on the chip — one
@@ -418,27 +443,47 @@ function phoneDigits(p: string | null | undefined): string {
  * 5.8.0). Exports the CURRENTLY NARROWED list — the tiles and the search
  * decide what the counter is looking at, the file carries exactly that (the
  * Bills house law: the counter exports what they see). Rows travel in the
- * list's own order — most-valuable regulars first. */
-function exportGuestsCsv(rows: GuestRow[]): void {
-  if (rows.length === 0) return;
+ * list's own order — most-valuable regulars first.
+ * v5.201.0 — "Last ticket" wears the ledger's word for the billed stamp.
+ * v5.208.0 — the file grows the ledger's GUEST side (three columns, the
+ * phone join): 'Offer redemptions' counts the guest's rows in the SAME
+ * read the offers tab holds (ONE read, FOUR facts — the date 5.190, the
+ * cost 5.197, the ledger 5.206, now the guest side), 'Given away (INR)'
+ * speaks the sum of those rows' paise (the reducer family's arithmetic),
+ * 'Last redemption' the newest row's stamp (bucket[0] — the .order IS the
+ * clock). The cells' grammar: the read LANDED, a guest with no rows
+ * speaks 0 / 0.00 / '' (a provable zero — the register every surface
+ * already shares); the read is null (unread or failed), all three cells
+ * stay '' — an unread ledger never becomes an invented number (the
+ * 5.190 doctrine at file scale). The builder is EXPORTED PURE (228's
+ * billsCsvRows pattern) so the suite owns the file's full content; the
+ * wrapper only carries it out. */
+export function guestsCsvRows(
+  rows: GuestRow[],
+  ledger: Map<string, OfferRedemptionRow[]> | null,
+): unknown[][] {
   const header = [
     'Name',
     'Phone',
     'Tier',
     'Paid visits',
     'Paid total (INR)',
-    /* v5.201.0 — "Last ticket": the column carries the billed stamp (any
-     * non-cancelled ticket on the phone), so it wears the ledger's word
-     * for that population — the row cell and the file now say the same
-     * thing the drill's All tickets counts. */
     'Last ticket',
     'On the book since',
     'Email',
     'Notes',
+    /* v5.208.0 — the ledger's guest side rides the phone key (the CRM's
+     * identity since v5.5); the headers name the register plainly. */
+    'Offer redemptions',
+    'Given away (INR)',
+    'Last redemption',
   ];
   const lines: unknown[][] = [header];
   for (const { g, s } of rows) {
     const tier = TIER_META[tierKeyOf(s?.visits ?? 0, Number(s?.total_spent ?? 0))].label;
+    const bucket = ledger ? ledger.get(phoneDigits(g.phone)) : undefined;
+    let given = 0;
+    if (bucket) for (const r of bucket) given += Number(r.discountAmount ?? 0);
     lines.push([
       g.name || '',
       g.phone,
@@ -449,9 +494,19 @@ function exportGuestsCsv(rows: GuestRow[]): void {
       new Date(g.created_at).toLocaleString(),
       g.email || '',
       g.notes || '',
+      /* the guest side: landed read speaks (0 is provable), null read
+       * stays silent — never an invented number. */
+      ledger ? (bucket ? bucket.length : 0) : '',
+      ledger ? given.toFixed(2) : '',
+      bucket && bucket[0] ? new Date(bucket[0].createdAt).toLocaleString() : '',
     ]);
   }
-  downloadCsv(`servepoint-guests-${appTodayIso()}.csv`, lines);
+  return lines;
+}
+
+function exportGuestsCsv(rows: GuestRow[], ledger: Map<string, OfferRedemptionRow[]> | null): void {
+  if (rows.length === 0) return;
+  downloadCsv(`servepoint-guests-${appTodayIso()}.csv`, guestsCsvRows(rows, ledger));
 }
 
 export interface BookVoice {
@@ -786,6 +841,15 @@ const GuestsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry })
     [redemptions],
   );
 
+  /* v5.208.0 — the same read sliced by GUEST (the phone join): the map
+   * the book's CSV carries out. null = the ledger unread (or could not):
+   * the file's three guest-side cells stay '' — the unread ledger never
+   * becomes an invented number. */
+  const ledgerByPhone = useMemo(
+    () => (redemptions ? redemptionsByPhone(redemptions) : null),
+    [redemptions],
+  );
+
   /* mutations ─────────────────────────────────────────────────────────── */
 
   const saveGuest = useCallback(
@@ -996,7 +1060,7 @@ const GuestsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry })
                   an empty narrowing exports an empty file, so it refuses. */}
               <button
                 type="button"
-                onClick={() => exportGuestsCsv(rows)}
+                onClick={() => exportGuestsCsv(rows, ledgerByPhone)}
                 disabled={rows.length === 0}
                 aria-label="Export guests as CSV"
                 title="Export the filtered list as CSV (opens in Excel / Sheets)"

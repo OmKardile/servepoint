@@ -2624,6 +2624,11 @@ export interface OfferRedemptionRow {
   discountAmount: number;
   /** the total the ticket walked in with (null on a rare orphaned ticket) */
   orderTotal: number | null;
+  /** v5.208.0 — the guest's phone on the ticket that redeemed, straight
+   * from the same orders embed (null on an anonymous ticket). The CRM's
+   * identity key since v5.5 rides the read for free — the guests CSV's
+   * guest-side columns join on THIS, never a second read. */
+  customerPhone: string | null;
   createdAt: string;
 }
 
@@ -2631,7 +2636,7 @@ export async function fetchOfferRedemptions(tenantId: string, limit = 500): Prom
   requireCloud();
   const { data, error } = await supabase
     .from('offer_redemptions')
-    .select('offer_id, discount_amount, created_at, offers(title, discount_type, discount_value, is_active), orders(total)')
+    .select('offer_id, discount_amount, created_at, offers(title, discount_type, discount_value, is_active), orders(total, customer_phone)')
     .eq('tenant_id', tenantId)
     .order('created_at', { ascending: false })
     .limit(limit);
@@ -2641,7 +2646,7 @@ export async function fetchOfferRedemptions(tenantId: string, limit = 500): Prom
     discount_amount: number;
     created_at: string;
     offers?: { title?: string; discount_type?: string; discount_value?: number; is_active?: boolean } | null;
-    orders?: { total?: number } | null;
+    orders?: { total?: number; customer_phone?: string | null } | null;
   }[]).map((r) => ({
     offerId: r.offer_id,
     title: r.offers?.title ?? 'an offer since gone',
@@ -2650,6 +2655,7 @@ export async function fetchOfferRedemptions(tenantId: string, limit = 500): Prom
     isActive: r.offers?.is_active ?? false,
     discountAmount: Number(r.discount_amount ?? 0),
     orderTotal: r.orders?.total != null ? Number(r.orders.total) : null,
+    customerPhone: r.orders?.customer_phone ?? null,
     createdAt: r.created_at,
   }));
 }
