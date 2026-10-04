@@ -52,7 +52,7 @@ import {
 } from '../../lib/api';
 import { computePaceByItem, computeTopMovers, MOVER_WINDOW_DAYS, type Mover } from '../../lib/movers';
 import { formatMoney } from '../../lib/prefs';
-import { LOW_COVER, shelfCoverage, shelfDaysClause } from '../../lib/shelf';
+import { LOW_COVER, computeBurnByIngredient, shelfCoverage, shelfDays, shelfDaysClause } from '../../lib/shelf';
 import { downloadCsv } from '../../lib/csv';
 import { appTodayIso, appFormatters, appTzTag } from '../../lib/appday';
 import { useDialogA11y } from '../../lib/useDialogA11y';
@@ -627,6 +627,36 @@ const InventoryInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
     return { low, out, value };
   }, [items]);
 
+  /* v5.176.0 — the bin's days: weekly burn per ingredient = Σ (recipe
+   * line qty × the dish's paid pace) over the SAME pace map the editor's
+   * strip and the planner's preset ride (computePaceByItem, one ledger);
+   * the bin's days are then shelfDays(stock, burn) — the ONE division the
+   * dish's days use, zero new math. pace null (ledger unread/failed) →
+   * no burn anywhere → every bin stays silent, never an invented 0. */
+  const burnByIngredient = useMemo<Map<string, number>>(
+    () => computeBurnByIngredient(recipes, pace),
+    [recipes, pace],
+  );
+  /* The bin's raw days per SKU (shelfDays = the number; the clause floors
+   * in words). null = silence — no recipe draws on the bin this week, or
+   * the bin is already out (the row's own level tone says "Out").
+   * dryBins feeds the header's whole-shelf forecast (the menu strip's
+   * amber pattern, 5.173.0). */
+  const binDays = useMemo<Map<string, number | null>>(() => {
+    const map = new Map<string, number | null>();
+    for (const it of items) {
+      map.set(it.id, shelfDays(it.current_stock, burnByIngredient.get(it.id) ?? null));
+    }
+    return map;
+  }, [items, burnByIngredient]);
+  const dryBins = useMemo(
+    () => items.filter((i) => {
+      const d = binDays.get(i.id) ?? null;
+      return d !== null && d <= 7;
+    }).length,
+    [items, binDays],
+  );
+
   /* v5.117.0 — the visible slice of the shelf under the search: names
    * only, case-insensitive. 5.130.0 — the tile filter composes with it:
    * the SAME predicates the stat tiles count with (low = above zero but
@@ -1138,6 +1168,14 @@ const InventoryInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
                   <p className="text-[11.5px] text-[#6B6B6B]">
                     <span className="font-bold text-[#1A1A1A]">{items.length}</span>{' '}
                     ingredient{items.length === 1 ? '' : 's'} on the shelf — every hand move lands in the diary
+                    {dryBins > 0 && (
+                      <>
+                        {' · '}
+                        <span className="font-bold text-[#8A5A00]">
+                          {dryBins} {dryBins === 1 ? 'bin dries' : 'bins dry'} within the week at this burn
+                        </span>
+                      </>
+                    )}
                   </p>
                 )}
                 <button
@@ -1207,6 +1245,16 @@ const InventoryInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
                 const max = Math.max(it.reorder_point * 2, it.current_stock, 1);
                 const pct = Math.min(100, (it.current_stock / max) * 100);
                 const busy = busyId === it.id;
+                /* v5.176.0 — the row's clock: the bin speaks its days in
+                   the family's every rule and none of its words — "at this
+                   burn" (shelfDaysClause's own noun swap, ONE math). Amber
+                   within the week, quiet grey past it; silence when the
+                   bin has no burn (no recipe pace draws on it) or is
+                   already out (the level tone said "Out" in its own voice
+                   — the bin never says "forever" either). */
+                const binClause = shelfDaysClause(it.current_stock, burnByIngredient.get(it.id) ?? null, 'burn');
+                const binDaysN = binDays.get(it.id) ?? null;
+                const binUrgent = binDaysN !== null && binDaysN <= 7;
                 return (
                   <li
                     key={it.id}
@@ -1238,6 +1286,17 @@ const InventoryInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
                           {fmtQty(it.reorder_point)} {it.unit}
                         </span>
                       </div>
+                      {binClause && (
+                        <p
+                          className={`mt-1 flex items-center gap-1 text-[10.5px] font-semibold ${binUrgent ? 'text-[#8A5A00]' : 'text-[#969696]'}`}
+                          title={binUrgent
+                            ? 'The bin runs dry within the week at this burn — cover it from the batch planner (Recipes tab).'
+                            : "Days of cover at the dishes' paid pace (recipe lines × the week's sales)."}
+                        >
+                          <Clock size={10} aria-hidden />
+                          {binClause}
+                        </p>
+                      )}
                     </div>
                     <div className="flex shrink-0 items-center gap-2">
                       <span className="hidden text-[11px] text-[#969696] sm:block">

@@ -1,6 +1,6 @@
 /* ── The shelf's answer, as ONE shared truth (5.91.0; the recipe editor
  *    joins in 5.166.0, the counter's item sheet in 5.170.0, the shelf's
- *    days in 5.172.0) ─────────────────────────────────────────────
+ *    days in 5.172.0, the bin's days in 5.176.0) ────────────────────
  *
  *   "How many more of this dish can the shelf still make?" — the thinnest
  *   recipe SKU decides, computed from what's actually on file. Born inside
@@ -19,6 +19,16 @@
  *   (shelfDaysClause). No pace → the answer stays as it always was — a
  *   dish nobody bought this week has no pace to divide by, and the shelf
  *   does not pretend it keeps forever.
+ *
+ *   5.176.0 — the bin learns to speak the same time. The dish's days are
+ *   built FROM the ingredients' stock; the ingredient's days are built
+ *   FROM the dishes' pace: weekly burn per SKU = Σ (recipe line qty ×
+ *   the dish's paid pace), and the bin's days = shelfDays(stock, burn)
+ *   — THE SAME division, one math, zero new denominators. The bin is a
+ *   different subject, so its clause borrows the family's every rule
+ *   (the floor, the boundaries, the weeks switch) and changes only the
+ *   noun: "at this burn". No recipe pace → no burn → silence, exactly
+ *   like a dish nobody bought — the bin never says "forever" either.
  *
  *   Honesty rules (inherited verbatim from the shelf's board):
  *   • no recipe lines on file  → coverage null, unknown false — the shelf
@@ -143,19 +153,54 @@ export function shelfDays(
   return Number.isFinite(days) ? days : null;
 }
 
+/** The bin's weekly burn per ingredient — ingredient-units per week, Σ
+ *  (recipe line qty × the dish's paid pace) over every dish that draws on
+ *  the bin (5.176.0). The SAME pace ledger the rail ranks and the days
+ *  voice divides — no new source, no new denominator. A dish with no
+ *  pace contributes nothing (silence, not zero — nobody bought it); a
+ *  noise line (qty ≤ 0) is skipped like every shelf line; an unread
+ *  ledger (pace null) reads as no burn anywhere — the bin stays silent,
+ *  never an invented 0. */
+export interface BurnLine extends ShelfLine {
+  menu_item_id: string;
+}
+
+export function computeBurnByIngredient(
+  lines: BurnLine[],
+  pace: Map<string, number> | null,
+): Map<string, number> {
+  const burn = new Map<string, number>();
+  if (!pace) return burn;
+  for (const r of lines) {
+    if (!r.menu_item_id) continue;
+    const p = pace.get(r.menu_item_id);
+    if (p == null || !(p > 0)) continue;
+    const qty = Number(r.qty_per_serve);
+    if (!Number.isFinite(qty) || !(qty > 0)) continue;
+    burn.set(r.inventory_item_id, (burn.get(r.inventory_item_id) ?? 0) + qty * p);
+  }
+  return burn;
+}
+
 /** The days voice — words built on shelfDays, never re-answering it.
  *  Under a day speaks honestly ("less than a day"); past a fortnight the
- *  voice moves to weeks (days stop meaning anything to a kitchen). */
+ *  voice moves to weeks (days stop meaning anything to a kitchen).
+ *
+ *  5.176.0 — optional `noun`: the bin borrows every rule and changes the
+ *  word ("at this burn"). Default keeps every existing caller's text
+ *  byte-identical — the formatting lives here ONCE, so the dish's clause
+ *  and the bin's clause can never drift apart. */
 export function shelfDaysClause(
   coverage: number | null,
   paceUnits: number | null | undefined,
+  noun: string = 'pace',
 ): string | null {
   const d = shelfDays(coverage, paceUnits);
   if (d == null) return null;
-  if (d < 1) return 'less than a day at this pace';
+  if (d < 1) return `less than a day at this ${noun}`;
   if (d < 14) {
     const f = Math.floor(d);
-    return `~${f} ${f === 1 ? 'day' : 'days'} at this pace`;
+    return `~${f} ${f === 1 ? 'day' : 'days'} at this ${noun}`;
   }
-  return `~${Math.floor(d / 7)} weeks at this pace`;
+  return `~${Math.floor(d / 7)} weeks at this ${noun}`;
 }
