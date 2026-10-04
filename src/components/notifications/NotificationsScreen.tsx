@@ -83,8 +83,10 @@ const CATEGORY_LABEL: Record<NotificationCategory, string> = {
 };
 
 /* The bell's door — a link_to slug only counts if it names a real section;
- * anything else (or nothing) renders no door. Honest unknown = no button. */
-const doorOf = (n: AppNotification): Section | null => {
+ * anything else (or nothing) renders no door. Honest unknown = no button.
+ * v5.188.0 — exported pure so the suite can assert the door's truth table
+ * (the mapping the deep-link button AND the door's read receipt ride). */
+export const doorOf = (n: AppNotification): Section | null => {
   const slug = n.link_to;
   if (!slug) return null;
   return Object.hasOwn(SECTION_LABELS, slug) ? (slug as Section) : null;
@@ -341,8 +343,13 @@ const NotificationCard: React.FC<{
                 {door && (
                   <button
                     onClick={() => onOpen(n)}
-                    aria-label={`Open ${SECTION_LABELS[door]} — ${n.title}`}
-                    className="flex items-center gap-1 rounded-lg bg-[#0F3D3E]/5 px-2.5 py-1 text-[12px] font-semibold text-[#0F3D3E] transition hover:bg-[#0F3D3E]/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#967221]"
+                    aria-label={`Open ${SECTION_LABELS[door]} — ${n.title}${unread ? ', marks it read' : ''}`}
+                    title={unread ? 'Opening marks it read — the walk is the receipt' : undefined}
+                    className={`flex items-center gap-1 rounded-lg px-2.5 py-1 text-[12px] font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#967221] ${
+                      unread
+                        ? 'bg-[#B88E2F]/12 text-[#8A5A00] hover:bg-[#B88E2F]/20'
+                        : 'bg-[#0F3D3E]/5 text-[#0F3D3E] hover:bg-[#0F3D3E]/10'
+                    }`}
                   >
                     Open {SECTION_LABELS[door]}
                     <ArrowRight size={12} aria-hidden />
@@ -518,10 +525,27 @@ const NotificationsContent: React.FC<{ onTenantRetry: () => void }> = ({ onTenan
     }
   };
 
-  /* The door: walk from the bell straight to the screen it is about. */
+  /* The door: walk from the bell straight to the screen it is about.
+   * v5.188.0 — the walk IS the read receipt: an unread row whose door
+   * opened marks read fire-and-forget (optimistic flip first — the list
+   * is honest instantly; rollback on error; navigation never waits on a
+   * write). The badge is server-derived and the realtime pings on UPDATE,
+   * so the bell drains the moment the row is seen — the count can't stay
+   * fat with rows already walked. An unread row with NO door keeps its
+   * badge — it was seen nowhere but here, and here the explicit Mark
+   * read button waits. */
   const onOpen = (n: AppNotification) => {
     const door = doorOf(n);
-    if (door) goSection(door, [SECTION_LABELS[door]]);
+    if (door) {
+      goSection(door, [SECTION_LABELS[door]]);
+      if (!n.is_read) {
+        setItems((prev) => prev.map((x) => (x.id === n.id ? { ...x, is_read: true } : x)));
+        markNotificationRead(n.id).catch(() => {
+          setItems((prev) => prev.map((x) => (x.id === n.id ? { ...x, is_read: n.is_read } : x)));
+          setMarkError(`Couldn't mark "${n.title}" as read`);
+        });
+      }
+    }
   };
 
   if (tenant.loading) {
