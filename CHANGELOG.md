@@ -3,6 +3,17 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.146.0] — 2026-10-04 — The day summary rides in the owner's pocket
+
+### Added — Copy + WhatsApp share on the Close-out Z-report (`src/components/eod/EodScreen.tsx`)
+
+The day-ledger CSV was already "the accountant's twin" of the printed Z; now the chat twin exists. `buildZReportText(opts)` (exported pure, like its receipt sibling from 5.145.0) renders the SAME `ZReportOpts` the thermal print consumes into the house's 32-column text frame — the money block, cost & margin, payments, sections, the bin's waste, the floor's rounds and no-shows, and the cash-drawer block, in the print's own order and with its own honest zero-language ("nothing", "the floor sat quiet"). The opts assembly moved out of `printReport` into a shared `buildZOpts()` — paper, CSV, and chat all quote the same day. The Close-out action area gains the share row (Copy report / WhatsApp, the bill share row's ghost-gold grammar): WhatsApp opens the share picker by design — a day summary goes where the OWNER sends it, never a guessed recipient. Inline honest copy feedback ("Copied" breath / "Copy blocked" on clipboard refusal), same as 5.145.0.
+
+### Verified
+
+tsc EXIT=0; build EXIT=0 (/tmp/build185a.log); sw VERSION 5.146.0-r1. Live E2E (dev, Close-out → Sat 3 Oct): share text decoded from the real wa.me href matches the pane to the rupee (Orders 1 · Gross ₹294.00 · GST ₹14.00 · PAID ₹294.00 · margin ₹244.00 = 294 − 14 GST − 36 cost ✓ · CASH ₹294.00 · sections Coffee 100%); Copy exercised to its honest "Copy blocked" fail path (headless clipboard denial) with the 1.8 s reset verified; zero console errors. READ-ONLY round (zero cloud writes). Screenshot .qa-screens/qa185-zreport-share.png.
+
+
 ## [5.145.0] — 2026-10-04 — The bill speaks in chat
 
 ### Added — Copy + WhatsApp share on the bill detail (`src/components/bills/ReceiptPrint.tsx`, `src/components/bills/BillsScreen.tsx`, `src/types.ts`)

@@ -3,16 +3,19 @@ import {
   AlertTriangle,
   Armchair,
   CalendarDays,
+  Check,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
   Clock,
   Coins,
+  Copy,
   Download,
   Flame,
   HandCoins,
   History,
   LockKeyhole,
+  MessageCircle,
   MoonStar,
   Printer,
   RefreshCw,
@@ -349,6 +352,96 @@ function printZReport(opts: ZReportOpts): void {
 </body></html>`;
 
   printHiddenFrame(html);
+}
+
+/**
+ * v5.146.0 — the Z-report's chat voice ("the accountant's twin" had a CSV;
+ * now the owner's pocket gets one too). The SAME ZReportOpts the thermal
+ * print consumes, rendered as aligned plain text for Copy / WhatsApp share:
+ * same money block, same cost & margin, same payments/sections/bin/floor/
+ * drawer blocks in the print's own order, same honest zero-language
+ * ("nothing", "the floor sat quiet"). Exported pure so browser E2E can
+ * assert the share text without touching the clipboard. 32-column frame,
+ * same as the receipt's chat voice (5.145.0) — one house text-register.
+ */
+export function buildZReportText(opts: ZReportOpts): string {
+  const W = 32;
+  const two = (l: string, r: string): string => {
+    const cut = Math.max(1, W - r.length - 1);
+    const left = l.length > cut ? `${l.slice(0, cut - 1)}…` : l;
+    return left.padEnd(W - r.length, ' ') + r;
+  };
+  const hr = '-'.repeat(W);
+  const center = (s: string): string =>
+    s.length >= W ? s : ' '.repeat(Math.floor((W - s.length) / 2)) + s;
+
+  const out: string[] = [];
+  out.push(center(opts.storeName));
+  out.push(center('Z-REPORT · END OF DAY'));
+  out.push(center(`${prettyDay(opts.dateIso)} · ${appTimezone()}`));
+  out.push(hr);
+  out.push(two('Orders', String(opts.orders)));
+  out.push(two('Cancelled', String(opts.cancelled)));
+  out.push(two('Gross sales', formatMoney(opts.gross)));
+  out.push(two('GST collected', formatMoney(opts.gst)));
+  out.push(two('PAID', formatMoney(opts.paid)));
+  out.push(
+    two(
+      'UNPAID',
+      `${formatMoney(opts.unpaid)} (${opts.unpaidTickets} tkt${opts.splitOpen ? ` · ${opts.splitOpen} split` : ''})`,
+    ),
+  );
+  out.push(hr);
+  out.push('COST & MARGIN · PAID TKTS');
+  out.push(two('Ingredient cost', formatMoney(opts.cogs)));
+  out.push(two('GROSS MARGIN', formatMoney(opts.margin)));
+  out.push(hr);
+  out.push('PAYMENTS');
+  if (opts.mix.length > 0) {
+    for (const m of opts.mix) out.push(two(m.method.toUpperCase(), formatMoney(m.amount)));
+  } else {
+    out.push('- (no payments)');
+  }
+  if (opts.sections && opts.sections.length > 0) {
+    out.push(hr);
+    out.push('SECTIONS · EX-GST ITEM BASE');
+    for (const s of opts.sections)
+      out.push(two(`${s.name} · ${s.units}u`, `${formatMoney(s.amount)} (${s.pct}%)`));
+  }
+  if (opts.waste) {
+    out.push(hr);
+    out.push('THE BIN · WASTE');
+    out.push(
+      opts.waste.moves === 0
+        ? two('Waste (spoil/spill/damage)', 'nothing')
+        : two('Waste (spoil/spill/damage)', `${formatMoney(opts.waste.rupees)} · ${opts.waste.moves}mv`),
+    );
+    if (opts.waste.top) out.push(two('Heaviest', opts.waste.top));
+  }
+  if (opts.floor) {
+    out.push(hr);
+    out.push('THE FLOOR · ROUNDS');
+    out.push(
+      opts.floor.rounds === 0
+        ? 'Rounds seated: none - quiet'
+        : two('Rounds seated', `${opts.floor.rounds} · ${formatMoney(opts.floor.rupees)}`),
+    );
+    if (opts.floor.busiest) out.push(two('Busiest table', opts.floor.busiest));
+    if (opts.floor.noShows && opts.floor.noShows > 0)
+      out.push(two('No-shows', `${opts.floor.noShows} booking${opts.floor.noShows === 1 ? '' : 's'}`));
+  }
+  if (opts.drawer) {
+    out.push(hr);
+    out.push(opts.drawer.title);
+    opts.drawer.rows.forEach(([l, r], i) => {
+      const strong = opts.drawer?.strongLast && i === opts.drawer!.rows.length - 1;
+      out.push(strong ? two(l.toUpperCase(), r) : two(l, r));
+    });
+  }
+  out.push(hr);
+  out.push(center(`Printed ${appFormatters().hhmm.format(new Date())} ${appTzTag()}${opts.printedBy ? ` - ${opts.printedBy}` : ''}`));
+  out.push(center('· · · z · close · · ·'));
+  return out.join('\n');
 }
 
 /* ─────────────────────────── cash drawer (020) ─────────────────────────── */
@@ -1291,7 +1384,7 @@ const EodScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
     return { rows, base };
   }, [sectionRows, agg]);
 
-  const printReport = () => {
+  const buildZOpts = (): ZReportOpts => {
     /* CASH DRAWER block — only when a shift actually touches this day.
        Open shift: float + ledger cash-in → expected (marked as such, never
        counted). Sealed shifts CLOSED today: stored counted/variance. */
@@ -1330,7 +1423,7 @@ const EodScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
         };
       }
     }
-    printZReport({
+    return {
       storeName: tenant?.name || 'ServePoint store',
       dateIso,
       orders: agg.live.length,
@@ -1362,7 +1455,26 @@ const EodScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
         busiest: floorDay.busiest,
         noShows: noShowDay,
       },
-    });
+    };
+  };
+  const printReport = () => {
+    printZReport(buildZOpts());
+  };
+
+  /* v5.146.0 — the Z's chat voice: the SAME opts the thermal print consumes,
+   * rendered by buildZReportText for Copy / WhatsApp. Inline honest feedback
+   * (no toast system in the house): "Copied" for a breath, "Copy blocked"
+   * when the clipboard refuses (insecure context / permission denial). */
+  const [zCopyState, setZCopyState] = useState<'idle' | 'ok' | 'fail'>('idle');
+  const copyZReport = async () => {
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error('clipboard unavailable');
+      await navigator.clipboard.writeText(buildZReportText(buildZOpts()));
+      setZCopyState('ok');
+    } catch {
+      setZCopyState('fail');
+    }
+    window.setTimeout(() => setZCopyState('idle'), 1800);
   };
 
   /* ── day-ledger CSV — the accountant's twin of the printed z-report.
@@ -1505,6 +1617,35 @@ const EodScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
             Print z-report
           </button>
         </div>
+        {/* v5.146.0 — the Z's chat voice: the day summary rides in the
+            owner's pocket. Same ghost-gold grammar as the bill's share row
+            (5.145.0); the WhatsApp link opens the share picker (a day
+            summary goes where the OWNER sends it — their own chat, their
+            partners' group — never a guessed recipient). */}
+        {orders.length > 0 && !loading && (
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <button
+              onClick={copyZReport}
+              className="flex min-h-[38px] items-center gap-1.5 rounded-xl border border-[#E3E7E0] bg-white px-3.5 text-[12px] font-semibold text-[#0F3D3E] transition hover:border-[#0F3D3E]/40 hover:bg-[#F6F5F2] active:scale-[0.99]"
+            >
+              {zCopyState === 'ok' ? (
+                <Check size={14} className="text-[#2E7D32]" aria-hidden />
+              ) : (
+                <Copy size={14} aria-hidden />
+              )}
+              {zCopyState === 'ok' ? 'Copied' : zCopyState === 'fail' ? 'Copy blocked' : 'Copy report'}
+            </button>
+            <a
+              href={`https://wa.me/?text=${encodeURIComponent(buildZReportText(buildZOpts()))}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex min-h-[38px] items-center gap-1.5 rounded-xl border border-[#E3E7E0] bg-white px-3.5 text-[12px] font-semibold text-[#0F3D3E] transition hover:border-[#0F3D3E]/40 hover:bg-[#F6F5F2] active:scale-[0.99]"
+            >
+              <MessageCircle size={14} aria-hidden />
+              WhatsApp
+            </a>
+          </div>
+        )}
       </div>
 
       {/* ── right now (today only) — v5.44.0: a real count earns its door.
