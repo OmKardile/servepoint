@@ -14,6 +14,7 @@ import {
   Search,
   Sparkles,
   Trash2,
+  TrendingUp,
   Users,
   Wifi,
   WifiOff,
@@ -141,6 +142,41 @@ function tierOf(visits: number, spent: number): { key: TierKey; label: string; c
   const key = tierKeyOf(visits, spent);
   return { key, ...TIER_META[key] };
 }
+
+/** v5.131.0 — THE LADDER: how far the LEDGER stands from the next rung,
+ *  spoken from the SAME predicates tierKeyOf counts with (one ledger
+ *  truth, two voices — the badge names the rung, the ladder names the
+ *  way back to the next one). New → Regular has one door: 2 paid visits.
+ *  Regular → VIP has two doors — 5 paid visits OR ₹5,000 paid — and the
+ *  line names the NEARER one (both stay true; naming one never closes
+ *  the other). A VIP holds the top rung: silence. */
+function ladderOf(visits: number, spent: number): { lead: string; target: 'regular' | 'vip' } | null {
+  const key = tierKeyOf(visits, spent);
+  if (key === 'vip') return null;
+  if (key === 'new') {
+    return (2 - visits) <= 1
+      ? { lead: 'one more paid visit makes a', target: 'regular' }
+      : { lead: 'two paid visits make a', target: 'regular' };
+  }
+  const vLeft = 5 - visits;
+  return (visits / 5) >= (spent / 5000)
+    ? { lead: `${vLeft} more paid visit${vLeft === 1 ? '' : 's'} make${vLeft === 1 ? 's' : ''} a`, target: 'vip' }
+    : { lead: `${formatMoney(5000 - spent)} more makes a`, target: 'vip' };
+}
+
+/** The rung word's tone on the ladder line — the target tier's own text
+ *  voice (the same family the badge and the tiles wear). */
+const LADDER_TONE: Record<'regular' | 'vip', string> = {
+  regular: 'text-[#2E7D32]',
+  vip: 'text-[#8A5A00]',
+};
+
+/** The stepper's dot/label tone per rung — ledger tones, not decoration. */
+const RUNG_TONE: Record<TierKey, string> = {
+  new: '#6B6B6B',
+  regular: '#2E7D32',
+  vip: '#B88E2F',
+};
 
 function offerBadgeLabel(o: Offer): string {
   return o.discount_type === 'percent'
@@ -983,6 +1019,9 @@ const GuestsTab: React.FC<{
             const visits = s?.visits ?? 0;
             const spent = Number(s?.total_spent ?? 0);
             const armed = deleteArm === g.id;
+            /* v5.131.0 — the ladder line: the ledger's distance to the next
+               rung, from the same tierKeyOf the badge counts with. */
+            const ladder = ladderOf(visits, spent);
             /* 5.90.0 — the guest's promise today, if the book holds one for
                this phone. The pill wears the book's own tone family; the
                hover/aria carries the full provenance sentence. */
@@ -1025,6 +1064,17 @@ const GuestsTab: React.FC<{
                       </span>
                       {g.notes && <span className="truncate">· <MarkHit text={g.notes} query={query} /></span>}
                     </span>
+                    {ladder && (
+                      <span className="mt-1 flex items-center gap-1.5 text-[11.5px] text-[#969696]">
+                        <TrendingUp size={11} aria-hidden className="shrink-0" />
+                        <span className="min-w-0 truncate">
+                          {ladder.lead}{' '}
+                          <span className={`font-semibold ${LADDER_TONE[ladder.target]}`}>
+                            {TIER_META[ladder.target].label}
+                          </span>
+                        </span>
+                      </span>
+                    )}
                   </button>
                   <div className="hidden shrink-0 items-center gap-7 sm:flex">
                     <div className="text-right">
@@ -1543,6 +1593,62 @@ const GuestDetailDrawer: React.FC<{
 
         {/* tickets */}
         <div className="flex-1 overflow-y-auto px-5 py-4">
+          {/* v5.131.0 — THE LADDER: the book's three rungs and the guest's
+              place on them, counted from the same ledger the badge counts
+              with. The strip carries the shape (aria-hidden — the words
+              below it are the announcement); the sentence carries the
+              distance. A VIP hears the definition restated, not a nudge. */}
+          {(() => {
+            const rungs: TierKey[] = ['new', 'regular', 'vip'];
+            const tierIdx = rungs.indexOf(tier.key);
+            const ladder = ladderOf(visits, spent);
+            return (
+              <div className="mb-4 rounded-2xl border border-[#E3E7E0] bg-[#FBFAF7] px-4 py-3.5">
+                <div aria-hidden="true" className="flex items-center">
+                  {rungs.map((k, i) => {
+                    const reached = tierIdx >= i;
+                    const current = tierIdx === i;
+                    return (
+                      <React.Fragment key={k}>
+                        {i > 0 && <span className="mx-2 h-px flex-1 bg-[#E3E7E0]" />}
+                        <span className="flex items-center gap-1.5">
+                          <span
+                            className={`h-2.5 w-2.5 shrink-0 rounded-full ${current ? 'ring-2 ring-offset-1' : ''}`}
+                            style={{
+                              backgroundColor: reached ? RUNG_TONE[k] : '#FFFFFF',
+                              boxShadow: reached ? undefined : 'inset 0 0 0 1.5px #C9CFC9',
+                              ...(current ? ({ '--tw-ring-color': RUNG_TONE[k] } as React.CSSProperties) : {}),
+                            }}
+                          />
+                          <span
+                            className={`text-[10px] font-bold uppercase tracking-wide ${reached ? '' : 'text-[#C9CFC9]'}`}
+                            style={reached ? { color: RUNG_TONE[k] } : undefined}
+                          >
+                            {TIER_META[k].label}
+                          </span>
+                        </span>
+                      </React.Fragment>
+                    );
+                  })}
+                </div>
+                <p className="mt-2.5 text-[12.5px] leading-relaxed text-[#6B6B6B]">
+                  {ladder ? (
+                    <>
+                      {ladder.lead}{' '}
+                      <span className={`font-semibold ${LADDER_TONE[ladder.target]}`}>
+                        {TIER_META[ladder.target].label}
+                      </span>
+                      .
+                    </>
+                  ) : (
+                    <>
+                      Holds the top rung — <span className="font-semibold text-[#8A5A00]">5 paid visits or ₹5,000 paid</span>.
+                    </>
+                  )}
+                </p>
+              </div>
+            );
+          })()}
           {/* TODAY ON THE BOOK (5.90.0) — the guest's promise, in the book's
               own tones: the same family the chip, drill, book rows and the
               bell speak. Null = no match today: the block simply never

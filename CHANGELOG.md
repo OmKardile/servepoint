@@ -3,6 +3,22 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.131.0] — 2026-10-04 — The book shows the way
+
+### Added — Guests: the ledger learns to speak the distance to the next rung
+
+- **The ladder** (`src/components/customers/CustomersScreen.tsx`): the tier badge names the rung a guest stands on (5.129.0); this release the ledger also names the way to the NEXT one. Every non-VIP row gains a ladder line — *"one more paid visit makes a **Regular**"* / *"two paid visits make a **Regular**"* — and a Regular hears the nearer of VIP's two doors: *"N more paid visits make(s) a **VIP**"* or *"₹M more makes a **VIP**"* (the predicate is 5 paid visits OR ₹5,000 paid — naming the nearer door never closes the other). A VIP holds the top rung: the row stays silent.
+- **One ledger, two voices**: the ladder reads the SAME `tierKeyOf` the badge, the tiles, the list predicate and the CSV count with — distance is ledger truth, not a second rule. The rung word wears the target tier's own text tone (sage for Regular, gold for VIP); the line rides the row's whisper register (11.5px, TrendingUp icon) and lives inside the name button — tapping it opens the drawer where the full sentence waits.
+- **The drawer's rung strip**: the guest drawer gains a three-rung stepper (NEW — REGULAR — VIP) between the ledger stats and the day's voice: rungs reached fill with their tier tone (the current one wears a ring), rungs ahead stay hollow; the sentence beneath carries the distance in words, and a VIP hears the definition restated — *"Holds the top rung — 5 paid visits or ₹5,000 paid."* The strip is aria-hidden; the words are the announcement.
+
+### Fixed — 5.130.0 errata
+
+- The CHANGELOG's verified example for the shelf whisper read *"Showing 2 of 4 ingredients for 'co'"*; the live sentence says **1** of 4 (Coffee beans is the only survivor). Corrected — never ship an unverified example, including retroactively.
+
+### Verified
+
+- tsc EXIT=0; build EXIT=0. Live E2E (QR Flow book, 3 guests — all NEW rung): Maya (1 paid visit) → "one more paid visit makes a Regular"; Priya & Ravi (0 paid visits) → "two paid visits make a Regular"; Maya's drawer → stepper NEW filled + ring, REGULAR/VIP hollow, sentence present. The Regular/VIP voices share `tierKeyOf`'s live-verified predicates — the book holds no regular or VIP yet, so the distance math is verified at the rung the data reaches (Platform offers no workspace door and no CheeseBurg owner credentials exist in-repo). Console delta ZERO. READ-ONLY round — zero cloud writes.
+
 ## [5.130.0] — 2026-10-04 — The shelf narrows
 
 ### Added — Inventory: the LOW STOCK and OUT OF STOCK tiles take up the tile grammar
@@ -18,7 +34,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Verified
 
-- tsc EXIT=0; build EXIT=0. Live E2E (QR Flow shelf, 4 healthy SKUs — 0 low, 0 out): Low stock tile → aria-pressed + "No low ingredients" + definition + Show the whole shelf; Out of stock tile → "Nothing is out of stock"; tile + query "zz" → either-can-miss + Clear both; release → 4 rows restored; search "co" → "Showing 2 of 4 ingredients for 'co' — the tiles above still count the whole shelf"; count line returns to the fact line on release. Console delta ZERO. READ-ONLY round — zero cloud writes.
+- tsc EXIT=0; build EXIT=0. Live E2E (QR Flow shelf, 4 healthy SKUs — 0 low, 0 out): Low stock tile → aria-pressed + "No low ingredients" + definition + Show the whole shelf; Out of stock tile → "Nothing is out of stock"; tile + query "zz" → either-can-miss + Clear both; release → 4 rows restored; search "co" → "Showing 1 of 4 ingredients for 'co' — the tiles above still count the whole shelf"; count line returns to the fact line on release. Console delta ZERO. READ-ONLY round — zero cloud writes.
 
 ## [5.129.0] — 2026-10-04 — The book answers
 
