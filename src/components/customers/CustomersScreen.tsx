@@ -652,6 +652,16 @@ const GuestsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry })
     useUi.getState().setSearchMeta({ placeholder: 'Search guests…' });
     return () => useUi.getState().setSearchMeta(null);
   }, []);
+  /* v5.207.0 — the paper's giveaway door consumes its hint here: the
+   * dashboard's "Open offers" lands the section with 'tab:offers' and this
+   * screen opens ON the offers tab (5.203's rule — the named thing
+   * reachable in ONE tap; landing on the guests tab would be a fiction
+   * with a doorknob). One mount-time consumption, the bills' day:-hint
+   * grammar; any other hint (or none) leaves the guests tab standing. */
+  useEffect(() => {
+    const hint = useUi.getState().consumeSectionHint();
+    if (hint === 'tab:offers') setTab('offers');
+  }, []);
   /* 5.90.0 — the book, read fail-soft alongside every load. null = the CRM
      has not read the book (or could not): every voice stays SILENT — an
      unread book never becomes an invented all-clear. */

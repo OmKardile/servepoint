@@ -18,6 +18,7 @@ import {
   ShoppingBag,
   Split,
   Star,
+  Tag,
   TrendingDown,
   TrendingUp,
   UserPlus,
@@ -37,7 +38,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { fetchDashboard, fetchFeedbackStats, fetchInventory, fetchMenuItems, fetchOpenPaymentSums, fetchOrders, fetchReservations, fetchTables, fetchTodayCostMargin, type DiningTable, type FeedbackStats, type InventoryItem, type Reservation, type TodayCostMargin } from '../../lib/api';
+import { fetchDashboard, fetchFeedbackStats, fetchInventory, fetchMenuItems, fetchOfferRedemptions, fetchOffers, fetchOpenPaymentSums, fetchOrders, fetchReservations, fetchTables, fetchTodayCostMargin, type DiningTable, type FeedbackStats, type InventoryItem, type OfferRedemptionRow, type Reservation, type TodayCostMargin } from '../../lib/api';
 import { formatMoney } from '../../lib/prefs';
 /* v5.175.0 — the morning paper borrows the booking clock for its book (the
    database's word, lib/bookingday — the same lib the floor's book, the bell
@@ -57,7 +58,7 @@ import { DoorChip } from '../shell/DoorChip';
    chip. The old inline two-state array forked from the dashboard's own
    oldest-wait clock in the same file; the fork is closed. */
 import { isOnRail } from '../kitchen/KitchenScreen';
-import type { DashboardData, MenuItem, Order } from '../../types';
+import type { DashboardData, MenuItem, Offer, Order } from '../../types';
 
 /**
  * Dashboard (ServePoint v5.0.0, ADR-0014) — rebuilt from the Figma frames:
@@ -777,6 +778,32 @@ export const bookAhead = (
   return { ahead, quiet };
 };
 
+/* ── v5.207.0 — the giveaways reducer: the paper's third register ──
+ *  The redemption ledger (the rows) and the offers register (the live
+ *  count) arrive together; ONE pure function answers for the tile. The
+ *  money is the ledger's own summed paise — the SAME sum the offers tab's
+ *  gold "given" chips speak (5.197's offerGivenAway family; the suite
+ *  asserts the agreement). The count is the rows' length — the same count
+ *  the landing's "used N×" chips add to. The live count is the offers
+ *  register's active rows — the same number the landing's header speaks.
+ *  Empty rows → null: nothing given away yet is not a story the paper
+ *  tells (silence is not zero — the tile never renders a fabricated ₹0).
+ *  String paise coerced at the boundary, the house rule. Exported pure so
+ *  the suite owns the arithmetic. */
+export const offersTake = (
+  rows: { discountAmount: number | string | null }[],
+  offers: { is_active: boolean }[],
+): { given: number; count: number; live: number } | null => {
+  if (!rows || rows.length === 0) return null;
+  let given = 0;
+  for (const r of rows) given += Number(r.discountAmount ?? 0);
+  return {
+    given,
+    count: rows.length,
+    live: (offers || []).filter((o) => o.is_active).length,
+  };
+};
+
 /**
  * The paper itself — three cards, each earning its place:
  *   • YESTERDAY — the day that closed, with its lead service, and Close-out's
@@ -787,13 +814,29 @@ export const bookAhead = (
  *   • THE WEEK SO FAR — the reporting week ending today, today's money
  *     counted as it happens (the ledger's week, 5.205.0), best day named,
  *     Reports one door away.
+ *   • GIVEN AWAY (5.207.0) — what the house gave back through offers, the
+ *     redemption ledger's whole-book truth, the offers tab one door away
+ *     (the door hints tab:offers and the landing opens ON the tab).
  * The book read is fail-soft: an unread or empty book is silence, never an
- * invented calm; when ALL three cards are silent the paper renders nothing
+ * invented calm; when ALL cards are silent the paper renders nothing
  * and the page keeps the honest circle.
  */
 const MorningPaper: React.FC<{ data: DashboardData }> = ({ data }) => {
   const { tenantId } = useTenant();
   const [book, setBook] = useState<Reservation[] | null>(null);
+  /* v5.207.0 — the giveaways ride: the redemption ledger (offer_redemptions)
+   * and the offers register, read fail-soft alongside the book — the same
+   * grammar (a failed read is silence, never an invented ₹0). The tile is
+   * the paper's THIRD money register: what the week brought in (the week
+   * tile) and what the house gave back (this one). Deliberately NO window:
+   * the tile speaks the LEDGER'S WHOLE-BOOK truth because that is the truth
+   * the landing answers — the offers tab's chips and its live/paused header
+   * are all-time voices (5.198's rule: two surfaces quoting the same
+   * register must quote the same number; a "this week" promise with no
+   * week-voiced landing would be the 5.205 fiction class). Every figure the
+   * tile speaks is answerable in one tap: the sums of the per-offer "given"
+   * chips, the "used N×" counts, the "N live" header. */
+  const [give, setGive] = useState<{ given: number; count: number; live: number } | null>(null);
 
   useEffect(() => {
     if (!tenantId) return;
@@ -805,6 +848,17 @@ const MorningPaper: React.FC<{ data: DashboardData }> = ({ data }) => {
       .catch(() => {
         if (alive) setBook([]); // a failed read is silence
       });
+    /* v5.207.0 — the giveaway register: BOTH reads must land or the tile
+     * stays silent (one voice or none — a half-voiced tile would make the
+     * counts disagree with the money). Empty ledger rows → the reducer's
+     * own null (nothing given away yet is not a story the paper tells). */
+    Promise.all([fetchOfferRedemptions(tenantId, 500), fetchOffers(tenantId)])
+      .then(([rows, offers]) => {
+        if (alive) setGive(offersTake(rows, offers));
+      })
+      .catch(() => {
+        if (alive) setGive(null); // a failed read is silence
+      });
     return () => {
       alive = false;
     };
@@ -812,7 +866,13 @@ const MorningPaper: React.FC<{ data: DashboardData }> = ({ data }) => {
 
   const take = morningTake(data);
   const promises = book ? bookAhead(book, Date.now()) : null;
-  if (!take.yesterday && !take.week && (!promises || promises.ahead.length === 0)) return null;
+  /* v5.207.0 — the giveaway tile joins the paper's render guard: when the
+   * only story the data can tell is the ledger's giveaways (no yesterday,
+   * no week, no promises ahead), the tile STILL ships — and when the ride
+   * failed or the ledger is empty, its silence never props the paper up
+   * alone (the async-arrival grammar the book tile already taught). */
+  if (!take.yesterday && !take.week && (!promises || promises.ahead.length === 0) && !give)
+    return null;
 
   const go = useUi.getState().goSection;
   const foreign = bookingTzIsForeign();
@@ -915,6 +975,42 @@ const MorningPaper: React.FC<{ data: DashboardData }> = ({ data }) => {
           >
             <TrendingUp size={12} aria-hidden />
             Open Reports
+          </button>
+        </section>
+      )}
+      {/* v5.207.0 — the paper's third register: what the house GAVE back.
+          The Tag icon is the giveaway register's own voice (the offers tab's
+          cost chip, the Z-report's "Offers given" whisper) and the money
+          wears the gold register — the same ink the offers tab speaks — so
+          the two surfaces name the same money the same way. The door hints
+          'tab:offers' and the Guests screen consumes it (5.203's rule: the
+          named thing reachable in ONE tap — landing on the guests tab would
+          be a fiction with a doorknob). Rendered only when the whole ride
+          landed and the ledger has rows: silence, never a fabricated ₹0. */}
+      {give && (
+        <section
+          className="sp-card flex flex-col p-5"
+          aria-label={`Given away — ${formatMoney(give.given)} across ${give.count} offer ${give.count === 1 ? 'redemption' : 'redemptions'}`}
+        >
+          <p className="flex items-center gap-1.5 text-[10.5px] font-bold uppercase tracking-[0.08em] text-[#969696]">
+            <Tag size={13} aria-hidden className="shrink-0 text-[#8A5A00]" />
+            Given away
+          </p>
+          <p className="mt-2.5 text-[22px] font-bold tabular-nums leading-tight text-[#8A5A00]">
+            {formatMoney(give.given)}
+          </p>
+          <p className="mt-1 text-[12px] text-[#6B6B6B]">
+            across {give.count} offer {give.count === 1 ? 'redemption' : 'redemptions'} ·{' '}
+            {give.live} {give.live === 1 ? 'offer' : 'offers'} live
+          </p>
+          <button
+            type="button"
+            onClick={() => go('customers', ['Dashboard', 'Guests'], 'tab:offers')}
+            aria-label={`Open Guests — the offers ledger reads ${formatMoney(give.given)} given away across ${give.count} redemptions`}
+            className="mt-3 inline-flex items-center gap-1.5 self-start rounded-lg border border-[#E3E7E0] px-3 py-1.5 text-[11.5px] font-semibold text-[#0F3D3E] transition hover:bg-[#F6F5F2] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#B88E2F]/40"
+          >
+            <Tag size={12} aria-hidden />
+            Open offers
           </button>
         </section>
       )}
