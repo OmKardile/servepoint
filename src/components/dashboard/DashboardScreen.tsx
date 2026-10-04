@@ -47,7 +47,7 @@ import { formatMoney } from '../../lib/prefs';
 import { bookingDayKey, bookingSlotLabel, bookingTodayKey, bookingTzIsForeign } from '../../lib/bookingday';
 import { appDayKey, appTodayIso } from '../../lib/appday';
 import { CHART_TOOLTIP_LABEL, CHART_TOOLTIP_STYLE } from '../../lib/chartvoice';
-import { isSameLocalDay } from '../../lib/day';
+import { chaseAge, isSameLocalDay } from '../../lib/day';
 import { useTenant } from '../../lib/tenant';
 import { useUi } from '../../store/session';
 import { DoorChip } from '../shell/DoorChip';
@@ -1201,12 +1201,26 @@ const NeedsNow: React.FC = () => {
   /* v5.65.0 — the band reads the balance, not the whole ticket: a mid-split
      ticket's open outstanding is total − recorded parts (floored at zero;
      an over-covered row can never inflate the count). Un-split tickets have
-     no ledger rows, so the arithmetic is identity for them. */
-  const unpaidAmt = unpaid.reduce(
-    (s, o) => s + Math.max(0, Number(o.total || 0) - (now.paidSums.get(o.id) || 0)),
-    0
+     no ledger rows, so the arithmetic is identity for them. v5.185.0 — the
+     per-ticket open lives in ONE map now: the band's sum and the age
+     whisper's "oldest owes" read the same numbers (one formula, one place). */
+  const openByTicket = new Map(
+    unpaid.map((o) => [o.id, Math.max(0, Number(o.total || 0) - (now.paidSums.get(o.id) || 0))])
   );
+  const unpaidAmt = unpaid.reduce((s, o) => s + (openByTicket.get(o.id) || 0), 0);
   const splitOpen = unpaid.filter((o) => (now.paidSums.get(o.id) || 0) > 0);
+  /* v5.185.0 — the age voice rides the unpaid card: the chase list's own
+     register (chaseAge, now in lib/day) and the chase set's own oldest-first
+     rule (created_at asc). The card's number says HOW MUCH is out; the
+     whisper says how LONG the oldest has waited — the dimension a total
+     hides. */
+  const oldestUnpaid =
+    unpaid.length > 0
+      ? unpaid.slice().sort((a, b) => a.created_at.localeCompare(b.created_at))[0]
+      : null;
+  const ageVoice = oldestUnpaid
+    ? `oldest #${oldestUnpaid.order_number} owes ${formatMoney(openByTicket.get(oldestUnpaid.id) || 0)}, ${chaseAge(oldestUnpaid.created_at, nowMs)}`
+    : null;
   const stockAlerts = now.inventory.filter((i) => i.current_stock <= i.reorder_point);
   const soldOut = now.menu.filter((m) => m.is_available === false);
   /* v5.61.0 — the front door joins the mirror: booked parties whose slot has
@@ -1312,11 +1326,25 @@ const NeedsNow: React.FC = () => {
           ? `${staleKitchen.length} older stuck ${staleKitchen.length === 1 ? 'ticket' : 'tickets'} off today's board — see Bills`
           : undefined,
       hintIcon: staleKitchen.length > 0 ? <History size={11} aria-hidden className="shrink-0" /> : undefined,
-      door: {
-        label: 'Kitchen',
-        aria: `Open Kitchen — ${inKitchen.length} ${inKitchen.length === 1 ? 'ticket is' : 'tickets are'} on the board right now`,
-        onOpen: () => go('kitchen', ['Dashboard', 'Kitchen']),
-      },
+      /* v5.185.0 — the door follows the truth (the 5.89.0 doctrine, kitchen
+         edition: the inbox card got it, this card never did): the board when
+         it holds today's work, Bills when only the ghosts remain — an
+         "Open Kitchen — 0 tickets" door walks the counter to an empty board
+         while the very tickets it named wait in Bills. No unpaid hint on
+         the door: the ghost set is mixed (paid-but-never-bumped and unpaid
+         alike); Bills' own unpaid-priority sort floats the money out first. */
+      door:
+        inKitchen.length > 0
+          ? {
+              label: 'Kitchen',
+              aria: `Open Kitchen — ${inKitchen.length} ${inKitchen.length === 1 ? 'ticket is' : 'tickets are'} on the board right now`,
+              onOpen: () => go('kitchen', ['Dashboard', 'Kitchen']),
+            }
+          : {
+              label: 'Bills',
+              aria: `Open Bills — ${staleKitchen.length} older ${staleKitchen.length === 1 ? 'ticket waits' : 'tickets wait'} off today's board`,
+              onOpen: () => go('bills', ['Dashboard', 'Bills']),
+            },
     });
   /* 5.89.0 — the late card carries the KDS's own escalation clock: amber at
      the 10-minute SLA, red at the board's 20-minute red line (waitTone's
@@ -1353,11 +1381,15 @@ const NeedsNow: React.FC = () => {
       iconTone: 'bg-[#FFF4DB] text-[#8A5A00]',
       aria: `${unpaid.length} unpaid ${unpaid.length === 1 ? 'ticket' : 'tickets'}, ${formatMoney(unpaidAmt)} still out${
         splitOpen.length > 0 ? ` — ${splitOpen.length} ${splitOpen.length === 1 ? 'ticket is' : 'tickets are'} settled in parts` : ''
-      }`,
+      }${ageVoice ? `; ${ageVoice}` : ''}`,
       hint:
         splitOpen.length > 0
           ? `${splitOpen.length} ${splitOpen.length === 1 ? 'ticket' : 'tickets'} settled in parts — the band reads balances`
-          : undefined,
+          : ageVoice ?? undefined,
+      hintIcon:
+        splitOpen.length > 0 ? undefined : (
+          <Clock size={11} aria-hidden className="shrink-0" />
+        ),
       door: {
         label: 'Bills',
         aria: `Open Bills — ${unpaid.length} unpaid ${unpaid.length === 1 ? 'ticket' : 'tickets'}, ${formatMoney(unpaidAmt)} still out`,

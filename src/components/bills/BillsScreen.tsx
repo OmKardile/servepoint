@@ -16,7 +16,7 @@ import {
   Split,
   X,
 } from 'lucide-react';
-import { dayTime, isSameLocalDay } from '../../lib/day';
+import { chaseAge, dayTime, isSameLocalDay } from '../../lib/day';
 import {
   advanceOrder,
   fetchOrderHistory,
@@ -111,14 +111,10 @@ const TYPE_LABEL: Record<string, string> = {
 };
 
 /* ── v5.151.0 — the chase list's age voice ────────────────────────────────
- * Honest age for money still out: "today" reads calm, "Nd old" reads with
- * urgency. Floor of full days — a ticket from 41h ago is 1d old, said
- * plainly. The tone ladder (amber → red at 48h) lives on the card. */
-export function chaseAge(createdIso: string, nowMs: number): string {
-  const hours = Math.max(0, (nowMs - new Date(createdIso).getTime()) / 36e5);
-  const days = Math.floor(hours / 24);
-  return days === 0 ? 'today' : `${days}d old`;
-}
+ * Moved to src/lib/day.ts (5.185.0) — the day-grammar home — so the
+ * dashboard's unpaid card can speak the SAME age without dragging this
+ * screen's module graph into another chunk. This file imports it; the
+ * register is ONE, wherever it is spoken. */
 
 /* ── v5.151.0 — the chase list speaks in chat ──────────────────────────
  * The share arc's sixth member: the bill (5.145.0), the day (5.146.0),

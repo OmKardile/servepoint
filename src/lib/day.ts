@@ -169,3 +169,16 @@ export function daySpan(openIso: string, closeIso: string | null | undefined, tz
   if (label === 'Yesterday') return `${label} ${hhmm(openIso, tz)}–${hhmm(closeIso, tz)}`;
   return `${label} · ${hhmm(openIso, tz)}–${hhmm(closeIso, tz)}`;
 }
+
+/** ── v5.185.0 — the age voice, moved home from BillsScreen (born 5.151.0)
+ *  ── Honest age for money still out: "today" reads calm, "Nd old" reads
+ *  with urgency. Floor of full days — a ticket from 41h ago is 1d old, said
+ *  plainly. The tone ladder (amber → red at 48h) lives on the bill card.
+ *  Lives in the day-grammar lib so any surface can speak the same age
+ *  without dragging one screen's module graph into another's chunk — the
+ *  dashboard's unpaid card joins the bill rows (5.185.0). */
+export function chaseAge(createdIso: string, nowMs: number): string {
+  const hours = Math.max(0, (nowMs - new Date(createdIso).getTime()) / 36e5);
+  const days = Math.floor(hours / 24);
+  return days === 0 ? 'today' : `${days}d old`;
+}
