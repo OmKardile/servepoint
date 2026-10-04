@@ -74,8 +74,9 @@ import type { MenuItem } from '../../types';
  *   2. RECIPES — what one serve of each menu item consumes; what it costs,
  *      what the shelf holds, what a batch pulls — and when a batch runs a
  *      bin short, Cover opens the delivery that fills the gap through the
- *      027 RPC (5.165–5.168). No recipe ⇒ that item moves no stock (stated
- *      honestly in the UI).
+ *      027 RPC (5.165–5.169). The plan prints: the production sheet (CSV /
+ *      copy) speaks the same words the strip does. No recipe ⇒ that item
+ *      moves no stock (stated honestly in the UI).
  *   3. REORDER — what to buy this week: the stock_deductions ledger prices
  *      each SKU's burn per day (last 14 days), converts to days-left meters
  *      and a 7-day-cover shopping list with estimated cost (copy/CSV).
@@ -335,6 +336,137 @@ export interface CoverPlan {
 export function coverPlan(n: BatchNeed): CoverPlan {
   const gap = Math.max(0, n.short);
   return { gap, pull: n.need, afterGap: n.have + gap - n.need, afterPull: n.have };
+}
+
+/* ── The production sheet (v5.169.0) — the batch plan's paper voice ──
+ *
+ *   5.167.0 planned the batch, 5.168.0 covered its shortfall — but the
+ *   plan lived only on screen. The kitchen and the supplier speak on
+ *   paper and in chat, so the plan now ships in the house's 32-column
+ *   register (the same voice as the bill, the day, the range, the offer
+ *   and the shopping list) and as a spreadsheet. The verdict words are
+ *   ONE: batchVerdictText speaks for both the screen strip and the
+ *   sheet, so the paper can never disagree with the plan it prints.
+ *   Exported pure so E2E can assert the text without touching the
+ *   clipboard (the 5.150.0 rule, batch edition).
+ */
+
+/* The register's shared typeface (lifted out of buildReorderText so the
+ * shopping list and the production sheet print in ONE voice). Prose must
+ * never ride regTwo — a truncated verdict breaks the English (the
+ * arc-wide lesson); full-width lines carry sentences. */
+const REGISTER_W = 32;
+const regHr = (): string => '-'.repeat(REGISTER_W);
+function regCenter(s: string): string {
+  const t = s.length > REGISTER_W ? `${s.slice(0, REGISTER_W - 1)}…` : s;
+  return t.length >= REGISTER_W ? t : ' '.repeat(Math.floor((REGISTER_W - t.length) / 2)) + t;
+}
+function regTwo(l: string, r: string): string {
+  const cut = Math.max(1, REGISTER_W - r.length - 1);
+  const left = l.length > cut ? `${l.slice(0, cut - 1)}…` : l;
+  return left.padEnd(REGISTER_W - r.length, ' ') + r;
+}
+
+export interface BatchVerdictOpts {
+  batch: number;
+  /** null = the shelf can't answer (unknown SKU or unreadable stock) */
+  fits: boolean | null;
+  coverage: number | null;
+  serveCost: number | null;
+}
+
+/** THE verdict sentence — the screen strip and the production sheet both
+ *  speak this one function, so the words can never fork. forSheet swaps
+ *  the screen's Cover pointer for the paper's restock line. */
+export function batchVerdictText(o: BatchVerdictOpts, forSheet: boolean): string {
+  if (o.fits === null)
+    return "The shelf can't answer for this recipe yet — the needs above are the plan; the verdict waits.";
+  if (o.fits) {
+    const money =
+      o.serveCost != null
+        ? ` — about ${formatMoney(o.serveCost * o.batch)} in ingredients at the costs on file.`
+        : '.';
+    return `The shelf covers a batch of ${o.batch}${money}`;
+  }
+  const dry = `A batch of ${o.batch} runs the shelf dry at ~${o.coverage}`;
+  return forSheet
+    ? `${dry} — the shortfalls above need a restock first.`
+    : `${dry} — Cover on a shortfall row opens the delivery that fills the gap.`;
+}
+
+export interface ProductionSheetOpts {
+  storeName: string;
+  dish: string;
+  batch: number;
+  lines: {
+    name: string;
+    unit: string;
+    perServe: number;
+    need: number;
+    have: number;
+    short: number;
+    costUnit: number | null;
+  }[];
+  fits: boolean | null;
+  coverage: number | null;
+  serveCost: number | null;
+  unpriced: number;
+}
+
+/** The chat/paper voice — the house register, same family as the shopping
+ *  list (5.150.0). Copy feeds WhatsApp and the printer; the verdict is the
+ *  ONE sentence (batchVerdictText, sheet ending). */
+export function buildProductionSheetText(o: ProductionSheetOpts): string {
+  const out: string[] = [];
+  out.push(regCenter(o.storeName));
+  out.push(regCenter('PRODUCTION SHEET'));
+  out.push(regCenter(`${o.dish} · batch of ${o.batch}`));
+  out.push(regHr());
+  if (o.lines.length === 0) {
+    out.push('NOTHING TO PULL — the batch plans nothing yet.');
+  } else {
+    o.lines.forEach((l, i) => {
+      out.push(regTwo(`${i + 1}. ${l.name}`, `${fmtQty(l.need)} ${l.unit}`));
+      out.push(
+        `   shelf ${fmtQty(l.have)} ${l.unit} — ${l.short > 0 ? `SHORT ${fmtQty(l.short)} ${l.unit}` : 'covered'}`,
+      );
+    });
+  }
+  out.push(regHr());
+  out.push(batchVerdictText(o, true));
+  if (o.serveCost == null && o.unpriced > 0)
+    out.push('Some ingredients have no cost on file — the rupees wait on the Stock tab.');
+  out.push(regHr());
+  out.push(regCenter(`Shared ${appFormatters().hhmm.format(new Date())} ${appTzTag()}`));
+  out.push('· · · end of sheet · · ·');
+  return out.join('\n');
+}
+
+/** The spreadsheet projection — ONE assembly (o) feeds text AND CSV, so
+ *  the paper and the sheet can never disagree (the 5.146.0 rule).
+ *  Numbers travel as bare decimals; an unpriced SKU's cost cells stay
+ *  empty — a missing cost never prints as ₹0. */
+export function productionSheetRows(o: ProductionSheetOpts): (string | number)[][] {
+  const out: (string | number)[][] = [
+    [`${o.storeName} — production sheet`],
+    [o.dish, `batch of ${o.batch}`],
+    [],
+    ['Ingredient', 'Per serve', 'Unit', 'Batch need', 'On shelf', 'Status', 'Shortfall', 'Cost per unit', 'Line cost'],
+  ];
+  for (const l of o.lines) {
+    out.push([
+      l.name,
+      Number(l.perServe.toFixed(3)),
+      l.unit,
+      Number(l.need.toFixed(3)),
+      Number(l.have.toFixed(3)),
+      l.short > 0 ? 'short' : 'covered',
+      l.short > 0 ? Number(l.short.toFixed(3)) : '',
+      l.costUnit == null ? '' : Number(l.costUnit.toFixed(4)),
+      l.costUnit == null ? '' : (l.need * l.costUnit).toFixed(2),
+    ]);
+  }
+  return out;
 }
 
 /* ─────────────────────────────── screen ────────────────────────────────── */
@@ -1232,6 +1364,7 @@ const InventoryInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
           recipes={recipes}
           onSave={saveRecipe}
           onCover={(item, qty, why) => setRestockFor({ item, suggested: qty, why })}
+          storeName={tenant?.name || 'ServePoint store'}
         />
       ) : (
         <ReorderBoard
@@ -1360,7 +1493,10 @@ const RecipeBoard: React.FC<{
   /* 5.168.0 — a shortfall row's Cover: the planner suggests the exact gap,
    * the existing RestockDialog (027 RPC, on the diary) does the writing. */
   onCover: (item: InventoryItem, qty: number, why: string) => void;
-}> = ({ items, menuItems, recipes, onSave, onCover }) => {
+  /* 5.169.0 — the production sheet's masthead: the same store name the
+   * shopping list prints. */
+  storeName: string;
+}> = ({ items, menuItems, recipes, onSave, onCover, storeName }) => {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [draft, setDraft] = useState<{ inventory_item_id: string; qty_per_serve: number }[]>([]);
   const [dirty, setDirty] = useState(false);
@@ -1425,6 +1561,46 @@ const RecipeBoard: React.FC<{
   const batchPlan = useMemo(() => batchNeeds(draft, items, batch), [draft, items, batch]);
   const batchFits =
     shelfRead.unknown || shelfRead.coverage == null ? null : shelfRead.coverage >= batch;
+  /* v5.169.0 — the production sheet: ONE assembly feeds Copy and CSV both
+   * (the 5.146.0 rule, batch edition) — the words and the cells read the
+   * same numbers the screen renders, and the verdict is THE sentence
+   * (batchVerdictText), so the paper can never disagree with the plan. */
+  const [copyState, setCopyState] = useState<'idle' | 'ok' | 'fail'>('idle');
+  const sheetOpts = useMemo<ProductionSheetOpts>(
+    () => ({
+      storeName,
+      dish: selected?.name ?? 'the dish',
+      batch,
+      lines: (batchPlan ?? []).map((n) => ({
+        name: n.item.name,
+        unit: n.item.unit,
+        perServe: batch > 0 ? n.need / batch : 0,
+        need: n.need,
+        have: n.have,
+        short: n.short,
+        costUnit: n.item.cost_per_unit == null ? null : Number(n.item.cost_per_unit),
+      })),
+      fits: batchFits,
+      coverage: shelfRead.coverage,
+      serveCost: costRead.cost,
+      unpriced: costRead.unpriced.length,
+    }),
+    [storeName, selected, batch, batchPlan, batchFits, shelfRead, costRead],
+  );
+  const copySheet = async () => {
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error('clipboard unavailable');
+      await navigator.clipboard.writeText(buildProductionSheetText(sheetOpts));
+      setCopyState('ok');
+    } catch {
+      setCopyState('fail');
+    }
+    window.setTimeout(() => setCopyState('idle'), 1800);
+  };
+  const exportSheet = () => {
+    if ((batchPlan ?? []).length === 0) return;
+    downloadCsv(`servepoint-production-sheet-${appTodayIso()}.csv`, productionSheetRows(sheetOpts));
+  };
 
   const addLine = () => {
     if (!addIng) return;
@@ -1769,25 +1945,42 @@ const RecipeBoard: React.FC<{
                 })}
               </ul>
               <p className="mt-2 text-[11px] leading-relaxed text-[#969696]">
-                {batchFits === null ? (
-                  <span className="text-[#8A5A0B]">
-                    The shelf can't answer for this recipe yet — the needs above are the plan; the
-                    verdict waits.
-                  </span>
-                ) : batchFits ? (
-                  <span className="text-[#2E7D32]">
-                    The shelf covers a batch of {batch}
-                    {costRead.cost != null
-                      ? ` — about ${formatMoney(costRead.cost * batch)} in ingredients at the costs on file.`
-                      : '.'}
-                  </span>
-                ) : (
-                  <span className="text-[#8A5A0B]">
-                    A batch of {batch} runs the shelf dry at ~{shelfRead.coverage} — Cover on a
-                    shortfall row opens the delivery that fills the gap.
-                  </span>
-                )}
+                <span className={batchFits === true ? 'text-[#2E7D32]' : 'text-[#8A5A0B]'}>
+                  {/* v5.169.0 — THE verdict sentence (batchVerdictText): the
+                      same words the production sheet prints. */}
+                  {batchVerdictText(
+                    { batch, fits: batchFits, coverage: shelfRead.coverage, serveCost: costRead.cost },
+                    false,
+                  )}
+                </span>
               </p>
+              {/* v5.169.0 — the plan ships: Copy speaks it in chat (the house
+                  register), CSV prints it for the kitchen door. One assembly
+                  feeds both, so neither can drift from the screen. */}
+              <div className="mt-2.5 flex items-center justify-end gap-2 border-t border-[#F0F2EF] pt-2.5">
+                <button
+                  onClick={() => void copySheet()}
+                  aria-live="polite"
+                  aria-label="Copy the production plan as text"
+                  className="flex h-8 items-center gap-1.5 rounded-lg border border-[#E3E7E0] bg-white px-2.5 text-[11px] font-bold text-[#0F3D3E] transition hover:border-[#B88E2F] hover:text-[#B88E2F] disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  {copyState === 'ok' ? (
+                    <Check size={12} className="text-[#2E7D32]" aria-hidden />
+                  ) : (
+                    <Copy size={12} aria-hidden />
+                  )}
+                  {copyState === 'ok' ? 'Copied' : copyState === 'fail' ? 'Copy blocked' : 'Copy'}
+                </button>
+                <button
+                  onClick={exportSheet}
+                  aria-label="Download the production plan as a CSV spreadsheet"
+                  title="Opens in Excel or Sheets — the same plan the Copy button speaks"
+                  className="flex h-8 items-center gap-1.5 rounded-lg border border-[#E3E7E0] bg-white px-2.5 text-[11px] font-bold text-[#0F3D3E] transition hover:border-[#B88E2F] hover:text-[#B88E2F] disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <Download size={12} aria-hidden />
+                  CSV
+                </button>
+              </div>
             </>
           )}
         </div>
@@ -2440,43 +2633,31 @@ export interface ReorderTextOpts {
 }
 
 export function buildReorderText(opts: ReorderTextOpts): string {
-  const W = 32;
-  const hr = '-'.repeat(W);
-  const center = (s: string): string => {
-    const t = s.length > W ? `${s.slice(0, W - 1)}…` : s;
-    return t.length >= W ? t : ' '.repeat(Math.floor((W - t.length) / 2)) + t;
-  };
-  const two = (l: string, r: string): string => {
-    const cut = Math.max(1, W - r.length - 1);
-    const left = l.length > cut ? `${l.slice(0, cut - 1)}…` : l;
-    return left.padEnd(W - r.length, ' ') + r;
-  };
-
   const out: string[] = [];
-  out.push(center(opts.storeName));
-  out.push(center(`SHOPPING LIST · ${opts.coverDays}-DAY COVER`));
-  out.push(hr);
+  out.push(regCenter(opts.storeName));
+  out.push(regCenter(`SHOPPING LIST · ${opts.coverDays}-DAY COVER`));
+  out.push(regHr());
   if (opts.buys.length === 0) {
     out.push('THE SHELF COVERS THE WEEK');
-    /* full-width sentence, deliberately NOT a two() row — the verdict is
+    /* full-width sentence, deliberately NOT a regTwo row — the verdict is
      * prose, and a truncated "Every burning …" would break the English. */
     out.push(`Every burning SKU has ${opts.coverDays}+ days.`);
   } else {
     opts.buys.forEach((b, i) => {
-      out.push(two(`${i + 1}. ${b.name}`, formatMoney(b.est)));
+      out.push(regTwo(`${i + 1}. ${b.name}`, formatMoney(b.est)));
       out.push(`   × ${b.qty} ${b.unit}`);
     });
-    out.push(two('Est basket', formatMoney(opts.estTotal)));
+    out.push(regTwo('Est basket', formatMoney(opts.estTotal)));
   }
   if (opts.watching.length > 0) {
-    out.push(hr);
+    out.push(regHr());
     out.push(opts.buys.length === 0 ? 'WATCHING · COVER' : 'ALSO WATCHING');
     for (const w of opts.watching)
-      out.push(two(w.name, `${Math.max(1, Math.round(w.daysLeft))}d cover`));
+      out.push(regTwo(w.name, `${Math.max(1, Math.round(w.daysLeft))}d cover`));
   }
-  out.push(hr);
-  out.push(center(`Shared ${appFormatters().hhmm.format(new Date())} ${appTzTag()}`));
-  out.push(center('· · · end of list · · ·'));
+  out.push(regHr());
+  out.push(regCenter(`Shared ${appFormatters().hhmm.format(new Date())} ${appTzTag()}`));
+  out.push(regCenter('· · · end of list · · ·'));
   return out.join('\n');
 }
 
