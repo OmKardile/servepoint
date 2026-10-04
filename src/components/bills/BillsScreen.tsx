@@ -33,7 +33,7 @@ import { buildReceiptText, printReceipt, type ReceiptOpts } from './ReceiptPrint
 import { preloadPrintImage } from '../../lib/printFrame';
 import { formatMoney, getPrefs } from '../../lib/prefs';
 import { downloadCsv } from '../../lib/csv';
-import { appTodayIso } from '../../lib/appday';
+import { appTodayIso, appFormatters, appTzTag } from '../../lib/appday';
 import { useTenant } from '../../lib/tenant';
 import { useSession, useUi } from '../../store/session';
 import { MarkHit } from '../shell/MarkHit';
@@ -109,6 +109,68 @@ const TYPE_LABEL: Record<string, string> = {
   takeaway: 'Takeaway',
   delivery: 'Delivery',
 };
+
+/* ── v5.151.0 — the chase list's age voice ────────────────────────────────
+ * Honest age for money still out: "today" reads calm, "Nd old" reads with
+ * urgency. Floor of full days — a ticket from 41h ago is 1d old, said
+ * plainly. The tone ladder (amber → red at 48h) lives on the card. */
+export function chaseAge(createdIso: string, nowMs: number): string {
+  const hours = Math.max(0, (nowMs - new Date(createdIso).getTime()) / 36e5);
+  const days = Math.floor(hours / 24);
+  return days === 0 ? 'today' : `${days}d old`;
+}
+
+/* ── v5.151.0 — the chase list speaks in chat ──────────────────────────
+ * The share arc's sixth member: the bill (5.145.0), the day (5.146.0),
+ * the range (5.147.0), the offer (5.149.0), the shopping list (5.150.0)
+ * — and now the money still out, because "5 unpaid · ₹1,801.80" on a
+ * screen is a glance, but a chat message is a promise someone reads.
+ * One assembly feeds Copy + WhatsApp; amounts are LEDGER truth (total
+ * minus paid parts, the split card's own math), never the client's
+ * guess; today's unpaid are listed too — money out is money out. Exported
+ * pure so E2E can assert the text without touching the clipboard. */
+export interface ChaseOpts {
+  storeName: string;
+  tickets: {
+    num: string;
+    where: string;
+    open: number;
+    when: string;
+    age: string;
+    note: string | null;
+  }[];
+  total: number;
+}
+
+export function buildChaseText(opts: ChaseOpts): string {
+  const W = 32;
+  const hr = '-'.repeat(W);
+  const center = (s: string): string =>
+    s.length >= W ? s : ' '.repeat(Math.floor((W - s.length) / 2)) + s;
+  const two = (l: string, r: string): string => {
+    const cut = Math.max(1, W - r.length - 1);
+    const left = l.length > cut ? `${l.slice(0, cut - 1)}…` : l;
+    return left.padEnd(W - r.length, ' ') + r;
+  };
+
+  const out: string[] = [];
+  out.push(center(opts.storeName));
+  out.push(center('UNPAID · THE CHASE LIST'));
+  out.push(hr);
+  for (const t of opts.tickets) {
+    out.push(two(`${t.num} · ${t.where}`, formatMoney(t.open)));
+    const head = `   ${t.when} · ${t.age}`;
+    out.push(head.length <= W ? head : `   ${t.when}`);
+    if (t.note) out.push(`   ${t.note}`);
+  }
+  out.push(hr);
+  out.push(two('TOTAL TO COLLECT', formatMoney(opts.total)));
+  out.push(center(`${opts.tickets.length} ticket${opts.tickets.length === 1 ? '' : 's'}`));
+  out.push(hr);
+  out.push(center(`Shared ${appFormatters().hhmm.format(new Date())} ${appTzTag()}`));
+  out.push(center('· · · end of chase list · · ·'));
+  return out.join('\n');
+}
 
 const METHOD_LABEL: Record<MethodKey, string> = {
   cash: 'Cash',
@@ -516,6 +578,52 @@ const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRet
     [orders]
   );
 
+  /* ── v5.151.0 — the chase set: every unpaid ticket, oldest first, with
+   * LEDGER-open amounts (total minus paid parts) and the honest age. One
+   * assembly feeds the strip's Copy + WhatsApp. */
+  const chaseTickets = useMemo(
+    () =>
+      orders
+        .filter((o) => displayStatus(o) === 'active')
+        .slice()
+        .sort((a, b) => a.created_at.localeCompare(b.created_at))
+        .map((o) => {
+          const paid = Number(paidSums.get(o.id) ?? 0);
+          const open = Math.max(0, Number(o.total ?? 0) - paid);
+          const notes: string[] = [];
+          if (Number(o.discount_amount ?? 0) > 0)
+            notes.push(`−${formatMoney(Number(o.discount_amount))} off`);
+          if (paid > 0) notes.push(`${formatMoney(paid)} in`);
+          return {
+            num: `#${o.order_number}`,
+            where: o.table_label || TYPE_LABEL[String(o.order_type)] || 'counter',
+            open,
+            when: dayTime(o.created_at),
+            age: chaseAge(o.created_at, Date.now()),
+            note: notes.length > 0 ? notes.join(' · ') : null,
+          };
+        }),
+    [orders, paidSums]
+  );
+  const chaseTotal = useMemo(() => chaseTickets.reduce((s, t) => s + t.open, 0), [chaseTickets]);
+  const [chaseCopyState, setChaseCopyState] = useState<'idle' | 'ok' | 'fail'>('idle');
+  const copyChase = async () => {
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error('clipboard unavailable');
+      await navigator.clipboard.writeText(
+        buildChaseText({
+          storeName: tenant?.name || 'ServePoint store',
+          tickets: chaseTickets,
+          total: chaseTotal,
+        })
+      );
+      setChaseCopyState('ok');
+    } catch {
+      setChaseCopyState('fail');
+    }
+    window.setTimeout(() => setChaseCopyState('idle'), 1800);
+  };
+
   /* Keep a valid selection (auto-select the most urgent bill on load / after
      a filter change — top of the sorted list, i.e. oldest unpaid first).
      5.122.0: when a filter empties the list this early-returns and the
@@ -905,6 +1013,51 @@ const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRet
           </div>
         </div>
 
+        {/* ── v5.151.0 — the chase strip: the money still out, ready to ride
+            in a chat. The cream chip names the amount (the gold family's
+            voice), Copy + WhatsApp speak the per-ticket truth from ONE
+            assembly. Hidden honestly when nothing is out. ── */}
+        {chaseTickets.length > 0 && (
+          <div
+            className="mt-3 flex flex-wrap items-center gap-2"
+            role="group"
+            aria-label="Share the chase list"
+          >
+            <span className="inline-flex h-[34px] items-center rounded-xl bg-[#FDF6E3] px-3 text-[10.5px] font-bold uppercase tracking-[0.08em] text-[#8A5A00]">
+              {formatMoney(chaseTotal)} out · {chaseTickets.length} unpaid
+            </span>
+            <button
+              onClick={copyChase}
+              aria-live="polite"
+              aria-label="Copy the chase list as text"
+              className="flex h-[34px] items-center gap-1.5 rounded-xl border border-[#E3E7E0] bg-white px-3 text-[12px] font-semibold text-[#0F3D3E] transition hover:border-[#0F3D3E]/40 hover:bg-[#F6F5F2] active:scale-[0.99]"
+            >
+              {chaseCopyState === 'ok' ? (
+                <Check size={14} className="text-[#2E7D32]" aria-hidden />
+              ) : (
+                <Copy size={14} aria-hidden />
+              )}
+              {chaseCopyState === 'ok' ? 'Copied' : chaseCopyState === 'fail' ? 'Copy blocked' : 'Copy'}
+            </button>
+            <a
+              href={`https://wa.me/?text=${encodeURIComponent(
+                buildChaseText({
+                  storeName: tenant?.name || 'ServePoint store',
+                  tickets: chaseTickets,
+                  total: chaseTotal,
+                })
+              )}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="Share the chase list on WhatsApp"
+              className="flex h-[34px] items-center gap-1.5 rounded-xl border border-[#E3E7E0] bg-white px-3 text-[12px] font-semibold text-[#0F3D3E] transition hover:border-[#0F3D3E]/40 hover:bg-[#F6F5F2] active:scale-[0.99]"
+            >
+              <MessageCircle size={14} aria-hidden />
+              WhatsApp
+            </a>
+          </div>
+        )}
+
         <div className="mt-3 flex items-center gap-2">
           <div className="relative min-w-0 flex-1">
             <select
@@ -1071,17 +1224,21 @@ const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRet
                                 open
                               </span>
                             )}
-                            {/* 5.92.0 — an off-today ticket still open wears the day:
-                                the strip whispered "N older tickets — see Bills";
-                                the row finishes the sentence. The gold family is
-                                this app's one grammar for "needs attention". */}
+                            {/* v5.151.0 — the age voice: "older ticket" became
+                                an honest age ("1d old"), amber under 48h,
+                                red beyond — the chase priority reads at a
+                                glance now. */}
                             {status === 'active' && !isSameLocalDay(o.created_at) && (
                               <span
-                                title="From an earlier day — still awaiting payment"
-                                className="inline-flex shrink-0 items-center gap-1 rounded bg-[#FFF4DB] px-1.5 py-px text-[10px] font-bold text-[#8A5A00]"
+                                title={`From an earlier day — still awaiting payment (${chaseAge(o.created_at, Date.now())})`}
+                                className={`inline-flex shrink-0 items-center gap-1 rounded px-1.5 py-px text-[10px] font-bold ${
+                                  (Date.now() - new Date(o.created_at).getTime()) / 36e5 >= 48
+                                    ? 'bg-[#FCEBEA] text-[#B3261E]'
+                                    : 'bg-[#FFF4DB] text-[#8A5A00]'
+                                }`}
                               >
                                 <History size={10} aria-hidden />
-                                older ticket
+                                {chaseAge(o.created_at, Date.now())}
                               </span>
                             )}
                           </p>

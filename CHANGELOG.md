@@ -3,6 +3,20 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.151.0] — 2026-10-04 — The chase list speaks in chat
+
+### Added — the money still out gets a pocket voice (`src/components/bills/BillsScreen.tsx`)
+
+The share arc's sixth member: bill (5.145.0), day (5.146.0), range (5.147.0), offer (5.149.0), shopping list (5.150.0) — and now the unpaid chase list, because "5 unpaid · ₹1,801.80" on a screen is a glance, but a chat message is a promise someone reads. `buildChaseText(opts)` (exported pure, E2E-assertable) speaks the house's 32-column register: one line per unpaid ticket — number, table or counter, the LEDGER-open amount (total minus paid parts, the split card's own math), the day-time and the honest age, with offer and part-payment notes — then TOTAL TO COLLECT and the ticket count. Today's unpaid are listed too: money out is money out. A chase strip sits under the Bills header (cream chip `₹X out · N unpaid` + Copy + WhatsApp through the house PICKER), hidden honestly when nothing is out, and fed by ONE assembly so screen and chat can never disagree.
+
+### Changed — the age voice on unpaid cards
+
+The flat "older ticket" chip became an honest age: `chaseAge` says "today" or "Nd old" (floor of full days — a 41-hour ticket is 1d old, plainly), amber under 48 hours, the red family beyond. The chase priority now reads at a glance.
+
+### Verified
+
+`tsc` EXIT=0 · `vite build` EXIT=0 · node --check sw.js OK · E2E on the live Bills screen: chase strip renders with the cream chip `₹1,801.80 out · 5 unpaid`, the wa.me href decodes to the exact builder text (5 tickets oldest-first — #96 · T2 ₹231.00 … #66 · T1 ₹693.00, the −₹44.00 off note on #67, TOTAL TO COLLECT ₹1,801.80), age chips say "1d old" in amber, Copy reports its honest headless state with the 1.8s reset, zero new console errors.
+
 ## [5.150.0] — 2026-10-04 — The shopping list speaks in chat
 
 ### Added — the shelf's reorder voice (`src/components/inventory/InventoryScreen.tsx`)
