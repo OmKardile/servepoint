@@ -237,12 +237,39 @@ function itemsSummary(o: Order): string {
     .join('; ');
 }
 
-function exportBillsCsv(rows: Order[], paidSums: Map<string, number>): void {
-  if (rows.length === 0) return;
+/** v5.189.0 — the accountant's twin, row by row (PURE: the suite reads the
+ *  exact table the download button writes — the 227 doorOf pattern).
+ *
+ *  Two columns join the sheet, and both speak what the SCREEN already
+ *  speaks — the CSV/strip/paper pairing discipline (5.184, closed for the
+ *  chase in 5.186) now closes its third surface:
+ *
+ *  • AGE — the per-row chase age ('1d old'), governed by the row chip's
+ *    OWN condition (5.151: unpaid AND from an earlier day), byte-for-byte.
+ *    Silence elsewhere: today's unpaid are not aged yet, and paid/cancelled
+ *    tickets are not debts standing — silence, never a fabricated '0d'.
+ *    Sort the sheet by this column and the chase list falls out oldest-
+ *    first, the strip's own order.
+ *  • OPEN (INR) — the ledger's honest open (total minus paid parts), the
+ *    chase strip's per-ticket math. Active speaks what's still out, paid
+ *    speaks '0.00' (the debt closed — true, not filler), cancelled stays
+ *    silent (it never happened). On the unfiltered export the column
+ *    SUMS to the strip's OUT — the accountant can verify the sheet
+ *    against the screen with one SUM().
+ *
+ *  `nowMs` is injected (the suite's clock); every other cell keeps its
+ *  existing bytes — the 5.63 partial voice included.
+ */
+export function billsCsvRows(
+  rows: Order[],
+  paidSums: Map<string, number>,
+  nowMs: number,
+): unknown[][] {
   const header = [
     'Order #',
     'Placed at',
     'Status',
+    'Age',
     'Payment',
     'Method',
     'Type',
@@ -253,6 +280,7 @@ function exportBillsCsv(rows: Order[], paidSums: Map<string, number>): void {
     'GST (INR)',
     'Discount (INR)',
     'Total (INR)',
+    'Open (INR)',
     'Notes',
   ];
   const lines: unknown[][] = [header];
@@ -268,10 +296,22 @@ function exportBillsCsv(rows: Order[], paidSums: Map<string, number>): void {
         : partPaid > 0
           ? `partial (${partPaid.toFixed(2)} of ${Number(o.total ?? 0).toFixed(2)} in)`
           : o.payment_status || 'pending';
+    /* v5.189.0 — the age cell: the row chip's own rule (5.151), ONE rule,
+       two surfaces. chaseAge is THE register (day.ts). */
+    const isActive = displayStatus(o) === 'active';
+    const ageCell = isActive && !isSameLocalDay(o.created_at) ? chaseAge(o.created_at, nowMs) : '';
+    /* v5.189.0 — the open cell: the chase's own math (max(0, total − paid));
+       paid reads '0.00' — the debt closed; cancelled reads silence. */
+    const openCell = isActive
+      ? Math.max(0, Number(o.total ?? 0) - partPaid).toFixed(2)
+      : st === 'Paid'
+        ? '0.00'
+        : '';
     lines.push([
       o.order_number,
       new Date(o.created_at).toLocaleString(),
       st,
+      ageCell,
       paymentCell,
       method,
       TYPE_LABEL[String(o.order_type)] || String(o.order_type),
@@ -282,15 +322,21 @@ function exportBillsCsv(rows: Order[], paidSums: Map<string, number>): void {
       Number(o.tax_amount ?? 0).toFixed(2),
       Number(o.discount_amount ?? 0).toFixed(2),
       Number(o.total ?? 0).toFixed(2),
+      openCell,
       o.notes || '',
     ]);
   }
+  return lines;
+}
+
+function exportBillsCsv(rows: Order[], paidSums: Map<string, number>): void {
+  if (rows.length === 0) return;
   /* v5.106.0 — the filename carries the reporting day (appday): the owner's
      own today, the same word Reports and Close-out speak. The old name was
      hardcoded IST — the wrong-clock family EOD's stepper came from (5.83.0);
      5.84.0 fixed the UTC→IST direction, and now the name also follows the
      owner when the reporting day itself moves. */
-  downloadCsv(`servepoint-bills-${appTodayIso()}.csv`, lines);
+  downloadCsv(`servepoint-bills-${appTodayIso()}.csv`, billsCsvRows(rows, paidSums, Date.now()));
 }
 
 /** Secondary line on a row card: "Table 12 · 2 guests" or type + customer. */
@@ -1033,8 +1079,8 @@ const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRet
             <button
               onClick={() => exportBillsCsv(sorted, paidSums)}
               disabled={sorted.length === 0}
-              aria-label="Export filtered bills as CSV"
-              title="Export the filtered list as CSV (opens in Excel / Sheets)"
+              aria-label="Export filtered bills as CSV — chase ages and open money included"
+              title="Export the filtered list as CSV (opens in Excel / Sheets) — every unpaid ticket's age rides the Age column, and Open (INR) sums to the strip's out"
               className="flex h-11 items-center gap-1.5 rounded-xl border border-[#E3E7E0] bg-white px-3 text-[12.5px] font-bold text-[#0F3D3E] transition hover:border-[#B88E2F] hover:text-[#B88E2F] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#B88E2F] disabled:cursor-not-allowed disabled:opacity-40"
             >
               <Download size={15} aria-hidden />
@@ -1595,7 +1641,28 @@ const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRet
                       {mutating && <Loader2 size={14} className="animate-spin" aria-hidden />}
                       {next.label}
                     </button>
-                    <span className="text-[11.5px] text-[#969696]">Kitchen status</span>
+                    {/* v5.189.0 — the state rides beside the next step: the
+                        counter sees WHERE the ticket stands without reading
+                        the Timeline below — same dot + label that trail
+                        speaks, ONE voice (on a PAID ticket a gold Active chip
+                        is the stuck-state signal itself). */}
+                    {(() => {
+                      const ds = displayStatus({ status: raw, payment_status: '' });
+                      return (
+                        <span
+                          className="inline-flex h-[26px] items-center gap-1.5 rounded-full border border-[#E3E7E0] bg-white px-2.5 text-[11.5px] font-semibold text-[#1A1A1A]"
+                          aria-label={`Kitchen status: ${STATUS_LABEL[ds] || raw || 'unknown'}`}
+                          title="Kitchen status — the trail below tells how it got here"
+                        >
+                          <span
+                            className="h-1.5 w-1.5 shrink-0 rounded-full"
+                            style={{ backgroundColor: STATUS_DOT[ds] || '#969696' }}
+                            aria-hidden
+                          />
+                          {STATUS_LABEL[ds] || raw || '—'}
+                        </span>
+                      );
+                    })()}
                   </div>
                 );
               })()}
