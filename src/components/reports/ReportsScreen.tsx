@@ -98,7 +98,7 @@ import type { Order } from '../../types';
  * All time, in the reporting day chosen in Settings — Asia/Kolkata by
  * default, like Close-out — via src/lib/appday.ts (5.97.0):
  *
- *   1. Headline strip — gross, GST collected, net (ex-GST), orders (+
+ *   1. Headline strip — gross, GST billed, net (ex-GST), orders (++
  *      cancelled sinkage), average ticket, items sold — each carrying a
  *      "vs prior range" delta chip: the same KPI recomputed over the
  *      equal-length window immediately before the selected one (prior day /
@@ -240,6 +240,59 @@ function aggregateTickets(rows: Order[], cogsMap: Map<string, number>): RangeAgg
   return { gross, gst, net, placed, cancelled, items, avgTicket, paidNet, cogs, margin, marginPct, paidCount };
 }
 
+/* ── 5.178.0 — the tax till: the GST register ──────────────────────────
+ * The strip's GST card is BILLED on every live ticket in range; the
+ * register is what the till actually COLLECTED — paid tickets only, the
+ * money doctrine's own population (margin banks on collected money; so
+ * does the taxman's). Zero new math: taxable is the aggregate's own net
+ * formula, GST is each ticket's own tax_amount, and the CGST/SGST split
+ * is the receipt's own display halving (ReceiptPrint) — one convention
+ * on both papers. The day key rides appday (appDayKey — the same
+ * reporting-day grammar every IST bucket speaks). Method rides the
+ * payments ledger's own read (the mix's convention: each ticket's first
+ * ledger part, stored fallback). Exported pure so the unit suite can
+ * born-test the population and the split. */
+export interface GstRegisterRow {
+  day: string;
+  ticket: number;
+  service: string;
+  method: string;
+  taxable: number;
+  cgst: number;
+  sgst: number;
+  gst: number;
+  gross: number;
+}
+
+export function buildGstRegister(
+  rows: Order[],
+  dayKey: (iso: string) => string,
+  methodByOrder?: Map<string, string>,
+): GstRegisterRow[] {
+  const out: GstRegisterRow[] = [];
+  for (const o of rows) {
+    if (String(o.status || '').toLowerCase() === 'cancelled') continue; // cancelled never happened
+    if (String(o.payment_status || '').toLowerCase() !== 'completed') continue; // collected money only
+    const tax = Number(o.tax_amount ?? 0);
+    const cgst = Math.round((tax / 2) * 100) / 100;
+    const sgst = Math.round((tax - cgst) * 100) / 100;
+    const ot = String(o.order_type || 'dine_in');
+    out.push({
+      day: dayKey(o.created_at),
+      ticket: Number(o.order_number ?? 0),
+      service: TYPE_LABEL[ot] || ot,
+      method: methodByOrder?.get(o.id) || String(o.payment_method || 'cash'),
+      taxable: Number(o.subtotal ?? 0) - Number(o.discount_amount ?? 0),
+      cgst,
+      sgst,
+      gst: tax,
+      gross: Number(o.total ?? 0),
+    });
+  }
+  out.sort((a, b) => (a.day < b.day ? -1 : a.day > b.day ? 1 : a.ticket - b.ticket));
+  return out;
+}
+
 /* ── v5.147.0 — the range report's chat voice ────────────────────────────
  *  The bill got a chat twin (5.145.0), the Z-report got one (5.146.0); the
  *  range report is the third sibling. `ReportOpts` is fed from the SAME
@@ -300,7 +353,7 @@ export function buildReportText(opts: ReportOpts): string {
   out.push(center(`${opts.windowLabel} · ${opts.tz}`));
   out.push(hr);
   out.push(two('Gross sales', formatMoney(opts.gross)));
-  out.push(two('GST collected', formatMoney(opts.gst)));
+  out.push(two('GST billed', formatMoney(opts.gst)));
   out.push(two('Net (ex-GST)', formatMoney(opts.net)));
   out.push(two('Orders', String(opts.orders)));
   out.push(two('Items sold', String(opts.items)));
@@ -596,7 +649,7 @@ function printRangeReport(opts: ReportOpts): void {
     ${row('Orders', String(opts.orders), true)}
     ${opts.cancelled > 0 ? row('Cancelled (excluded)', String(opts.cancelled)) : ''}
     ${row('Gross sales', formatMoney(opts.gross), true)}
-    ${row('GST collected', formatMoney(opts.gst))}
+    ${row('GST billed', formatMoney(opts.gst))}
     ${row('Net (ex-GST)', formatMoney(opts.net))}
     ${row('Items sold', String(opts.items))}
     ${row('Avg ticket', formatMoney(opts.avgTicket), true)}
@@ -1644,6 +1697,32 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
     return { paid, unpaid, unpaidAmt, splitTickets };
   }, [inRange, ledger]);
 
+  /* 5.178.0 — the tax till: the GST register over COLLECTED money only —
+   * the same paid-only population the margin banks on. The headline strip's
+   * GST is billed on live tickets; the register is what the till kept.
+   * Method rides the payments ledger's own read (the mix's convention:
+   * each ticket's first ledger part, stored fallback). */
+  const gstRegister = useMemo(() => {
+    const methodByOrder = new Map<string, string>();
+    for (const r of ledger) {
+      if (!methodByOrder.has(r.orderId)) methodByOrder.set(r.orderId, String(r.method || 'cash'));
+    }
+    return buildGstRegister(inRange, appDayKey, methodByOrder);
+  }, [inRange, ledger]);
+  const gstTotals = useMemo(() => {
+    const t = gstRegister.reduce(
+      (s, r) => ({
+        taxable: s.taxable + r.taxable,
+        cgst: s.cgst + r.cgst,
+        sgst: s.sgst + r.sgst,
+        gst: s.gst + r.gst,
+        gross: s.gross + r.gross,
+      }),
+      { taxable: 0, cgst: 0, sgst: 0, gst: 0, gross: 0 },
+    );
+    return t;
+  }, [gstRegister]);
+
   const topItems = useMemo(() => {
     const byName = new Map<string, ItemRank>();
     for (const o of inRange) {
@@ -2450,6 +2529,39 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
     downloadCsv(`servepoint-payment-mix-${appTodayIso()}.csv`, rows);
   }, [payMix]);
 
+  /* 5.178.0 — the register's CSV: one row per paid ticket + a totals row.
+   * The CA's artifact — date, ticket, service, method, taxable, CGST, SGST,
+   * GST, gross — fed by the SAME builder the glance strip reads. */
+  const exportGstRegister = useCallback(() => {
+    if (gstRegister.length === 0) return;
+    const rows: (string | number)[][] = [
+      ['Date', 'Ticket', 'Service', 'Method', 'Taxable (INR)', 'CGST (INR)', 'SGST (INR)', 'GST (INR)', 'Gross (INR)'],
+      ...gstRegister.map((r) => [
+        r.day,
+        r.ticket,
+        r.service,
+        r.method,
+        r.taxable.toFixed(2),
+        r.cgst.toFixed(2),
+        r.sgst.toFixed(2),
+        r.gst.toFixed(2),
+        r.gross.toFixed(2),
+      ]),
+    ];
+    rows.push([
+      'TOTAL',
+      '',
+      '',
+      '',
+      gstTotals.taxable.toFixed(2),
+      gstTotals.cgst.toFixed(2),
+      gstTotals.sgst.toFixed(2),
+      gstTotals.gst.toFixed(2),
+      gstTotals.gross.toFixed(2),
+    ]);
+    downloadCsv(`servepoint-gst-register-${appTodayIso()}.csv`, rows);
+  }, [gstRegister, gstTotals]);
+
   const exportMargin = useCallback(() => {
     if (agg.paidCount === 0) return;
     const rows: (string | number)[][] = [
@@ -2665,8 +2777,9 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
           {...deltaProps(agg.gross, priorAgg?.gross ?? 0, formatMoney)}
         />
         <StatCard
-          label="GST collected"
+          label="GST billed"
           value={formatMoney(agg.gst)}
+          sub={payMix.unpaid > 0 ? `${payMix.unpaid} unpaid still to settle` : undefined}
           tone="#8A5A00"
           spark={daily.map((d) => d.gst)}
           {...deltaProps(agg.gst, priorAgg?.gst ?? 0, formatMoney)}
@@ -3163,6 +3276,54 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
               )}
             </section>
           </div>
+
+          {/* ── 5.178.0 — the tax till: the GST register. The strip's GST card
+              is BILLED on live tickets; this register is what the till
+              COLLECTED — paid tickets only, the money doctrine's own
+              population. The CGST/SGST split is the receipt's own display
+              halving — one convention on both papers. The CSV carries the
+              row-per-ticket detail (the CA's artifact); the glance speaks
+              the totals (the CSV/strip pairing rule). ── */}
+          <section className="sp-card p-5" aria-label="GST register">
+            <div className="mb-1 flex items-center justify-between gap-2">
+              <h2 className="text-[15px] font-bold text-[#1A1A1A]">GST register</h2>
+              {gstRegister.length > 0 && (
+                <button
+                  onClick={exportGstRegister}
+                  aria-label="Export the GST register as CSV"
+                  title="One row per paid ticket — taxable, CGST, SGST, GST, gross — with a totals row"
+                  className="inline-flex h-7 items-center rounded-lg border border-[#B88E2F]/45 bg-[#FDF9F0] px-2.5 text-[11px] font-bold text-[#8A5A00] transition hover:bg-[#B88E2F] hover:text-white active:scale-[0.97]"
+                >
+                  CSV
+                </button>
+              )}
+            </div>
+            <p className="mb-2 text-[11.5px] text-[#969696]">
+              The till's own GST — collected money only, one row per paid ticket
+              {payMix.unpaid > 0 ? ` · GST on ${payMix.unpaid} unpaid ticket${payMix.unpaid === 1 ? '' : 's'} not here yet` : ''}
+            </p>
+            {gstRegister.length === 0 ? (
+              <p className="py-4 text-[12px] font-medium text-[#6B6B6B]">
+                No collected money in this range yet — settled tickets land here.
+              </p>
+            ) : (
+              <div className="flex flex-wrap gap-x-7 gap-y-3">
+                {[
+                  ['PAID TICKETS', String(gstRegister.length)],
+                  ['TAXABLE', formatMoney(gstTotals.taxable)],
+                  ['CGST', formatMoney(gstTotals.cgst)],
+                  ['SGST', formatMoney(gstTotals.sgst)],
+                  ['GST', formatMoney(gstTotals.gst)],
+                  ['GROSS', formatMoney(gstTotals.gross)],
+                ].map(([label, value]) => (
+                  <div key={label}>
+                    <p className="text-[10px] font-bold uppercase tracking-[0.06em] text-[#969696]">{label}</p>
+                    <p className="text-[14px] font-extrabold tabular-nums text-[#1A1A1A]">{value}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
 
           {/* ── 5.71.0 — the offer's scorecard: offers answer for themselves ── */}
           <section className="sp-card p-5" aria-label="Offer scorecard">
