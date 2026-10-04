@@ -2,10 +2,13 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   BadgePercent,
   CalendarClock,
+  Check,
+  Copy,
   Crown,
   Download,
   Gift,
   Loader2,
+  MessageCircle,
   Pencil,
   Phone,
   Plus,
@@ -41,7 +44,7 @@ import {
 } from '../../lib/api';
 import { formatMoney } from '../../lib/prefs';
 import { downloadCsv } from '../../lib/csv';
-import { appTodayIso } from '../../lib/appday';
+import { appTodayIso, appFormatters, appTzTag } from '../../lib/appday';
 import { bookingSlotLabel, bookingDayKey, bookingTodayKey, bookingTzIsForeign } from '../../lib/bookingday';
 import { useTenant } from '../../lib/tenant';
 import { computeUsual, isPaidTicket, USUAL_WINDOW } from '../../lib/usual';
@@ -182,6 +185,71 @@ function offerBadgeLabel(o: Offer): string {
   return o.discount_type === 'percent'
     ? `${Number(o.discount_value)}% off`
     : `${formatMoney(Number(o.discount_value))} off`;
+}
+
+/* ── v5.149.0 — the offer speaks in chat ─────────────────────────────────
+ * The share arc's fourth member: the bill (5.145.0), the day (5.146.0),
+ * the range (5.147.0) — and now the offer. An offer exists to be SENT:
+ * the owner taps share on its card and the same rule-truth the counter
+ * drawer and the guest QR menu read rides into a chat, through the house
+ * PICKER (wa.me/?text=) — the owner decides which chat it lands in;
+ * ServePoint never guesses a recipient, and the sender's name is
+ * deliberate absence (the chat itself carries it). Exported pure so E2E
+ * can assert the text without touching the clipboard. Same house
+ * text-voice as the receipt, the Z and the range: 32 columns, centered
+ * headline, aligned two() rows, honest usage and status. */
+export function buildOfferText(o: Offer, storeName: string): string {
+  const W = 32;
+  const hr = '-'.repeat(W);
+  const center = (s: string): string =>
+    s.length >= W ? s : ' '.repeat(Math.floor((W - s.length) / 2)) + s;
+  const two = (l: string, r: string): string => {
+    const cut = Math.max(1, W - r.length - 1);
+    const left = l.length > cut ? `${l.slice(0, cut - 1)}…` : l;
+    return left.padEnd(W - r.length, ' ') + r;
+  };
+  /* titles and descriptions speak in prose — word-wrap at the frame, no
+   * rupee to align, nothing lost to a mid-word truncation unless a single
+   * word alone overspills. */
+  const wrap = (s: string): string[] => {
+    const words = s.split(/\s+/).filter(Boolean);
+    const lines: string[] = [];
+    let cur = '';
+    for (const w of words) {
+      const t = cur ? `${cur} ${w}` : w;
+      if (t.length <= W) {
+        cur = t;
+        continue;
+      }
+      if (cur) lines.push(cur);
+      cur = w.length > W ? `${w.slice(0, W - 1)}…` : w;
+    }
+    if (cur) lines.push(cur);
+    return lines;
+  };
+
+  const out: string[] = [];
+  out.push(center(storeName));
+  out.push(center('OFFER'));
+  out.push(hr);
+  out.push(...wrap(o.title));
+  out.push(offerBadgeLabel(o));
+  if (o.description) out.push(...wrap(o.description));
+  out.push(hr);
+  out.push(
+    two(
+      'Rule',
+      Number(o.min_order_amount) > 0
+        ? `min ${formatMoney(Number(o.min_order_amount))}`
+        : 'no minimum'
+    )
+  );
+  out.push(two('Used so far', `${o.usage_count}×`));
+  out.push(two('Status', o.is_active ? 'Live' : 'Paused'));
+  out.push(hr);
+  out.push(center(`Shared ${appFormatters().hhmm.format(new Date())} ${appTzTag()}`));
+  out.push(center('· · · end of offer · · ·'));
+  return out.join('\n');
 }
 
 /* ── The CRM reads the book (5.90.0) — a guest row carries today's promise.
@@ -359,7 +427,7 @@ export const CustomersScreen: React.FC = () => {
 };
 
 const GuestsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }) => {
-  const { tenantId, loading: tenantLoading, error: tenantError } = useTenant();
+  const { tenantId, loading: tenantLoading, error: tenantError, tenant } = useTenant();
   const [tab, setTab] = useState<TabKey>('guests');
   const [guests, setGuests] = useState<Customer[]>([]);
   const [stats, setStats] = useState<Map<string, CustomerStats>>(new Map());
@@ -779,6 +847,7 @@ const GuestsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry })
           setDeleteArm={setDeleteArm}
           busyId={busyId}
           activeOffers={activeOffers}
+          storeName={tenant?.name || 'ServePoint store'}
         />
       )}
 
@@ -1135,7 +1204,22 @@ const OffersTab: React.FC<{
   setDeleteArm: (id: string | null) => void;
   busyId: string | null;
   activeOffers: number;
-}> = ({ offers, loading, onEdit, onToggle, onDelete, deleteArm, setDeleteArm, busyId, activeOffers }) => {
+  storeName: string;
+}> = ({ offers, loading, onEdit, onToggle, onDelete, deleteArm, setDeleteArm, busyId, activeOffers, storeName }) => {
+  /* v5.149.0 — per-card copy feedback: one state cell keyed by offer id,
+   * ok/fail honest (headless and denied-permission browsers say so), the
+   * 1.8s reset the bill's copy button taught (5.145.0). */
+  const [offerCopy, setOfferCopy] = useState<{ id: string; ok: boolean } | null>(null);
+  const copyOffer = async (o: Offer) => {
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error('clipboard unavailable');
+      await navigator.clipboard.writeText(buildOfferText(o, storeName));
+      setOfferCopy({ id: o.id, ok: true });
+    } catch {
+      setOfferCopy({ id: o.id, ok: false });
+    }
+    window.setTimeout(() => setOfferCopy(null), 1800);
+  };
   if (loading) {
     return (
       <div className="grid grid-cols-1 gap-3 px-6 py-5 md:grid-cols-2 xl:grid-cols-3">
@@ -1219,52 +1303,95 @@ const OffersTab: React.FC<{
                     </div>
                   </div>
                 </div>
-                <div className="mt-3 flex items-center justify-between border-t border-[#F0F1EE] pt-3">
-                  <button
-                    type="button"
-                    onClick={() => onToggle(o)}
-                    disabled={busyId === o.id}
-                    className="inline-flex items-center gap-2 text-[12.5px] font-semibold text-[#6B6B6B] transition hover:text-[#1A1A1A] disabled:opacity-50"
-                    aria-pressed={o.is_active}
-                  >
-                    {busyId === o.id ? (
-                      <Loader2 size={14} className="animate-spin" aria-hidden />
-                    ) : (
-                      <span
-                        className={`relative inline-flex h-4.5 w-8 items-center rounded-full transition-colors ${
-                          o.is_active ? 'bg-[#2E7D32]' : 'bg-[#D5D9D3]'
-                        }`}
-                        aria-hidden
-                      >
+                {/* v5.149.0 — the card's actions gather under one rule: what
+                    the owner can do to this offer (toggle, edit, delete)
+                    and what the offer can now do for the house (speak in a
+                    chat). One border, two rows, no double-line clutter. */}
+                <div className="mt-3 border-t border-[#F0F1EE] pt-3">
+                  <div className="flex items-center justify-between">
+                    <button
+                      type="button"
+                      onClick={() => onToggle(o)}
+                      disabled={busyId === o.id}
+                      className="inline-flex items-center gap-2 text-[12.5px] font-semibold text-[#6B6B6B] transition hover:text-[#1A1A1A] disabled:opacity-50"
+                      aria-pressed={o.is_active}
+                    >
+                      {busyId === o.id ? (
+                        <Loader2 size={14} className="animate-spin" aria-hidden />
+                      ) : (
                         <span
-                          className={`absolute h-3.5 w-3.5 rounded-full bg-white shadow transition-all ${
-                            o.is_active ? 'left-[17px]' : 'left-[2px]'
+                          className={`relative inline-flex h-4.5 w-8 items-center rounded-full transition-colors ${
+                            o.is_active ? 'bg-[#2E7D32]' : 'bg-[#D5D9D3]'
                           }`}
-                        />
-                      </span>
-                    )}
-                    {o.is_active ? 'Active' : 'Paused'}
-                  </button>
-                  <div className="flex items-center gap-1.5">
+                          aria-hidden
+                        >
+                          <span
+                            className={`absolute h-3.5 w-3.5 rounded-full bg-white shadow transition-all ${
+                              o.is_active ? 'left-[17px]' : 'left-[2px]'
+                            }`}
+                          />
+                        </span>
+                      )}
+                      {o.is_active ? 'Active' : 'Paused'}
+                    </button>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => onEdit(o)}
+                        aria-label={`Edit ${o.title}`}
+                        className="flex h-8.5 w-8.5 items-center justify-center rounded-xl text-[#969696] transition hover:bg-[#F6F5F2] hover:text-[#1A1A1A]"
+                      >
+                        <Pencil size={14} aria-hidden />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => (armed ? onDelete(o) : setDeleteArm(o.id))}
+                        onBlur={() => deleteArm === o.id && setDeleteArm(null)}
+                        aria-label={armed ? 'Confirm delete offer' : 'Delete offer'}
+                        className={`flex h-8.5 w-8.5 items-center justify-center rounded-xl transition ${
+                          armed ? 'bg-[#B3261E] text-white' : 'text-[#969696] hover:bg-[#FEECEB] hover:text-[#B3261E]'
+                        }`}
+                      >
+                        <Trash2 size={14} aria-hidden />
+                      </button>
+                    </div>
+                  </div>
+                  {/* v5.149.0 — the offer's chat voice: Copy (honest, aria-live)
+                      + WhatsApp picker. Same ghost grammar as the bill's, the
+                      Z's and the range's share rows — compact card scale. */}
+                  <div
+                    className="mt-2.5 flex flex-wrap items-center gap-2"
+                    role="group"
+                    aria-label={`Share the ${o.title} offer`}
+                  >
                     <button
                       type="button"
-                      onClick={() => onEdit(o)}
-                      aria-label={`Edit ${o.title}`}
-                      className="flex h-8.5 w-8.5 items-center justify-center rounded-xl text-[#969696] transition hover:bg-[#F6F5F2] hover:text-[#1A1A1A]"
+                      onClick={() => copyOffer(o)}
+                      aria-live="polite"
+                      aria-label={`Copy the ${o.title} offer as text`}
+                      className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-[#E3E7E0] bg-white px-2.5 text-[11.5px] font-semibold text-[#0F3D3E] transition hover:border-[#0F3D3E]/40 hover:bg-[#F6F5F2] active:scale-[0.99]"
                     >
-                      <Pencil size={14} aria-hidden />
+                      {offerCopy && offerCopy.id === o.id && offerCopy.ok ? (
+                        <Check size={13} className="text-[#2E7D32]" aria-hidden />
+                      ) : (
+                        <Copy size={13} aria-hidden />
+                      )}
+                      {offerCopy && offerCopy.id === o.id
+                        ? offerCopy.ok
+                          ? 'Copied'
+                          : 'Copy blocked'
+                        : 'Copy'}
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => (armed ? onDelete(o) : setDeleteArm(o.id))}
-                      onBlur={() => deleteArm === o.id && setDeleteArm(null)}
-                      aria-label={armed ? 'Confirm delete offer' : 'Delete offer'}
-                      className={`flex h-8.5 w-8.5 items-center justify-center rounded-xl transition ${
-                        armed ? 'bg-[#B3261E] text-white' : 'text-[#969696] hover:bg-[#FEECEB] hover:text-[#B3261E]'
-                      }`}
+                    <a
+                      href={`https://wa.me/?text=${encodeURIComponent(buildOfferText(o, storeName))}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      aria-label={`Share the ${o.title} offer on WhatsApp`}
+                      className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-[#E3E7E0] bg-white px-2.5 text-[11.5px] font-semibold text-[#0F3D3E] transition hover:border-[#0F3D3E]/40 hover:bg-[#F6F5F2] active:scale-[0.99]"
                     >
-                      <Trash2 size={14} aria-hidden />
-                    </button>
+                      <MessageCircle size={13} aria-hidden />
+                      WhatsApp
+                    </a>
                   </div>
                 </div>
               </div>

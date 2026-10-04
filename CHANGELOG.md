@@ -3,6 +3,16 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.149.0] — 2026-10-04 — The offer speaks in chat
+
+### Added — share row on every offer card (`src/components/customers/CustomersScreen.tsx`)
+
+The share arc's fourth member: the bill (5.145.0), the day (5.146.0), the range (5.147.0) — and now the offer, because an offer exists to be SENT. `buildOfferText(offer, storeName)` (exported pure, E2E-assertable) renders the offer as the house's 32-column text register — centered store + OFFER headline, word-wrapped title and description, the same badge voice the card shows (`10% off` / `₹50.00 off`), and honest Rule (min or no minimum), Used-so-far and Status rows with the Shared hhmm TZ footer. Each card's action area now gathers under one rule: what the owner can do to the offer (toggle, edit, delete) and what the offer can do for the house (speak in a chat) — Copy (aria-live polite, honest ok/blocked with the 1.8s reset) and WhatsApp through the house PICKER (`wa.me/?text=`), so the owner decides which guest's chat a promotion lands in and ServePoint never guesses a recipient.
+
+### Verified
+
+`tsc` EXIT=0 · `vite build` EXIT=0 · node --check sw.js OK · E2E on the live Guests→Offers tab: share rows render per card with descriptive aria-labels, the WhatsApp href decodes to the exact builder text (title, rule, usage, status, store headline), Copy reports its honest state in the headless harness with the 1.8s reset, zero console errors.
+
 ## [5.148.0] — 2026-10-04 — The range gets its paper voice
 
 ### Added — Print on Reports (`src/components/reports/ReportsScreen.tsx`)
