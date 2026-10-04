@@ -599,6 +599,14 @@ const SESSION_TONE: Record<SessionState, { dot: string; fg: string; label: strin
   revoked: { dot: '#B3261E', fg: '#B3261E', label: 'cut' },
 };
 
+/** Live windows on ONE table (5.217.0) — the free action's disclosure count.
+ *  Same clock-derived rule as sessionState; the free button names how many
+ *  windows end with the seating, so the owner confirms with both effects in
+ *  view, never a surprise cut. */
+function liveWindowsOf(rows: TableSession[], tableId: string): TableSession[] {
+  return rows.filter((s) => s.table_id === tableId && sessionState(s) === 'live');
+}
+
 /** "20:49" IST wall clock for a session window row. */
 function istHM(iso: string): string {
   return appFormatters().hhmm.format(new Date(iso));
@@ -1916,6 +1924,46 @@ export function FloorScreen(): React.ReactElement {
     [reload],
   );
 
+  /* 5.217.0 — freeing the table ends its windows. The order RPC gates on the
+     TENANT's status and the session's life — never the table's own status —
+     so a freed table whose guests still held a live QR window could keep
+     taking their orders, and migration 011's hold trigger would re-hold the
+     freed table from the ghost order. The seating is over; the windows end
+     with it. The table's freedom is the PRIMARY write (it holds even if
+     every cut fails — the residue is bounded by the 10-minute expiry); the
+     session read is FRESH (a window opened while the confirm sat armed must
+     not outlive the free), and a partial cut failure speaks its honest count
+     while the board resyncs to what actually held. */
+  const freeTable = useCallback(
+    async (t: DiningTable) => {
+      if (!tenantId) return;
+      setBusyId(t.id);
+      setActionError(null);
+      try {
+        await updateTable(t.id, tenantId, { status: 'available', active_order_id: null });
+        const fresh = await fetchTableSessions(tenantId).catch(() => null);
+        const live = liveWindowsOf(fresh ?? sessions, t.id);
+        if (live.length > 0) {
+          const ids = live.map((s) => s.id);
+          setSessions((prev) => prev.map((s) => (ids.includes(s.id) ? { ...s, status: 'revoked' } : s)));
+          const results = await Promise.allSettled(ids.map((id) => revokeTableSession(id)));
+          const failed = results.filter((r) => r.status === 'rejected').length;
+          if (failed > 0) {
+            setActionError(
+              `The table is free, but ${failed} of ${ids.length} session cuts failed — the windows expire on their own within 10 minutes.`,
+            );
+          }
+        }
+      } catch (err) {
+        setActionError(err instanceof Error ? err.message : 'Something went wrong. Try again.');
+      } finally {
+        setBusyId(null);
+        void reload(); // the board resyncs — status, cards and the drill agree
+      }
+    },
+    [tenantId, sessions, reload],
+  );
+
   /* v5.59.0 — the party moves. runAction owns the busy/error surface; the
      optimistic repaint keeps the cards instant while realtime confirms, and
      the drill closes because the ticket no longer lives at this table. */
@@ -2988,6 +3036,10 @@ export function FloorScreen(): React.ReactElement {
               const activeOrder = t.active_order_id ? orderByTable.get(t.active_order_id) : undefined;
               const busy = busyId === t.id;
               const armed = confirmId === t.id;
+              /* 5.217.0 — live windows on THIS table: the free confirm names
+                 how many QR windows end with the seating, so the cut is
+                 never a surprise. */
+              const liveNow = liveWindowsOf(sessions, t.id).length;
               const isLive = t.status === 'occupied' || t.status === 'billing';
               const hold = holdVerdictFor(t, orderByTable, holdAudit, holdFailed);
               const staleHold = hold && hold !== 'live' ? hold : null;
@@ -3041,6 +3093,19 @@ export function FloorScreen(): React.ReactElement {
                             title={`${sessionsByTable.get(t.id)!.length} guest QR sessions on record for this table`}
                           >
                             <Smartphone size={10} aria-hidden /> {sessionsByTable.get(t.id)!.length} scan{sessionsByTable.get(t.id)!.length === 1 ? '' : 's'}
+                          </span>
+                        )}
+                        {/* 5.217.0 — the card face speaks the LIVE windows in
+                            the drill's own tone (deep-ink pill, gold pulse):
+                            the owner sees the open menus BEFORE the free
+                            confirm names how many the seating takes with it. */}
+                        {liveNow > 0 && (
+                          <span
+                            className="ml-1.5 flex items-center gap-1 rounded-full bg-[#0F3D3E] px-2 py-0.5 text-[10.5px] font-bold tabular-nums text-white"
+                            title={`${liveNow} live QR window${liveNow === 1 ? '' : 's'} on this table — freeing the table ends ${liveNow === 1 ? 'it' : 'them'}`}
+                          >
+                            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#E7C878]" aria-hidden />
+                            {liveNow} open
                           </span>
                         )}
                         {isLive && activeOrder && !seat?.camping && (
@@ -3277,14 +3342,14 @@ export function FloorScreen(): React.ReactElement {
                           disabled={busy}
                           onClick={(e) => {
                             e.stopPropagation();
-                            if (armed) void runAction(t.id, () => updateTable(t.id, tenantId, { status: 'available', active_order_id: null }));
+                            if (armed) void freeTable(t);
                             else armConfirm(t.id);
                           }}
-                          aria-label={armed ? `Confirm free table ${t.table_number}` : staleHold ? `Free table ${t.table_number} — stale hold` : `Free table ${t.table_number}`}
+                          aria-label={armed ? `Confirm free table ${t.table_number}${liveNow > 0 ? ` — its ${liveNow} live QR window${liveNow === 1 ? '' : 's'} ${liveNow === 1 ? 'is' : 'are'} cut too` : ''}` : staleHold ? `Free table ${t.table_number} — stale hold` : `Free table ${t.table_number}`}
                           title={staleHold ? 'Nothing left to settle — the table can go.' : undefined}
                           className={`h-10 rounded-full px-3 text-[12.5px] font-bold ${armed || staleHold === 'ghost' || staleHold === 'settled' ? 'bg-[#B4483C] text-white' : 'border border-[#E3E7E0] text-[#B4483C] hover:bg-[#F6E8E6]'}`}
                         >
-                          {armed ? 'Confirm free?' : 'Free'}
+                          {armed ? (liveNow > 0 ? `Free + cut ${liveNow}?` : 'Confirm free?') : 'Free'}
                         </button>
                       </>
                     )}
@@ -3298,13 +3363,13 @@ export function FloorScreen(): React.ReactElement {
                           disabled={busy}
                           onClick={(e) => {
                             e.stopPropagation();
-                            if (armed) void runAction(t.id, () => updateTable(t.id, tenantId, { status: 'available', active_order_id: null }));
+                            if (armed) void freeTable(t);
                             else armConfirm(t.id);
                           }}
-                          aria-label={armed ? `Confirm free table ${t.table_number}` : `Free table ${t.table_number}`}
+                          aria-label={armed ? `Confirm free table ${t.table_number}${liveNow > 0 ? ` — its ${liveNow} live QR window${liveNow === 1 ? '' : 's'} ${liveNow === 1 ? 'is' : 'are'} cut too` : ''}` : `Free table ${t.table_number}`}
                           className={`h-10 rounded-full px-3 text-[12.5px] font-bold ${armed ? 'bg-[#B4483C] text-white' : 'border border-[#E3E7E0] text-[#B4483C] hover:bg-[#F6E8E6]'}`}
                         >
-                          {armed ? 'Confirm free?' : 'Free'}
+                          {armed ? (liveNow > 0 ? `Free + cut ${liveNow}?` : 'Confirm free?') : 'Free'}
                         </button>
                       </>
                     )}

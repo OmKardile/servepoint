@@ -3,6 +3,24 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.217.0] — 2026-10-05 — Freeing the table ends its windows: the Floor's "Free table" only flipped the table's row while the guests' live QR sessions sailed on — the order RPC gates on the TENANT's status and the session's life, never the table's own status, so a freed table could keep taking a stale window's orders and migration 011's hold trigger would re-hold the freed table from the ghost order
+
+### Changed — the free action composes the cut (`src/components/floor/FloorScreen.tsx`)
+
+`freeTable` born: the table write is the **PRIMARY** step (freedom holds even if every cut fails — the residue is bounded by the 10-minute expiry), then a **FRESH** `fetchTableSessions` read (a window opened while the confirm sat armed must not outlive the free; fail-soft to the cached rows), then `Promise.allSettled` over the drill's own RLS-scoped `revokeTableSession` — no new RPC, no second liveness rule (`liveWindowsOf` rides the drill's clock-derived `sessionState`). A partial cut failure speaks its honest count — "The table is free, but N of M session cuts failed — the windows expire on their own within 10 minutes" — while the board resyncs to what actually held. Both true free sites (occupied + billing) route through it; the reservation-clear and party-move paths keep their own semantics (never a seating; a move is not an end).
+
+### The disclosure — never a surprise cut
+
+The card face now speaks the LIVE windows in the drill's own tone (deep-ink pill, gold pulse, `tabular-nums`) BEFORE any confirm: "● 1 open" with a title naming the consequence. The armed confirm grows the visible count — "**Free + cut 2?**" (plain "Confirm free?" at zero) — and the aria names the cut in full words, verb-agreed ("its 1 live QR window **is** cut too" — the E2E caught the un-agreed "are" live and it died in the same round).
+
+### Tests
+
+`scripts/unit256.mjs` born — 12 checks: the composed order (table write precedes the session read — freedom is the primary intent), the fresh read fail-soft to the cached rows, the drill's liveness rule reused, allSettled + the honest partial voice, the optimistic flip + resync, both sites routed and the bare path retired, the reservation/move paths left alone, the armed disclosure on both sites + the agreed aria, the card-face chip's tone bytes, and the drill's `cutAllSessions` body intact (the free composes, never forks). Suite lesson re-learned: strip() eats comment lines — slice anchors must be CODE (`const handleMoveParty = useCallback(`), never the comment that names the block. Regression battery unit194–255 ALL PASS by exit code (62 suites with the born one); tsc EXIT=0; build EXIT=0 (43 assets, VERSION → servepoint-v5.217.0-r1).
+
+### E2E (dev, live, read-only — the confirm never clicked)
+
+A fresh guest window was opened from the menu, then the Floor read it: T1's card grew the deep-ink "**1 open**" pill; arming the free showed "**Free + cut 1?**" with the agreed aria "…its 1 live QR window is cut too". The confirm was never pressed — the arm disarms itself; no fixture mutated. Console zero errors. Screenshot: `download/qa256-floor-free-cuts-windows.png`.
+
 ## [5.216.0] — 2026-10-05 — The ribbon hears the server: migration 023's verify RPC has ALWAYS answered live sessions with `remaining_seconds` — the server's own arithmetic, read from the same clock that decides the lock — and every release before this one discarded it; the guest ribbon counted on the phone's clock alone, so a drifted phone could promise a window the server disagrees with
 
 ### Changed — the server's number comes home (`src/lib/guest.ts`)
