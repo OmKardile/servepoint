@@ -58,6 +58,7 @@ import {
   fetchWasteMoves,
 } from '../../lib/api';
 import { seatSpanLabel, buildSettleMap, medianMinOf } from '../../lib/turn';
+import { isPaidTicket } from '../../lib/usual';
 import type {
   DrawerSession,
   FeedbackRow,
@@ -115,14 +116,20 @@ import type { Order } from '../../types';
  *      COGS, gross margin and margin-% on PAID tickets, with a revenue-split
  *      bar (what the shelf burned vs what the cafe keeps).
  *   6. Top items — best sellers by revenue with unit counts, share bars and
- *      per-item margin chips, exportable as CSV. Unpriced dishes wear an
- *      honest "unpriced" chip instead of a fake 100% margin. Under the list
- *      sits THE EARNER'S LIST (5.72.0): the same dishes ranked by what they
- *      KEEP (revenue − ingredient cost, recipe-priced dishes only), each row
- *      naming its divergence from the sales board — "earns above its bill"
- *      (a quiet earner worth pushing) vs "sells above its earn" (popular but
- *      thin; review price or recipe). THE MENU'S QUADRANTS (5.73.0) finish
- *      the frame: the priced menu split at its own averages into Stars /
+ *      per-item margin chips, exportable as CSV. 5.198.0: the ranking banks
+ *      on PAID tickets (isPaidTicket, the family's own truth) — the same
+ *      register the Menu's mover medallion and the margin card speak, so the
+ *      earner's list now sums to the margin card (one ledger), and the
+ *      "this week" numbers on Menu and Reports can never fork again. The
+ *      billed ITEMS SOLD tile names its own register ("unpaid tickets
+ *      included"). Unpriced dishes wear an honest "unpriced" chip instead
+ *      of a fake 100% margin. Under the list sits THE EARNER'S LIST
+ *      (5.72.0): the same dishes ranked by what they KEEP (revenue −
+ *      ingredient cost, recipe-priced dishes only), each row naming its
+ *      divergence from the sales board — "earns above its bill" (a quiet
+ *      earner worth pushing) vs "sells above its earn" (popular but thin;
+ *      review price or recipe). THE MENU'S QUADRANTS (5.73.0) finish the
+ *      frame: the priced menu split at its own averages into Stars /
  *      Plowhorses / Puzzles / Dogs, each quadrant speaking its verdict.
  *   7. Service mix — dine-in / takeaway / delivery split.
  *   8. Guest satisfaction — the 019 order_feedback ledger read over the
@@ -377,7 +384,10 @@ export function buildReportText(opts: ReportOpts): string {
   if (opts.unpaid > 0) out.push(two('UNPAID', `${formatMoney(opts.unpaidAmt)} (${opts.unpaid} tkt)`));
   if (opts.top.length > 0) {
     out.push(hr);
-    out.push('WHAT SOLD · TOP 3');
+    /* 5.198.0 — the top-3 rides the paid ledger (rankTopItems); the paper's
+     * other money blocks are billed, so the section names its own register,
+     * the way COST & MARGIN already says PAID TKTS. */
+    out.push('WHAT SOLD · TOP 3 (PAID)');
     opts.top.forEach((t, i) => out.push(two(`${i + 1}. ${t.name} · ${t.units}u`, formatMoney(t.revenue))));
   }
   if (opts.bestDay || opts.peakHour) {
@@ -422,6 +432,9 @@ export interface TopTextOpts {
   /** priced dishes by what they keep; earns rank = position + 1 */
   earners: { name: string; kept: number; marginPct: number; sellsRank: number }[];
   itemsSold: number;
+  /** 5.198.0 — optional register line under the header ('paid tickets only');
+   *  absent keeps the paper byte-identical (the absent-field doctrine). */
+  unitsVoice?: string;
 }
 
 export function buildTopText(opts: TopTextOpts): string {
@@ -483,6 +496,7 @@ export function buildTopText(opts: TopTextOpts): string {
   const out: string[] = [];
   out.push(center(opts.storeName));
   out.push(center(`BEST SELLERS · ${opts.rangeLabel.toUpperCase()}`));
+  if (opts.unitsVoice) out.push(center(opts.unitsVoice));
   out.push(hr);
   opts.items.forEach((it, i) => {
     out.push(two(`${i + 1}. ${it.name}`, formatMoney(it.revenue)));
@@ -1415,6 +1429,33 @@ interface ItemRank {
   priced: boolean;
 }
 
+/* ── 5.198.0 — the best sellers bank on paid ─────────────────────────
+ * The ranking counted every non-cancelled ticket — unpaid included — so
+ * a dish "sold" units that were still being chased (7 of the week's 37
+ * Flat Whites rode the chase list), and its keep-rank claimed margins
+ * the till never collected while the margin card beside it banked on
+ * collected money only. The what-sells family speaks ONE register:
+ * isPaidTicket (the shared truth behind the Menu's mover medallion, the
+ * usual, and v_customer_stats). Exported pure so the suite owns the
+ * population — paid in, cancelled/refunded/unpaid out, revenue and
+ * recipe cost per unit summed, sorted by revenue. */
+export function rankTopItems(rows: Order[], unitCosts: Map<string, number>): ItemRank[] {
+  const byName = new Map<string, ItemRank>();
+  for (const o of rows) {
+    if (!isPaidTicket(o)) continue;
+    for (const it of o.items || []) {
+      const priced = unitCosts.has(it.menu_item_id ?? '');
+      const cur = byName.get(it.name) || { name: it.name, units: 0, revenue: 0, cost: 0, priced };
+      cur.units += Number(it.qty ?? 0);
+      cur.revenue += Number(it.item_total ?? Number(it.unit_price ?? 0) * Number(it.qty ?? 0));
+      // base-recipe ingredient cost for the units sold (variants/add-ons not priced)
+      cur.cost += (unitCosts.get(it.menu_item_id ?? '') ?? 0) * Number(it.qty ?? 0);
+      byName.set(it.name, cur);
+    }
+  }
+  return [...byName.values()].sort((a, b) => b.revenue - a.revenue);
+}
+
 const TYPE_LABEL: Record<string, string> = {
   dine_in: 'Dine-in',
   takeaway: 'Takeaway',
@@ -1740,22 +1781,13 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
     return t;
   }, [gstRegister]);
 
-  const topItems = useMemo(() => {
-    const byName = new Map<string, ItemRank>();
-    for (const o of inRange) {
-      if (String(o.status || '').toLowerCase() === 'cancelled') continue;
-      for (const it of o.items || []) {
-        const priced = unitCosts.has(it.menu_item_id ?? '');
-        const cur = byName.get(it.name) || { name: it.name, units: 0, revenue: 0, cost: 0, priced };
-        cur.units += Number(it.qty ?? 0);
-        cur.revenue += Number(it.item_total ?? Number(it.unit_price ?? 0) * Number(it.qty ?? 0));
-        // base-recipe ingredient cost for the units sold (variants/add-ons not priced)
-        cur.cost += (unitCosts.get(it.menu_item_id ?? '') ?? 0) * Number(it.qty ?? 0);
-        byName.set(it.name, cur);
-      }
-    }
-    return [...byName.values()].sort((a, b) => b.revenue - a.revenue);
-  }, [inRange, unitCosts]);
+  /* 5.198.0 — the ranking rides the exported rankTopItems (paid tickets only,
+   * the what-sells family's register — the Menu medallion's own truth); the
+   * derivation lives above, one definition, suite-owned. */
+  const topItems = useMemo(() => rankTopItems(inRange, unitCosts), [inRange, unitCosts]);
+  /* The list's own unit sum — the number the sub-line and the chat paper
+   * speak. NOT the billed agg.items: the list and its footer must agree. */
+  const topUnits = useMemo(() => topItems.reduce((n, it) => n + it.units, 0), [topItems]);
 
   /* 5.72.0 — the earner's list. Top items ranks by what dishes RING; this ranks
    * by what they KEEP (revenue − ingredient cost). Only recipe-priced dishes
@@ -1856,6 +1888,7 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
     return {
       storeName: tenant?.name || 'ServePoint store',
       rangeLabel: RANGE_LABEL[range],
+      unitsVoice: 'paid tickets only',
       items: topItems.slice(0, 8).map((it) => ({
         name: it.name,
         units: it.units,
@@ -1870,9 +1903,9 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
         marginPct: it.revenue > 0 ? ((it.revenue - it.cost) / it.revenue) * 100 : 0,
         sellsRank: sellsRank.get(it.name) ?? 0,
       })),
-      itemsSold: agg.items,
+      itemsSold: topUnits,
     };
-  }, [tenant?.name, range, topItems, sellsRank, agg.items]);
+  }, [tenant?.name, range, topItems, topUnits, sellsRank]);
   const topText = topItems.length > 0 ? buildTopText(topShareOpts) : '';
   const [topCopyState, setTopCopyState] = useState<'idle' | 'ok' | 'fail'>('idle');
   const copyTop = async () => {
@@ -2838,6 +2871,7 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
         <StatCard
           label="Items sold"
           value={String(agg.items)}
+          sub={agg.placed - agg.paidCount > 0 ? 'unpaid tickets included' : 'live in range'}
           tone="#0F3D3E"
           spark={daily.map((d) => d.items)}
           {...deltaProps(agg.items, priorAgg?.items ?? 0, (n) => String(Math.round(n)))}
@@ -3585,7 +3619,7 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
                   <h2 className="text-[15px] font-bold text-[#1A1A1A]">Top items</h2>
                   <p className="text-[11.5px] text-[#969696]">
                     Best sellers by revenue · {topItems.length} distinct item
-                    {topItems.length === 1 ? '' : 's'} · {agg.items} units
+                    {topItems.length === 1 ? '' : 's'} · {topUnits} units on paid tickets
                   </p>
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
