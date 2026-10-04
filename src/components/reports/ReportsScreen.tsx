@@ -330,6 +330,93 @@ export function buildReportText(opts: ReportOpts): string {
   return out.join('\n');
 }
 
+/* ── v5.153.0 — the best sellers speak in chat ───────────────────────
+ * The share arc's eighth member: the item ranking gets a pocket voice.
+ * "Weekly best-sellers" is the most-shared owner report in F&B — to a
+ * partner, a supplier, a franchise head — and unlike the menu (5.152.0,
+ * the GUEST view), this is the house's own book: margins legitimately
+ * ride along. Mirrors the screen's two boards — TOP ITEMS by revenue
+ * (units, share of sales, margin when priced) and THE EARNER'S LIST by
+ * what dishes KEEP (revenue − ingredient cost, sells-rank divergence
+ * named when it isn't the earns rank). Unpriced dishes say so by
+ * omission — a zero cost is not a 100% margin. Detail lines are
+ * greedy-packed segments joined with ' · ' — never truncated mid-word
+ * (the 189/190 prose lesson, list edition). Exported pure so E2E can
+ * assert the text without the clipboard. */
+export interface TopTextItem {
+  name: string;
+  units: number;
+  revenue: number;
+  sharePct: number;
+  /** null when the dish is unpriced — the text stays honest by omission */
+  marginPct: number | null;
+  kept: number | null;
+}
+
+export interface TopTextOpts {
+  storeName: string;
+  rangeLabel: string;
+  items: TopTextItem[];
+  /** priced dishes by what they keep; earns rank = position + 1 */
+  earners: { name: string; kept: number; marginPct: number; sellsRank: number }[];
+  itemsSold: number;
+}
+
+export function buildTopText(opts: TopTextOpts): string {
+  const W = 32;
+  const hr = '-'.repeat(W);
+  const center = (s: string): string =>
+    s.length >= W ? s : ' '.repeat(Math.floor((W - s.length) / 2)) + s;
+  const two = (l: string, r: string): string => {
+    const cut = Math.max(1, W - r.length - 1);
+    const left = l.length > cut ? `${l.slice(0, cut - 1)}…` : l;
+    return left.padEnd(W - r.length, ' ') + r;
+  };
+  /* detail lines are packed segments, not an aligned row — a sentence
+   * about a dish is prose, and prose never rides the money aligner */
+  const detail = (segs: string[]): string[] => {
+    const lines: string[] = [];
+    let cur = '';
+    for (const s of segs) {
+      const t = cur ? `${cur} · ${s}` : s;
+      if (t.length <= W - 3) {
+        cur = t;
+        continue;
+      }
+      if (cur) lines.push(cur);
+      cur = s;
+    }
+    if (cur) lines.push(cur);
+    return lines;
+  };
+
+  const out: string[] = [];
+  out.push(center(opts.storeName));
+  out.push(center(`BEST SELLERS · ${opts.rangeLabel.toUpperCase()}`));
+  out.push(hr);
+  opts.items.forEach((it, i) => {
+    out.push(two(`${i + 1}. ${it.name}`, formatMoney(it.revenue)));
+    const segs = [`${it.units} unit${it.units === 1 ? '' : 's'}`, `${Math.round(it.sharePct)}% of sales`];
+    if (it.marginPct !== null) segs.push(`${Math.round(it.marginPct)}% mgn`);
+    for (const line of detail(segs)) out.push(`   ${line}`);
+  });
+  if (opts.earners.length > 0) {
+    out.push(hr);
+    out.push("THE EARNER'S LIST");
+    opts.earners.forEach((e, i) => {
+      out.push(two(`${i + 1}. ${e.name}`, formatMoney(e.kept)));
+      const segs = [`${Math.round(e.marginPct)}% kept`, `sells #${e.sellsRank}`];
+      if (i + 1 !== e.sellsRank) segs.push(`earns #${i + 1}`);
+      for (const line of detail(segs)) out.push(`   ${line}`);
+    });
+  }
+  out.push(hr);
+  out.push(two(`${opts.items.length} dish${opts.items.length === 1 ? '' : 'es'}`, `${opts.itemsSold} units`));
+  out.push(center(`Shared ${appFormatters().hhmm.format(new Date())} ${appTzTag()}`));
+  out.push(center('· · · end of best sellers · · ·'));
+  return out.join('\n');
+}
+
 /**
  * v5.148.0 — the range report's PAPER voice: the quad completes. The screen
  * shows the range, the CSVs carry it complete to a spreadsheet, chat pockets
@@ -987,6 +1074,46 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
     });
     downloadCsv(`servepoint-top-items-${appTodayIso()}.csv`, rows);
   }, [topItems, marginRank, menuMatrix]);
+
+  /* v5.153.0 — one assembly feeds Copy + WhatsApp (5.146.0 rule, ranking
+   * edition): the chat best-sellers are built from the same topItems /
+   * marginRank / sellsRank memos the screen renders, so screen and chat
+   * can never disagree. Earner rank is the earner's list position. Hooks
+   * live ABOVE the early returns — a crash here taught the order rule. */
+  const topShareOpts = useMemo<TopTextOpts>(() => {
+    const revTotal = topItems.reduce((n, it) => n + it.revenue, 0) || 1;
+    return {
+      storeName: tenant?.name || 'ServePoint store',
+      rangeLabel: RANGE_LABEL[range],
+      items: topItems.slice(0, 8).map((it) => ({
+        name: it.name,
+        units: it.units,
+        revenue: it.revenue,
+        sharePct: (it.revenue / revTotal) * 100,
+        marginPct: it.priced && it.revenue > 0 ? ((it.revenue - it.cost) / it.revenue) * 100 : null,
+        kept: it.priced ? it.revenue - it.cost : null,
+      })),
+      earners: marginRank.slice(0, 8).map((it) => ({
+        name: it.name,
+        kept: it.revenue - it.cost,
+        marginPct: it.revenue > 0 ? ((it.revenue - it.cost) / it.revenue) * 100 : 0,
+        sellsRank: sellsRank.get(it.name) ?? 0,
+      })),
+      itemsSold: agg.items,
+    };
+  }, [tenant?.name, range, topItems, sellsRank, agg.items]);
+  const topText = topItems.length > 0 ? buildTopText(topShareOpts) : '';
+  const [topCopyState, setTopCopyState] = useState<'idle' | 'ok' | 'fail'>('idle');
+  const copyTop = async () => {
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error('clipboard unavailable');
+      await navigator.clipboard.writeText(topText);
+      setTopCopyState('ok');
+    } catch {
+      setTopCopyState('fail');
+    }
+    window.setTimeout(() => setTopCopyState('idle'), 1800);
+  };
 
   /* ── guest satisfaction (019) — range-scoped reads, fail-soft data ── */
 
@@ -2356,16 +2483,47 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
                     {topItems.length === 1 ? '' : 's'} · {agg.items} units
                   </p>
                 </div>
-                <button
-                  onClick={exportRanking}
-                  disabled={topItems.length === 0}
-                  aria-label="Export item ranking as CSV"
-                  title="Export the item ranking as CSV"
-                  className="flex h-11 shrink-0 items-center gap-1.5 rounded-xl border border-[#E3E7E0] bg-white px-3 text-[12.5px] font-bold text-[#0F3D3E] transition hover:border-[#B88E2F] hover:text-[#B88E2F] disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  <Download size={14} aria-hidden />
-                  CSV
-                </button>
+                <div className="flex shrink-0 items-center gap-2">
+                  {topItems.length > 0 && (
+                    <>
+                      <button
+                        onClick={copyTop}
+                        aria-live="polite"
+                        aria-label="Copy the best sellers as text"
+                        title="Copy the best sellers as text"
+                        className="flex h-11 items-center gap-1.5 rounded-xl border border-[#E3E7E0] bg-white px-3 text-[12.5px] font-bold text-[#0F3D3E] transition hover:border-[#B88E2F] hover:text-[#B88E2F]"
+                      >
+                        {topCopyState === 'ok' ? (
+                          <Check size={14} className="text-[#2E7D32]" aria-hidden />
+                        ) : (
+                          <Copy size={14} aria-hidden />
+                        )}
+                        {topCopyState === 'ok' ? 'Copied' : topCopyState === 'fail' ? 'Copy blocked' : 'Copy'}
+                      </button>
+                      <a
+                        href={`https://wa.me/?text=${encodeURIComponent(topText)}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        aria-label="Share the best sellers on WhatsApp"
+                        title="Share the best sellers on WhatsApp"
+                        className="flex h-11 items-center gap-1.5 rounded-xl border border-[#E3E7E0] bg-white px-3 text-[12.5px] font-bold text-[#0F3D3E] transition hover:border-[#B88E2F] hover:text-[#B88E2F]"
+                      >
+                        <MessageCircle size={14} aria-hidden />
+                        WhatsApp
+                      </a>
+                    </>
+                  )}
+                  <button
+                    onClick={exportRanking}
+                    disabled={topItems.length === 0}
+                    aria-label="Export item ranking as CSV"
+                    title="Export the item ranking as CSV"
+                    className="flex h-11 shrink-0 items-center gap-1.5 rounded-xl border border-[#E3E7E0] bg-white px-3 text-[12.5px] font-bold text-[#0F3D3E] transition hover:border-[#B88E2F] hover:text-[#B88E2F] disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    <Download size={14} aria-hidden />
+                    CSV
+                  </button>
+                </div>
               </div>
               {topItems.length === 0 ? (
                 <p className="py-8 text-center text-[12.5px] text-[#969696]">

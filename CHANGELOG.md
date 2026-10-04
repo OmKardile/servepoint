@@ -3,6 +3,20 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.153.0] — 2026-10-04 — The best sellers speak in chat
+
+### Added — the house's own book joins the share arc (`src/components/reports/ReportsScreen.tsx`)
+
+The share arc's eighth member: the item ranking gets a pocket voice. "Weekly best-sellers" is the most-shared owner report in F&B — to a partner, a supplier, a franchise head — and unlike the menu (5.152.0, the guest view), this is the house's own book: margins legitimately ride along. `buildTopText(opts)` (exported pure, E2E-assertable) mirrors the screen's two boards from the same `topItems` / `marginRank` / `sellsRank` memos, so screen and chat can never disagree: TOP ITEMS by revenue (units, share of sales, margin when recipe-priced) and THE EARNER'S LIST by what dishes keep (revenue − ingredient cost, with the sells-rank divergence named only when it isn't the earns rank). Unpriced dishes say so by omission — a zero cost is not a 100% margin. Detail lines are greedy-packed segments joined with `·`, never truncated mid-word (the prose lesson, list edition); the closes with `N dishes · M units`, the Shared footer and the end-of-best-sellers signature.
+
+### Changed — the Top items card gains a share row
+
+Copy + WhatsApp chips join the CSV button in the Top items header (matching the card's chip grammar, gold hover). Copy rides the honest tri-state (`aria-live="polite"`, 1.8s reset); WhatsApp is the house PICKER (`wa.me/?text=`); the row renders only when the range holds item lines — an empty range has nothing to share.
+
+### Verified
+
+`tsc` EXIT=0 · `vite build` EXIT=0 · node --check sw.js OK · E2E on the live Reports screen (Last 7 days, 29 orders): share chips render beside CSV, the wa.me href decodes to the exact builder text — QR Flow Cafe / BEST SELLERS · LAST 7 DAYS / 1. Flat White ₹8,580.00 + 37 units · 95% of sales · 84% mgn / THE EARNER'S LIST / Flat White ₹7,248.00 84% kept sells #1 / Veg Grilled Sandwich ₹183.00 70% kept sells #2 / Blueberry Muffin ₹146.00 81% kept sells #3 / 3 dishes · 39 units / end signature — every number matching the screen's rows, detail lines ≤ 32 columns, Copy honest tri-state with the 1.8s reset, zero new console errors. The sells≠earns divergence line and unpriced-omission verified by pure-fn unit asserts (vite-node, literals only).
+
 ## [5.152.0] — 2026-10-04 — The menu speaks in chat
 
 ### Added — the catalog joins the share arc (`src/components/menu/MenuScreen.tsx`)
