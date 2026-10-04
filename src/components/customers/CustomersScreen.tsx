@@ -519,6 +519,20 @@ export function paymentWords(ps: string | null | undefined): string {
   return v;
 }
 
+/* ── 5.199.0 — the usual names its money ────────────────────────────────
+ * The drill carried two rupee figures one line apart and only one said
+ * what it was: the header's PAID TOTAL is the TICKET register (the
+ * ticket's own total — offers taken, GST added), while THE USUAL's
+ * rupees are the MENU-LINE register (qty × the ledger's frozen menu
+ * price, before offers and GST). Maya read "₹440.00 of everything
+ * they've rung" above "PAID TOTAL ₹409.50" — the same word "rung"
+ * answering two questions 30.50 apart. The tails are exported words
+ * (the paymentWords pattern): ONE register, ONE owner, the suite
+ * sweeps them. The start-the-usual aria joins the register — the
+ * ledger froze that price; the ticket settled its own. */
+export const USUAL_MONEY_TAIL = 'of menu rings, before offers and GST';
+export const USUAL_SHARE_TAIL = 'percent of their menu rings';
+
 /* ─────────────────────────────── screen ────────────────────────────────── */
 
 export const CustomersScreen: React.FC = () => {
@@ -1847,7 +1861,8 @@ const GuestDetailDrawer: React.FC<{
 
   /* START THEIR USUAL (v5.74.0) — the habit itself, one tap. The latest
    * expression of it rides in at the habit's own size (the last line's
-   * qty), at the last price and extras the ledger froze, with the guest's
+   * qty), at the last price and extras the ledger froze (the ledger
+   * freezes the price; the ticket settles its own — 5.199.0), with the guest's
    * identity pre-filled. Guard: a usual whose dish was de-listed cannot
    * start — the well keeps the name (ledger truth) but says so honestly. */
   const startUsual = () => {
@@ -1992,8 +2007,10 @@ const GuestDetailDrawer: React.FC<{
             </div>
           )}
           {/* THE USUAL (v5.74.0) — the dish this guest's own paid ledger keeps
-              naming, with the share of everything they've rung it accounts
-              for, and one tap to start it into today's order. */}
+              naming, with the share of their menu rings it accounts for
+              (line money at the ledger's frozen prices — before offers and
+              GST; the ticket's own total lives in the header's PAID TOTAL).
+              5.199.0 — the money names its register, one word one owner. */}
           {orders !== null && usual && usual.line && (
             <div
               className="mb-4 rounded-2xl border border-[#E3E7E0] bg-[#FBFAF7] px-4 py-3.5"
@@ -2009,13 +2026,13 @@ const GuestDetailDrawer: React.FC<{
               <p className="mt-0.5 text-[11.5px] leading-relaxed text-[#6B6B6B]">
                 named across <span className="font-semibold text-[#1A1A1A] tabular-nums">{usual.tickets}</span>{' '}
                 paid {usual.tickets === 1 ? 'ticket' : 'tickets'} ·{' '}
-                <span className="tabular-nums">{formatMoney(usual.rupees)}</span> of everything they've rung
+                <span className="tabular-nums">{formatMoney(usual.rupees)}</span> {USUAL_MONEY_TAIL}
                 {paidTickets.length >= USUAL_WINDOW && ` · last-${USUAL_WINDOW}-ticket window`}
               </p>
               <div
                 className="mt-2 h-1.5 overflow-hidden rounded-full bg-[#EAF0EC]"
                 role="img"
-                aria-label={`${Math.round(usual.share * 100)} percent of everything they have rung`}
+                aria-label={`${Math.round(usual.share * 100)} ${USUAL_SHARE_TAIL}`}
               >
                 <div
                   className="h-full rounded-full bg-[#B88E2F]"
@@ -2026,7 +2043,7 @@ const GuestDetailDrawer: React.FC<{
                 <button
                   type="button"
                   onClick={startUsual}
-                  aria-label={`Start their usual — ${usual.line.qty} times ${usual.name} at the last price they paid`}
+                  aria-label={`Start their usual — ${usual.line.qty} times ${usual.name} at the ledger's frozen price`}
                   title={`Start their usual — ${usual.line.qty}× ${usual.name} at the last price and extras the ledger froze`}
                   className="mt-2.5 flex h-8 w-full items-center justify-center gap-1.5 rounded-full bg-[#B88E2F] text-[12px] font-bold text-white shadow-sm transition-colors hover:bg-[#A67D28] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[#B88E2F]"
                 >
