@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
   AlertTriangle,
+  BookOpen,
   CalendarClock,
   ChevronDown,
   CircleSlash,
@@ -38,6 +39,13 @@ import {
 } from 'recharts';
 import { fetchDashboard, fetchFeedbackStats, fetchInventory, fetchMenuItems, fetchOpenPaymentSums, fetchOrders, fetchReservations, fetchTables, fetchTodayCostMargin, type DiningTable, type FeedbackStats, type InventoryItem, type Reservation, type TodayCostMargin } from '../../lib/api';
 import { formatMoney } from '../../lib/prefs';
+/* v5.175.0 — the morning paper borrows two clocks, each already the law of
+   its own room: the BOOK speaks the booking voice (lib/bookingday — the
+   database's word, the same lib the floor's book, the bell and the guest
+   drawer speak) and the CLOSE-OUT door key speaks the reporting day
+   (lib/appday — the same clock Reports' day bars use for the day: hint). */
+import { bookingDayKey, bookingSlotLabel, bookingTodayKey, bookingTzIsForeign } from '../../lib/bookingday';
+import { appDayKey, appTodayIso } from '../../lib/appday';
 import { CHART_TOOLTIP_LABEL, CHART_TOOLTIP_STYLE } from '../../lib/chartvoice';
 import { isSameLocalDay } from '../../lib/day';
 import { useTenant } from '../../lib/tenant';
@@ -50,6 +58,19 @@ import type { DashboardData, MenuItem, Order } from '../../types';
  *   Dashboard_219-29880 (primary), Dashboard_219-26483 (grid variant),
  *   Empty_State_219-29868 (empty-state language).
  * Production data only: fetchDashboard(tenantId) — no mock data, no fallbacks.
+ *
+ * v5.175.0 — the morning paper: when today holds no sales yet, the page no
+ *   longer collapses to one circle. The operator's morning has questions the
+ *   dead circle never answered — what did YESTERDAY take, who promised to
+ *   come TONIGHT, how is the WEEK running — and every answer already lives
+ *   in a ledger the app owns. The paper EXPOSES, it never re-answers:
+ *   yesterday and the week read fetchDashboard's own weeklyRevenue buckets
+ *   (the same live grammar, cancelled never happened), the book reads the
+ *   floor's exact ahead/quiet grammar (bookingday lib — booked rows only,
+ *   today in the booking clock), and the doors are the doors that exist
+ *   (Close-out's day hint, the Floor, Reports). Silence stays honest: a
+ *   dead yesterday reads nothing, an empty book reads nothing, and when
+ *   NOTHING can speak the page stays the honest circle — zero noise.
  */
 
 type Range = 'today' | 'week';
@@ -660,6 +681,216 @@ const TrendingDishesCard: React.FC<{ data: DashboardData }> = ({ data }) => {
   );
 };
 
+/* ─────────────────── The morning paper (v5.175.0) ──────────────────────── */
+
+export interface MorningTake {
+  /** Yesterday's bucket from the week's own rows — null when the day sold nothing. */
+  yesterday: { full: string; total: number; lead: string | null } | null;
+  /** The six days before today — null when the week so far sold nothing. */
+  week: { total: number; sellingDays: number; best: { label: string; total: number } | null } | null;
+}
+
+/**
+ * Reads the morning take out of fetchDashboard's OWN week rows — the paper
+ * never re-answers the money: the buckets are the same live grammar the week
+ * chart speaks (cancelled never happened, browser days, oldest first, the
+ * last row being TODAY by the fetch's own contract). A dead yesterday reads
+ * silence; a silent week reads silence; the lead service is a deterministic
+ * tie-break (Dine-in, then Takeaway), not a judgment.
+ */
+export const morningTake = (data: Pick<DashboardData, 'weeklyRevenue'>): MorningTake => {
+  const rows = data.weeklyRevenue || [];
+  const past = rows.slice(0, Math.max(0, rows.length - 1)); // everything before TODAY
+  const yRow = past.length > 0 ? past[past.length - 1] : null;
+  const yesterday =
+    yRow && yRow.total > 0
+      ? {
+          full: yRow.full,
+          total: yRow.total,
+          lead:
+            yRow.dineIn <= 0 && yRow.takeaway <= 0 && yRow.delivery <= 0
+              ? null
+              : yRow.dineIn >= yRow.takeaway && yRow.dineIn >= yRow.delivery
+                ? 'Dine-in'
+                : yRow.takeaway >= yRow.delivery
+                  ? 'Takeaway'
+                  : 'Delivery',
+        }
+      : null;
+  const weekTotal = past.reduce((s, r) => s + r.total, 0);
+  let best: { label: string; total: number } | null = null;
+  for (const r of past)
+    if (r.total > 0 && (!best || r.total > best.total)) best = { label: r.label, total: r.total };
+  const week =
+    weekTotal > 0
+      ? { total: weekTotal, sellingDays: past.filter((r) => r.total > 0).length, best }
+      : null;
+  return { yesterday, week };
+};
+
+/**
+ * The floor's own ahead/quiet grammar (FloorScreen, 5.84/5.86), lifted to a
+ * pure voice the paper can share: booked rows only — a seated, no-show or
+ * cancelled promise never speaks; TODAY in the booking clock (the database's
+ * word, lib/bookingday); ahead = the slot still stands, quiet = the promised
+ * hour went by with the booking still open. todayKey is a parameter (the
+ * component passes bookingTodayKey()) so the grammar is testable without a
+ * running clock.
+ */
+export const bookAhead = (
+  reservations: Reservation[],
+  nowMs: number,
+  todayKey: string = bookingTodayKey(),
+): { ahead: Reservation[]; quiet: number } => {
+  const ahead: Reservation[] = [];
+  let quiet = 0;
+  for (const r of reservations) {
+    if (r.status !== 'booked') continue;
+    if (bookingDayKey(r.slot_at) !== todayKey) continue;
+    if (new Date(r.slot_at).getTime() >= nowMs) ahead.push(r);
+    else quiet += 1;
+  }
+  ahead.sort((a, b) => new Date(a.slot_at).getTime() - new Date(b.slot_at).getTime());
+  return { ahead, quiet };
+};
+
+/**
+ * The paper itself — three cards, each earning its place:
+ *   • YESTERDAY — the day that closed, with its lead service, and Close-out's
+ *     day door (the same day: hint Reports' day bars carry, 5.96.0).
+ *   • THE BOOK — promises still standing for the rest of today, the first
+ *     one named (hour in the booking voice, guest, party), quiet ones
+ *     whispered, the floor's book one door away.
+ *   • THE WEEK SO FAR — the six days before today, their best day named,
+ *     Reports one door away.
+ * The book read is fail-soft: an unread or empty book is silence, never an
+ * invented calm; when ALL three cards are silent the paper renders nothing
+ * and the page keeps the honest circle.
+ */
+const MorningPaper: React.FC<{ data: DashboardData }> = ({ data }) => {
+  const { tenantId } = useTenant();
+  const [book, setBook] = useState<Reservation[] | null>(null);
+
+  useEffect(() => {
+    if (!tenantId) return;
+    let alive = true;
+    fetchReservations(tenantId, 200)
+      .then((rows) => {
+        if (alive) setBook(rows);
+      })
+      .catch(() => {
+        if (alive) setBook([]); // a failed read is silence
+      });
+    return () => {
+      alive = false;
+    };
+  }, [tenantId]);
+
+  const take = morningTake(data);
+  const promises = book ? bookAhead(book, Date.now()) : null;
+  if (!take.yesterday && !take.week && (!promises || promises.ahead.length === 0)) return null;
+
+  const go = useUi.getState().goSection;
+  const foreign = bookingTzIsForeign();
+  /* Yesterday's door key in the reporting day (Close-out's clock) — stepped
+     as a calendar STRING through noon UTC, Reports' own DST-safe stride. */
+  const yDoor = new Date(`${appTodayIso()}T12:00:00Z`);
+  yDoor.setUTCDate(yDoor.getUTCDate() - 1);
+  const yesterdayKey = appDayKey(yDoor.toISOString());
+
+  return (
+    <div className="mx-auto mt-9 grid w-full max-w-4xl grid-cols-1 gap-4 text-left md:grid-cols-3">
+      {take.yesterday && (
+        <section className="sp-card flex flex-col p-5" aria-label={`Yesterday's take — ${take.yesterday.full}`}>
+          <p className="flex items-center gap-1.5 text-[10.5px] font-bold uppercase tracking-[0.08em] text-[#969696]">
+            <CalendarClock size={13} aria-hidden className="shrink-0 text-[#0F3D3E]" />
+            Yesterday · {take.yesterday.full}
+          </p>
+          <p className="mt-2.5 text-[22px] font-bold tabular-nums leading-tight text-[#1A1A1A]">
+            {formatMoney(take.yesterday.total)}
+          </p>
+          {take.yesterday.lead && (
+            <p className="mt-1 text-[12px] text-[#6B6B6B]">{take.yesterday.lead} led the day</p>
+          )}
+          <button
+            type="button"
+            onClick={() => go('eod', ['Dashboard', 'Close-out'], `day:${yesterdayKey}`)}
+            aria-label={`Replay yesterday (${take.yesterday.full}) in Close-out`}
+            className="mt-3 inline-flex items-center gap-1.5 self-start rounded-lg border border-[#E3E7E0] px-3 py-1.5 text-[11.5px] font-semibold text-[#0F3D3E] transition hover:bg-[#F6F5F2] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#B88E2F]/40"
+          >
+            <History size={12} aria-hidden />
+            Replay in Close-out
+          </button>
+        </section>
+      )}
+      {promises && promises.ahead.length > 0 && (
+        <section
+          className="sp-card flex flex-col p-5"
+          aria-label={`The book — ${promises.ahead.length} ${promises.ahead.length === 1 ? 'promise' : 'promises'} for the rest of today`}
+        >
+          <p className="flex items-center gap-1.5 text-[10.5px] font-bold uppercase tracking-[0.08em] text-[#969696]">
+            <BookOpen size={13} aria-hidden className="shrink-0 text-[#0F3D3E]" />
+            The book · rest of today
+          </p>
+          <p className="mt-2.5 text-[22px] font-bold leading-tight text-[#1A1A1A]">
+            {promises.ahead.length} {promises.ahead.length === 1 ? 'promise' : 'promises'} ahead
+          </p>
+          <p className="mt-1 text-[12px] text-[#6B6B6B]">
+            {bookingSlotLabel(promises.ahead[0].slot_at)}
+            {foreign && ' IST'} · {promises.ahead[0].guest_name} · party of{' '}
+            {promises.ahead[0].party_size}
+          </p>
+          {promises.quiet > 0 && (
+            <p className="mt-1 flex items-center gap-1 text-[11.5px] font-medium text-[#967221]">
+              <Clock size={11} aria-hidden className="shrink-0" />
+              {promises.quiet === 1
+                ? "one promise's hour went by, still booked"
+                : `${promises.quiet} promises' hours went by, still booked`}
+            </p>
+          )}
+          <button
+            type="button"
+            onClick={() => go('floor', ['Dashboard', 'Floor'])}
+            aria-label={`Open the floor's book — ${promises.ahead.length} ${promises.ahead.length === 1 ? 'promise' : 'promises'} ahead`}
+            className="mt-3 inline-flex items-center gap-1.5 self-start rounded-lg border border-[#E3E7E0] px-3 py-1.5 text-[11.5px] font-semibold text-[#0F3D3E] transition hover:bg-[#F6F5F2] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#B88E2F]/40"
+          >
+            <BookOpen size={12} aria-hidden />
+            Open the book
+          </button>
+        </section>
+      )}
+      {take.week && (
+        <section className="sp-card flex flex-col p-5" aria-label="The week so far">
+          <p className="flex items-center gap-1.5 text-[10.5px] font-bold uppercase tracking-[0.08em] text-[#969696]">
+            <TrendingUp size={13} aria-hidden className="shrink-0 text-[#0F3D3E]" />
+            The week so far
+          </p>
+          <p className="mt-2.5 text-[22px] font-bold tabular-nums leading-tight text-[#1A1A1A]">
+            {formatMoney(take.week.total)}
+          </p>
+          <p className="mt-1 text-[12px] text-[#6B6B6B]">
+            across {take.week.sellingDays} selling {take.week.sellingDays === 1 ? 'day' : 'days'}
+          </p>
+          {take.week.best && (
+            <p className="text-[12px] text-[#6B6B6B]">
+              best {take.week.best.label} · {formatMoney(take.week.best.total)}
+            </p>
+          )}
+          <button
+            type="button"
+            onClick={() => go('reports', ['Dashboard', 'Reports'])}
+            aria-label={`Open Reports — the week so far reads ${formatMoney(take.week.total)}`}
+            className="mt-3 inline-flex items-center gap-1.5 self-start rounded-lg border border-[#E3E7E0] px-3 py-1.5 text-[11.5px] font-semibold text-[#0F3D3E] transition hover:bg-[#F6F5F2] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#B88E2F]/40"
+          >
+            <TrendingUp size={12} aria-hidden />
+            Open Reports
+          </button>
+        </section>
+      )}
+    </div>
+  );
+};
+
 /* ───────────────────────────── State screens ───────────────────────────── */
 
 const DashboardSkeleton: React.FC = () => (
@@ -702,22 +933,35 @@ const ErrorCard: React.FC<{ title: string; message: string; onRetry: () => void 
   </div>
 );
 
-/** Empty_State_219-29868 language, adapted to sales: sage circle + honest copy. */
-const EmptySales: React.FC = () => (
-  <div className="flex min-h-[62vh] flex-col items-center justify-center px-4 py-10 text-center">
-    <span
-      className="flex h-[120px] w-[120px] items-center justify-center rounded-full bg-[#EAF0EC] text-[#0F3D3E]"
-      aria-hidden
-    >
-      <ShoppingBag size={40} strokeWidth={1.6} />
-    </span>
-    <h2 className="mt-6 text-[18px] font-semibold text-[#1A1A1A]">No sales yet today</h2>
-    <p className="mt-2 max-w-[360px] text-[13px] leading-relaxed text-[#6B6B6B]">
-      Once the first order of the day goes through, sales, revenue and customer stats will appear
-      here automatically.
-    </p>
-  </div>
-);
+/**
+ * Empty_State_219-29868 language, adapted to sales: sage circle + honest copy.
+ * v5.175.0 — the circle keeps its Figma voice, but a dead morning no longer
+ * hangs alone: when the day's own data can speak of anything (yesterday, the
+ * week), the morning paper renders beneath it. When the paper can only speak
+ * through the async book read, it arrives as data lands — the circle stays
+ * where the Figma put it either way.
+ */
+const EmptySales: React.FC<{ data?: DashboardData | null }> = ({ data = null }) => {
+  const paperSync = data != null && (() => { const t = morningTake(data); return !!(t.yesterday || t.week); })();
+  return (
+    <div className="flex flex-col items-center px-4 pb-10 pt-10 text-center">
+      <div className={paperSync ? 'flex flex-col items-center' : 'flex min-h-[52vh] flex-col items-center justify-center'}>
+        <span
+          className="flex h-[120px] w-[120px] items-center justify-center rounded-full bg-[#EAF0EC] text-[#0F3D3E]"
+          aria-hidden
+        >
+          <ShoppingBag size={40} strokeWidth={1.6} />
+        </span>
+        <h2 className="mt-6 text-[18px] font-semibold text-[#1A1A1A]">No sales yet today</h2>
+        <p className="mt-2 max-w-[360px] text-[13px] leading-relaxed text-[#6B6B6B]">
+          Once the first order of the day goes through, sales, revenue and customer stats will appear
+          here automatically.
+        </p>
+      </div>
+      {data && <MorningPaper data={data} />}
+    </div>
+  );
+};
 
 /* ───────────────────────────── Data plumbing ───────────────────────────── */
 
@@ -826,7 +1070,7 @@ const DashboardInner: React.FC<{ onRetry: () => void }> = ({ onRetry }) => {
 
   const d = dash.data;
   const empty = d.totalRevenue === 0 && d.totalOrders === 0 && d.newCustomers === 0;
-  if (empty) return <EmptySales />;
+  if (empty) return <EmptySales data={d} />;
   return <DashboardContent data={d} margin={dash.margin} love={dash.love} />;
 };
 
