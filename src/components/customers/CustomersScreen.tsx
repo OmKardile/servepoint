@@ -398,6 +398,24 @@ export function offerUsageStats(
   };
 }
 
+/** ── v5.209.0 — the drill's giveaway arithmetic ──────────────────────
+ *  One guest's ledger rows in (the 5.208 phone bucket), the drill's
+ *  GIVEN AWAY voice out: the count and the summed paise — the SAME
+ *  arithmetic the offers tab's chips speak per offer (offerGivenAway)
+ *  and the book's file speaks per guest (guestsCsvRows' own cell) — one
+ *  reducer family, one arithmetic across three surfaces. Empty rows →
+ *  null: the drill's block never renders on an empty bucket — silence,
+ *  never a fabricated ₹0 (the chip's own rule, 5.197). String paise
+ *  coerced at the boundary. Exported pure so the suite owns it. */
+export function guestGiveaway(
+  rows: { discountAmount: number | string | null }[],
+): { count: number; given: number } | null {
+  if (!rows || rows.length === 0) return null;
+  let given = 0;
+  for (const r of rows) given += Number(r.discountAmount ?? 0);
+  return { count: rows.length, given };
+}
+
 /** ── v5.190.0 — the usage fact's full sentence ───────────────────────
  *  The card's date clause rides a hover title and an aria name; both
  *  compose from THIS function so the suite reads the exact sentences the
@@ -1191,6 +1209,12 @@ const GuestsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry })
           customer={detailFor}
           stats={stats.get(detailFor.phone) || null}
           voice={bookVoices?.get(detailFor.id) ?? null}
+          /* v5.209.0 — the guest's own ledger rows, already sliced by the
+             5.208 memo: no new read, one ride deeper. The map is null
+             when the ledger is unread, and get() is undefined when the
+             guest claims no rows — BOTH normalize to null, the block's
+             silence. */
+          ledger={ledgerByPhone ? (ledgerByPhone.get(phoneDigits(detailFor.phone)) ?? null) : null}
           onClose={() => setDetailFor(null)}
         />
       )}
@@ -2081,8 +2105,13 @@ const GuestDetailDrawer: React.FC<{
   /* 5.90.0 — the guest's promise today (null = no match, or the book is
      unread — silence either way). */
   voice: BookVoice | null;
+  /* v5.209.0 — the guest's own redemption ledger rows (the 5.208 phone
+     bucket, no new read). null = the ledger unread (or could not): the
+     GIVEN AWAY block stays SILENT — an unread ledger never becomes an
+     invented ₹0. */
+  ledger: OfferRedemptionRow[] | null;
   onClose: () => void;
-}> = ({ tenantId, customer, stats, voice, onClose }) => {
+}> = ({ tenantId, customer, stats, voice, ledger, onClose }) => {
   const [orders, setOrders] = useState<Order[] | null>(null);
   const [err, setErr] = useState<string | null>(null);
   /* v5.110.0 — the drawer holds the door (replaces the hand-rolled Escape listener). */
@@ -2368,6 +2397,58 @@ const GuestDetailDrawer: React.FC<{
             </p>
           )}
           {orders === null && !err && <div className="sp-skeleton mb-4 h-[92px] rounded-2xl" />}
+          {/* v5.209.0 — GIVEN AWAY, the guest's side of the ledger: the
+              5.208 phone bucket rendered at guest scale — the drawer
+              grammar 5.206 taught on the offers tab, crossed to a guest
+              whose rows cross OFFERS (the offer's own name is the
+              distinguishing fact of the row, "via"). Renders only when
+              the read LANDED and the bucket has rows — the suite-owned
+              reducer makes the silence STRUCTURAL (null on empty), never
+              a fabricated ₹0. Each row names its take in the gold
+              register ("off" — the offers drawer's own ink) and rides the
+              ago-voice right, the full stamp — and, when the ticket
+              carried a total, the register it walked in with — in the
+              title; an orphaned row keeps the ticket's silence (a missing
+              total is not a ₹0 ticket). The bucket renders in the read's
+              own order — the .order IS the clock. */}
+          {(() => {
+            if (!ledger) return null;
+            const give = guestGiveaway(ledger);
+            if (!give) return null;
+            return (
+              <div
+                className="mb-4 rounded-2xl border border-[#EFE3CC] bg-[#FBF9F4] px-4 py-3.5"
+                role="note"
+                aria-label={`Given away ${formatMoney(give.given)} across ${give.count} ${give.count === 1 ? 'redemption' : 'redemptions'}`}
+              >
+                <div className="flex items-center gap-1.5">
+                  <Tag size={13} className="text-[#8A5A00]" aria-hidden />
+                  <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#8A5A00]">Given away</p>
+                </div>
+                <p className="mt-1.5 text-[15.5px] font-bold text-[#1A1A1A]">
+                  <span className="tabular-nums">{formatMoney(give.given)}</span>
+                  <span className="ml-1.5 text-[11.5px] font-semibold text-[#6B6B6B]">
+                    across {give.count} {give.count === 1 ? 'redemption' : 'redemptions'}
+                  </span>
+                </p>
+                <ul className="m-0 mt-2 list-none p-0">
+                  {ledger.map((r, i) => (
+                    <li
+                      key={`${r.offerId}-${r.createdAt}-${i}`}
+                      className="flex items-center justify-between gap-2 border-b border-[#EFE3CC]/70 py-1.5 last:border-b-0"
+                      title={`redeemed ${dayTime(r.createdAt)}${r.orderTotal != null ? ` on a ${formatMoney(Number(r.orderTotal))} ticket` : ''}`}
+                    >
+                      <span className="min-w-0 truncate text-[11.5px]">
+                        <span className="font-semibold tabular-nums text-[#8A5A00]">{formatMoney(Number(r.discountAmount))} off</span>
+                        <span className="ml-1.5 text-[#6B6B6B]">via {r.title}</span>
+                      </span>
+                      <span className="shrink-0 text-[11px] text-[#969696]">{usedAgo(r.createdAt, Date.now())}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            );
+          })()}
           <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#969696]">Recent tickets</p>
           {err && <p className="mt-2 rounded-xl bg-[#FEF2F2] px-3 py-2 text-[12.5px] text-[#B42318]">{err}</p>}
           {orders === null && !err && (
