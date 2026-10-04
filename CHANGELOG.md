@@ -3,6 +3,16 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.166.0] — 2026-10-04 — The shelf's answer, at the editor's desk: the Recipes tab reads the ONE shared coverage math — how many more serves the shelf holds, the thinnest bin deciding, with the Number(null) stock trap now guarded in the shared truth itself
+
+### Added — the shelf's capacity voice at the editor's desk (`src/components/inventory/InventoryScreen.tsx`, `src/lib/shelf.ts`)
+
+5.165.0 taught the serve what it costs; nothing said how many more serves the shelf can actually fire — and the answer ALREADY existed as ONE shared truth: `shelfCoverage` (5.91.0, `src/lib/shelf.ts`), read daily by the Stock tab's shortlist and the counter's rail. The Recipes tab now reads the same math on its in-flight draft — "THE SHELF'S ANSWER" strip under the cost strip, re-reading on every keystroke: "~58 more serves" with the thinnest bin named ("Flour binds first — the shelf holds ~58 more serves"), the family's own `~N more` floor-on-reality grammar, zero as a red "can't make another — {bin} is out" with the restock pointer, below-LOW_COVER amber, and an amber refusal when a line names an ingredient the shelf no longer knows. The shared math itself grew two rules this round: its signature widened to a minimal `ShelfLine` so the editor's draft rides the same signature as a full RecipeLine (no cast, no fork), and an unreadable stock (null/NaN) now reads as UNKNOWN — `Number(null)` is 0, and an unreadable bin must never masquerade as an empty one (the 5.165.0 cost trap, now guarded on the stock side). Every recipe line gains its own capacity chip ("×58", red at zero, amber "shelf?" when unreadable) with the full division spelled out in its tooltip.
+
+### Verified
+
+`tsc` EXIT=0; `node --check` OK (`servepoint-v5.166.0-r1`); build EXIT=0; unit suite `scripts/unit205.mjs` 12/12 first-run (honest min with thinnest bin, floor-not-round, the Number(null) stock trap now UNKNOWN, NaN stock, zero-is-a-count with the family voice, negative clamp, deleted-SKU honesty, garbage-qty silence, empty draft, tie-to-first-line, all-noise quiet path, ShelfLine structural signature) plus regression suites unit197/198/199/200/201/202/203/204 ALL PASS; live E2E — the strip answers ~58 more serves with Flour binding (4,640 g ÷ 80 g per serve, against Butter's ×248), per-line capacity chips ×58/×248 render; console buffer delta stable on fresh loads, zero live.
+
 ## [5.165.0] — 2026-10-04 — What a serve costs: the recipe editor finds its money voice — a serve prices itself off each ingredient's cost on file, reads its share of the menu price, and refuses to guess when an ingredient has no cost
 
 ### Added — the serve's price (`src/components/inventory/InventoryScreen.tsx`)

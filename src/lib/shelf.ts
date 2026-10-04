@@ -1,22 +1,34 @@
-/* ── The shelf's answer, as ONE shared truth (5.91.0) ──────────────────────
+/* ── The shelf's answer, as ONE shared truth (5.91.0; the recipe editor
+ *    joins in 5.166.0) ────────────────────────────────────────────────
  *
  *   "How many more of this dish can the shelf still make?" — the thinnest
  *   recipe SKU decides, computed from what's actually on file. Born inside
  *   InventoryScreen (v5.81.0); the counter's shortlist now speaks the same
- *   answer (5.91.0), so the math lives here and BOTH surfaces read it.
+ *   answer (5.91.0); the Recipes tab's draft strip reads the same math
+ *   (5.166.0), so ONE answer serves the board, the rail, and the editor.
  *
  *   Honesty rules (inherited verbatim from the shelf's board):
  *   • no recipe lines on file  → coverage null, unknown false — the shelf
  *     can't answer, and says nothing rather than inventing a number;
  *   • a recipe SKU missing from the shelf map → unknown true — coverage is
  *     unknowable, said honestly;
+ *   • a SKU whose stock reads null/NaN (5.166.0) → unknown true too —
+ *     Number(null) is 0, and an unreadable bin must never masquerade as an
+ *     empty one (the 5.165.0 cost trap, now guarded on the stock side);
  *   • a zero/invalid qty_per_serve line is data noise — skipped, never a
  *     fake zero;
  *   • the answer is a floor on reality (recipes assume exact portions) —
  *     the surfaces word it as "~N more", never an exact promise.
  */
 
-import type { InventoryItem, RecipeLine } from './api';
+import type { InventoryItem } from './api';
+
+/** The minimal line the math reads — a full RecipeLine satisfies it, and
+ *  so does the recipe editor's in-flight draft (5.166.0). */
+export interface ShelfLine {
+  inventory_item_id: string;
+  qty_per_serve: number;
+}
 
 /** Below this many serves, the shelf's voice drops from green to amber —
  *  the board's own threshold (InventoryScreen v5.81.0), now shared. */
@@ -31,7 +43,7 @@ export interface ShelfCoverage {
   unknown: boolean;
 }
 
-export function shelfCoverage(lines: RecipeLine[], items: InventoryItem[]): ShelfCoverage {
+export function shelfCoverage(lines: ShelfLine[], items: InventoryItem[]): ShelfCoverage {
   if (lines.length === 0) return { coverage: null, thin: null, unknown: false };
   const shelf = new Map(items.map((i) => [i.id, i]));
   let best = Infinity;
@@ -39,9 +51,13 @@ export function shelfCoverage(lines: RecipeLine[], items: InventoryItem[]): Shel
   for (const r of lines) {
     const it = shelf.get(r.inventory_item_id);
     if (!it) return { coverage: null, thin: null, unknown: true };
+    /* Number(null) is 0 — an unreadable bin is UNKNOWN, never an empty one
+     * (5.166.0; the stock side of the cost trap recipeCost already guards) */
+    const stock = it.current_stock == null ? NaN : Number(it.current_stock);
+    if (!Number.isFinite(stock)) return { coverage: null, thin: null, unknown: true };
     const per = Number(r.qty_per_serve);
     if (!(per > 0)) continue; /* data noise — skipped, never a fake zero */
-    const serves = Math.floor(Number(it.current_stock) / per);
+    const serves = Math.floor(stock / per);
     if (serves < best) {
       best = serves;
       thin = it;

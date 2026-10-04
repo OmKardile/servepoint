@@ -1328,6 +1328,11 @@ const RecipeBoard: React.FC<{
   /* v5.165.0 — the money voice: what the drafted serve costs off the SKUs'
    * costs on file, re-read on every keystroke of the draft. */
   const costRead = useMemo(() => recipeCost(draft, items), [draft, items]);
+  /* v5.166.0 — the shelf's answer, at the editor's desk: the ONE shared
+   * math (5.91.0, src/lib/shelf.ts) reads the draft — the same answer the
+   * Stock tab's shortlist and the counter's rail speak — re-read on every
+   * keystroke. */
+  const shelfRead = useMemo(() => shelfCoverage(draft, items), [draft, items]);
 
   const addLine = () => {
     if (!addIng) return;
@@ -1456,6 +1461,31 @@ const RecipeBoard: React.FC<{
                       </span>
                     );
                   })()}
+                  {(() => {
+                    if (!ing) return <span className="w-12 shrink-0" />;
+                    const stock = ing.current_stock == null ? NaN : Number(ing.current_stock);
+                    if (!Number.isFinite(stock)) {
+                      return (
+                        <span
+                          className="w-12 shrink-0 text-right text-[11px] font-semibold text-[#B88E2F]"
+                          title={`${ing.name}'s stock is unknown — count it on the Stock tab`}
+                        >
+                          shelf?
+                        </span>
+                      );
+                    }
+                    const qty = Number(l.qty_per_serve);
+                    if (!Number.isFinite(qty) || qty <= 0) return <span className="w-12 shrink-0" />;
+                    const cap = Math.max(0, Math.floor(stock / qty));
+                    return (
+                      <span
+                        className={`w-12 shrink-0 text-right text-[11px] font-bold tabular-nums ${cap === 0 ? 'text-[#B3261E]' : 'text-[#6B6B6B]'}`}
+                        title={`${ing.name}: ${stock} ${ing.unit} on the shelf ÷ ${qty} ${ing.unit} per serve = ${cap} serve${cap === 1 ? '' : 's'}`}
+                      >
+                        ×{cap}
+                      </span>
+                    );
+                  })()}
                 </span>
                 <button
                   onClick={() => {
@@ -1498,6 +1528,56 @@ const RecipeBoard: React.FC<{
               and the serve prices itself.
             </p>
           )}
+        </div>
+      )}
+
+      {draft.length > 0 && (
+        <div
+          className={`mb-4 rounded-xl px-3.5 py-3 ${
+            shelfRead.unknown
+              ? 'bg-[#FCF1DF]'
+              : shelfRead.coverage === null
+                ? 'bg-[#F7F8F6]'
+                : shelfRead.coverage === 0
+                  ? 'bg-[#FCEBEA]'
+                  : shelfRead.coverage < LOW_COVER
+                    ? 'bg-[#FCF1DF]'
+                    : 'bg-[#EAF0EC]'
+          }`}
+          title="One shared math (src/lib/shelf.ts) — the same answer the Stock tab's shortlist and the counter's rail speak"
+        >
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-[10.5px] font-semibold uppercase tracking-wide text-[#6B6B6B]">
+              The shelf's answer
+            </p>
+            <p className="text-[15px] font-extrabold tabular-nums text-[#1A1A1A]">
+              {!shelfRead.unknown && shelfRead.coverage != null
+                ? `~${shelfRead.coverage} more serve${shelfRead.coverage === 1 ? '' : 's'}`
+                : '—'}
+            </p>
+          </div>
+          <p className="mt-0.5 text-[11px] leading-relaxed text-[#969696]">
+            {shelfRead.unknown ? (
+              <span className="text-[#8A5A0B]">
+                The recipe names an ingredient the shelf no longer knows — re-add it or drop the
+                line, and the shelf answers.
+              </span>
+            ) : shelfRead.coverage == null ? (
+              'Give at least one line a real per-serve quantity and the shelf answers.'
+            ) : shelfRead.coverage === 0 ? (
+              <span className="text-[#B3261E]">
+                The shelf can't make another — {shelfRead.thin?.name ?? 'a SKU'} is out. Restock it
+                on the Stock tab.
+              </span>
+            ) : shelfRead.coverage < LOW_COVER ? (
+              <span className="text-[#8A5A0B]">
+                {shelfRead.thin?.name ?? 'A SKU'} binds first — ~{shelfRead.coverage} more and the
+                shelf runs dry.
+              </span>
+            ) : (
+              `${shelfRead.thin?.name ?? 'A SKU'} binds first — the shelf holds ~${shelfRead.coverage} more serves.`
+            )}
+          </p>
         </div>
       )}
 
