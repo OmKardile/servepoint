@@ -349,7 +349,7 @@ const SupportContent: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
 
   return (
     <div className="mx-auto w-full max-w-3xl p-4 lg:p-5">
-      <h1 className="pb-5 text-[22px] font-bold text-[#1A1A1A]">Support</h1>
+      <h1 className="sp-screen-title pb-5">Support</h1>
 
       {/* Hero */}
       <div className="sp-card p-5 sm:p-6">

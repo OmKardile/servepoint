@@ -790,7 +790,7 @@ const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRet
       >
         <div className="flex items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-2.5">
-            <h1 className="text-[20px] font-bold text-[#1A1A1A]">Bills</h1>
+            <h1 className="sp-screen-title">Bills</h1>
             {unpaidCount > 0 && (
               <span
                 title={

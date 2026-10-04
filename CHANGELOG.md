@@ -3,6 +3,18 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.136.0] — 2026-10-04 — One header voice
+
+### Changed — every staff screen's title speaks the same register
+
+- **The census**: thirteen staff screen `<h1>`s had drifted across four sizes (19/20/22px/text-xl), two weights (bold, plus `font-semibold` on Settings and Platform), inconsistent `leading-tight`, and layout margins mixed into the type (F&D's `mb-5`, Support's `pb-5`) — accretion, not design. A header is the first thing every screen says; the house had one tooltip voice (5.132.0), one drawer register, one feed lifecycle (5.135.0) — but thirteen ways to say its own name.
+- **The register** (`src/index.css`): `.sp-screen-title` — 20px / 700 / `var(--sp-ink)` / line-height 1.25, written once next to the `:root` tokens. Fourteen screens adopt it (Dashboard, F&D, Kitchen, Bills, Close-out, Reports, Inventory, Guests, Messages, Notifications, Support, Settings, Platform, NoWorkspace); per-screen layout margins stay local. The heal is visible where the drift was widest: Settings drops its lone `font-semibold` + tight tracking, Kitchen gains the missing pixel, the 22px quartet comes down to the house size. Menu and Floor are deliberately NOT adopters — see below.
+- **The editorial pair, documented**: Menu and Floor keep their serif-italic 28px deep-teal titles ON PURPOSE — the two "physical room" surfaces speak a different register, and both files now carry the comment so no future header audit flags them as drift. Guest/public pages keep their own larger editorial scale; AuthScreen is frozen (ADR-0016).
+
+### Verified
+
+tsc EXIT=0, build EXIT=0. Live computed-style sweep across all twelve reachable staff screens: h1 = 20px / 700 / rgb(26,26,26) everywhere (Dashboard, Bills, Kitchen Display, Close-out, Reports, Inventory, Guests, Messages, Notifications, Support, Settings, F&D incl. its dynamic drill-level title — "Categories" wears the same register, mb preserved); Floor + Menu verified INTENTIONALLY different (28px / 400 / rgb(15,61,62) — the editorial pair intact); screenshot eyeball-QA on Settings (the widest heal) shows no layout damage. Platform + NoWorkspace verified at code level (conditional surfaces; Platform's desktop size was already 20px). READ-ONLY round — zero cloud writes.
+
 ## [5.135.0] — 2026-10-04 — One lifecycle, spoken once
 
 ### Changed — the chat feed moves into the factory it inspired

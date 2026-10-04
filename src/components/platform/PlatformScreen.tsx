@@ -984,7 +984,7 @@ export const PlatformScreen: React.FC = () => {
       <div className="flex h-screen min-w-0 flex-1 flex-col">
         {/* Header strip */}
         <header className="flex h-16 shrink-0 items-center justify-between gap-3 border-b border-[#E3E7E0] bg-white px-4 md:px-8">
-          <h1 className="truncate text-lg font-semibold text-[#1A1A1A] md:text-xl">{TAB_TITLES[tab]}</h1>
+          <h1 className="sp-screen-title truncate">{TAB_TITLES[tab]}</h1>
           <span
             className="inline-flex h-8 shrink-0 items-center gap-2 rounded-full border border-[#E3E7E0] bg-white px-3 text-xs font-medium text-[#6B6B6B]"
             role="status"

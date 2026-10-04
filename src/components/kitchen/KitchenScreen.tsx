@@ -664,7 +664,7 @@ export const KitchenScreen: React.FC = () => {
             />
           )}
           <div className="min-w-0">
-            <h1 className="text-[19px] font-bold text-[#1A1A1A]">Kitchen Display</h1>
+            <h1 className="sp-screen-title">Kitchen Display</h1>
             <p className="text-[12.5px] text-[#969696]">
               {tenant.name} · live rail for the pass — statuses move through the guarded engine
             </p>

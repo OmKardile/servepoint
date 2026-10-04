@@ -2134,6 +2134,10 @@ export function FloorScreen(): React.ReactElement {
       {/* header */}
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
+          {/* v5.136.0 — the editorial pair: Menu and Floor keep the serif-italic
+              accent family (28px deep-teal) on purpose — the two "physical room"
+              surfaces speak a different register from the staff screens' shared
+              .sp-screen-title. Documented so no future header audit flags it. */}
           <h1 className="font-serif text-[28px] italic leading-tight text-[#0F3D3E]">Floor</h1>
           <p className="mt-0.5 text-[13px] text-[#6B6B6B]">
             {tenant?.name} · {stats.seatsUsed}/{stats.seats} seats busy{' '}

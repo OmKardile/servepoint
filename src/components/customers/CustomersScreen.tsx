@@ -650,7 +650,7 @@ const GuestsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry })
       {/* ── header ── */}
       <div className="flex flex-wrap items-center justify-between gap-3 px-6 pt-6">
         <div>
-          <h1 className="text-xl font-bold text-[#1A1A1A]">Guests</h1>
+          <h1 className="sp-screen-title">Guests</h1>
           <p className="mt-0.5 text-[12.5px] text-[#6B6B6B]">
             Regulars, their spend, and the offers that keep them coming back.
           </p>

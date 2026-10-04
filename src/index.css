@@ -39,6 +39,20 @@ body {
 
 /* ── ServePoint utilities ─────────────────────────────────────────────── */
 
+/* v5.136.0 — one header voice. Every staff screen's <h1> wears this register:
+   20px bold ink, tight line. The census that preceded it found four sizes
+   (19/20/22/xl), two weights (bold + semibold on Settings/Platform) and
+   inconsistent leading — accretion, not design. Menu and Floor keep the
+   deliberate serif-italic editorial pair (font-serif italic 28px deep-teal —
+   the two "physical room" surfaces); guest/public pages carry their own
+   larger editorial scale. AuthScreen is frozen (ADR-0016). */
+.sp-screen-title {
+  font-size: 20px;
+  line-height: 1.25;
+  font-weight: 700;
+  color: var(--sp-ink);
+}
+
 .sp-cta {
   background-color: var(--sp-gold);
   color: #FFFFFF;

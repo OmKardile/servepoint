@@ -36,7 +36,7 @@ export const NoWorkspaceScreen: React.FC<NoWorkspaceScreenProps> = ({
             <Building2 className="h-7 w-7 text-[#0F3D3E]" />
           </span>
 
-          <h1 className="mt-5 text-xl font-bold text-[#1A1A1A]">
+          <h1 className="sp-screen-title mt-5">
             No business workspace yet
           </h1>
           <p className="mt-2 text-sm leading-relaxed text-[#6B6B6B]">

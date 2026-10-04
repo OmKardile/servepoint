@@ -1697,7 +1697,7 @@ export const SettingsScreen: React.FC = () => {
 
   return (
     <div className="p-5 lg:p-8">
-      <h1 className="text-[22px] font-semibold tracking-[-0.01em] text-[#1A1A1A]">Settings</h1>
+      <h1 className="sp-screen-title">Settings</h1>
 
       <div className="mt-5 flex flex-col gap-5 lg:flex-row lg:items-start">
         <nav

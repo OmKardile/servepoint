@@ -1445,7 +1445,7 @@ const EodScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
           <MoonStar size={17} aria-hidden />
         </span>
         <div className="min-w-0">
-          <h1 className="text-[20px] font-bold leading-tight text-[#1A1A1A]">Close-out</h1>
+          <h1 className="sp-screen-title">Close-out</h1>
           <p className="truncate text-[11.5px] text-[#6B6B6B]">
             The day, counted — sales, drawer and the z-report
           </p>

@@ -488,7 +488,7 @@ const NotificationsContent: React.FC<{ onTenantRetry: () => void }> = ({ onTenan
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3 pb-5">
         <div className="flex items-center gap-3">
-          <h1 className="text-[22px] font-bold text-[#1A1A1A]">Notifications</h1>
+          <h1 className="sp-screen-title">Notifications</h1>
           <span
             title={rt === 'live' ? 'Realtime connected' : 'Polling every 30s'}
             aria-label={rt === 'live' ? 'Realtime connected' : 'Polling every 30 seconds'}

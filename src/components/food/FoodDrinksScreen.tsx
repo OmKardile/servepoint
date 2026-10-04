@@ -1464,7 +1464,7 @@ const FoodDrinksInner: React.FC<{ onRetry: () => void }> = ({ onRetry }) => {
 
   return (
     <div className="mx-auto w-full max-w-6xl px-4 pb-28 pt-5 sm:px-6 lg:px-8">
-      <h1 className="mb-5 text-[22px] font-bold text-[#1A1A1A]">
+      <h1 className="sp-screen-title mb-5">
         {isItemsLevel ? activeCategoryName || 'Items' : 'Categories'}
       </h1>
 

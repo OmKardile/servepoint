@@ -489,7 +489,7 @@ const InventoryInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
             <Package size={17} aria-hidden />
           </span>
           <div className="min-w-0">
-            <h1 className="text-[20px] font-bold leading-tight text-[#1A1A1A]">Inventory</h1>
+            <h1 className="sp-screen-title">Inventory</h1>
             <p className="truncate text-[11.5px] text-[#6B6B6B]">
               The shelf, the recipes, and the stock that moves when the kitchen fires
             </p>

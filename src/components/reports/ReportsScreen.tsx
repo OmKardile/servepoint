@@ -1355,7 +1355,7 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
             <TrendingUp size={17} aria-hidden />
           </span>
           <div className="min-w-0">
-            <h1 className="text-[20px] font-bold leading-tight text-[#1A1A1A]">Reports</h1>
+            <h1 className="sp-screen-title">Reports</h1>
             <p className="truncate text-[11.5px] text-[#6B6B6B]">
               Sales, items and hours — the business over a real range
             </p>

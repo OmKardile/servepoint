@@ -1227,7 +1227,7 @@ export const DashboardScreen: React.FC = () => {
 
   return (
     <section aria-label="Dashboard" className="p-5 md:p-6">
-      <h1 className="text-[20px] font-bold text-[#1A1A1A]">Dashboard</h1>
+      <h1 className="sp-screen-title">Dashboard</h1>
       <NeedsNow />
       <DashboardInner key={reload} onRetry={() => setReload((n) => n + 1)} />
     </section>
