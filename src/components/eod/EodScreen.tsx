@@ -52,6 +52,7 @@ import {
   appFormatters,
   appTzTag,
 } from '../../lib/appday';
+import { daySpan, dayTime } from '../../lib/day';
 import { printHiddenFrame } from '../../lib/printFrame';
 import { downloadCsv } from '../../lib/csv';
 import { useDialogA11y } from '../../lib/useDialogA11y';
@@ -835,7 +836,7 @@ const DrawerCard: React.FC<{
       {active ? (
         <>
           <p className="mt-2.5 text-[11.5px] font-semibold text-[#8A938C]">
-            Opened {istTime(active.opened_at)} {appTzTag()} · {active.opened_by_email || 'counter'}
+            Opened {dayTime(active.opened_at, appTimezone())} {appTzTag()} · {active.opened_by_email || 'counter'}
           </p>
           <div className="mt-3 grid grid-cols-3 gap-2.5">
             <div className="rounded-xl bg-[#F7F8F6] px-3 py-2.5">
@@ -880,7 +881,7 @@ const DrawerCard: React.FC<{
                     <span className="min-w-0 flex-1 truncate" title={m.reason}>
                       {m.reason}
                     </span>
-                    <span className="text-[10px] font-semibold text-[#C8CFC9]">{istTime(m.created_at)}</span>
+                    <span className="text-[10px] font-semibold text-[#C8CFC9]">{dayTime(m.created_at, appTimezone())}</span>
                   </li>
                 ))}
               </ul>
@@ -893,7 +894,7 @@ const DrawerCard: React.FC<{
       ) : last ? (
         <p className="mt-2.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] font-semibold text-[#5F6B63]">
           <span>
-            Last shift closed {last.closed_at ? istTime(last.closed_at) : '—'}
+            Last shift closed {last.closed_at ? dayTime(last.closed_at, appTimezone()) : '—'}
             {last.closed_by_email ? ` by ${last.closed_by_email}` : ''}
           </span>
           <VarianceChip v={Number(last.variance || 0)} />
@@ -924,19 +925,23 @@ const DrawerCard: React.FC<{
               {history.map((h) => (
                 <li
                   key={h.id}
-                  className="flex flex-wrap items-center gap-x-2.5 gap-y-1 rounded-xl bg-[#F7F8F6] px-3 py-2 text-[11.5px] font-semibold text-[#5F6B63]"
+                  className="rounded-xl bg-[#F7F8F6] px-3 py-2 text-[11.5px] font-semibold text-[#5F6B63]"
                 >
-                  <span className="tabular-nums text-[#0F3D3E]">
-                    {istTime(h.opened_at)}–{h.closed_at ? istTime(h.closed_at) : '—'}
-                  </span>
-                  <span className="tabular-nums">
-                    float {formatMoney(Number(h.opening_float))} · counted {formatMoney(Number(h.counted_cash || 0))}
-                  </span>
-                  <VarianceChip v={Number(h.variance || 0)} />
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="tabular-nums text-[#0F3D3E]">{daySpan(h.opened_at, h.closed_at, appTimezone())}</span>
+                    <VarianceChip v={Number(h.variance || 0)} />
+                  </div>
+                  <div className="mt-0.5 flex flex-wrap gap-x-2.5 gap-y-0.5 tabular-nums">
+                    <span>float {formatMoney(Number(h.opening_float))}</span>
+                    {h.expected_cash != null ? (
+                      <span>expected {formatMoney(Number(h.expected_cash))}</span>
+                    ) : null}
+                    <span>counted {formatMoney(Number(h.counted_cash || 0))}</span>
+                  </div>
                   {h.closing_note ? (
-                    <span className="max-w-[220px] truncate text-[11px] text-[#8A938C]" title={h.closing_note}>
+                    <p className="mt-0.5 truncate text-[11px] font-medium text-[#8A938C]" title={h.closing_note}>
                       “{h.closing_note}”
-                    </span>
+                    </p>
                   ) : null}
                 </li>
               ))}
@@ -1395,7 +1400,7 @@ const EodScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
       drawer = {
         title: 'CASH DRAWER · OPEN SHIFT',
         rows: [
-          [`Opened ${istTime(drawerActive.opened_at)} ${appTzTag()}`, drawerActive.opened_by_email || 'counter'],
+          [`Opened ${dayTime(drawerActive.opened_at, appTimezone())} ${appTzTag()}`, drawerActive.opened_by_email || 'counter'],
           ['Float', formatMoney(Number(drawerActive.opening_float))],
           ['Cash in (ledger)', formatMoney(cashIn)],
           ...(moveSum > 0 ? [['Payouts/drops', `-${formatMoney(moveSum)}`] as [string, string]] : []),
@@ -1415,7 +1420,7 @@ const EodScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
         drawer = {
           title: 'CASH DRAWER · LAST SHIFT',
           rows: [
-            [`Closed ${daySess.closed_at ? istTime(daySess.closed_at) : '—'}`, daySess.closed_by_email || 'counter'],
+            [`Closed ${daySess.closed_at ? dayTime(daySess.closed_at, appTimezone()) : '—'}`, daySess.closed_by_email || 'counter'],
             ['Float', formatMoney(Number(daySess.opening_float))],
             ['Net cash (in − out)', `${net < 0 ? '-' : net > 0 ? '+' : ''}${formatMoney(Math.abs(net))}`],
             ['Counted', formatMoney(Number(daySess.counted_cash || 0))],
