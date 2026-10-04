@@ -10,6 +10,7 @@ import {
   Download,
   Layers,
   Loader2,
+  MessageCircle,
   Minus,
   Package,
   PackageMinus,
@@ -52,7 +53,7 @@ import { computeTopMovers, MOVER_WINDOW_DAYS, type Mover } from '../../lib/mover
 import { formatMoney } from '../../lib/prefs';
 import { LOW_COVER, shelfCoverage } from '../../lib/shelf';
 import { downloadCsv } from '../../lib/csv';
-import { appTodayIso } from '../../lib/appday';
+import { appTodayIso, appFormatters, appTzTag } from '../../lib/appday';
 import { useDialogA11y } from '../../lib/useDialogA11y';
 import { useTenant } from '../../lib/tenant';
 import { useUi } from '../../store/session';
@@ -169,7 +170,7 @@ export const InventoryScreen: React.FC = () => {
 };
 
 const InventoryInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }) => {
-  const { tenantId, loading: tenantLoading, error: tenantError } = useTenant();
+  const { tenantId, loading: tenantLoading, error: tenantError, tenant } = useTenant();
   /* v5.117.0 — the shelf joins the shell-search contract: the header box
    * (when the shelf is on stage) and the toolbar's own box are two doors
    * to one state. The filter reads ingredient NAMES only and never
@@ -1018,6 +1019,7 @@ const InventoryInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
           items={items}
           deductions={dedWindow}
           onRestock={(item, suggested) => setRestockFor({ item, suggested })}
+          storeName={tenant?.name || 'ServePoint store'}
         />
       )}
 
@@ -1917,6 +1919,65 @@ interface ReorderRow {
   needsBuy: boolean;
 }
 
+/* ── v5.150.0 — the shopping list speaks in chat ──────────────────────────
+ * The share arc's fifth member: the bill (5.145.0), the day (5.146.0),
+ * the range (5.147.0), the offer (5.149.0) — and now the shelf's reorder
+ * voice. The morning ritual is real: look at what the week will burn,
+ * then message the supplier (or the partner, or the owner's own notes)
+ * — through the house PICKER (wa.me/?text=), the owner decides which
+ * chat; ServePoint never guesses a recipient. The voice is the house's
+ * 32-column register, and it speaks the WHOLE truth: the buy lines with
+ * (owner-editable) quantities and estimated rupees when the shelf runs
+ * short, and the honest "covers the week" verdict with the watched SKUs'
+ * days of cover when it doesn't — a healthy shelf is news too. Exported
+ * pure so E2E can assert the text without touching the clipboard. */
+export interface ReorderTextOpts {
+  storeName: string;
+  coverDays: number;
+  buys: { name: string; qty: string; unit: string; est: number }[];
+  estTotal: number;
+  watching: { name: string; daysLeft: number }[];
+}
+
+export function buildReorderText(opts: ReorderTextOpts): string {
+  const W = 32;
+  const hr = '-'.repeat(W);
+  const center = (s: string): string =>
+    s.length >= W ? s : ' '.repeat(Math.floor((W - s.length) / 2)) + s;
+  const two = (l: string, r: string): string => {
+    const cut = Math.max(1, W - r.length - 1);
+    const left = l.length > cut ? `${l.slice(0, cut - 1)}…` : l;
+    return left.padEnd(W - r.length, ' ') + r;
+  };
+
+  const out: string[] = [];
+  out.push(center(opts.storeName));
+  out.push(center(`SHOPPING LIST · ${opts.coverDays}-DAY COVER`));
+  out.push(hr);
+  if (opts.buys.length === 0) {
+    out.push('THE SHELF COVERS THE WEEK');
+    /* full-width sentence, deliberately NOT a two() row — the verdict is
+     * prose, and a truncated "Every burning …" would break the English. */
+    out.push(`Every burning SKU has ${opts.coverDays}+ days.`);
+  } else {
+    opts.buys.forEach((b, i) => {
+      out.push(two(`${i + 1}. ${b.name}`, formatMoney(b.est)));
+      out.push(`   × ${b.qty} ${b.unit}`);
+    });
+    out.push(two('Est basket', formatMoney(opts.estTotal)));
+  }
+  if (opts.watching.length > 0) {
+    out.push(hr);
+    out.push(opts.buys.length === 0 ? 'WATCHING · COVER' : 'ALSO WATCHING');
+    for (const w of opts.watching)
+      out.push(two(w.name, `${Math.max(1, Math.round(w.daysLeft))}d cover`));
+  }
+  out.push(hr);
+  out.push(center(`Shared ${appFormatters().hhmm.format(new Date())} ${appTzTag()}`));
+  out.push(center('· · · end of list · · ·'));
+  return out.join('\n');
+}
+
 /** Pure burn-rate math over the stock_deductions ledger — read-only, no engine. */
 function buildReorderRows(items: InventoryItem[], deductions: StockDeduction[]): ReorderRow[] {
   const burn = new Map<string, number>();
@@ -1957,10 +2018,14 @@ const ReorderBoard: React.FC<{
   items: InventoryItem[];
   deductions: StockDeduction[];
   onRestock: (item: InventoryItem, suggested: number) => void;
-}> = ({ items, deductions, onRestock }) => {
+  storeName: string;
+}> = ({ items, deductions, onRestock, storeName }) => {
   const rows = useMemo(() => buildReorderRows(items, deductions), [items, deductions]);
   const [edits, setEdits] = useState<Record<string, string>>({});
-  const [copied, setCopied] = useState(false);
+  /* v5.150.0 — the copy button joins the arc's honest tri-state: ok/fail
+   * said out loud (aria-live), the 1.8s reset the bill taught (5.145.0);
+   * the old silent catch is gone. */
+  const [copyState, setCopyState] = useState<'idle' | 'ok' | 'fail'>('idle');
 
   const buyRows = rows.filter((r) => r.needsBuy);
   const watchRows = rows.filter((r) => !r.needsBuy && r.burnPerDay > 0);
@@ -1976,22 +2041,37 @@ const ReorderBoard: React.FC<{
 
   const listCost = buyRows.reduce((s, r) => s + effectiveQty(r) * Number(r.item.cost_per_unit ?? 0), 0);
 
-  const copyList = useCallback(() => {
-    if (buyRows.length === 0) return;
-    const lines = buyRows.map((r) => {
-      const q = effectiveQty(r);
-      const cost = q * Number(r.item.cost_per_unit ?? 0);
-      return `${r.item.name} × ${fmtQty(q)} ${r.item.unit} — est ${formatMoney(cost)}`;
-    });
-    void navigator.clipboard
-      .writeText(`ServePoint shopping list (7-day cover):\n${lines.join('\n')}`)
-      .then(() => {
-        setCopied(true);
-        setTimeout(() => setCopied(false), 1600);
-      })
-      .catch(() => {});
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [buyRows, edits]);
+  /* v5.150.0 — one assembly feeds Copy, WhatsApp and nothing else; the
+   * screen's buy rows and watch rows can never disagree with the chat
+   * text (the 5.146.0 one-assembly rule, shelf edition). The owner's
+   * edited Buy quantities ride along via effectiveQty. */
+  const buildOpts = (): ReorderTextOpts => ({
+    storeName,
+    coverDays: REORDER_COVER_DAYS,
+    buys: buyRows.map((r) => ({
+      name: r.item.name,
+      qty: fmtQty(effectiveQty(r)),
+      unit: r.item.unit,
+      est: effectiveQty(r) * Number(r.item.cost_per_unit ?? 0),
+    })),
+    estTotal: listCost,
+    watching: watchRows.slice(0, 4).map((r) => ({
+      name: r.item.name,
+      daysLeft: r.daysLeft ?? 0,
+    })),
+  });
+  const shareable = buyRows.length > 0 || watchRows.length > 0;
+
+  const copyList = async () => {
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error('clipboard unavailable');
+      await navigator.clipboard.writeText(buildReorderText(buildOpts()));
+      setCopyState('ok');
+    } catch {
+      setCopyState('fail');
+    }
+    window.setTimeout(() => setCopyState('idle'), 1800);
+  };
 
   const exportList = useCallback(() => {
     if (buyRows.length === 0) return;
@@ -2049,13 +2129,33 @@ const ReorderBoard: React.FC<{
           <div className="flex shrink-0 items-center gap-2">
             <button
               onClick={copyList}
-              disabled={buyRows.length === 0}
-              aria-label="Copy shopping list to clipboard"
+              disabled={!shareable}
+              aria-live="polite"
+              aria-label="Copy the shopping list as text"
               className="flex h-11 items-center gap-1.5 rounded-xl border border-[#E3E7E0] bg-white px-3 text-[12.5px] font-bold text-[#0F3D3E] transition hover:border-[#B88E2F] hover:text-[#B88E2F] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#B88E2F] disabled:cursor-not-allowed disabled:opacity-40"
             >
-              {copied ? <Check size={14} aria-hidden /> : <Copy size={14} aria-hidden />}
-              {copied ? 'Copied!' : 'Copy'}
+              {copyState === 'ok' ? (
+                <Check size={14} className="text-[#2E7D32]" aria-hidden />
+              ) : (
+                <Copy size={14} aria-hidden />
+              )}
+              {copyState === 'ok' ? 'Copied' : copyState === 'fail' ? 'Copy blocked' : 'Copy'}
             </button>
+            {/* v5.150.0 — the list's chat voice: the house PICKER, the owner
+                decides which chat (supplier, partner, own notes). Same ghost
+                grammar as the bill's, the Z's, the range's and the offer's
+                share rows. */}
+            <a
+              href={shareable ? `https://wa.me/?text=${encodeURIComponent(buildReorderText(buildOpts()))}` : undefined}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-disabled={!shareable}
+              aria-label="Share the shopping list on WhatsApp"
+              className={`flex h-11 items-center gap-1.5 rounded-xl border border-[#E3E7E0] bg-white px-3 text-[12.5px] font-bold text-[#0F3D3E] transition hover:border-[#B88E2F] hover:text-[#B88E2F] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#B88E2F] ${shareable ? '' : 'pointer-events-none opacity-40'}`}
+            >
+              <MessageCircle size={14} aria-hidden />
+              WhatsApp
+            </a>
             <button
               onClick={exportList}
               disabled={buyRows.length === 0}

@@ -3,6 +3,16 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.150.0] — 2026-10-04 — The shopping list speaks in chat
+
+### Added — the shelf's reorder voice (`src/components/inventory/InventoryScreen.tsx`)
+
+The share arc's fifth member: bill (5.145.0), day (5.146.0), range (5.147.0), offer (5.149.0) — and now the Reorder tab's shopping list, because the morning ritual is real: look at what the week will burn, then message the supplier. `buildReorderText(opts)` (exported pure, E2E-assertable) speaks the house's 32-column register — centered store + `SHOPPING LIST · 7-DAY COVER` headline, numbered buy lines with the owner's (editable) Buy quantities and estimated rupees, an Est basket row, and the watching SKUs' days of cover under `ALSO WATCHING`. A healthy shelf is news too: when nothing needs buying the voice says `THE SHELF COVERS THE WEEK` honestly and lists what it's watching. Copy and WhatsApp ride the SAME assembly (the 5.146.0 one-assembly rule, shelf edition) through the house PICKER (`wa.me/?text=`) — the owner decides which chat; the CSV export stays the buy-list-only spreadsheet. The Copy button also joins the arc's honest tri-state: aria-live ok/fail with the 1.8s reset, replacing the old silent catch.
+
+### Verified
+
+`tsc` EXIT=0 · `vite build` EXIT=0 · node --check sw.js OK · E2E on the live Reorder tab: Copy + WhatsApp + CSV render with descriptive aria-labels, the wa.me href decodes to the exact builder text (`QR Flow Cafe / SHOPPING LIST · 7-DAY COVER / THE SHELF COVERS THE WEEK / WATCHING · COVER: Flour 205d, Coffee beans 274d, Butter 870d / Shared hhmm IST`), Copy reports its honest headless state with the 1.8s reset, zero new console errors.
+
 ## [5.149.0] — 2026-10-04 — The offer speaks in chat
 
 ### Added — share row on every offer card (`src/components/customers/CustomersScreen.tsx`)
