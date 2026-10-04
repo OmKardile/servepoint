@@ -3,6 +3,22 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.213.0] — 2026-10-05 — The chip knows what it saves: the guest banner's chips said WHY an offer exists (the rule, 5.212) but never why the guest should tap one NOW — "Tap to apply" with no number on the table; the chip now whispers the savings, read from the store's ONE arithmetic, and the aria speaks every state the sighted read
+
+### Added — the savings preview on the guest chips (`src/components/guest/GuestPages.tsx`, `src/lib/guest-i18n.ts`)
+
+An unlocked-but-unselected chip's state line now speaks the money: "Tap to apply — saves ₹50.00" (new `offerSaves` key, all three languages — EN/HI/KN with the {amt} slot). The preview reads `offerDiscount(o, cartSubtotal)` — the store's ONE arithmetic (widened to the voice triple in 5.212 precisely so a projection could borrow it), the same number the counter's fit whisper speaks and the drawer's discount line will speak when the guest taps. A locked chip reads ₹0 naturally (the arithmetic guards the threshold), so the preview never lies about an offer the cart can't take yet; a zero take (degenerate offer) falls back to the plain "Tap to apply".
+
+### Changed — the four-state aria + the tabular rail
+
+The chip's `aria-label` now speaks EVERY state the sighted read (5.212's own lesson: aria-label REPLACES content — a state the aria omits is a state the SR never hears): applied / saves / tap / add-more — including the selected-but-locked case, which was SR-silent before. The `addMore` composition keeps the round2 discipline (one arithmetic with the drawer's honest state line). The state line rides `tabular-nums`: the amounts align across the horizontally-scrolling chip rail like a table of its own.
+
+### Verified
+
+- `unit252` born (vite-node): 8 groups green — the preview arithmetic byte-cases (flat ₹50, 10% of ₹400 = ₹40.00 hand-checked against 251's E2E; locked → ₹0; empty cart → ₹0; paise rounding; fractional percent), the i18n template present in all three dicts (the suite is the completeness guard `Dict = Record<string, string>` lacks), source guards (the chip composes `offerDiscount` + `offerSaves` exactly twice — visible line + aria, one sentence two ears; the take>0 fallback; the round2 discipline), the four-state aria, tabular-nums, and 251's own-words round intact (no second composer came back, the rounding lie stays dead).
+- Regression battery: unit194/195/197–251 all PASS (58 suites incl. 252, zero failures).
+- tsc EXIT=0 ×2; build EXIT=0 (42 assets injected, VERSION → servepoint-v5.213.0-r1).
+
 ## [5.212.0] — 2026-10-05 — The guest hears the offer's own words: the QR menu's chips composed their badge and rule locally since the banner was born — a no-paise badge plus a local min clause while the offers tab's card said "₹50.00 off over ₹300.00" — and the compact badge's flat branch rounded a ₹44.50 offer into a "₹45" chip; the ONE composer now reaches the guest side, the rounding lie is dead, and a picked-but-locked offer finally speaks its reason inline
 
 ### Changed — the own-words rule reaches the guest side (`src/components/guest/GuestPages.tsx`, `src/lib/offerLabel.ts`)

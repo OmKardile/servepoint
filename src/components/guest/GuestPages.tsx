@@ -56,6 +56,14 @@ import { useDialogA11y } from '../../lib/useDialogA11y';
    the lib's OfferVoice triple — the guest side borrows the words without
    owning an Offer-shaped shadow of the owner's row. */
 import { offerBadgeShort, offerRuleLabel } from '../../lib/offerLabel';
+/* v5.213.0 — the chip knows what it saves: the preview reads the store's
+   ONE offerDiscount (widened to the voice triple last round precisely so a
+   projection could borrow it) — the SAME number the counter's fit whisper
+   speaks and the drawer's discount line will speak when the guest taps.
+   The locked chips read it as ₹0 naturally (the arithmetic guards the
+   threshold), so the savings never lies about an offer the cart can't
+   take yet. */
+import { offerDiscount } from '../../store/cart';
 
 /**
  * Guest QR surfaces (v5.3.0) — the customer side of the main flow.
@@ -923,13 +931,29 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
                 const min = Number(o.min_order_amount);
                 const selected = selectedOfferId === o.id;
                 const unlockable = cartSubtotal >= min;
+                /* v5.213.0 — the savings preview: what this offer takes off
+                   the line set AS IT STANDS (₹0 while locked — the arithmetic
+                   guards the threshold, the preview never lies). */
+                const take = offerDiscount(o, cartSubtotal);
+                const addMore = t('offerAddMore', { amt: money(round2(Math.max(min - cartSubtotal, 0))) });
                 return (
                   <button
                     key={o.id}
                     type="button"
                     onClick={() => toggleOffer(o.id)}
                     aria-pressed={selected}
-                    aria-label={`${o.title} — ${offerRuleLabel(o)}${selected && unlockable ? ` — ${t('offerApplied')}` : ''}`}
+                    /* v5.213.0 — the aria speaks EVERY state the sighted read
+                       (5.212's own lesson: aria-label REPLACES content — a
+                       state the aria omits is a state the SR never hears): */
+                    aria-label={`${o.title} — ${offerRuleLabel(o)}${
+                      selected && unlockable
+                        ? ` — ${t('offerApplied')}`
+                        : unlockable
+                          ? take > 0
+                            ? ` — ${t('offerSaves', { amt: money(take) })}`
+                            : ` — ${t('offerTap')}`
+                          : ` — ${addMore}`
+                    }`}
                     className={`relative flex min-w-[240px] max-w-[300px] flex-1 items-center gap-3 rounded-2xl border px-3.5 py-3 text-left shadow-sm transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#B88E2F] ${
                       selected
                         ? 'border-[#B88E2F] bg-white ring-2 ring-[#B88E2F]'
@@ -957,11 +981,17 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
                         {o.description ? ` — ${o.description}` : ''}
                       </span>
                       <span
-                        className={`mt-0.5 block text-[10.5px] font-semibold ${
+                        className={`mt-0.5 block text-[10.5px] font-semibold tabular-nums ${
                           selected && unlockable ? 'text-[#2E7D32]' : unlockable ? 'text-[#967221]' : 'text-[#B4483C]'
                         }`}
                       >
-                        {selected && unlockable ? `✓ ${t('offerApplied')}` : unlockable ? t('offerTap') : t('offerAddMore', { amt: money(Math.max(min - cartSubtotal, 0)) })}
+                        {selected && unlockable
+                          ? `✓ ${t('offerApplied')}`
+                          : unlockable
+                            ? take > 0
+                              ? t('offerSaves', { amt: money(take) })
+                              : t('offerTap')
+                            : addMore}
                       </span>
                     </span>
                   </button>
