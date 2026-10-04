@@ -647,13 +647,28 @@ const CheckoutSection: React.FC = () => {
  * drill, header chip) reads it live through subscribePrefs, so a Save here
  * re-voices the floor with zero fetches and zero remounts. The turn-line
  * options span the real band of house paces: a brisk 60-minute café turn
- * up to a 150-minute linger line; the doctrine default is 90. */
+ * up to a 150-minute linger line; the doctrine default is 90.
+ * v5.194.0 — the explainer re-voices the clock: 5.193.0 amended the
+ * doctrine to TWO provable sources (the round's placed-at; the book's
+ * seated stamp), but this section still preached "provable tickets
+ * only" — the copy now says what the clock actually does, as ONE
+ * exported sentence the suite owns (CLOCK_LEDGER_WORDS). */
 const TURN_LINE_OPTIONS: { min: number; note: string }[] = [
   { min: 60, note: 'brisk café turn' },
   { min: 90, note: 'the classic house line' },
   { min: 120, note: 'long, lazy tables' },
   { min: 150, note: 'let them linger' },
 ];
+
+/** The status line's ledger sentence — THE words this section uses to
+ * describe the camping clock's sources. v5.193.0 amended the doctrine
+ * (ticket in hand → the round's placed-at; no ticket → the book's flip
+ * stamp; neither → silence) but this section's copy still said
+ * "provable tickets only" — a label whose plain reading must match its
+ * truth (5.191's rule). ONE exported sentence, so the suite can hold
+ * the copy to the doctrine it names. */
+export const CLOCK_LEDGER_WORDS =
+  "The clock reads two provable ledgers — the ticket's own placed-at when the ticket is in hand, the book's seated stamp when the host seats them first; neither, silence.";
 
 const FloorServiceSection: React.FC = () => {
   const [turnDraft, setTurnDraft] = useState<number>(() => getPrefs().floor.turnAfterMin);
@@ -713,14 +728,14 @@ const FloorServiceSection: React.FC = () => {
         </SettingRow>
       </div>
       <p className="mt-3 rounded-xl bg-[#FCF1DF] px-3.5 py-2.5 text-[12.5px] leading-relaxed text-[#8A5A0B]" role="status">
-        {previewPill} The clock is the round's own placed-at ledger — provable tickets only.
+        {previewPill} {CLOCK_LEDGER_WORDS}
       </p>
 
       <p className="mt-6 text-[14px] font-semibold text-[#1A1A1A]">The floor's voices</p>
       <div className="mt-1 border-t border-[#E3E7E0]">
         <SettingRow
           label="Longest-seat chip"
-          description="The “· longest seat 1h 42m” chip in the floor header — the walking question answered before it's asked. Turn it off if your floor already breathes at its own pace."
+          description="The “· longest seat 1h 42m” chip in the floor header — the walking question answered before it's asked, ticket clocks and book seats alike. Turn it off if your floor already breathes at its own pace."
           last
         >
           <SPToggle

@@ -30,6 +30,14 @@ import brandMark from '../../assets/brand/mark.png';
  * quiet Later) — and with the sw.js self-skip finally removed the toast
  * is no longer dead code: an update really does WAIT now, and this
  * surface is the only door that lets it in.
+ *
+ * v5.194.0 — the card names the version. "A newer ServePoint is ready"
+ * asked the owner to move the house without saying WHICH house was
+ * waiting; the waiting worker's own bytes live at the fixed /sw.js url
+ * (updateViaCache: 'none'), so the page fetches them, parses the
+ * VERSION literal, and the body line names the exact release the
+ * Refresh tap installs. Unparseable or unfetchable → the v5.144 words
+ * stand byte-identical — never an unverified version.
  */
 
 type Mode = 'staff' | 'public' | 'guest';
@@ -48,6 +56,27 @@ function modeFromPath(pathname: string): Mode {
 }
 
 type InstallEvent = Event & { prompt: () => Promise<void>; userChoice?: Promise<{ outcome: string }> };
+
+/* ── v5.194.0 — the card names the version ───────────────────────────
+ * sw.js registers at a FIXED url with updateViaCache: 'none', so while a
+ * worker WAITS, the bytes at /sw.js are the waiting worker's own — the
+ * browser installed them from exactly this fetch. parseSwVersion reads
+ * the VERSION literal out of those bytes; updateCardBody speaks the
+ * body line. Null rides the absent-field doctrine: the card keeps the
+ * v5.144 words, never claiming an unverified version. (A third release
+ * landing mid-read races the fetch — the card then names the newest
+ * provable bytes, still the truth of what the next check installs;
+ * waitingWorker re-fires and the card re-reads.) */
+export function parseSwVersion(source: string): string | null {
+  const m = /const\s+VERSION\s*=\s*"([^"]+)"/.exec(source);
+  return m ? m[1] : null;
+}
+
+export function updateCardBody(version: string | null): string {
+  return version
+    ? `${version} is waiting — refresh when the counter is quiet; nothing will be lost.`
+    : 'A newer ServePoint is ready — refresh when the counter is quiet; nothing will be lost.';
+}
 
 export function PwaLayer() {
   const [mode] = useState<Mode>(() => modeFromPath(window.location.pathname));
@@ -162,6 +191,30 @@ export function PwaLayer() {
     }
     return () => window.removeEventListener('sp:sw-waiting', onWaiting);
   }, []);
+
+  /* v5.194.0 — the waiting version, read from the same bytes the browser
+   * parsed to install the waiting worker (see parseSwVersion). ONE fetch
+   * per waitingWorker — the worker identity guards the read, so a
+   * genuinely newer worker re-fires it (146's discipline, extended). */
+  const [waitingVersion, setWaitingVersion] = useState<string | null>(null);
+  useEffect(() => {
+    if (!waitingWorker) {
+      setWaitingVersion(null);
+      return;
+    }
+    let live = true;
+    fetch('/sw.js', { cache: 'no-store' })
+      .then((r) => r.text())
+      .then((t) => {
+        if (live) setWaitingVersion(parseSwVersion(t));
+      })
+      .catch(() => {
+        if (live) setWaitingVersion(null);
+      });
+    return () => {
+      live = false;
+    };
+  }, [waitingWorker]);
 
   const applyUpdate = () => {
     waitingWorker?.postMessage('SP_CHECK_UPDATE');
@@ -305,7 +358,7 @@ export function PwaLayer() {
                 The house has grown.
               </p>
               <p className="mt-0.5 text-[11.5px] leading-snug text-[#6B6B6B]">
-                A newer ServePoint is ready — refresh when the counter is quiet; nothing will be lost.
+                {updateCardBody(waitingVersion)}
               </p>
             </div>
             <div className="ml-1 flex shrink-0 items-center gap-1">
