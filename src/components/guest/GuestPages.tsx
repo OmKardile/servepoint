@@ -274,14 +274,46 @@ const lineUnit = (l: CartLine) =>
 const CART_KEY = (token: string) => `sp.guest.cart.${token}`;
 const OFFER_KEY = (token: string) => `sp.guest.offer.${token}`;
 
-/** Session countdown ribbon — the ONLY 1s-ticking component on the page. */
-function SessionRibbon({ session }: { session: TableSession }): React.ReactElement {
+/** The window's left-over, computed fresh each tick. The server's anchor WINS
+ *  when present — 023's own discipline ("the server, not this phone's clock,
+ *  decides") extended from the LOCK to the DISPLAY: seconds-left minus the
+ *  time since the verdict landed, floored at zero. With no anchor yet (the
+ *  first 30s of a fresh window, or a fail-soft tick that came back without
+ *  the number) the phone subtracts its own clock from expires_at — correct
+ *  at birth, corrected the moment the server speaks. A drifted phone clock
+ *  can interpolate, but it can never PROMISE a window the server disagrees
+ *  with for longer than one 30s tick. */
+function windowLeft(
+  session: TableSession,
+  serverRemaining: { at: number; seconds: number } | null | undefined,
+): number {
+  if (serverRemaining) {
+    return Math.max(0, serverRemaining.seconds * 1000 - (Date.now() - serverRemaining.at));
+  }
+  return new Date(session.expires_at).getTime() - Date.now();
+}
+
+/** Session countdown ribbon — the ONLY 1s-ticking component on the page. It
+ *  interpolates locally and re-anchors to the server's `remaining_seconds` on
+ *  every 30s re-verify tick (5.216.0 — the field the RPC always sent and the
+ *  app always threw away). The ended state is i18n'd like every other state
+ *  (the dead window is exactly when a guest is most confused — English-only
+ *  words there were a hole in the three-language promise), and the rescan
+ *  hint is audible at EVERY width — `hidden sm:inline` hid the recovery
+ *  sentence on the phones the ribbon exists for. */
+function SessionRibbon({
+  session,
+  serverRemaining,
+}: {
+  session: TableSession;
+  serverRemaining?: { at: number; seconds: number } | null;
+}): React.ReactElement {
   const { t } = useGuestLang();
-  const [msLeft, setMsLeft] = useState(() => new Date(session.expires_at).getTime() - Date.now());
+  const [msLeft, setMsLeft] = useState(() => windowLeft(session, serverRemaining));
   useEffect(() => {
-    const t2 = window.setInterval(() => setMsLeft(new Date(session.expires_at).getTime() - Date.now()), 1000);
+    const t2 = window.setInterval(() => setMsLeft(windowLeft(session, serverRemaining)), 1000);
     return () => window.clearInterval(t2);
-  }, [session.expires_at]);
+  }, [session.expires_at, serverRemaining]);
   const totalSec = Math.max(0, Math.floor(msLeft / 1000));
   const mm = String(Math.floor(totalSec / 60));
   const ss = String(totalSec % 60).padStart(2, '0');
@@ -289,19 +321,19 @@ function SessionRibbon({ session }: { session: TableSession }): React.ReactEleme
   const warm = totalSec < 180 && !ended;
   return (
     <div
-      className="flex items-center justify-center gap-2 px-4 py-2 text-[12.5px] font-semibold"
+      className="flex flex-wrap items-center justify-center gap-2 px-4 py-2 text-center text-[12.5px] font-semibold"
       style={{ background: ended ? '#F1F4F1' : warm ? '#FBF3E4' : brand.teal, color: ended ? '#6B6B6B' : warm ? '#8A5A16' : '#FFFFFF' }}
       role="status"
       aria-label={t('ariaEnds', { t: `${mm}:${ss}` })}
     >
       <Clock size={14} aria-hidden />
-      <span>{ended ? 'Window ended' : warm ? t('endingSoon') : t('orderingWindow')}</span>
+      <span>{ended ? t('windowEnded') : warm ? t('endingSoon') : t('orderingWindow')}</span>
       {!ended && (
         <span className="font-mono tabular-nums">
           {mm}:{ss}
         </span>
       )}
-      <span className="hidden sm:inline">{ended ? 'scan the table QR to continue' : t('rescanHint')}</span>
+      <span className="text-[11.5px] font-medium opacity-90">{ended ? t('windowEndedHint') : t('rescanHint')}</span>
     </div>
   );
 }
@@ -511,6 +543,11 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
   const [menu, setMenu] = useState<PublicMenu | null>(null);
   const [sessionToken, setSessionToken] = useState<TableSession | null>(null);
   const [lockTone, setLockTone] = useState<'clock' | 'cut'>('clock');
+  /* 5.216.0 — the ribbon's freshest SERVER verdict: { when it landed, seconds
+     it said were left }. The 30s re-verify tick writes it; the 1s ribbon tick
+     interpolates from it. A fail-soft tick (ok without a number) leaves this
+     untouched — silence from the network is never read as zero. */
+  const [serverAnchor, setServerAnchor] = useState<{ at: number; seconds: number } | null>(null);
   const [lines, setLines] = useState<CartLine[]>(() => {
     try {
       const raw = sessionStorage.getItem(CART_KEY(qrToken));
@@ -634,6 +671,11 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
     const token = sessionToken.session_token;
     const iv = window.setInterval(() => {
       void verifyTableSession(token).then((r) => {
+        // the server's own remaining-seconds (5.216.0) — only a verdict with a
+        // finite number re-anchors the ribbon; a fail-soft ok keeps the last one
+        if (r.ok && typeof r.remainingSeconds === 'number') {
+          setServerAnchor({ at: Date.now(), seconds: r.remainingSeconds });
+        }
         if (!r.ok) lockGuest(r.reason || 'unknown');
       });
     }, 30000);
@@ -831,7 +873,7 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
 
   return (
     <div className="flex min-h-screen flex-col bg-[#F6F5F2]">
-      {sessionToken && <SessionRibbon session={sessionToken} />}
+      {sessionToken && <SessionRibbon session={sessionToken} serverRemaining={serverAnchor} />}
 
       {/* brand hero */}
       <header className="px-4 pb-4 pt-6" style={{ background: `linear-gradient(160deg, ${brand.teal} 0%, #14514f 100%)` }}>

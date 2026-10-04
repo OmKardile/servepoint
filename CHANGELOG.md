@@ -3,6 +3,28 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.216.0] — 2026-10-05 — The ribbon hears the server: migration 023's verify RPC has ALWAYS answered live sessions with `remaining_seconds` — the server's own arithmetic, read from the same clock that decides the lock — and every release before this one discarded it; the guest ribbon counted on the phone's clock alone, so a drifted phone could promise a window the server disagrees with
+
+### Changed — the server's number comes home (`src/lib/guest.ts`)
+
+`verifyTableSession` now threads the RPC's `remaining_seconds` through as `remainingSeconds` (floored, clamped at zero, gated on `Number.isFinite` — `Number(undefined)` is NaN, so the absent field and a garbage field both fall to the same honest silence). The fail-soft branches return WITHOUT the field — silence from the network must never be read as zero, and the caller knows to keep interpolating from its last anchor.
+
+### Changed — the display interpolates, the server decides (`src/components/guest/GuestPages.tsx`)
+
+The 30s re-verify tick writes a server anchor `{ at: verdict time, seconds: server's number }`; the ribbon's 1s tick computes `seconds − elapsed-since-verdict`, floored at zero. 023's own discipline ("the server, not this phone's clock, decides") now extends from the LOCK to the DISPLAY: a drifted phone clock can interpolate between verdicts but can never promise a window the server disagrees with for longer than one 30s tick. A fail-soft tick leaves the anchor untouched; the anchor re-arms the interval only when a finite verdict lands; the lock itself stays exactly where 023 put it — the server's `!ok`, never the ribbon's zero.
+
+### Fixed — two honesty holes in the same strip
+
+The ended state was **hardcoded English** ("Window ended", "scan the table QR to continue") in an otherwise three-language component — the dead window is exactly when a guest is most confused, and it was the one moment the strip abandoned the language promise; new `windowEnded` / `windowEndedHint` keys in en / hi / kn. And the recovery hint rode `hidden sm:inline` — invisible below 640px, on the very phones the ribbon exists for; the hint now speaks at every width in its own quieter voice (`text-[11.5px] font-medium opacity-90`) with `flex-wrap` so it never overflows a narrow phone.
+
+### Tests
+
+`scripts/unit255.mjs` born — 20 checks: the mapping's contract bytes (the RPC field threaded, the finite gate, the clamp, the fail-soft shapes that must stay silent about the number); `windowLeft`'s arithmetic (anchor wins and interpolates floored at zero, no anchor → the legacy phone-clock path, the ribbon computes from it exactly twice — initial + tick); the tick's gating (re-anchor only on ok && finite, no `?? null` laundering, no unconditional reset); one 1s interval + cleanup + re-arm on a fresh anchor; the 30s tick still alone; `windowEnded`/`windowEndedHint` in all three dicts and zero hardcoded ended-words left; `ariaEnds` exactly once (one sentence, two ears); the hint's `hidden sm:inline` retired. Regression battery unit194–254 ALL PASS by exit code (61 suites with the born one); tsc EXIT=0; build EXIT=0 (43 assets, VERSION → servepoint-v5.216.0-r1).
+
+### E2E (dev, live, read-only)
+
+The tick was caught red-handed twice with the RPC instrumented: verdict 539 → ribbon 8:53 (539 − ~6s elapsed), verdict 509 → ribbon 8:12 (509 − ~17s elapsed) — the server's number IS the display, interpolated to the second. At a 390px viewport the rescan hint renders visible at 11.5px (the old rule would have hidden it). Console zero errors. Screenshot: `download/qa255-guest-ribbon-server-anchor.png`.
+
 ## [5.215.0] — 2026-10-05 — The offers tab keeps the week's tally: the Guests → Offers chip said only the standing state ("2 live · 0 paused") and never answered the owner's actual weekly question — is the discount pulling its weight? The chip now grows the tab's own window voice: the week's rides and the money they gave away, from the SAME read the drawer doors slice
 
 ### Added — the chip's window voice (`src/components/customers/CustomersScreen.tsx`)

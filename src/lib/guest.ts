@@ -253,13 +253,29 @@ export function openTableSession(input: {
  * session every 30s. The server — not the client clock — decides whether the
  * window is still open, so a STAFF CUT locks the menu within one tick. A
  * natural expiry converges the stored status the same way.
+ *
+ * 5.216.0 — the tick also carries the window's OWN number home: 023's RPC has
+ * always answered live sessions with `remaining_seconds` (the SERVER's
+ * arithmetic, read from the same clock that decides the lock), and every
+ * release before this one discarded it — the ribbon counted on the phone's
+ * clock alone, so a drifting phone could promise a window the server
+ * disagrees with. The field threads through here as `remainingSeconds`;
+ * the fail-soft branches return WITHOUT it so the caller knows to keep
+ * interpolating from its last anchor instead of mistaking silence for zero.
  */
-export async function verifyTableSession(sessionToken: string): Promise<{ ok: boolean; reason?: string }> {
+export async function verifyTableSession(
+  sessionToken: string,
+): Promise<{ ok: boolean; reason?: string; remainingSeconds?: number }> {
   try {
     const { data, error } = await supabase.rpc('sp_verify_table_session', { p_session_token: sessionToken });
     if (error) return { ok: true, reason: 'network' }; // fail-soft: retry on the next tick
-    const res = data as { is_valid: boolean; reason?: string };
-    return res?.is_valid ? { ok: true } : { ok: false, reason: res.reason || 'unknown' };
+    const res = data as { is_valid: boolean; reason?: string; remaining_seconds?: number };
+    if (!res?.is_valid) return { ok: false, reason: res.reason || 'unknown' };
+    // Number(undefined) is NaN — the finite gate below covers the absent field too
+    const remaining = Number(res.remaining_seconds);
+    return Number.isFinite(remaining)
+      ? { ok: true, remainingSeconds: Math.max(0, Math.floor(remaining)) }
+      : { ok: true };
   } catch {
     return { ok: true, reason: 'network' }; // a network hiccup never locks a paying guest
   }
