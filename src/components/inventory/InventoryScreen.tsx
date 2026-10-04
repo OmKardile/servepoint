@@ -222,6 +222,48 @@ export function groupDiaryByDay(
   return groups;
 }
 
+/* ── What a serve costs (v5.165.0) — the recipe editor's money voice ── */
+
+export interface RecipeCostRead {
+  /** the serve's cost off the SKUs' costs on file; null when ANY ingredient
+   *  lacks a price — a partial price is a lie the shelf won't tell */
+  cost: number | null;
+  /** names of the ingredients standing between the serve and a price */
+  unpriced: string[];
+}
+
+/** Sums one serve's recipe lines at each ingredient's cost on file — the
+ *  same costs the bin's bill reads. An ingredient with no cost on file,
+ *  or one the shelf no longer knows, makes the whole serve unpriceable:
+ *  the read comes back null with the culprits named, never a half-price
+ *  dressed as a whole one. A line with an unreadable or non-positive
+ *  quantity contributes nothing to the sum (the editor's own inputs can
+ *  hold garbage mid-edit; the price read stays sane, never negative). */
+export function recipeCost(
+  lines: { inventory_item_id: string; qty_per_serve: number }[],
+  items: InventoryItem[],
+): RecipeCostRead {
+  const byId = new Map(items.map((i) => [i.id, i]));
+  const unpriced: string[] = [];
+  let sum = 0;
+  for (const l of lines) {
+    const ing = byId.get(l.inventory_item_id);
+    if (!ing) {
+      unpriced.push('Unknown ingredient');
+      continue;
+    }
+    /* Number(null) is 0 — a null cost must read as NO cost, never as free */
+    const cost = ing.cost_per_unit == null ? NaN : Number(ing.cost_per_unit);
+    if (!Number.isFinite(cost)) {
+      unpriced.push(ing.name);
+      continue;
+    }
+    const qty = Number(l.qty_per_serve);
+    if (Number.isFinite(qty) && qty > 0) sum += qty * cost;
+  }
+  return { cost: unpriced.length > 0 ? null : sum, unpriced };
+}
+
 /* ─────────────────────────────── screen ────────────────────────────────── */
 
 /* v5.120.0 — the gold glint, consolidated: one truth now lives in
@@ -1283,6 +1325,9 @@ const RecipeBoard: React.FC<{
     recipes.forEach((r) => m.set(r.menu_item_id, (m.get(r.menu_item_id) || 0) + 1));
     return m;
   }, [recipes]);
+  /* v5.165.0 — the money voice: what the drafted serve costs off the SKUs'
+   * costs on file, re-read on every keystroke of the draft. */
+  const costRead = useMemo(() => recipeCost(draft, items), [draft, items]);
 
   const addLine = () => {
     if (!addIng) return;
@@ -1319,8 +1364,16 @@ const RecipeBoard: React.FC<{
     <section className="sp-card p-5" aria-label="Recipe editor">
       <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-[15px] font-bold text-[#1A1A1A]">What one serve consumes</h2>
-        <span className="text-[11px] font-semibold text-[#969696]">
+        <span className="flex items-center gap-2 text-[11px] font-semibold text-[#969696]">
           {recipeCount.size} of {menuItems.length} menu items have recipes
+          <span aria-hidden className="inline-block h-1 w-16 overflow-hidden rounded-full bg-[#E3E7E0]">
+            <span
+              className="block h-full rounded-full bg-[#0F3D3E]"
+              style={{
+                width: `${menuItems.length > 0 ? Math.round((recipeCount.size / menuItems.length) * 100) : 0}%`,
+              }}
+            />
+          </span>
         </span>
       </div>
       <p className="mb-4 text-[11.5px] text-[#969696]">
@@ -1376,6 +1429,33 @@ const RecipeBoard: React.FC<{
                     className="h-9 w-24 rounded-lg border border-[#E3E7E0] bg-white px-2.5 text-right text-[12.5px] tabular-nums text-[#1A1A1A] focus:border-[#B88E2F] focus:outline-none focus:ring-2 focus:ring-[#B88E2F]/25"
                   />
                   <span className="w-7 text-[11.5px] font-bold text-[#6B6B6B]">{ing?.unit ?? ''}</span>
+                  {(() => {
+                    if (!ing) return <span className="w-16 shrink-0" />;
+                    const cost = ing.cost_per_unit == null ? null : Number(ing.cost_per_unit);
+                    const qty = Number(l.qty_per_serve);
+                    const lineCost =
+                      cost != null && Number.isFinite(cost) && Number.isFinite(qty) && qty > 0
+                        ? qty * cost
+                        : null;
+                    if (lineCost == null && cost == null) {
+                      return (
+                        <span
+                          className="w-16 shrink-0 text-right text-[11px] font-semibold tabular-nums text-[#B88E2F]"
+                          title={`${ing.name} has no cost on file — the serve can't be fully priced`}
+                        >
+                          cost?
+                        </span>
+                      );
+                    }
+                    return (
+                      <span
+                        className="w-16 shrink-0 text-right text-[11px] tabular-nums text-[#6B6B6B]"
+                        title={cost != null ? `${qty} ${ing.unit} × ${formatMoney(cost)}/${ing.unit}` : undefined}
+                      >
+                        {lineCost != null ? formatMoney(lineCost) : '—'}
+                      </span>
+                    );
+                  })()}
                 </span>
                 <button
                   onClick={() => {
@@ -1391,6 +1471,34 @@ const RecipeBoard: React.FC<{
             );
           })}
         </ul>
+      )}
+
+      {draft.length > 0 && (
+        <div
+          className={`mb-4 rounded-xl px-3.5 py-3 ${costRead.cost != null ? 'bg-[#EAF0EC]' : 'bg-[#FCF1DF]'}`}
+        >
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-[10.5px] font-semibold uppercase tracking-wide text-[#6B6B6B]">
+              What one serve costs
+            </p>
+            <p className="text-[15px] font-extrabold tabular-nums text-[#1A1A1A]">
+              {costRead.cost != null ? formatMoney(costRead.cost) : '—'}
+            </p>
+          </div>
+          {costRead.cost != null ? (
+            <p className="mt-0.5 text-[11px] leading-relaxed text-[#969696]">
+              {selected && Number(selected.price) > 0
+                ? `${Math.round((costRead.cost / Number(selected.price)) * 100)}% of the ${formatMoney(Number(selected.price))} price — read off each ingredient's cost on file.`
+                : "Read off each ingredient's cost on file."}
+            </p>
+          ) : (
+            <p className="mt-0.5 text-[11px] leading-relaxed text-[#8A5A0B]">
+              {costRead.unpriced.join(', ')} {costRead.unpriced.length === 1 ? 'has' : 'have'} no
+              cost on file — set {costRead.unpriced.length === 1 ? 'it' : 'them'} on the Stock tab
+              and the serve prices itself.
+            </p>
+          )}
+        </div>
       )}
 
       <div className="flex flex-wrap items-end gap-2 rounded-xl border border-dashed border-[#E3E7E0] p-3.5">

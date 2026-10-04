@@ -3,6 +3,16 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.165.0] — 2026-10-04 — What a serve costs: the recipe editor finds its money voice — a serve prices itself off each ingredient's cost on file, reads its share of the menu price, and refuses to guess when an ingredient has no cost
+
+### Added — the serve's price (`src/components/inventory/InventoryScreen.tsx`)
+
+The Recipes tab edits what one serve consumes but never said what it COSTS — while the bin's bill has valued waste at each SKU's cost on file for versions. `recipeCost(lines, items)` (exported pure, unit-asserted) sums the drafted serve's lines at the same costs on file; an ingredient with no cost on file, or one the shelf no longer knows, makes the WHOLE serve unpriceable — the read comes back null with the culprits named, never a half-price dressed as a whole one (and `Number(null)` is 0, so a null cost is guarded into NO-cost, never free). The editor renders the read as a strip under the recipe lines — "WHAT ONE SERVE COSTS" with the amount and its share of the menu price as plain data (no invented margin doctrine) — turning amber with the culprit list when the serve can't be priced ("set it on the Stock tab and the serve prices itself"). Every recipe line now carries its own contribution ("80 g × ₹0.50/g"), an amber "cost?" hint marking the unpriced ones. The header's coverage count rides a tiny hairline meter. Draft-keystroke honest: NaN/negative/zero quantities contribute nothing — a typo can never make the serve pay you.
+
+### Verified
+
+`tsc` EXIT=0; `node --check` OK (`servepoint-v5.165.0-r1`); build EXIT=0; unit suite `scripts/unit204.mjs` 10/10 (honest sum, the Number(null) trap, partial-price refusal, deleted-SKU honesty, NaN/negative/zero quantity silence, ₹0-is-a-real-price, empty draft, fractional math, multi-culprit order) plus regression suites unit197/198/199/200/201/202/203 ALL PASS; live E2E — the strip prices a real serve with its price share, per-line contributions render; console buffer delta stable on fresh loads, zero live.
+
 ## [5.164.0] — 2026-10-04 — The house line, audited: the turn line the floor camps by now meets the spans ledger in Reports — a meter reads how many timed seats ran past it, at the camping pill's own boundary, through the prefs layer's own validator
 
 ### Added — the line audit (`src/components/reports/ReportsScreen.tsx`)
