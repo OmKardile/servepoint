@@ -33,7 +33,7 @@ const ROLES: { icon: React.ElementType; title: string; body: string }[] = [
   {
     icon: MonitorSmartphone,
     title: 'Staff',
-    body: 'Added by the owner from Settings → Team. Works the counter and the kitchen board — placing orders, advancing tickets, taking payments.',
+    body: 'Added by the owner from Settings → Staff accounts. Works the counter and the kitchen board — placing orders, advancing tickets, taking payments.', // 5.140.0 — the tab is "Staff accounts"; the porch said "Team", a tab that does not exist,
   },
 ];
 
@@ -83,7 +83,7 @@ const FAQ: { q: string; a: string }[] = [
   },
   {
     q: 'I forgot my password. What now?',
-    a: 'Your workspace owner can reset staff passwords from Settings → Team. If you are the owner, contact your ServePoint operator — they can issue you a fresh temporary sign-in.',
+    a: 'Your workspace owner can reset staff passwords from Settings → Staff accounts. If you are the owner, contact your ServePoint operator — they can issue you a fresh temporary sign-in.', // 5.140.0 — pointer healed,
   },
 ];
 
@@ -198,7 +198,7 @@ const IndexHelpPage: React.FC = () => {
               <li>· Your ServePoint operator provisions the business and its owner sign-in.</li>
               <li>· You receive a temporary password in person — sign in with it once.</li>
               <li>· Change it in Settings right away; your session and data stay intact.</li>
-              <li>· Add staff from Settings → Team when you're ready to go live.</li>
+              <li>· Add staff from Settings → Staff accounts when you're ready to go live.</li> {/* 5.140.0 — pointer healed */}
             </ul>
           </article>
           <article className="rounded-2xl border border-[#0F3D3E]/20 bg-[#0F3D3E]/4 p-5">
@@ -252,7 +252,9 @@ const IndexHelpPage: React.FC = () => {
           <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#F6F1E9] p-0.5">
             <img src={brandMark} alt="" aria-hidden className="h-full w-full object-contain" />
           </span>
-          <p className="text-[12px] text-[#969696]">© 2026 ServePoint · smartPOS · v5.2.0</p>
+          {/* 5.140.0 — the version token is gone (it read v5.2.0 for 137
+              releases); the sidebar's footer line is the voice. */}
+          <p className="text-[12px] text-[#969696]">© 2026 ServePoint · smartPOS</p>
           <nav className="ml-auto flex items-center gap-4 text-[12px] font-semibold text-[#0F3D3E]" aria-label="Footer">
             <a href="/" className="hover:underline hover:underline-offset-2">App</a>
             <a href="/showcase" className="hover:underline hover:underline-offset-2">Showcase</a>

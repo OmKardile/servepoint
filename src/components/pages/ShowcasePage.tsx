@@ -170,7 +170,10 @@ const ShowcasePage: React.FC = () => {
               Serious under the hood.
             </h2>
             <p className="mt-2 max-w-2xl text-[13.5px] leading-6 text-white/70">
-              Ten idempotent migrations shape the schema; every write that matters goes through a
+              {/* 5.140.0 — the spelled count was frozen at the 5.2.2 porch (“Ten”)
+                  while the repo carried 37 migrations; brittle numbers left the
+                  prose, the stat chips below carry the census. */}
+              Idempotent migrations shape the schema; every write that matters goes through a
               SECURITY DEFINER RPC with a membership check; status changes are append-only history.
             </p>
             <ul className="mt-6 flex flex-wrap gap-2">
@@ -185,8 +188,13 @@ const ShowcasePage: React.FC = () => {
             </ul>
             <div className="mt-8 grid gap-4 sm:grid-cols-3">
               {[
-                { k: '10', v: 'idempotent migrations applied from the CLI' },
-                { k: '2', v: 'guarded engine RPCs — the only write path for status & money' },
+                /* 5.140.0 — the numbers re-censused against the tree: 37
+                    migration files on disk, 34 distinct guarded sp_ functions
+                    (the old "2 engine RPCs" claim also overstated its scope —
+                    the guarded set now covers drawers, stock and guest
+                    capability paths, not just status & money). */
+                { k: '37', v: 'idempotent migrations applied from the CLI' },
+                { k: '34', v: 'guarded RPCs — every cloud write passes a database-side guard' },
                 { k: '0', v: 'mock data paths — every screen reads the live cloud' },
               ].map((s) => (
                 <div key={s.k} className="rounded-2xl border border-white/10 bg-white/6 p-4">
@@ -228,7 +236,9 @@ const ShowcasePage: React.FC = () => {
           <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#F6F1E9] p-0.5">
             <img src={brandMark} alt="" aria-hidden className="h-full w-full object-contain" />
           </span>
-          <p className="text-[12px] text-[#969696]">© 2026 ServePoint · smartPOS · v5.2.0</p>
+          {/* 5.140.0 — the version token is gone: a hardcoded one rots (it read
+              v5.2.0 for 137 releases). The sidebar's footer line is the voice. */}
+          <p className="text-[12px] text-[#969696]">© 2026 ServePoint · smartPOS</p>
           <nav className="ml-auto flex items-center gap-4 text-[12px] font-semibold text-[#0F3D3E]" aria-label="Footer">
             <a href="/" className="hover:underline hover:underline-offset-2">App</a>
             <a href="/showcase" className="hover:underline hover:underline-offset-2">Showcase</a>
