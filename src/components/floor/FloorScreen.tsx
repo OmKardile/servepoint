@@ -62,7 +62,7 @@ import {
 } from '../../lib/api';
 import { useTenant } from '../../lib/tenant';
 import { printHiddenFrame, preloadPrintImage } from '../../lib/printFrame';
-import { formatMoney, subscribePrefs } from '../../lib/prefs';
+import { formatMoney, subscribePrefs, getPrefs, DEFAULT_TURN_AFTER_MIN } from '../../lib/prefs';
 import { CHART_TOOLTIP_LABEL, CHART_TOOLTIP_STYLE } from '../../lib/chartvoice';
 import { useDialogA11y } from '../../lib/useDialogA11y';
 import {
@@ -348,7 +348,10 @@ const HOLD_ALARM: Record<Exclude<HoldVerdict, 'live'>, { card: string; aria: (t:
    a seat with no ticket in hand stays silent, never inventing a number,
    and a disproved hold's alarm owns the story instead. Past the house
    turn line the card speaks up in amber: camping. */
-export const CAMPING_AFTER_MIN = 90;
+/** v5.160.0 — the doctrine default still names the line; the house's own
+ *  number (Settings · Floor & service → prefs.floor.turnAfterMin) rides as
+ *  the argument at every call site. */
+export const CAMPING_AFTER_MIN = DEFAULT_TURN_AFTER_MIN;
 
 export interface SeatClock {
   minutes: number;
@@ -358,8 +361,13 @@ export interface SeatClock {
 
 /** The seat clock from a round's placed-at instant, in the floor's own
  *  TimeAgo register ("45m" · "1h 5m" · "just sat"). Null when the ledger
- *  input is unreadable — silence, not invention. */
-export function seatClockFor(placedAt: string, nowMs: number): SeatClock | null {
+ *  input is unreadable — silence, not invention. `turnAfterMin` is the
+ *  house turn line (defaults to the 5.158.0 doctrine line of 90). */
+export function seatClockFor(
+  placedAt: string,
+  nowMs: number,
+  turnAfterMin: number = CAMPING_AFTER_MIN,
+): SeatClock | null {
   const t = new Date(placedAt).getTime();
   if (!Number.isFinite(t)) return null;
   const minutes = Math.max(0, Math.floor((nowMs - t) / 60000));
@@ -370,7 +378,7 @@ export function seatClockFor(placedAt: string, nowMs: number): SeatClock | null 
       : h > 0
         ? `${h}h ${minutes % 60}m`
         : `${minutes}m`;
-  return { minutes, label, camping: minutes >= CAMPING_AFTER_MIN };
+  return { minutes, label, camping: minutes >= turnAfterMin };
 }
 
 /* ── The book (v5.38.0) — reservation status tones + booking-clock slot labels.
@@ -894,6 +902,7 @@ function TableDrill({
   table,
   order,
   hold,
+  turnAfterMin,
   promises,
   onSeat,
   onNoShow,
@@ -914,6 +923,10 @@ function TableDrill({
 }: {
   table: DiningTable;
   order: Order | undefined;
+  /** v5.160.0 — the house turn line, from prefs. The drill's seat clock
+   *  obeys the same number the tile and the header chip obey: one floor,
+   *  one line, the house's own word. */
+  turnAfterMin: number;
   /** v5.83.0 — the hold audit rides into the drill: the same verdict the card
    *  shows, so the panel the owner opens to investigate carries the alarm too. */
   hold?: HoldVerdict | null;
@@ -962,7 +975,7 @@ function TableDrill({
      story; a manual seat with no ticket stays honest-silent). */
   const seatD =
     isLive && order && (!hold || hold === 'live')
-      ? seatClockFor(order.created_at, Date.now())
+      ? seatClockFor(order.created_at, Date.now(), turnAfterMin)
       : null;
   /* A table that still holds an order (or a reservation) can't be retired —
      the guard is honest: the hint names what to do first. */
@@ -1075,7 +1088,7 @@ function TableDrill({
                 <span
                   className="flex items-center gap-1 rounded-full px-2 py-0.5 text-[10.5px] font-bold tabular-nums"
                   style={{ background: '#FDF3E4', color: '#8A5A16' }}
-                  title={`The round was placed ${appFormatters().dt.format(new Date(order.created_at))} — ${seatD.label} ago, past the ${CAMPING_AFTER_MIN}-minute house turn line.`}
+                  title={`The round was placed ${appFormatters().dt.format(new Date(order.created_at))} — ${seatD.label} ago, past the ${turnAfterMin}-minute house turn line.`}
                 >
                   <Clock size={11} aria-hidden /> sat {seatD.label}
                 </span>
@@ -1585,6 +1598,12 @@ export function FloorScreen(): React.ReactElement {
      save re-renders the book, the rhythm and the dialog's zone tag. */
   const [, forceTzTick] = useState(0);
   useEffect(() => subscribePrefs(() => forceTzTick((n) => n + 1)), []);
+  /* v5.160.0 — the house's own turn line, read at render: the subscribePrefs
+     tick above makes a Settings save re-voice every seat on the floor (tile,
+     drill and header chip) with zero fetches and zero remounts. */
+  const floorPrefs = getPrefs().floor;
+  const turnMin = floorPrefs.turnAfterMin;
+  const showSeatChip = floorPrefs.showLongestSeatChip;
   const [tables, setTables] = useState<DiningTable[] | null>(null);
   const [orders, setOrders] = useState<Order[]>([]);
   const [sessions, setSessions] = useState<TableSession[]>([]);
@@ -1934,11 +1953,11 @@ export function FloorScreen(): React.ReactElement {
       if (v !== 'live') continue;
       const o = orderByTable.get(t.active_order_id) ?? holdAudit.get(t.active_order_id);
       if (!o) continue;
-      const c = seatClockFor(o.created_at, Date.now());
+      const c = seatClockFor(o.created_at, Date.now(), turnMin);
       if (c && c.camping && (!longest || c.minutes > longest.minutes)) longest = c;
     }
     return longest;
-  }, [tables, orderByTable, holdAudit, holdFailed, promiseTick]);
+  }, [tables, orderByTable, holdAudit, holdFailed, promiseTick, turnMin]);
 
   const stats = useMemo(() => {
     const list = tables || [];
@@ -2216,10 +2235,10 @@ export function FloorScreen(): React.ReactElement {
                 · {staleHoldCount} stale hold{staleHoldCount === 1 ? '' : 's'}
               </span>
             )}{' '}
-            {longestSeat && (
+            {showSeatChip && longestSeat && (
               <span
                 className="mx-1 rounded-full bg-[#FDF3E4] px-2 py-0.5 font-bold text-[#8A5A16]"
-                title={`The longest provable seat on the floor — from the live round's own placed-at clock, past the ${CAMPING_AFTER_MIN}-minute house turn line.`}
+                title={`The longest provable seat on the floor — from the live round's own placed-at clock, past the ${turnMin}-minute house turn line.`}
               >
                 · longest seat {longestSeat.label}
               </span>
@@ -2740,7 +2759,9 @@ export function FloorScreen(): React.ReactElement {
                 activeOrder ??
                 (t.active_order_id ? (holdAudit.get(t.active_order_id) ?? undefined) : undefined);
               const seat =
-                isLive && seatOrder && !staleHold ? seatClockFor(seatOrder.created_at, Date.now()) : null;
+                isLive && seatOrder && !staleHold
+                  ? seatClockFor(seatOrder.created_at, Date.now(), turnMin)
+                  : null;
               /* v5.84.0 — this table's next promise, from the book. */
               const nextPromise = nextPromiseByTable.get(t.id);
               return (
@@ -2806,8 +2827,8 @@ export function FloorScreen(): React.ReactElement {
                   {seat?.camping && seatOrder && (
                     <div
                       role="status"
-                      aria-label={`Table ${t.table_number} has been seated ${seat.label} — past the ${CAMPING_AFTER_MIN}-minute turn line. Check on them.`}
-                      title={`The round was placed ${appFormatters().dt.format(new Date(seatOrder.created_at))} — ${seat.label} ago, past the ${CAMPING_AFTER_MIN}-minute house turn line.`}
+                      aria-label={`Table ${t.table_number} has been seated ${seat.label} — past the ${turnMin}-minute turn line. Check on them.`}
+                      title={`The round was placed ${appFormatters().dt.format(new Date(seatOrder.created_at))} — ${seat.label} ago, past the ${turnMin}-minute house turn line.`}
                       className="flex items-center gap-2 rounded-xl px-3 py-2 text-[12px] font-semibold leading-snug"
                       style={{ background: '#FDF3E4', color: '#8A5A16', boxShadow: 'inset 0 0 0 1px #F3E3C3' }}
                     >
@@ -3126,6 +3147,7 @@ export function FloorScreen(): React.ReactElement {
         <TableDrill
           table={drillTable}
           order={drillOrder}
+          turnAfterMin={turnMin}
           hold={drillTable ? holdVerdictFor(drillTable, orderByTable, holdAudit, holdFailed) : null}
           promises={promisesByTable.get(drillTable.id) ?? []}
           onSeat={(r) => void runAction(`res-${r.id}`, () => seatThePromise(r))}

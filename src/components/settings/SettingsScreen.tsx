@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
+  Armchair,
   Bell,
   Building2,
   Check,
@@ -60,6 +61,7 @@ type SettingsSection =
   | 'notification'
   | 'appearance'
   | 'checkout'
+  | 'floor'
   | 'security'
   | 'language'
   | 'staff'
@@ -72,6 +74,7 @@ const SECTION_TITLES: Record<SettingsSection, string> = {
   notification: 'Notification',
   appearance: 'Appearance',
   checkout: 'Checkout Settings',
+  floor: 'Floor & service',
   security: 'Security',
   language: 'Language & Region',
   staff: 'Staff accounts',
@@ -632,6 +635,106 @@ const CheckoutSection: React.FC = () => {
 
       <SectionSave
         onPersist={() => setPrefs({ savePaymentHistory: saveHistory, paymentMethods: methods })}
+      />
+    </div>
+  );
+};
+
+/* ─────────────────── 4½ · Floor & service (v5.160.0) ─────────────────── */
+
+/** The floor's pace, in the house's own words. The turn line feeds
+ * prefs.floor.turnAfterMin — FloorScreen's camping clock (tile pill, table
+ * drill, header chip) reads it live through subscribePrefs, so a Save here
+ * re-voices the floor with zero fetches and zero remounts. The turn-line
+ * options span the real band of house paces: a brisk 60-minute café turn
+ * up to a 150-minute linger line; the doctrine default is 90. */
+const TURN_LINE_OPTIONS: { min: number; note: string }[] = [
+  { min: 60, note: 'brisk café turn' },
+  { min: 90, note: 'the classic house line' },
+  { min: 120, note: 'long, lazy tables' },
+  { min: 150, note: 'let them linger' },
+];
+
+const FloorServiceSection: React.FC = () => {
+  const [turnDraft, setTurnDraft] = useState<number>(() => getPrefs().floor.turnAfterMin);
+  const [chipDraft, setChipDraft] = useState<boolean>(
+    () => getPrefs().floor.showLongestSeatChip,
+  );
+
+  /* The consequence, as arithmetic rather than a promise: what the tile pill
+     would say for a hypothetical 12:00 seat under the drafted line. A clear
+     example, not a fabricated table. */
+  const previewPill = (() => {
+    const camp = new Date(2000, 0, 1, 12, 0);
+    camp.setMinutes(camp.getMinutes() + turnDraft);
+    const at = `${camp.getHours()}:${String(camp.getMinutes()).padStart(2, '0')}`;
+    return `Say a table sits down at 12:00 — past ${at} the tile calls it camping.`;
+  })();
+
+  return (
+    <div>
+      <SectionHeading
+        title="Floor & service"
+        description="How the dining room paces itself — the house turn line and the floor's own voices."
+      />
+
+      <p className="mt-6 text-[14px] font-semibold text-[#1A1A1A]">The house turn line</p>
+      <div className="mt-1 border-t border-[#E3E7E0]">
+        <SettingRow
+          label="Call a seat camping after"
+          description="Past this many minutes at the table, the tile pill, the table drill and the floor header all speak up in amber — a service nudge, never a broken-ledger alarm."
+        >
+          <div
+            role="group"
+            aria-label="House turn line in minutes"
+            className="flex gap-1 rounded-xl bg-[#D9E2DD] p-1"
+          >
+            {TURN_LINE_OPTIONS.map((opt) => {
+              const active = turnDraft === opt.min;
+              return (
+                <button
+                  key={opt.min}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => setTurnDraft(opt.min)}
+                  title={opt.note}
+                  className={`min-h-[36px] rounded-lg px-3 text-[12.5px] font-semibold tabular-nums transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#967221] ${
+                    active
+                      ? 'bg-white text-[#1A1A1A] shadow-sm'
+                      : 'text-[#0F3D3E]/70 hover:bg-white/50'
+                  }`}
+                >
+                  {opt.min}
+                  <span className="ml-1 text-[10.5px] font-medium opacity-70">min</span>
+                </button>
+              );
+            })}
+          </div>
+        </SettingRow>
+      </div>
+      <p className="mt-3 rounded-xl bg-[#FCF1DF] px-3.5 py-2.5 text-[12.5px] leading-relaxed text-[#8A5A0B]" role="status">
+        {previewPill} The clock is the round's own placed-at ledger — provable tickets only.
+      </p>
+
+      <p className="mt-6 text-[14px] font-semibold text-[#1A1A1A]">The floor's voices</p>
+      <div className="mt-1 border-t border-[#E3E7E0]">
+        <SettingRow
+          label="Longest-seat chip"
+          description="The “· longest seat 1h 42m” chip in the floor header — the walking question answered before it's asked. Turn it off if your floor already breathes at its own pace."
+          last
+        >
+          <SPToggle
+            label="Longest-seat chip"
+            checked={chipDraft}
+            onChange={setChipDraft}
+          />
+        </SettingRow>
+      </div>
+
+      <SectionSave
+        onPersist={() =>
+          setPrefs({ floor: { turnAfterMin: turnDraft, showLongestSeatChip: chipDraft } })
+        }
       />
     </div>
   );
@@ -1668,6 +1771,7 @@ const NAV_ITEMS: { id: SettingsSection; label: string; icon: LucideIcon }[] = [
   { id: 'notification', label: 'Notification', icon: Bell },
   { id: 'appearance', label: 'Appearance', icon: Glasses },
   { id: 'checkout', label: 'Checkout settings', icon: SlidersHorizontal },
+  { id: 'floor', label: 'Floor & service', icon: Armchair },
   { id: 'security', label: 'Security', icon: ShieldCheck },
   { id: 'language', label: 'Language & Region', icon: Globe2 },
 ];
@@ -1753,6 +1857,7 @@ export const SettingsScreen: React.FC = () => {
           {effective === 'notification' && <NotificationSection />}
           {effective === 'appearance' && <AppearanceSection />}
           {effective === 'checkout' && <CheckoutSection />}
+          {effective === 'floor' && <FloorServiceSection />}
           {effective === 'security' && <SecuritySection />}
           {effective === 'language' && <LanguageRegionSection />}
           {effective === 'staff' && <StaffSection />}

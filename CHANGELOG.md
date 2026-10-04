@@ -3,6 +3,20 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.160.0] — 2026-10-04 — The turn line, settable: Settings grows a Floor & service section and the camping clock reads the house's own number
+
+### Added — Floor & service section (`src/components/settings/SettingsScreen.tsx`, `src/lib/prefs.ts`)
+
+The floor's pace stops being a line in the code and becomes the house's own word. A new **Floor & service** section (the first Settings section the census had never touched — Settings sat at 0 changelogged rounds) carries two real decisions: the **house turn line**, a segmented 60 / 90 / 120 / 150-minute choice (each option named in prose — brisk café turn, the classic house line, long lazy tables, let them linger) that feeds `prefs.floor.turnAfterMin`; and the **longest-seat chip** toggle (`showLongestSeatChip`) for houses whose floor already breathes at its own pace. An amber consequence card does the arithmetic honestly — "Say a table sits down at 12:00 — past 13:30 the tile calls it camping" — a clear example, never a fabricated table. `prefs.ts` gains the `floor` block with a pure validator, `clampTurnAfterMin`: finite numbers round and clamp into a sane 30–240 band; anything unreadable returns the doctrine default of 90 (silence over invention, at the prefs layer). The default lives in prefs as `DEFAULT_TURN_AFTER_MIN` so the lib never reaches into a component; FloorScreen re-exports it as `CAMPING_AFTER_MIN`, keeping the 5.158.0 doctrine name.
+
+### Changed — one floor, one line (`src/components/floor/FloorScreen.tsx`)
+
+`seatClockFor(placedAt, nowMs, turnAfterMin)` takes the house's number as a parameter (default: the doctrine 90) and every voice obeys it: the tile pill, the table drill's meta pill, and the header's longest-seat chip — which now also renders only while `showLongestSeatChip` is true. The floor already re-renders on a Settings save through `subscribePrefs` (the 5.98.0 seam), so a save re-voices every seat with zero fetches and zero remounts; `longestSeat`'s memo carries `turnMin` in its deps so the header ages honestly under the house's own line. The camping amber stays the promise-due family — a service nudge, never a broken-ledger alarm.
+
+### Verified
+
+`tsc` EXIT=0; `node --check` OK (`servepoint-v5.160.0-r1`); build EXIT=0; unit suite `scripts/unit199.mjs` 13/13 first run (validator: offered options survive, rounding, 30–240 clamps, six unreadable shapes all return 90; clock: the 5.158.0 boundary intact at the default line, 60/150 lines flip at their own minute, the label register untouched, null-on-unreadable at any line) plus regression suites unit197 (14) and unit198 (10) ALL PASS; live E2E — the section renders, save at 150 + chip off silences the header chip and re-titles the drill pill to the house's new line, restore at 90 + chip on brings the voices back; console buffer delta 21 → 21, zero live.
+
 ## [5.159.0] — 2026-10-04 — The briefing finds its hours: the bell feed reads in day groups
 
 ### Added — Today / Yesterday / Earlier on the notifications screen (`src/components/notifications/NotificationsScreen.tsx`)

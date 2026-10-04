@@ -29,6 +29,29 @@ export interface SpPrefs {
    * counting. Overnight windows (from > to) span midnight; equal bounds
    * mean an empty window (never quiet). */
   quiet: { enabled: boolean; from: string; to: string };
+  /** v5.160.0 — the floor's pace, in the house's own words. `turnAfterMin`
+   * is the house turn line: a seat past this many minutes is called camping
+   * on the tile pill, the table drill and the header chip (FloorScreen's
+   * camping clock reads it live — a Settings save re-voices the floor
+   * without a remount). `showLongestSeatChip` gates the header's
+   * “· longest seat” chip for houses that already breathe at their pace.
+   * Validation lives in clampTurnAfterMin — a corrupt blob falls back to
+   * the doctrine default, never to a nonsense line. */
+  floor: { turnAfterMin: number; showLongestSeatChip: boolean };
+}
+
+/** v5.160.0 — the doctrine default: 90 minutes, the turn line 5.158.0 drew.
+ * Lives here (not in FloorScreen) so the lib can validate without reaching
+ * into a component; the floor re-exports it as CAMPING_AFTER_MIN. */
+export const DEFAULT_TURN_AFTER_MIN = 90;
+
+/** Pure validator for the saved turn line: finite numbers round and clamp
+ * into a sane band (30–240 — an hour is the fastest real turn, four hours
+ * the slowest line worth naming); anything unreadable returns the doctrine
+ * default. Silence over invention, at the prefs layer. */
+export function clampTurnAfterMin(v: unknown): number {
+  if (typeof v !== 'number' || !Number.isFinite(v)) return DEFAULT_TURN_AFTER_MIN;
+  return Math.min(240, Math.max(30, Math.round(v)));
 }
 
 const KEY = 'servepoint_prefs';
@@ -41,6 +64,7 @@ const DEFAULTS: SpPrefs = {
   savePaymentHistory: true,
   notify: { message: true, system: true, reminder: true, feedback: true, promotion: false },
   quiet: { enabled: false, from: '22:00', to: '08:00' },
+  floor: { turnAfterMin: DEFAULT_TURN_AFTER_MIN, showLongestSeatChip: true },
 };
 
 /** 5.103.0 — legacy shim: saved prefs from the old vocabulary map onto the
@@ -83,6 +107,13 @@ export function getPrefs(): SpPrefs {
       paymentMethods: { ...DEFAULTS.paymentMethods, ...(parsed.paymentMethods || {}) },
       notify: { ...DEFAULTS.notify, ...migrateNotify(parsed.notify) },
       quiet: { ...DEFAULTS.quiet, ...(parsed.quiet || {}) },
+      floor: {
+        turnAfterMin: clampTurnAfterMin(parsed.floor?.turnAfterMin),
+        showLongestSeatChip:
+          typeof parsed.floor?.showLongestSeatChip === 'boolean'
+            ? parsed.floor.showLongestSeatChip
+            : DEFAULTS.floor.showLongestSeatChip,
+      },
       savePaymentHistory:
         typeof parsed.savePaymentHistory === 'boolean'
           ? parsed.savePaymentHistory
