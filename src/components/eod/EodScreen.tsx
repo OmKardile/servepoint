@@ -1626,6 +1626,7 @@ const EodScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <button
               onClick={copyZReport}
+              aria-live="polite"
               className="flex min-h-[38px] items-center gap-1.5 rounded-xl border border-[#E3E7E0] bg-white px-3.5 text-[12px] font-semibold text-[#0F3D3E] transition hover:border-[#0F3D3E]/40 hover:bg-[#F6F5F2] active:scale-[0.99]"
             >
               {zCopyState === 'ok' ? (

@@ -31,6 +31,7 @@ import {
   MessageCircle,
   Minus,
   MousePointerClick,
+  Printer,
   QrCode,
   Quote,
   RefreshCw,
@@ -67,6 +68,7 @@ import type {
 import type { Offer } from '../../types';
 import { formatMoney, subscribePrefs } from '../../lib/prefs';
 import { downloadCsv } from '../../lib/csv';
+import { printHiddenFrame } from '../../lib/printFrame';
 import { CHART_TOOLTIP_LABEL, CHART_TOOLTIP_STYLE } from '../../lib/chartvoice';
 import {
   appTimezone,
@@ -326,6 +328,76 @@ export function buildReportText(opts: ReportOpts): string {
   out.push(center(`Shared ${appFormatters().hhmm.format(new Date())} ${appTzTag()}`));
   out.push(center('· · · end of report · · ·'));
   return out.join('\n');
+}
+
+/**
+ * v5.148.0 — the range report's PAPER voice: the quad completes. The screen
+ * shows the range, the CSVs carry it complete to a spreadsheet, chat pockets
+ * it (5.147.0), and now the thermal printer gets the same ReportOpts — the
+ * SAME assembly buildReportText consumes, so paper can never disagree with
+ * the chat text or the screen (the 5.146.0 one-assembly rule, range edition).
+ * House thermal register: 'Courier New' 32-ish-col frame, dashed rules,
+ * tabular-nums right column, honest zero-language. The headline money block
+ * carries the range; cost & margin stay paid-tickets-truthful; WHAT SOLD is
+ * the top-3 (the item CSVs stay the complete ranking); THE SHAPE closes with
+ * best day and peak hour.
+ */
+function printRangeReport(opts: ReportOpts): void {
+  const row = (l: string, r: string, strong = false) =>
+    `<div style="display:flex;justify-content:space-between;padding:2.5px 0;${strong ? 'font-weight:700;' : ''}"><span>${l}</span><span style="font-variant-numeric:tabular-nums">${r}</span></div>`;
+  const moneyRows = opts.mix.length > 0
+    ? opts.mix.map((m) => row(`${m.method.toUpperCase()} · ${m.count}`, formatMoney(m.amount))).join('')
+    : row('—', 'no payments');
+  const topRows = opts.top.length > 0
+    ? `<div style="border-top:1px dashed #000;margin-top:8px;padding-top:6px;">
+    <div style="font-weight:800;padding-bottom:3px;">WHAT SOLD · TOP 3</div>
+    ${opts.top.map((t, i) => row(`${i + 1}. ${t.name} · ${t.units}u`, formatMoney(t.revenue))).join('')}
+  </div>`
+    : '';
+  const shapeRows = opts.bestDay || opts.peakHour
+    ? `<div style="border-top:1px dashed #000;margin-top:8px;padding-top:6px;">
+    <div style="font-weight:800;padding-bottom:3px;">THE SHAPE</div>
+    ${opts.bestDay ? row('Best day', `${opts.bestDay.label} · ${formatMoney(opts.bestDay.gross)}`) : ''}
+    ${opts.peakHour ? row('Peak hour', `${opts.peakHour.label} · ${formatMoney(opts.peakHour.gross)}`) : ''}
+  </div>`
+    : '';
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>Report ${opts.rangeLabel}</title></head>
+<body style="font-family:'Courier New',monospace;color:#000;margin:0;padding:16px 12px;width:300px;font-size:12px;">
+  <div style="text-align:center;border-bottom:1px dashed #000;padding-bottom:8px;margin-bottom:8px;">
+    <div style="font-size:15px;font-weight:800;letter-spacing:1px;">${opts.storeName}</div>
+    <div>REPORT · ${opts.rangeLabel.toUpperCase()}</div>
+    <div>${opts.windowLabel} · ${opts.tz}</div>
+  </div>
+  <div style="border-top:1px dashed #000;padding-top:6px;">
+    ${row('Orders', String(opts.orders), true)}
+    ${opts.cancelled > 0 ? row('Cancelled (excluded)', String(opts.cancelled)) : ''}
+    ${row('Gross sales', formatMoney(opts.gross), true)}
+    ${row('GST collected', formatMoney(opts.gst))}
+    ${row('Net (ex-GST)', formatMoney(opts.net))}
+    ${row('Items sold', String(opts.items))}
+    ${row('Avg ticket', formatMoney(opts.avgTicket), true)}
+  </div>
+  <div style="border-top:1px dashed #000;margin-top:8px;padding-top:6px;">
+    <div style="font-weight:800;padding-bottom:3px;">COST &amp; MARGIN · PAID TKTS</div>
+    ${row(`Paid net (${opts.paidCount} tkt)`, formatMoney(opts.paidNet))}
+    ${row('Ingredient cost', formatMoney(opts.cogs))}
+    ${row('GROSS MARGIN', `${formatMoney(opts.margin)} (${Math.round(opts.marginPct)}%)`, true)}
+  </div>
+  <div style="border-top:1px dashed #000;margin-top:8px;padding-top:6px;">
+    <div style="font-weight:800;padding-bottom:3px;">MONEY ARRIVED</div>
+    ${moneyRows}
+    ${opts.splitTickets > 0 ? row('Split tickets', `${opts.splitTickets} settled in parts`) : ''}
+    ${opts.unpaid > 0 ? row('UNPAID', `${formatMoney(opts.unpaidAmt)} (${opts.unpaid} tkt)`, true) : ''}
+  </div>
+  ${topRows}
+  ${shapeRows}
+  <div style="border-top:1px dashed #000;margin-top:8px;padding-top:6px;text-align:center;color:#333;">
+    <div>Printed ${appFormatters().hhmm.format(new Date())} ${appTzTag()}</div>
+    <div style="margin-top:6px;letter-spacing:2px;">· · · end of report · · ·</div>
+  </div>
+</body></html>`;
+
+  printHiddenFrame(html);
 }
 
 /* ── Kitchen speed (5.67.0) — the clock reads the hop ledger ──────────────── */
@@ -1329,6 +1401,9 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
     }
     window.setTimeout(() => setRepCopyState('idle'), 1800);
   };
+  const printRange = () => {
+    printRangeReport(buildRepOpts());
+  };
 
   /* ── 5.50.0 — the other five sections speak CSV too. Reports had exits for
      daily sales, item ranking and guest ratings since 5.3.x; the hour shape,
@@ -1616,7 +1691,8 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
           whole range now, not just a day. The lead-in chip names the range
           on view (Reports lives under four live ranges — a day summary's
           context is obvious, a range's must be said). Ghost-gold grammar,
-          the bill's and the Z's share-row voice. Renders only when the
+          the bill's and the Z's share-row voice. v5.148.0: Print joins —
+          the range's paper voice from the same opts. Renders only when the
           range holds live tickets — an empty range has nothing to share. ── */}
       {agg.placed > 0 && !loading && (
         <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Share this report">
@@ -1624,7 +1700,16 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
             {RANGE_LABEL[range]}
           </span>
           <button
+            onClick={printRange}
+            aria-label={`Print the ${RANGE_LABEL[range]} report`}
+            className="flex min-h-[38px] items-center gap-1.5 rounded-xl border border-[#E3E7E0] bg-white px-3.5 text-[12px] font-semibold text-[#0F3D3E] transition hover:border-[#0F3D3E]/40 hover:bg-[#F6F5F2] active:scale-[0.99]"
+          >
+            <Printer size={14} aria-hidden />
+            Print
+          </button>
+          <button
             onClick={copyReport}
+            aria-live="polite"
             aria-label={`Copy the ${RANGE_LABEL[range]} report as text`}
             className="flex min-h-[38px] items-center gap-1.5 rounded-xl border border-[#E3E7E0] bg-white px-3.5 text-[12px] font-semibold text-[#0F3D3E] transition hover:border-[#0F3D3E]/40 hover:bg-[#F6F5F2] active:scale-[0.99]"
           >

@@ -3,6 +3,25 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.148.0] — 2026-10-04 — The range gets its paper voice
+
+### Added — Print on Reports (`src/components/reports/ReportsScreen.tsx`)
+
+The range report's quad completes: the screen shows the range, the CSVs carry it complete, chat pockets it (5.147.0) — and now `printRangeReport(opts)` prints the SAME `ReportOpts` on the thermal register (Courier, dashed rules, tabular right column): headline money, COST & MARGIN · PAID TKTS, MONEY ARRIVED (methods with counts, splits, UNPAID), WHAT SOLD · TOP 3, THE SHAPE (best day + peak hour), the end-of-report signature. One assembly (`buildRepOpts`) feeds screen, chat, and paper — none can disagree to the rupee. The action row gains a Print button (ghost grammar, Printer icon) beside Copy report and WhatsApp.
+
+### Fixed — the offline page finally renders the house serif (`public/sw.js`)
+
+The 181 parked polish. The offline headline always asked for 'Instrument Serif' but the document declared no @font-face — so Georgia rendered even when FONT_CACHE held the real face (the app fetches it on every boot; the SW serves fonts cache-first). The italic latin @font-face is now declared inline: the SW's own font route delivers the cached woff2 to an offline page that never loads the Google CSS — the house serif speaks offline whenever the house ran before the outage, and a truly cold offline falls back to Georgia honestly. One face, the only weight the page renders.
+
+### Accessibility — the copy buttons speak to screen readers (`src/components/reports/ReportsScreen.tsx`, `src/components/bills/BillsScreen.tsx`, `src/components/eod/EodScreen.tsx`)
+
+All three share-row copy buttons (bill 5.145.0, Z-report 5.146.0, range report 5.147.0) now carry `aria-live="polite"` — the inline honest feedback ("Copied" / "Copy blocked") is announced instead of silently swapping text.
+
+### Verified
+
+tsc EXIT=0; build EXIT=0 (/tmp/build187a.log); sw VERSION 5.148.0-r1; node --check sw.js OK. Live E2E (dev): Print → hidden iframe renders REPORT · LAST 7 DAYS with Gross ₹9,267.30 matching the screen and the chat text to the rupee (screen/CSV/chat/paper one source); all blocks asserted in-frame (COST & MARGIN ₹5,919.00 (83%) · MONEY ARRIVED · UNPAID ₹1,801.80 (5 tkt) · WHAT SOLD · THE SHAPE incl. Best day 2 Oct ₹5,046.30 + Peak hour); Z-report Copy exercised on Sat 3 Oct to its honest "Copy blocked"; font woff2 URL verified live (200); aria-live present on all three copy buttons; zero console errors. READ-ONLY round (zero cloud writes). Screenshots .qa-screens/qa187-reports-actions.png, qa187-closeout-copy.png.
+
+
 ## [5.147.0] — 2026-10-04 — The whole range rides in the owner's pocket
 
 ### Added — Copy + WhatsApp share on Reports (`src/components/reports/ReportsScreen.tsx`)

@@ -15,7 +15,7 @@
  * Release discipline: bump VERSION on every shell-changing deploy so old
  * caches are evicted on activate.
  */
-const VERSION = 'servepoint-v5.147.0-r1';
+const VERSION = 'servepoint-v5.148.0-r1';
 const SHELL_CACHE = `${VERSION}-shell`;
 const ASSET_CACHE = `${VERSION}-assets`;
 const FONT_CACHE = `${VERSION}-fonts`;
@@ -152,6 +152,17 @@ const OFFLINE_PAGE = `<!doctype html>
 <title>Offline · ServePoint</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <style>
+  /* v5.148.0 — the 181 parked polish. The headline always ASKED for the
+     house serif, but no @font-face existed in this document, so 'Instrument
+     Serif' could never resolve — even when FONT_CACHE held the real face
+     (the app fetches it on every boot and the SW serves fonts cache-first).
+     Declaring the face lets the SW's own font route deliver the cached
+     woff2 to an offline page that otherwise never loads the Google CSS:
+     the house serif now speaks offline whenever the house ran before the
+     outage, and a truly cold offline (install half-failed, fonts never
+     fetched) falls back to Georgia honestly. One face only — the italic
+     latin file this page actually renders; no other weights are used here. */
+  @font-face{font-family:'Instrument Serif';font-style:italic;font-weight:400;font-display:swap;src:url(https://fonts.gstatic.com/s/instrumentserif/v5/jizHRFtNs2ka5fXjeivQ4LroWlx-6zAjjH7M.woff2) format('woff2')}
   html,body{margin:0;height:100%}
   body{font-family:system-ui,-apple-system,'Segoe UI',sans-serif;background:#F6F5F2;color:#1A1A1A;display:grid;place-items:center;padding:24px;box-sizing:border-box}
   .card{max-width:440px;text-align:center}
