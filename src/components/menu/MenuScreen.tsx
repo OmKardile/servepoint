@@ -79,7 +79,11 @@ import type { MenuItem } from '../../types';
  * spreadsheet — costs, kept margins, mover ranks and availability ride out
  * together, and an unpriced dish leaves its cost cells EMPTY (never ₹0).
  * The header strip reads the menu's health at a glance — sold out, no
- * recipe, priced under cost, thin — with the names riding the tooltips.
+ * recipe, priced under cost, keeps under 25%, thin — with the names riding
+ * the tooltips. 5.191.0 — the <25% band split from the loss-makers: a dish
+ * keeping 12% is a squeeze, not "priced under cost"; the words now match
+ * the arithmetic they name (a sale must lose money or break even to wear
+ * the loss chip).
  *
  * v5.173.0 — the menu's expiry dates: the shelf's days voice (5.172.0,
  * src/lib/shelf.ts) joins the owner's sheet. The catalog gains a "Days of
@@ -708,7 +712,9 @@ export function catalogCsvRows(o: CatalogOpts & { storeName: string }): unknown[
 }
 
 /* The menu's health at a glance — the same kept% bands the price chips
- * speak (≥50% healthy, ≥25% thin, else priced under its own kitchen),
+ * speak (≥50% healthy, ≥25% thin, ≤0% priced under cost, 0–25% keeps under
+ * 25% — the 5.191.0 split; the red tone covers both severities, the WORDS
+ * name the difference),
  * plus the two silences: sold out, and no recipe on file.
  * v5.173.0 — dryWeek: dishes the shelf runs dry on WITHIN THE WEEK at the
  * paid pace (days ≤ 7, the family's own cover horizon). A forecast, not a
@@ -717,7 +723,15 @@ export function catalogCsvRows(o: CatalogOpts & { storeName: string }): unknown[
 export interface MenuHealth {
   soldOut: string[];
   noRecipe: string[];
+  /** v5.191.0 — the LITERAL words: price ≤ cost, every sale loses money or
+   *  breaks even. Before this release the band swallowed everything under
+   *  25% kept — a dish keeping 12% was announced as "priced under cost"
+   *  when its price beat its kitchen. The alarm now says what it means. */
   underCost: string[];
+  /** v5.191.0 — 0 < kept% < 25%: covers the kitchen but barely. The squeeze
+   *  is severe (the card's red tone stands) but it is not a loss — it wears
+   *  its own honest words instead of the loss-maker's. */
+  keepsUnder25: string[];
   thin: string[];
   dryWeek: string[];
 }
@@ -727,7 +741,7 @@ export function menuHealth(o: {
   unitCosts: Map<string, number>;
   daysByItem?: Map<string, number | null>;
 }): MenuHealth {
-  const h: MenuHealth = { soldOut: [], noRecipe: [], underCost: [], thin: [], dryWeek: [] };
+  const h: MenuHealth = { soldOut: [], noRecipe: [], underCost: [], keepsUnder25: [], thin: [], dryWeek: [] };
   for (const i of o.items) {
     if (i.is_available === false) h.soldOut.push(i.name);
     const d = o.daysByItem?.get(i.id) ?? null;
@@ -740,7 +754,8 @@ export function menuHealth(o: {
     }
     if (price <= 0) continue;
     const keptPct = (price - costVal) / price;
-    if (keptPct < 0.25) h.underCost.push(i.name);
+    if (keptPct <= 0) h.underCost.push(i.name);
+    else if (keptPct < 0.25) h.keepsUnder25.push(i.name);
     else if (keptPct < 0.5) h.thin.push(i.name);
   }
   return h;
@@ -1075,7 +1090,7 @@ export function MenuScreen(): React.ReactElement {
               recipe). Silence when all zero — the strip never congratulates.
               5.173.0 — the forecast joins: dryWeek reads the shelf's days
               (ONE math with the catalog's column), a clock per dish. */}
-          {(health.soldOut.length > 0 || health.noRecipe.length > 0 || health.underCost.length > 0 || health.thin.length > 0 || health.dryWeek.length > 0) && (
+          {(health.soldOut.length > 0 || health.noRecipe.length > 0 || health.underCost.length > 0 || health.keepsUnder25.length > 0 || health.thin.length > 0 || health.dryWeek.length > 0) && (
             <div className="mt-2 flex flex-wrap gap-1.5">
               {health.soldOut.length > 0 && (
                 <HealthChip
@@ -1102,7 +1117,17 @@ export function MenuScreen(): React.ReactElement {
                   count={health.underCost.length}
                   names={health.underCost}
                   label="priced under cost"
-                  title="Keeps less than 25% of its bill at the price on file — priced under its own kitchen (Inventory → Recipes holds the costs)."
+                  title="Every sale loses money or breaks even — the price doesn't beat the kitchen's own cost. Raise the price or cost the recipe again (Inventory → Recipes holds the costs)."
+                  icon={<TrendingDown size={11} aria-hidden />}
+                  className="bg-[#FDF3F2] text-[#B4483C]"
+                />
+              )}
+              {health.keepsUnder25.length > 0 && (
+                <HealthChip
+                  count={health.keepsUnder25.length}
+                  names={health.keepsUnder25}
+                  label="keeps under 25%"
+                  title="Keeps less than 25% of its bill — the price covers the kitchen but barely. Not a loss, but the thinnest slice on the board (Inventory → Recipes holds the costs)."
                   icon={<TrendingDown size={11} aria-hidden />}
                   className="bg-[#FDF3F2] text-[#B4483C]"
                 />
@@ -1348,7 +1373,8 @@ export function MenuScreen(): React.ReactElement {
                 const armed = confirmId === `item:${item.id}`;
                 /* v5.75.0 — the dish's true price: recipe cost beside the
                  * billing price. Kept% bands: ≥50% green (healthy), ≥25%
-                 * amber (thin), else red (priced under its own kitchen). */
+                 * amber (thin), else red (a loss or a squeeze under 25% —
+                 * the health strip's chips name which one it is). */
                 const cost = unitCosts.get(item.id);
                 const keptPct =
                   cost !== undefined && Number(item.price) > 0

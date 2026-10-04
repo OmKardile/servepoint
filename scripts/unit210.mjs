@@ -184,9 +184,12 @@ ok('empty menu: masthead + meta + blank + header, no fabricated rows');
 const h = menuHealth({ items, unitCosts });
 assert.deepEqual(h.soldOut, ['Chai']);
 assert.deepEqual(h.noRecipe, ['Soup']);
-assert.deepEqual(h.underCost, ['Fries']);
+/* 5.191.0 — the band split: Fries keep 18% (100/82) — a squeeze, no longer
+ * announced as a loss-maker; underCost now means the LITERAL words. */
+assert.deepEqual(h.underCost, []);
+assert.deepEqual(h.keepsUnder25, ['Fries']);
 assert.deepEqual(h.thin, ['Toastie']);
-ok('health strip: the four conditions read the same bands the chips speak');
+ok('health strip: the bands read the same five chips the strip speaks');
 
 const h2 = menuHealth({
   items: [item('z1', 'Freebie', 0)],
@@ -194,13 +197,40 @@ const h2 = menuHealth({
 });
 assert.equal(h2.noRecipe.length, 0);
 assert.equal(h2.underCost.length, 0);
+assert.equal(h2.keepsUnder25.length, 0);
 assert.equal(h2.thin.length, 0);
 assert.equal(h2.soldOut.length, 0);
 ok('zero price with a recipe: skipped, never judged (no divide drama)');
 
 const h3 = menuHealth({ items: [], unitCosts: new Map() });
 /* 5.173.0 — the health object carries dryWeek too; an empty menu keeps every list empty. */
-assert.deepEqual(h3, { soldOut: [], noRecipe: [], underCost: [], thin: [], dryWeek: [] });
+assert.deepEqual(h3, { soldOut: [], noRecipe: [], underCost: [], keepsUnder25: [], thin: [], dryWeek: [] });
 ok('empty menu: total silence — the strip never congratulates');
+
+/* 5.191.0 — the band boundaries: a loss, a breakeven, a squeeze, the exact
+ * 25% edge, and the thin band's own floor all land where their words live. */
+const hBand = menuHealth({
+  items: [
+    item('b1', 'Loss Leader', 100),
+    item('b2', 'Breakeven', 100),
+    item('b3', 'Squeeze', 100),
+    item('b4', 'Edge', 100),
+    item('b5', 'Thin', 100),
+    item('b6', 'Healthy', 100),
+  ],
+  unitCosts: new Map([
+    ['b1', 120],
+    ['b2', 100],
+    ['b3', 88],
+    ['b4', 75],
+    ['b5', 60],
+    ['b6', 50],
+  ]),
+});
+assert.deepEqual(hBand.underCost, ['Loss Leader', 'Breakeven'], 'kept ≤ 0: the literal loss words');
+assert.deepEqual(hBand.keepsUnder25, ['Squeeze'], 'kept 12%: a squeeze, not a loss');
+assert.deepEqual(hBand.thin, ['Edge', 'Thin'], 'kept exactly 25% starts thin; 40% stays thin');
+assert.equal(hBand.thin.includes('Healthy'), false, 'kept exactly 50% is healthy, not thin');
+ok('5.191.0 band split: loss ≤ 0 < squeeze < 25 ≤ thin < 50 ≤ healthy');
 
 console.log(`\nunit210 — ${n} asserts, the house catalog (v5.171.0)`);

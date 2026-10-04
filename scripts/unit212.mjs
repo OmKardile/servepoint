@@ -142,11 +142,13 @@ assert.ok(hBoth.soldOut.includes('Toastie'));
 assert.ok(hBoth.dryWeek.includes('Toastie'));
 ok('a sold-out dish with 3 days wears both chips — conditions are independent');
 
-/* 11 — the old signature keeps its shape: dryWeek empty, bands intact. */
+/* 11 — the old signature keeps its shape: dryWeek empty, bands intact
+ * (5.191.0 — underCost split: Fries keep 18%, now a squeeze, not a loss). */
 const hOld = menuHealth({ items, unitCosts });
 assert.deepEqual(hOld.dryWeek, []);
-assert.deepEqual(hOld.underCost, ['Fries']);
-ok('no days map → dryWeek silent, the 5.171.0 health unchanged');
+assert.deepEqual(hOld.underCost, []);
+assert.deepEqual(hOld.keepsUnder25, ['Fries']);
+ok('no days map → dryWeek silent, the band split holds the 5.191.0 words');
 
 /* 12 — zero days is IN the forecast (the most urgent voice of all). */
 const hZero = menuHealth({ items: [items[2]], unitCosts, daysByItem: new Map([['i3', 0]]) });
