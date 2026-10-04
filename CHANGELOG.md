@@ -3,6 +3,20 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.137.0] — 2026-10-04 — The toggle stops promising a density that was never built
+
+### Fixed — Settings' five-month dead control
+
+The Appearance panel carried a **"Compact density"** toggle — *"Tighter rows and smaller text across the app"* — since **v5.0.0**, and NOTHING ever consumed the pref: no CSS hook, no class, no `getPrefs().compact` reader anywhere in the tree, then or now. A control that persists a boolean nothing reads is settings theater — the 5.134.0 banner's disease, toggle-sized. Removed. The honest half of the section stays: the locked **ServePoint** theme card (it documents the deliberate single-theme register), now also drawing the five `:root` palette tokens it speaks of — the card is a brand record, not a stub. Section copy honest-sized: "Interface style." Density, if the owner ever asks for it, is a designed system — not a switch bolted onto nothing.
+
+### Changed — the dead-key doctrine, made structural (`src/lib/prefs.ts`)
+
+`getPrefs` used to blind-spread the saved blob over the defaults — meaning ANY junk key in localStorage rode along forever (every save re-serialized it; `compact` itself would have lived to the end of time). The load is now an **allowlist rebuild**: only the keys the interface declares survive, scalars type-checked, nested objects still merged (`quiet` bounds never lost to a partial save). The 5.103.0 doctrine — *a stale shape must never resurrect a dead toggle* — is now the shape of the code, not just a comment. Live keys survive the prune; dead keys (`compact`, tomorrow's corpses) fall out at the next save.
+
+### Verified
+
+tsc EXIT=0, build EXIT=0. Live E2E: injected `{compact:true, junkKey:'dead-value'}` + a live `quiet.enabled=true` into the saved blob → reloaded → a no-op Save in the Notification section → blob re-read: `compact` GONE, `junkKey` GONE, `quiet.enabled` PRESERVED, keys exactly `[currency, locale, timezone, paymentMethods, notify, quiet, savePaymentHistory]`. Appearance section renders display-only: no toggle, no Save bar, palette strip visible, Locked chip intact. READ-ONLY round — zero cloud writes (prefs are localStorage).
+
 ## [5.136.0] — 2026-10-04 — One header voice
 
 ### Changed — every staff screen's title speaks the same register

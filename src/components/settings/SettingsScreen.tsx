@@ -472,12 +472,18 @@ const NotificationSection: React.FC = () => {
 
 /* ───────────────────────── 3 · Appearance ───────────────────────────── */
 
+/* v5.137.0 — the section is a display-only record now. The "Compact density"
+ * toggle it carried since v5.0.0 promised "tighter rows and smaller text
+ * across the app" and NOTHING consumed the pref — no CSS hook, no class,
+ * no consumer, five months of a control that changed nothing (the 5.134.0
+ * banner's disease, toggle-sized). The lie is removed; the honest half
+ * stays: the locked ServePoint theme card documents the single-theme
+ * register, now with the house palette it speaks of. Density, if the owner
+ * ever asks for it, is a designed system — not a switch bolted onto nothing. */
 const AppearanceSection: React.FC = () => {
-  const [compact, setCompact] = useState<boolean>(() => getPrefs().compact);
-
   return (
     <div>
-      <SectionHeading title="Appearance" description="Interface style and density." />
+      <SectionHeading title="Appearance" description="Interface style." />
       <p className="mt-6 text-[14px] font-semibold text-[#1A1A1A]">Interface style</p>
       <div className="mt-3 rounded-2xl border border-[#E3E7E0] bg-[#EAF0EC] p-4">
         <div className="flex items-center gap-3">
@@ -492,19 +498,30 @@ const AppearanceSection: React.FC = () => {
             <Lock size={12} aria-hidden /> Locked
           </span>
         </div>
-        <p className="mt-3 text-[12px] text-[#969696]">ServePoint is the production theme</p>
+        {/* the palette the whole house speaks — the five :root tokens drawn
+            where the theme is declared, so the card is a brand record, not
+            a stub. Static dots: no motion, no contrast claim, just the
+            tokens with their names on hover. */}
+        <div className="mt-3.5 flex items-center gap-2" aria-hidden>
+          {[
+            ['--sp-canvas', '#F6F5F2'],
+            ['--sp-sage', '#D9E2DD'],
+            ['--sp-teal', '#0F3D3E'],
+            ['--sp-gold', '#B88E2F'],
+            ['--sp-ink', '#1A1A1A'],
+          ].map(([name, hex]) => (
+            <span
+              key={name}
+              title={`${name.replace('--sp-', '')} ${hex}`}
+              className="h-4 w-4 rounded-full border border-[#E3E7E0] shadow-sm"
+              style={{ backgroundColor: hex }}
+            />
+          ))}
+        </div>
+        <p className="mt-3 text-[12px] text-[#969696]">
+          ServePoint is the production theme — one register across every screen.
+        </p>
       </div>
-
-      <div className="mt-4 border-t border-[#E3E7E0]">
-        <SettingRow
-          label="Compact density"
-          description="Tighter rows and smaller text across the app"
-          last
-        >
-          <SPToggle label="Compact density" checked={compact} onChange={setCompact} />
-        </SettingRow>
-      </div>
-      <SectionSave onPersist={() => setPrefs({ compact })} />
     </div>
   );
 };

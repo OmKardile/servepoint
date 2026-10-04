@@ -3,14 +3,13 @@ import { useSession } from '../store/session';
 /**
  * Production preferences (v5.0.0) — real, persisted UI settings that other
  * screens consume (currency symbol, payment methods, notification toggles,
- * compact mode, region). ServePoint-only; no theme system.
+ * the quiet-hours schedule, region). ServePoint-only; no theme system.
  */
 
 export interface SpPrefs {
   currency: string; // currency symbol, e.g. '₹'
   locale: string;
   timezone: string;
-  compact: boolean;
   paymentMethods: { card: boolean; cash: boolean; upi: boolean };
   savePaymentHistory: boolean;
   /** 5.103.0 — the notify toggles finally speak the bell's own language:
@@ -38,7 +37,6 @@ const DEFAULTS: SpPrefs = {
   currency: '₹',
   locale: 'en-IN',
   timezone: 'Asia/Kolkata',
-  compact: false,
   paymentMethods: { card: true, cash: true, upi: true },
   savePaymentHistory: true,
   notify: { message: true, system: true, reminder: true, feedback: true, promotion: false },
@@ -70,14 +68,25 @@ export function getPrefs(): SpPrefs {
     const raw = localStorage.getItem(KEY);
     if (!raw) return DEFAULTS;
     const parsed = JSON.parse(raw) as Partial<SpPrefs>;
+    /* v5.137.0 — an allowlist rebuild, not a blind spread: only the keys the
+     * interface declares survive a load. The spread used to carry ANY junk a
+     * saved blob held forever — `compact` (a v5.0.0 toggle no code ever read;
+     * the Settings round removed it) would have ridden the blob until the end
+     * of time, and so would every future dead key. A stale shape must never
+     * resurrect a dead toggle — the 5.103.0 doctrine, now structural. */
     return {
-      ...DEFAULTS,
-      ...parsed,
+      currency: typeof parsed.currency === 'string' ? parsed.currency : DEFAULTS.currency,
+      locale: typeof parsed.locale === 'string' ? parsed.locale : DEFAULTS.locale,
+      timezone: typeof parsed.timezone === 'string' ? parsed.timezone : DEFAULTS.timezone,
       // nested objects must merge, not replace — a saved `{ enabled: true }`
       // without bounds must never lose the default window
       paymentMethods: { ...DEFAULTS.paymentMethods, ...(parsed.paymentMethods || {}) },
       notify: { ...DEFAULTS.notify, ...migrateNotify(parsed.notify) },
       quiet: { ...DEFAULTS.quiet, ...(parsed.quiet || {}) },
+      savePaymentHistory:
+        typeof parsed.savePaymentHistory === 'boolean'
+          ? parsed.savePaymentHistory
+          : DEFAULTS.savePaymentHistory,
     };
   } catch {
     return DEFAULTS;
