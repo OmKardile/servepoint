@@ -21,6 +21,8 @@ import {
   CalendarRange,
   Check,
   CheckCircle2,
+  ChevronDown,
+  ChevronUp,
   Clock,
   Coins,
   Copy,
@@ -34,6 +36,7 @@ import {
   Printer,
   QrCode,
   Quote,
+  ReceiptText,
   RefreshCw,
   ShoppingBag,
   Split,
@@ -59,6 +62,14 @@ import {
 } from '../../lib/api';
 import { seatSpanLabel, buildSettleMap, medianMinOf } from '../../lib/turn';
 import { isPaidTicket } from '../../lib/usual';
+import { dayTime, usedAgo } from '../../lib/day';
+import { offerBadgeLabel } from '../../lib/offerLabel';
+/* v5.211.0 — the drawer grammar is the family's, borrowed whole: the
+ * offers tab's slicer and footer arithmetic (5.206) travel here as the
+ * SAME exported pure reducers — a second copy would be a second
+ * arithmetic that can disagree with the chip (5.210's own-word rule,
+ * at reducer scale). */
+import { offerUsageStats, redemptionsByOffer } from '../customers/CustomersScreen';
 import type {
   DrawerSession,
   FeedbackRow,
@@ -2063,8 +2074,18 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
     return { count: inWin.length, total, unvalued, reasons, items };
   }, [waste, range]);
 
-  /* ── 5.71.0 — the offer's scorecard: every offer answers for itself ── */
-
+  /* ── 5.71.0 — the offer's scorecard: every offer answers for itself ──
+   * v5.211.0 — and the window keeps the rides whole: offerAgg now also
+   * carries the ledger sliced by offer (redemptionsByOffer — the SAME
+   * suite-owned reducer the offers tab's drawer reads), built from the
+   * window's own rows so the slice is a free derivation of the ONE read
+   * (5.197 — never a second fetch). The rows keep the read's own
+   * newest-first order — inWin filters, it does not re-sort; a local
+   * sort would be a second clock (5.190's lesson at bucket scale). The
+   * badge voice comes from lib/offerLabel (5.210's ONE composer) — the
+   * local voiceOf that used to live here is retired: two composers of
+   * one offer's words can disagree, and the share paper's byte-identity
+   * watch (5.149) deserves a single source. */
   const offerAgg = useMemo(() => {
     const { startMs, endMs } = rangeWindow(range);
     const inWin = redemptions.filter((r) => {
@@ -2087,7 +2108,6 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
        one the owner most needs to see). Orphaned redemptions (offer row gone
        despite the CASCADE) still render defensively. */
     const rows = new Map<string, { id: string; title: string; isActive: boolean; uses: number; discountSum: number; revenue: number; lastAt: string | null; voice: string }>();
-    const voiceOf = (o: Offer) => (o.discount_type === 'flat' ? `${formatMoney(Number(o.discount_value))} off` : `${Number(o.discount_value)}% off`);
     for (const o of offersList) {
       const v = byOffer.get(o.id);
       rows.set(o.id, {
@@ -2098,7 +2118,7 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
         discountSum: v?.discountSum ?? 0,
         revenue: v?.revenue ?? 0,
         lastAt: v?.lastAt ?? null,
-        voice: voiceOf(o),
+        voice: offerBadgeLabel(o),
       });
     }
     for (const [id, v] of byOffer) {
@@ -2118,8 +2138,23 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
     const totalUses = list.reduce((s, o) => s + o.uses, 0);
     const totalDiscount = list.reduce((s, o) => s + o.discountSum, 0);
     const totalRevenue = list.reduce((s, o) => s + o.revenue, 0);
-    return { list, totalUses, totalDiscount, totalRevenue, offerCount: offersList.length };
+    return { list, totalUses, totalDiscount, totalRevenue, offerCount: offersList.length, ledger: redemptionsByOffer(inWin) };
   }, [redemptions, offersList, range]);
+
+  /* v5.211.0 — which window ledgers stand open: a Set of offer ids, the
+   * 5.206 door grammar verbatim (open many, compare freely; the chevron
+   * says which way each door faces). A silent offer has no rows, so its
+   * id can never open anything — the door's own guard is the slice's
+   * length, silence is structural. */
+  const [ledgerOpen, setLedgerOpen] = useState<Set<string>>(new Set());
+  const toggleOfferLedger = useCallback((id: string) => {
+    setLedgerOpen((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
 
   const exportOffers = useCallback(() => {
     if (offerAgg.list.length === 0) return;
@@ -3462,11 +3497,17 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
               <ul className="flex flex-col gap-2">
                 {offerAgg.list.map((o) => {
                   const silent = o.uses === 0;
-                  return (
-                    <li
-                      key={o.id}
-                      className="flex items-center gap-3 rounded-xl border border-[#E3E7E0] bg-[#FBFBF9] px-3.5 py-2.5"
-                    >
+                  /* v5.211.0 — the row's own registers: the slice comes from
+                     the memo's ledger (the read's own newest-first order, the
+                     window already applied), the footer arithmetic is the
+                     family's own reducer — one arithmetic, never a second. A
+                     silent offer gets no slice and no door: silence is
+                     structural, not a rendering accident. */
+                  const usageRows = offerAgg.ledger.get(o.id);
+                  const openThis = !silent && ledgerOpen.has(o.id);
+                  const usageStats = usageRows && usageRows.length > 0 ? offerUsageStats(usageRows) : null;
+                  const inner = (
+                    <>
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-1.5">
                           <span className="truncate text-[13px] font-bold text-[#1A1A1A]">{o.title}</span>
@@ -3504,6 +3545,107 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
                           </p>
                         )}
                       </div>
+                      {/* v5.211.0 — the door: the 5.206 ledger-chip grammar
+                          verbatim (ReceiptText, the chevron faces the door's
+                          truth — down = closed, up = open). aria-expanded,
+                          no dangling aria-controls (the region exists only
+                          while open). The count rides in the aria-label so
+                          the door is speakable before it is opened. */}
+                      {!silent && (
+                        <span
+                          className={`inline-flex h-6 shrink-0 items-center gap-1 rounded-lg border px-2 text-[11px] font-semibold ${
+                            openThis
+                              ? 'border-[#B88E2F]/50 bg-[#FBF7EC] text-[#8A5A00]'
+                              : 'border-[#E3E7E0] bg-white text-[#6B6B6B]'
+                          }`}
+                        >
+                          <ReceiptText size={12} aria-hidden className="shrink-0" />
+                          ledger
+                          {openThis ? (
+                            <ChevronUp size={12} aria-hidden className="shrink-0" />
+                          ) : (
+                            <ChevronDown size={12} aria-hidden className="shrink-0" />
+                          )}
+                        </span>
+                      )}
+                    </>
+                  );
+                  return (
+                    <li key={o.id}>
+                      {silent ? (
+                        <div className="flex items-center gap-3 rounded-xl border border-[#E3E7E0] bg-[#FBFBF9] px-3.5 py-2.5">
+                          {inner}
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => toggleOfferLedger(o.id)}
+                          aria-expanded={openThis}
+                          aria-label={`${openThis ? 'Hide' : 'Show'} the rides in this window for ${o.title} — ${o.uses} ${o.uses === 1 ? 'ticket' : 'tickets'}`}
+                          className="flex w-full cursor-pointer items-center gap-3 rounded-xl border border-[#E3E7E0] bg-[#FBFBF9] px-3.5 py-2.5 text-left transition-colors hover:border-[#B88E2F]/40 hover:bg-[#FDF9EF] active:scale-[0.995]"
+                        >
+                          {inner}
+                        </button>
+                      )}
+                      {/* v5.211.0 — the drawer itself: the offer's own rides in
+                          this window, newest first (the LEDGER's order — inWin
+                          filters, it never re-sorts). Each row names BOTH its
+                          rupee registers (5.206's grammar at window scale):
+                          the gold "off" (what the offer took) and the grey "a
+                          ₹X ticket" (what the ticket walked in with); the
+                          row's own ago-voice rides right, the full stamp in
+                          the title. An orphaned row (no order total) speaks
+                          its take and keeps its silence about the ticket — a
+                          missing total is not a ₹0 ticket. Footer: the
+                          average voice from the family's own reducer — "avg
+                          ₹X off a ₹Y ticket" when the window's rows carried
+                          totals, "avg ₹X off per redemption" when they did
+                          not (a null average never becomes an invented ₹0). */}
+                      {openThis && usageRows && usageRows.length > 0 && (
+                        <div
+                          className="mt-2 rounded-xl border border-[#EFE3CC] bg-[#FBF9F4] px-3 py-2"
+                          role="region"
+                          aria-label={`Rides in this window for ${o.title}`}
+                          style={{ animation: 'spFadeIn 160ms ease-out' }}
+                        >
+                          <ul className="m-0 list-none p-0">
+                            {usageRows.map((r, i) => (
+                              <li
+                                key={`${r.offerId}-${r.createdAt}-${i}`}
+                                className="flex items-center justify-between gap-2 border-b border-[#EFE3CC]/70 py-1.5 last:border-b-0"
+                                title={`redeemed ${dayTime(r.createdAt)}`}
+                              >
+                                <span className="shrink-0 text-[11.5px] font-semibold tabular-nums text-[#8A5A00]">
+                                  {formatMoney(r.discountAmount)} off
+                                </span>
+                                {r.orderTotal != null && (
+                                  <span className="min-w-0 truncate text-[11px] tabular-nums text-[#6B6B6B]">
+                                    a {formatMoney(r.orderTotal)} ticket
+                                  </span>
+                                )}
+                                <span className="ml-auto shrink-0 text-[11px] tabular-nums text-[#969696]">
+                                  {usedAgo(r.createdAt, Date.now())}
+                                </span>
+                              </li>
+                            ))}
+                          </ul>
+                          {usageStats && (
+                            <p
+                              className="mb-0 mt-1.5 border-t border-[#EFE3CC] pt-1.5 text-[11px] font-medium tabular-nums text-[#8A5A00]"
+                              title={
+                                usageStats.avgTicket != null
+                                  ? `average take ${formatMoney(usageStats.avgOff)} across ${usageStats.count} ride${usageStats.count === 1 ? '' : 's'} in this window, average ticket ${formatMoney(usageStats.avgTicket)}`
+                                  : `average take ${formatMoney(usageStats.avgOff)} across ${usageStats.count} ride${usageStats.count === 1 ? '' : 's'} in this window`
+                              }
+                            >
+                              avg {formatMoney(usageStats.avgOff)} off{' '}
+                              {usageStats.avgTicket != null
+                                ? `a ${formatMoney(usageStats.avgTicket)} ticket`
+                                : 'per redemption'}
+                            </p>
+                          )}
+                        </div>
+                      )}
                     </li>
                   );
                 })}

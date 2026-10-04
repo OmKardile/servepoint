@@ -3,6 +3,23 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.211.0] — 2026-10-05 — The window speaks the offer's own rides: the Reports scorecard answered for every offer in aggregates (uses, brought-in, cost) but kept the window's rides themselves locked in the read — now every row that rode opens the family's ledger door
+
+### Added — the scorecard's ledger door (`src/components/reports/ReportsScreen.tsx`)
+
+Each scorecard row with rides in the window grew the 5.206 ledger-chip door (ReceiptText + chevron; the chevron faces the door's truth — down = closed, up = open; `aria-expanded`, the count rides the aria-label so the door is speakable before it is opened). The door opens a drawer speaking the offer's OWN rides in this window, newest-first — the read's own order, preserved: `inWin` filters, it never re-sorts (a local sort would be a second clock). Each row names BOTH its rupee registers — the gold "₹X off" (what the offer took) and the grey "a ₹Y ticket" (what the ticket walked in with); the row's ago-voice rides right, the full stamp in the title. An orphaned row (no order total) speaks its take and keeps its silence about the ticket — a missing total is not a ₹0 ticket. Footer: the average voice — "avg ₹X off a ₹Y ticket" when the window's rows carried totals, "avg ₹X off per redemption" when they did not (a null average never becomes an invented ₹0). A silent offer (zero rides) keeps NO door: the static row stays, silence is structural. The slice is a free derivation of the ONE read — `offerAgg` now carries `ledger: redemptionsByOffer(inWin)`; no second fetch (5.197).
+
+### Changed — one composer, one reducer family
+
+The scorecard's badge voice now comes from `lib/offerLabel.ts` (`offerBadgeLabel`) — the local `voiceOf` that had lived in ReportsScreen since 5.71 is retired: two composers of one offer's words can disagree, and the share paper's byte-identity watch (5.149) deserves a single source (5.210's own-word rule finally reaching Reports). The drawer's slicer and footer arithmetic are the SAME exported pure reducers the offers tab's drawer reads (`redemptionsByOffer`, `offerUsageStats`, imported from the family home — not copied): a second copy would be a second arithmetic that can disagree with the chip.
+
+### Verified
+
+- `unit250` born (vite-node): 7 groups green — the composer agreement (offerBadgeLabel's words hand-checked byte-for-byte against the retired local line: "₹50.00 off" / "10% off"; the threshold clause speaks only over a non-zero min), source guards (no `const voiceOf` remains; the ledger derives from the window's own rows; the reducers travel from the family home), the window slice preserves the read's newest-first order, structural silence (no rows → no bucket → no door), the family agreement (stats.given == the scorecard's cost register — 50+50+50 = ₹150 hand-re-added; avg ticket (409.50+332.50)/2 = ₹371 with the orphaned ride kept out of the ticket average), the all-orphan fallback (`avgTicket` null → the per-redemption voice).
+- Regression battery: unit194/195/197–250 all PASS (56 suites, zero failures).
+- tsc EXIT=0 ×2 (before the walk, after the edit); build EXIT=0 (41 assets injected, VERSION → servepoint-v5.211.0-r1).
+- E2E (dev, live data, READ-ONLY): the ₹50-off row's door speaks "Show the rides in this window for ₹50 off over ₹300 — 3 tickets" and opens the drawer — 3 rows newest-first ("₹50.00 off | a ₹294.00 ticket | 1d ago" on top), footer "avg ₹50.00 off a ₹332.50 ticket" (hand-check: ₹997.50 / 3 = ₹332.50, the scorecard's own brought register); the 10% row's door opens one ride — "₹44.00 off | a ₹415.80 ticket" agreeing with the offers tab's chip (used 1× ₹44.00 — one cost register across surfaces); doors toggle closed cleanly; standing promises re-probed (paper ₹194.00 tile, week ₹8,112.30, offers tab "2 live"); console clean, zero page errors.
+
 ## [5.210.0] — 2026-10-05 — The cart hears the offers: the counter built an order and the only surface that ever mentioned offers was the review drawer's picker — a fit the counter had to discover by opening things; the order pill now whispers the offer's fit for the line set as it stands
 
 ### Added — the pill's fit whisper (`src/components/food/FoodDrinksScreen.tsx`, `src/lib/offerLabel.ts`, `src/components/customers/CustomersScreen.tsx`)
