@@ -20,6 +20,7 @@ import {
   Printer,
   RefreshCw,
   Split,
+  Tag,
   Trash2,
   TrendingDown,
   Wallet,
@@ -131,6 +132,45 @@ function istTime(iso: string): string {
   return appFormatters().hhmm.format(new Date(iso));
 }
 
+/* ── v5.192.0 — the day-ledger CSV's rows, extracted pure (228's
+ * billsCsvRows pattern): the suite reads the exact table the CSV button
+ * writes. The Discount column joins (after Tax) — the money the offers
+ * gave away, per ticket, so SUM(Discount) reconciles against the Z's
+ * "Offers given" line to the paisa. ONE rule: the order row's own
+ * discount_amount; a cancelled ticket says '' (never happened — the bills
+ * CSV's own rule); null on legacy rows reads 0 (no offer — a true zero,
+ * never an unknown). */
+export function dayLedgerCsvRows(o: {
+  orders: DayOrder[];
+  payments: { order_id: string; method: string }[];
+  cogsRows: { order_id: string; cogs: number }[];
+}): unknown[][] {
+  const methodsByOrder = new Map<string, string>();
+  for (const p of o.payments) {
+    const prev = methodsByOrder.get(p.order_id);
+    methodsByOrder.set(p.order_id, prev && !prev.includes(p.method) ? `${prev} + ${p.method}` : p.method);
+  }
+  const cogsByOrder = new Map(o.cogsRows.map((c) => [c.order_id, Number(c.cogs)]));
+  const typeLabel = (t: string) =>
+    t === 'dine_in' ? 'Dine-in' : t === 'takeaway' ? 'Takeaway' : t === 'delivery' ? 'Delivery' : t;
+  return [
+    ['Ticket', `Time (${appTzTag()})`, 'Type', 'Status', 'Payment', 'Method', 'Customer', 'Total', 'Tax', 'Discount', 'COGS'],
+    ...o.orders.map((ord) => [
+      `#${ord.order_number}`,
+      istTime(ord.created_at),
+      typeLabel(ord.order_type),
+      ord.status,
+      ord.payment_status || '',
+      methodsByOrder.get(ord.id) || ord.payment_method || '',
+      ord.customer_name || '',
+      Number(ord.total),
+      Number(ord.tax_amount),
+      ord.status === 'cancelled' ? '' : Number(ord.discount_amount ?? 0),
+      cogsByOrder.get(ord.id) ?? '',
+    ]),
+  ];
+}
+
 /* ─────────────────────────────── types ─────────────────────────────────── */
 
 interface DayOrder {
@@ -140,6 +180,10 @@ interface DayOrder {
   status: string;
   total: number;
   tax_amount: number;
+  /** v5.192.0 — the money the offers gave away on THIS ticket (016's cart
+   *  math, frozen on the order row). Null on legacy tickets = no offer —
+   *  a true zero, never an unknown. */
+  discount_amount: number | null;
   payment_status: string | null;
   payment_method: string | null;
   customer_name: string | null;
@@ -270,6 +314,12 @@ interface ZReportOpts {
    *  language. Undefined = the read never happened (the block stays off;
    *  the Z never claims an honest zero it didn't verify). */
   waste?: { rupees: number; moves: number; top: string | null } | null;
+  /** v5.192.0 — the close counts the offers: the day's live tickets' own
+   *  discount_amount (ONE source — the orders the Z already counts).
+   *  Undefined = never assembled (the block stays off; the Z never claims
+   *  an honest zero it didn't verify). Present, it speaks the truth even
+   *  when that truth is "nothing" — the bin's own zero-language. */
+  offers?: { rupees: number; tickets: number } | null;
   /** v5.83.0 — the close sees the floor: the day's rounds, computed from
    *  the SAME day orders the Z already counts (no extra read to trust). */
   floor?: { rounds: number; rupees: number; busiest: string | null; noShows: number | null } | null;
@@ -431,6 +481,16 @@ function printZReport(opts: ZReportOpts): void {
     ${row('Orders', String(opts.orders), true)}
     ${row('Cancelled', String(opts.cancelled))}
     ${row('Gross sales', formatMoney(opts.gross), true)}
+    ${
+      opts.offers
+        ? row(
+            'Offers given',
+            opts.offers.tickets > 0
+              ? `${formatMoney(opts.offers.rupees)} · ${opts.offers.tickets} tkt`
+              : 'nothing',
+          )
+        : ''
+    }
     ${row('GST collected', formatMoney(opts.gst))}
     ${row('PAID', formatMoney(opts.paid), true)}
     ${row(
@@ -492,6 +552,18 @@ export function buildZReportText(opts: ZReportOpts): string {
   out.push(two('Orders', String(opts.orders)));
   out.push(two('Cancelled', String(opts.cancelled)));
   out.push(two('Gross sales', formatMoney(opts.gross)));
+  /* v5.192.0 — the close counts the offers: the money the offers gave away
+   * rides right under the gross it discounts (the print's own order). */
+  if (opts.offers) {
+    out.push(
+      two(
+        'Offers given',
+        opts.offers.tickets > 0
+          ? `${formatMoney(opts.offers.rupees)} · ${opts.offers.tickets} tkt`
+          : 'nothing',
+      ),
+    );
+  }
   out.push(two('GST collected', formatMoney(opts.gst)));
   out.push(two('PAID', formatMoney(opts.paid)));
   out.push(
@@ -1386,6 +1458,21 @@ const EodScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
     }
     const margin = paidNet - paidCogs;
 
+    // ── the day's generosity (v5.192.0): the money the offers gave away —
+    // the live tickets' own discount_amount, ONE source (the orders the Z
+    // already counts — the floor block's doctrine, no extra read to trust).
+    // Cancelled tickets stay silent (they never happened — the bills CSV's
+    // own rule); a d ≤ 0 row is no offer, not a rounding ghost.
+    let offerRupees = 0;
+    let offerTickets = 0;
+    for (const o of live) {
+      const d = Number(o.discount_amount ?? 0);
+      if (d > 0) {
+        offerRupees += d;
+        offerTickets += 1;
+      }
+    }
+
     return {
       live,
       cancelled,
@@ -1404,6 +1491,8 @@ const EodScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
       paidNet,
       margin,
       paidTickets,
+      offerRupees,
+      offerTickets,
     };
   }, [orders, payments, cogsRows]);
 
@@ -1559,6 +1648,7 @@ const EodScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
       sections: sectionMix.rows.length > 0 ? sectionMix.rows : null,
       cancelled: agg.cancelled,
       printedBy: session?.email || '',
+      offers: { rupees: agg.offerRupees, tickets: agg.offerTickets },
       drawer,
       waste: wasteDay
         ? {
@@ -1600,32 +1690,11 @@ const EodScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
   /* ── day-ledger CSV — the accountant's twin of the printed z-report.
      One row per ticket, exactly the loaded day's orders (nothing fetched,
      nothing rounded): split payments join their methods, COGS rides along
-     from the 018 view so margin can be recomputed in the spreadsheet. */
+     from the 018 view so margin can be recomputed in the spreadsheet.
+     v5.192.0 — the rows build through dayLedgerCsvRows (exported pure),
+     the Discount column reconciling against the Z's Offers-given line. */
   const exportDayCsv = () => {
-    const methodsByOrder = new Map<string, string>();
-    for (const p of payments) {
-      const prev = methodsByOrder.get(p.order_id);
-      methodsByOrder.set(p.order_id, prev && !prev.includes(p.method) ? `${prev} + ${p.method}` : p.method);
-    }
-    const cogsByOrder = new Map(cogsRows.map((c) => [c.order_id, Number(c.cogs)]));
-    const typeLabel = (t: string) =>
-      t === 'dine_in' ? 'Dine-in' : t === 'takeaway' ? 'Takeaway' : t === 'delivery' ? 'Delivery' : t;
-    const rows: unknown[][] = [
-      ['Ticket', `Time (${appTzTag()})`, 'Type', 'Status', 'Payment', 'Method', 'Customer', 'Total', 'Tax', 'COGS'],
-      ...orders.map((o) => [
-        `#${o.order_number}`,
-        istTime(o.created_at),
-        typeLabel(o.order_type),
-        o.status,
-        o.payment_status || '',
-        methodsByOrder.get(o.id) || o.payment_method || '',
-        o.customer_name || '',
-        Number(o.total),
-        Number(o.tax_amount),
-        cogsByOrder.get(o.id) ?? '',
-      ]),
-    ];
-    downloadCsv(`servepoint-closeout-${dateIso}.csv`, rows);
+    downloadCsv(`servepoint-closeout-${dateIso}.csv`, dayLedgerCsvRows({ orders, payments, cogsRows }));
   };
 
   /* ── tenant gates ── */
@@ -1915,7 +1984,23 @@ const EodScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
               value={String(agg.live.length)}
               sub={agg.cancelled > 0 ? `${agg.cancelled} cancelled` : 'live day count'}
             />
-            <StatCard label="Gross" value={formatMoney(agg.gross)} sub={`GST ${formatMoney(agg.gst)}`} />
+            <StatCard
+              label="Gross"
+              value={formatMoney(agg.gross)}
+              sub={`GST ${formatMoney(agg.gst)}`}
+              whisper={
+                agg.offerTickets > 0 ? (
+                  <span
+                    className="inline-flex items-center gap-1 text-[10.5px] font-bold text-[#8A6D1F]"
+                    title="The money the offers gave away — gross is already net of these discounts; the z-report names the line (Offers given)"
+                  >
+                    <Tag size={11} aria-hidden />
+                    {formatMoney(agg.offerRupees)} given in offers · {agg.offerTickets}{' '}
+                    {agg.offerTickets === 1 ? 'ticket' : 'tickets'}
+                  </span>
+                ) : undefined
+              }
+            />
             <StatCard label="Paid" value={formatMoney(agg.paid)} tone="green" sub="payments taken" />
             <StatCard
               label="Unpaid"
