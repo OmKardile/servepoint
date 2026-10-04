@@ -145,12 +145,32 @@ export interface ChaseOpts {
 export function buildChaseText(opts: ChaseOpts): string {
   const W = 32;
   const hr = '-'.repeat(W);
-  const center = (s: string): string =>
-    s.length >= W ? s : ' '.repeat(Math.floor((W - s.length) / 2)) + s;
+  const center = (s: string): string => {
+    const t = s.length > W ? `${s.slice(0, W - 1)}…` : s;
+    return t.length >= W ? t : ' '.repeat(Math.floor((W - t.length) / 2)) + t;
+  };
   const two = (l: string, r: string): string => {
     const cut = Math.max(1, W - r.length - 1);
     const left = l.length > cut ? `${l.slice(0, cut - 1)}…` : l;
     return left.padEnd(W - r.length, ' ') + r;
+  };
+  /* chase notes are prose — word-wrapped at the detail width so a long
+   * "will pay tomorrow" story can't ride past the frame (195 torture). */
+  const wrap = (s: string, width = W): string[] => {
+    const words = s.split(/\s+/).filter(Boolean);
+    const lines: string[] = [];
+    let cur = '';
+    for (const w of words) {
+      const t = cur ? `${cur} ${w}` : w;
+      if (t.length <= width) {
+        cur = t;
+        continue;
+      }
+      if (cur) lines.push(cur);
+      cur = w.length > width ? `${w.slice(0, width - 1)}…` : w;
+    }
+    if (cur) lines.push(cur);
+    return lines;
   };
 
   const out: string[] = [];
@@ -161,7 +181,7 @@ export function buildChaseText(opts: ChaseOpts): string {
     out.push(two(`${t.num} · ${t.where}`, formatMoney(t.open)));
     const head = `   ${t.when} · ${t.age}`;
     out.push(head.length <= W ? head : `   ${t.when}`);
-    if (t.note) out.push(`   ${t.note}`);
+    if (t.note) for (const line of wrap(t.note, W - 3)) out.push(`   ${line}`);
   }
   out.push(hr);
   out.push(two('TOTAL TO COLLECT', formatMoney(opts.total)));

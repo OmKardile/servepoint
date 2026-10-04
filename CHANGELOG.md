@@ -3,6 +3,20 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.156.0] — 2026-10-04 — The guest voices speak in chat, and every twin's frame is unbreakable
+
+### Added — the satisfaction card gets a pocket voice (`src/components/reports/ReportsScreen.tsx`)
+
+The share arc's eleventh member: `buildRatingsText(opts)` (exported pure, E2E-assertable) answers "what did guests say this week?" in the same chat where the day's money travels — the average with the card's own word ("good — keep going"), the ratings/comments voice, the star histogram (non-zero rows only; the recover line carries the zero story), the guests' own words quoted full-width with star + ticket detail, and THE RECOVER LIST with names and phones — the callback sheet an owner can act on from the group chat, with the phone-only and anonymous voices honest (`no comment — the stars spoke`). Chat caps mirror the screen's (3 quotes, 5 recover rows) and `lowTotal` keeps the `+ N more in the CSV` line honest; a clean window speaks its "nothing to recover" zero. Built on the hardened helpers from birth (center truncates into the frame, detail word-wraps over-long segments). Assembly from the same `fbAgg` memo the screen renders (the 5.146.0 rule); Copy + WhatsApp chips join CSV in the card's own `h-11 rounded-xl` white grammar, gated on ratings existing; Copy rides the honest tri-state.
+
+### Changed — the frame is now proven unbreakable across the WHOLE arc, and recover rows tier their alarm
+
+The torture suite (`scripts/unit195.mjs`, 11 builders × hostile 40-char store name + over-long dish/comment/offer/note fields) now guards every chat twin, and it caught two real bugs this round: `buildChaseText` rode the chase note completely unguarded (68 columns — latent since 5.151.0, now word-wrapped at the detail width), and the guest-voices recover rows initially wrapped at frame width then indented past it. The `center()` truncate fix from 5.155.0 is now ported to all ten sibling builders (report, top, scorecard, menu, receipt, reorder, Z-report, chase, offer + the new voices), and the packed-segment detail guard rides in the three builders that pack segments. On the card, the recover list stops painting every ≤3★ row with the same red alarm: ≤2★ keeps the bell's red (030's trigger), 3★ "meh" steps down to the amber that "deserves a name" — rail, stars, and wash all follow the tier (live data has no low rows this window; the tier logic is assert-covered in text and JSX-guarded on screen).
+
+### Verified
+
+`tsc` EXIT=0 · `vite build` EXIT=0 · node --check sw.js OK · unit suite (vite-node, literals) ALL PASS: 11/11 torture cases ≤ 32 columns (report, top, scorecard, kitchen, voices, menu, receipt, reorder, Z, chase, offer) + 21 semantic asserts (avg voice, histogram non-zero rows + hidden zeros, quotes, recover list naming/phone/anonymous/no-comment/over-cap, honest empty) · E2E on the live Reports screen (Last 7 days): chips render on fresh load, the wa.me href decodes to the exact builder text — QR Flow Cafe / GUEST VOICES · LAST 7 DAYS / Average 4.3 / 5 · good — keep going / 3 ratings · 2 with comments / 5★ ×1 · 4★ ×2 / both live quotes with 4★ · #55 and 5★ · #63 / no low stars in this window — nothing to recover — every element matching the card, Copy honest tri-state with the 1.8s reset, console delta 0.
+
 ## [5.155.0] — 2026-10-04 — The kitchen speed speaks in chat
 
 ### Added — the stopwatch gets a pocket voice (`src/components/reports/ReportsScreen.tsx`)

@@ -502,8 +502,10 @@ export interface MenuTextOpts {
 export function buildMenuText(opts: MenuTextOpts): string {
   const W = 32;
   const hr = '-'.repeat(W);
-  const center = (s: string): string =>
-    s.length >= W ? s : ' '.repeat(Math.floor((W - s.length) / 2)) + s;
+  const center = (s: string): string => {
+    const t = s.length > W ? `${s.slice(0, W - 1)}…` : s;
+    return t.length >= W ? t : ' '.repeat(Math.floor((W - t.length) / 2)) + t;
+  };
   const two = (l: string, r: string): string => {
     const cut = Math.max(1, W - r.length - 1);
     const left = l.length > cut ? `${l.slice(0, cut - 1)}…` : l;

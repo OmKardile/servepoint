@@ -372,8 +372,10 @@ export function buildZReportText(opts: ZReportOpts): string {
     return left.padEnd(W - r.length, ' ') + r;
   };
   const hr = '-'.repeat(W);
-  const center = (s: string): string =>
-    s.length >= W ? s : ' '.repeat(Math.floor((W - s.length) / 2)) + s;
+  const center = (s: string): string => {
+    const t = s.length > W ? `${s.slice(0, W - 1)}…` : s;
+    return t.length >= W ? t : ' '.repeat(Math.floor((W - t.length) / 2)) + t;
+  };
 
   const out: string[] = [];
   out.push(center(opts.storeName));

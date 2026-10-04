@@ -240,8 +240,10 @@ export function buildReceiptText(opts: ReceiptOpts): string {
     return left.padEnd(W - r.length, ' ') + r;
   };
   const hr = '-'.repeat(W);
-  const center = (s: string): string =>
-    s.length >= W ? s : ' '.repeat(Math.floor((W - s.length) / 2)) + s;
+  const center = (s: string): string => {
+    const t = s.length > W ? `${s.slice(0, W - 1)}…` : s;
+    return t.length >= W ? t : ' '.repeat(Math.floor((W - t.length) / 2)) + t;
+  };
 
   const cgst = Math.round((opts.tax / 2) * 100) / 100;
   const sgst = Math.round((opts.tax - cgst) * 100) / 100;

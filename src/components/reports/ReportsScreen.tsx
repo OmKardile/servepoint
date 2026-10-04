@@ -283,8 +283,10 @@ export function buildReportText(opts: ReportOpts): string {
     return left.padEnd(W - r.length, ' ') + r;
   };
   const hr = '-'.repeat(W);
-  const center = (s: string): string =>
-    s.length >= W ? s : ' '.repeat(Math.floor((W - s.length) / 2)) + s;
+  const center = (s: string): string => {
+    const t = s.length > W ? `${s.slice(0, W - 1)}…` : s;
+    return t.length >= W ? t : ' '.repeat(Math.floor((W - t.length) / 2)) + t;
+  };
 
   const out: string[] = [];
   out.push(center(opts.storeName));
@@ -365,19 +367,47 @@ export interface TopTextOpts {
 export function buildTopText(opts: TopTextOpts): string {
   const W = 32;
   const hr = '-'.repeat(W);
-  const center = (s: string): string =>
-    s.length >= W ? s : ' '.repeat(Math.floor((W - s.length) / 2)) + s;
+  const center = (s: string): string => {
+    const t = s.length > W ? `${s.slice(0, W - 1)}…` : s;
+    return t.length >= W ? t : ' '.repeat(Math.floor((W - t.length) / 2)) + t;
+  };
   const two = (l: string, r: string): string => {
     const cut = Math.max(1, W - r.length - 1);
     const left = l.length > cut ? `${l.slice(0, cut - 1)}…` : l;
     return left.padEnd(W - r.length, ' ') + r;
   };
   /* detail lines are packed segments, not an aligned row — a sentence
-   * about a dish is prose, and prose never rides the money aligner */
+   * about a dish is prose, and prose never rides the money aligner.
+   * An over-long single segment word-wraps at the detail width instead
+   * of riding the packer past the frame (194's lesson, ported). */
+  const wrap = (s: string, width = W): string[] => {
+    const words = s.split(/\s+/).filter(Boolean);
+    const lines: string[] = [];
+    let cur = '';
+    for (const w of words) {
+      const t = cur ? `${cur} ${w}` : w;
+      if (t.length <= width) {
+        cur = t;
+        continue;
+      }
+      if (cur) lines.push(cur);
+      cur = w.length > width ? `${w.slice(0, width - 1)}…` : w;
+    }
+    if (cur) lines.push(cur);
+    return lines;
+  };
   const detail = (segs: string[]): string[] => {
     const lines: string[] = [];
     let cur = '';
     for (const s of segs) {
+      if (s.length > W - 3) {
+        if (cur) {
+          lines.push(cur);
+          cur = '';
+        }
+        for (const w of wrap(s, W - 3)) lines.push(w);
+        continue;
+      }
       const t = cur ? `${cur} · ${s}` : s;
       if (t.length <= W - 3) {
         cur = t;
@@ -447,25 +477,27 @@ export interface OfferScoreOpts {
 export function buildOfferScoreText(opts: OfferScoreOpts): string {
   const W = 32;
   const hr = '-'.repeat(W);
-  const center = (s: string): string =>
-    s.length >= W ? s : ' '.repeat(Math.floor((W - s.length) / 2)) + s;
+  const center = (s: string): string => {
+    const t = s.length > W ? `${s.slice(0, W - 1)}…` : s;
+    return t.length >= W ? t : ' '.repeat(Math.floor((W - t.length) / 2)) + t;
+  };
   const two = (l: string, r: string): string => {
     const cut = Math.max(1, W - r.length - 1);
     const left = l.length > cut ? `${l.slice(0, cut - 1)}…` : l;
     return left.padEnd(W - r.length, ' ') + r;
   };
-  const wrap = (s: string): string[] => {
+  const wrap = (s: string, width = W): string[] => {
     const words = s.split(/\s+/).filter(Boolean);
     const lines: string[] = [];
     let cur = '';
     for (const w of words) {
       const t = cur ? `${cur} ${w}` : w;
-      if (t.length <= W) {
+      if (t.length <= width) {
         cur = t;
         continue;
       }
       if (cur) lines.push(cur);
-      cur = w.length > W ? `${w.slice(0, W - 1)}…` : w;
+      cur = w.length > width ? `${w.slice(0, width - 1)}…` : w;
     }
     if (cur) lines.push(cur);
     return lines;
@@ -474,6 +506,14 @@ export function buildOfferScoreText(opts: OfferScoreOpts): string {
     const lines: string[] = [];
     let cur = '';
     for (const s of segs) {
+      if (s.length > W - 3) {
+        if (cur) {
+          lines.push(cur);
+          cur = '';
+        }
+        for (const w of wrap(s, W - 3)) lines.push(w);
+        continue;
+      }
       const t = cur ? `${cur} · ${s}` : s;
       if (t.length <= W - 3) {
         cur = t;
@@ -706,6 +746,141 @@ export function buildKitchenSpeedText(opts: KitchenSpeedOpts): string {
   }
   out.push(center(`Shared ${appFormatters().hhmm.format(new Date())} ${appTzTag()}`));
   out.push(center('· · · end of kitchen speed · · ·'));
+  return out.join('\n');
+}
+
+/* ── v5.156.0 — the guest voices speak in chat ──────────────────────
+ * The share arc's eleventh member: the satisfaction card gets a pocket
+ * voice. "What did guests say this week?" rides in the same chat where
+ * the day's money travels — the average with the card's own word, the
+ * star histogram (non-zero rows; the recover line carries the zero
+ * story), the guests' own words quoted full-width, and THE RECOVER
+ * LIST with names and phones: the callback sheet an owner can act on
+ * from the group chat. Zeros stay honest ("nothing to recover"), and
+ * the chat caps mirror the screen's (3 quotes, 5 recover rows — the
+ * CSVs stay complete). Built on the hardened helpers from birth:
+ * center() truncates into the frame, detail() wraps over-long
+ * segments, prose never rides the money aligner. Exported pure so
+ * E2E can assert the text without the clipboard. */
+export interface GuestVoiceOpts {
+  storeName: string;
+  rangeLabel: string;
+  avg: number | null;
+  avgWord: string;
+  count: number;
+  commentCount: number;
+  /** index 0 = 1★ … 4 = 5★, the screen's own histogram */
+  stars: number[];
+  comments: { rating: number; orderNumber: number; text: string }[];
+  low: {
+    name: string | null;
+    phone: string | null;
+    rating: number;
+    orderNumber: number;
+    when: string;
+    comment: string | null;
+  }[];
+  lowTotal: number;
+}
+
+export function buildRatingsText(opts: GuestVoiceOpts): string {
+  const W = 32;
+  const hr = '-'.repeat(W);
+  const center = (s: string): string => {
+    const t = s.length > W ? `${s.slice(0, W - 1)}…` : s;
+    return t.length >= W ? t : ' '.repeat(Math.floor((W - t.length) / 2)) + t;
+  };
+  const two = (l: string, r: string): string => {
+    const cut = Math.max(1, W - r.length - 1);
+    const left = l.length > cut ? `${l.slice(0, cut - 1)}…` : l;
+    return left.padEnd(W - r.length, ' ') + r;
+  };
+  const wrap = (s: string, width = W): string[] => {
+    const words = s.split(/\s+/).filter(Boolean);
+    const lines: string[] = [];
+    let cur = '';
+    for (const w of words) {
+      const t = cur ? `${cur} ${w}` : w;
+      if (t.length <= width) {
+        cur = t;
+        continue;
+      }
+      if (cur) lines.push(cur);
+      cur = w.length > width ? `${w.slice(0, width - 1)}…` : w;
+    }
+    if (cur) lines.push(cur);
+    return lines;
+  };
+  const detail = (segs: (string | false | null | undefined)[]): string[] => {
+    const lines: string[] = [];
+    let cur = '';
+    for (const raw of segs) {
+      if (!raw) continue;
+      const s = String(raw);
+      if (s.length > W - 3) {
+        if (cur) {
+          lines.push(cur);
+          cur = '';
+        }
+        for (const w of wrap(s, W - 3)) lines.push(w);
+        continue;
+      }
+      const t = cur ? `${cur} · ${s}` : s;
+      if (t.length <= W - 3) {
+        cur = t;
+        continue;
+      }
+      if (cur) lines.push(cur);
+      cur = s;
+    }
+    if (cur) lines.push(cur);
+    return lines;
+  };
+
+  const out: string[] = [];
+  out.push(center(opts.storeName));
+  out.push(center(`GUEST VOICES · ${opts.rangeLabel.toUpperCase()}`));
+  out.push(hr);
+  if (opts.avg !== null) out.push(two('Average', `${opts.avg.toFixed(1)} / 5`));
+  if (opts.avgWord) for (const line of detail([opts.avgWord])) out.push(`   ${line}`);
+  for (const line of detail([
+    `${opts.count} rating${opts.count === 1 ? '' : 's'}`,
+    opts.commentCount > 0 ? `${opts.commentCount} with comment${opts.commentCount === 1 ? '' : 's'}` : null,
+  ]))
+    out.push(line);
+  const starSegs = opts.stars
+    .map((n, i) => ({ n, star: i + 1 }))
+    .reverse()
+    .filter((s) => s.n > 0)
+    .map((s) => `${s.star}★ ×${s.n}`);
+  if (starSegs.length > 0) {
+    out.push(hr);
+    for (const line of detail(starSegs)) out.push(line);
+  }
+  if (opts.comments.length > 0) {
+    out.push(hr);
+    for (const c of opts.comments) {
+      for (const line of wrap(`“${c.text}”`)) out.push(line);
+      for (const line of detail([`${c.rating}★`, `#${c.orderNumber}`])) out.push(`   ${line}`);
+    }
+  }
+  out.push(hr);
+  if (opts.low.length > 0) {
+    out.push('THE RECOVER LIST');
+    for (const l of opts.low) {
+      out.push(two(l.name || l.phone || 'anonymous ticket', `${l.rating}★`));
+      for (const line of detail([l.name && l.phone ? l.phone : null, `#${l.orderNumber}`, l.when]))
+        out.push(`   ${line}`);
+      if (l.comment && l.comment.trim().length > 0)
+        for (const line of wrap(`“${l.comment.trim()}”`, W - 3)) out.push(`   ${line}`);
+      else out.push('   no comment — the stars spoke');
+    }
+    if (opts.lowTotal > opts.low.length) out.push(`+ ${opts.lowTotal - opts.low.length} more in the CSV`);
+  } else {
+    for (const line of wrap('no low stars in this window — nothing to recover')) out.push(line);
+  }
+  out.push(center(`Shared ${appFormatters().hhmm.format(new Date())} ${appTzTag()}`));
+  out.push(center('· · · end of guest voices · · ·'));
   return out.join('\n');
 }
 
@@ -1369,6 +1544,47 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
       .slice(0, 8);
     return { stars, avg, count: fbInRange.length, quotes, low };
   }, [fbInRange]);
+
+  /* v5.156.0 — one assembly feeds Copy + WhatsApp (5.146.0 rule, guest
+   * voices edition): built from the same fbAgg memo the screen renders.
+   * Hooks stay above the early returns — the 192 rule. The chat caps
+   * mirror the screen's (3 quotes, 5 recover rows); lowTotal keeps the
+   * "+ more in the CSV" honest. */
+  const ratingsShareOpts = useMemo<GuestVoiceOpts>(() => ({
+    storeName: tenant?.name || 'ServePoint store',
+    rangeLabel: RANGE_LABEL[range],
+    avg: fbAgg.avg,
+    avgWord: fbAgg.avg !== null ? ratingWord(fbAgg.avg) : '',
+    count: fbAgg.count,
+    commentCount: fbAgg.quotes.length,
+    stars: fbAgg.stars,
+    comments: fbAgg.quotes.map((q) => ({
+      rating: q.rating,
+      orderNumber: q.order_number,
+      text: (q.comment ?? '').trim(),
+    })),
+    low: fbAgg.low.slice(0, 5).map((f) => ({
+      name: f.customer_name ?? null,
+      phone: f.customer_phone ?? null,
+      rating: f.rating,
+      orderNumber: f.order_number,
+      when: appFormatters().dt.format(new Date(f.created_at)),
+      comment: f.comment,
+    })),
+    lowTotal: fbInRange.filter((f) => f.rating <= 3).length,
+  }), [tenant?.name, range, fbAgg, fbInRange]);
+  const ratingsText = fbAgg.count > 0 ? buildRatingsText(ratingsShareOpts) : '';
+  const [ratingsCopyState, setRatingsCopyState] = useState<'idle' | 'ok' | 'fail'>('idle');
+  const copyRatings = async () => {
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error('clipboard unavailable');
+      await navigator.clipboard.writeText(ratingsText);
+      setRatingsCopyState('ok');
+    } catch {
+      setRatingsCopyState('fail');
+    }
+    window.setTimeout(() => setRatingsCopyState('idle'), 1800);
+  };
 
   /* ── 5.77.0 — the bin's bill: what the shelf threw away, in rupees ── */
 
@@ -3568,16 +3784,49 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
             <section className="sp-card p-5 xl:col-span-2" aria-label="Guest satisfaction">
               <div className="mb-1 flex items-center justify-between gap-2">
                 <h2 className="text-[15px] font-bold text-[#1A1A1A]">Guest satisfaction</h2>
-                <button
-                  onClick={exportRatings}
-                  disabled={fbAgg.count === 0}
-                  aria-label="Export guest ratings as CSV"
-                  title="Export the range's guest ratings as CSV"
-                  className="flex h-11 shrink-0 items-center gap-1.5 rounded-xl border border-[#E3E7E0] bg-white px-3 text-[12.5px] font-bold text-[#0F3D3E] transition hover:border-[#B88E2F] hover:text-[#B88E2F] disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  <Download size={14} aria-hidden />
-                  CSV
-                </button>
+                {fbAgg.count > 0 && (
+                  <div className="flex shrink-0 items-center gap-1.5">
+                    <button
+                      onClick={copyRatings}
+                      aria-live="polite"
+                      aria-label="Copy the guest voices as text"
+                      title="Copy what guests said this range as text"
+                      className="inline-flex h-11 shrink-0 items-center gap-1.5 rounded-xl border border-[#E3E7E0] bg-white px-3 text-[12.5px] font-bold text-[#0F3D3E] transition hover:border-[#B88E2F] hover:text-[#B88E2F] active:scale-[0.97]"
+                    >
+                      {ratingsCopyState === 'ok' ? (
+                        <Check size={14} aria-hidden />
+                      ) : (
+                        <Copy size={14} aria-hidden />
+                      )}
+                      {ratingsCopyState === 'ok'
+                        ? 'Copied'
+                        : ratingsCopyState === 'fail'
+                          ? 'Copy blocked'
+                          : 'Copy'}
+                    </button>
+                    <a
+                      href={`https://wa.me/?text=${encodeURIComponent(ratingsText)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      aria-label="Share the guest voices on WhatsApp"
+                      title="Share what guests said this range on WhatsApp"
+                      className="inline-flex h-11 shrink-0 items-center gap-1.5 rounded-xl border border-[#E3E7E0] bg-white px-3 text-[12.5px] font-bold text-[#0F3D3E] transition hover:border-[#B88E2F] hover:text-[#B88E2F] active:scale-[0.97]"
+                    >
+                      <MessageCircle size={14} aria-hidden />
+                      WhatsApp
+                    </a>
+                    <button
+                      onClick={exportRatings}
+                      disabled={fbAgg.count === 0}
+                      aria-label="Export guest ratings as CSV"
+                      title="Export the range's guest ratings as CSV"
+                      className="flex h-11 shrink-0 items-center gap-1.5 rounded-xl border border-[#E3E7E0] bg-white px-3 text-[12.5px] font-bold text-[#0F3D3E] transition hover:border-[#B88E2F] hover:text-[#B88E2F] disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      <Download size={14} aria-hidden />
+                      CSV
+                    </button>
+                  </div>
+                )}
               </div>
               <p className="mb-4 text-[11.5px] text-[#969696]">
                 Star ratings guests leave on their own phones, from the order's track page —
@@ -3701,20 +3950,31 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
                       <ul className="mt-2.5 flex flex-col gap-2">
                         {fbAgg.low.map((f) => {
                           const who = f.customer_name || (f.customer_phone ? f.customer_phone : null);
+                          /* severity storytelling: ≤2★ is the bell's alarm
+                           * (030's trigger — red), 3★ is the "meh" that still
+                           * deserves a name (amber). Same row, honest tier. */
+                          const alarm = f.rating <= 2;
                           return (
                             <li
                               key={`low-${f.order_number}-${f.created_at}`}
-                              className="rounded-r-lg border-l-2 border-[#B3261E] bg-[#FBFBF9] py-2 pl-3 pr-2.5"
+                              className={`rounded-r-lg border-l-2 py-2 pl-3 pr-2.5 ${
+                                alarm ? 'border-[#B3261E] bg-[#FDF7F6]' : 'border-[#C9A227] bg-[#FDFBF5]'
+                              }`}
                             >
                               <div className="flex items-start gap-2">
                                 <div className="min-w-0 flex-1">
                                   <div className="flex items-center gap-1.5">
                                     <span
-                                      className="inline-flex shrink-0 items-center gap-0.5 text-[10.5px] font-bold tabular-nums text-[#B3261E]"
+                                      className={`inline-flex shrink-0 items-center gap-0.5 text-[10.5px] font-bold tabular-nums ${alarm ? 'text-[#B3261E]' : 'text-[#8A6D1F]'}`}
                                       aria-label={`${f.rating} star rating`}
                                     >
                                       {Array.from({ length: f.rating }).map((_, i) => (
-                                        <Star key={i} size={10} aria-hidden className="fill-[#B3261E] text-[#B3261E]" />
+                                        <Star
+                                          key={i}
+                                          size={10}
+                                          aria-hidden
+                                          className={alarm ? 'fill-[#B3261E] text-[#B3261E]' : 'fill-[#C9A227] text-[#C9A227]'}
+                                        />
                                       ))}
                                       {f.rating}
                                     </span>
