@@ -10,3 +10,7 @@ dist/
 preview.log
 preview.pid
 tsbuildinfo
+
+# vite dev-server runtime logs (cron snapshot sweep guard)
+dev.err.log
+dev.log
