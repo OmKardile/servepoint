@@ -3,6 +3,8 @@ import {
   BadgePercent,
   CalendarClock,
   Check,
+  ChevronDown,
+  ChevronUp,
   Copy,
   Crown,
   Download,
@@ -13,6 +15,7 @@ import {
   Pencil,
   Phone,
   Plus,
+  ReceiptText,
   RefreshCw,
   Repeat,
   Search,
@@ -41,6 +44,7 @@ import {
   updateOffer,
   type CustomerInput,
   type OfferInput,
+  type OfferRedemptionRow,
   type RealtimeState,
   type Reservation,
   type ReservationStatus,
@@ -307,6 +311,68 @@ export function offerGivenAway(
   return m;
 }
 
+/** ── v5.206.0 — the ledger, sliced by offer ─────────────────────────
+ *  The offer card's usage drawer reads THE SAME read as the tally and
+ *  the cost (5.190 + 5.197's one-read doctrine): fetchOfferRedemptions
+ *  arrives newest-first across ALL offers; the drawer speaks ONE
+ *  offer's rows. This slicer buckets them by offerId and PRESERVES the
+ *  read's own order inside every bucket — the drawer renders newest
+ *  first because the LEDGER said so, never because a local sort
+ *  guessed it (the 5.190 max-loop's lesson: never trust the sort
+ *  order implicitly, but when the contract itself promises
+ *  `.order('created_at', { ascending: false })`, preserving it IS the
+ *  honest move — a re-sort would be a second clock). Exported pure so
+ *  the suite owns the bucketing. An offer with no rows simply gets no
+ *  key — the card's ledger door stays silent (silence is not zero). */
+export function redemptionsByOffer(
+  rows: OfferRedemptionRow[],
+): Map<string, OfferRedemptionRow[]> {
+  const m = new Map<string, OfferRedemptionRow[]>();
+  for (const r of rows) {
+    const list = m.get(r.offerId) || [];
+    list.push(r);
+    m.set(r.offerId, list);
+  }
+  return m;
+}
+
+/** ── v5.206.0 — the drawer's footer arithmetic ──────────────────────
+ *  One offer's rows in, the drawer's average voice out: count, the
+ *  given sum (the SAME sum offerGivenAway speaks on the chip — one
+ *  reducer family, one arithmetic), the average take per redemption,
+ *  and the average ticket the offer landed on. The average ticket is
+ *  computed over the rows that CARRY a total only — an orphaned ticket
+ *  (rare, the 5.71 docstring's own caveat) contributes its discount to
+ *  the take but stays out of the ticket average, because a null total
+ *  is not a ₹0 ticket (silence is not zero). All rows null-total →
+ *  avgTicket null → the footer speaks the per-redemption voice and no
+ *  ticket register is invented. Empty rows → null — the drawer never
+ *  opens on an empty ledger (the door's own guard is `rows.length >
+ *  0`, but the suite owns this too: a reducer that returns null on
+ *  empty makes the silence STRUCTURAL, not a rendering accident). */
+export function offerUsageStats(
+  rows: { discountAmount: number | string | null; orderTotal: number | string | null }[],
+): { count: number; given: number; avgOff: number; avgTicket: number | null } | null {
+  if (!rows || rows.length === 0) return null;
+  let given = 0;
+  let ticketSum = 0;
+  let ticketN = 0;
+  for (const r of rows) {
+    given += Number(r.discountAmount ?? 0);
+    if (r.orderTotal != null) {
+      ticketSum += Number(r.orderTotal);
+      ticketN += 1;
+    }
+  }
+  const count = rows.length;
+  return {
+    count,
+    given,
+    avgOff: given / count,
+    avgTicket: ticketN > 0 ? ticketSum / ticketN : null,
+  };
+}
+
 /** ── v5.190.0 — the usage fact's full sentence ───────────────────────
  *  The card's date clause rides a hover title and an aria name; both
  *  compose from THIS function so the suite reads the exact sentences the
@@ -564,6 +630,12 @@ const GuestsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry })
    * becomes an invented ₹0, and an offer with no rows never wears a
    * cost chip (silence is not zero — only a row with 0.00 speaks it). */
   const [givenAway, setGivenAway] = useState<Map<string, number> | null>(null);
+  /* v5.206.0 — the ledger itself, kept whole: the SAME read that dates the
+   * tally (5.190) and costs it (5.197) now rides into the offers tab with
+   * every row intact, so each offer card can open its OWN usage drawer.
+   * null = the ledger unread (or could not): every drawer door stays
+   * SILENT — an unread ledger never becomes an invented empty book. */
+  const [redemptions, setRedemptions] = useState<OfferRedemptionRow[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [rt, setRt] = useState<RealtimeState>('connecting');
@@ -640,10 +712,15 @@ const GuestsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry })
          * in every read and being discarded. ONE read, TWO derivations,
          * the reducer suite-owned. */
         setGivenAway(offerGivenAway(rows));
+        /* v5.206.0 — the same rows, kept whole for the drawer: ONE read,
+         * now THREE facts (the date, the cost, the ledger itself). The
+         * slicer runs in the card's own memo — the read stays raw here. */
+        setRedemptions(rows);
       })
       .catch(() => {
         setLastUsed(null);
         setGivenAway(null);
+        setRedemptions(null);
       });
   }, [tenantId]);
 
@@ -690,6 +767,14 @@ const GuestsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry })
     }
     return map;
   }, [book, guests, bookTick]);
+
+  /* v5.206.0 — the ledger sliced by offer, ONE memo off the raw ride:
+   * the map the drawer doors read. Rebuilt only when the ledger itself
+   * changes (the 30s CRM poll re-reads; the slicer is pure). */
+  const ledgerByOffer = useMemo(
+    () => (redemptions ? redemptionsByOffer(redemptions) : null),
+    [redemptions],
+  );
 
   /* mutations ─────────────────────────────────────────────────────────── */
 
@@ -1003,6 +1088,7 @@ const GuestsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry })
           storeName={tenant?.name || 'ServePoint store'}
           lastUsed={lastUsed}
           givenAway={givenAway}
+          ledgerByOffer={ledgerByOffer}
         />
       )}
 
@@ -1389,11 +1475,28 @@ const OffersTab: React.FC<{
    * discount_amount); null = the ledger unread, no key = no rows —
    * both keep the cost chip silent. */
   givenAway: Map<string, number> | null;
-}> = ({ offers, loading, onEdit, onToggle, onDelete, deleteArm, setDeleteArm, busyId, activeOffers, storeName, lastUsed, givenAway }) => {
+  /* v5.206.0 — the ledger itself, sliced by offer (offerId → that
+   * offer's redemption rows, the read's own newest-first order kept);
+   * null = the ledger unread — every ledger door stays silent, an
+   * offer with no key gets no door at all (silence is not zero). */
+  ledgerByOffer: Map<string, OfferRedemptionRow[]> | null;
+}> = ({ offers, loading, onEdit, onToggle, onDelete, deleteArm, setDeleteArm, busyId, activeOffers, storeName, lastUsed, givenAway, ledgerByOffer }) => {
   /* v5.149.0 — per-card copy feedback: one state cell keyed by offer id,
    * ok/fail honest (headless and denied-permission browsers say so), the
    * 1.8s reset the bill's copy button taught (5.145.0). */
   const [offerCopy, setOfferCopy] = useState<{ id: string; ok: boolean } | null>(null);
+  /* v5.206.0 — which ledger drawers stand open: a Set of offer ids, one
+   * honest toggle per card (open many, compare freely; the chevron says
+   * which way each door faces). */
+  const [ledgerOpen, setLedgerOpen] = useState<Set<string>>(new Set());
+  const toggleLedger = (id: string) => {
+    setLedgerOpen((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
   const copyOffer = async (o: Offer) => {
     try {
       if (!navigator.clipboard?.writeText) throw new Error('clipboard unavailable');
@@ -1446,6 +1549,13 @@ const OffersTab: React.FC<{
              * spoke for this offer), a present 0.00 stays 0.00 (the ledger
              * spoke a provable zero, the chip says so). */
             const givenRupees = givenAway?.get(o.id) ?? null;
+            /* v5.206.0 — the card's own ledger slice: the rows THIS offer
+             * wrote, the read's newest-first order kept. No key → no door
+             * (an offer the ledger never spoke for stays silent); the
+             * stats ride the same rows for the drawer's footer voice. */
+            const usageRows = ledgerByOffer?.get(o.id) ?? null;
+            const usageStats = offerUsageStats(usageRows ?? []);
+            const ledgerOpenThis = ledgerOpen.has(o.id);
             return (
               <div
                 key={o.id}
@@ -1526,7 +1636,94 @@ const OffersTab: React.FC<{
                           {formatMoney(givenRupees)} given
                         </span>
                       )}
+                      {/* v5.206.0 — the ledger's door: present only when the
+                          ledger has rows for THIS offer (silence, never an
+                          empty drawer); the count on the door is the same
+                          count the tally chip speaks (one arithmetic). The
+                          chevron faces the door's truth — down = closed,
+                          up = open. aria-expanded, no dangling aria-controls
+                          (the region exists only while open). */}
+                      {usageRows && usageRows.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => toggleLedger(o.id)}
+                          aria-expanded={ledgerOpenThis}
+                          aria-label={`${ledgerOpenThis ? 'Hide' : 'Show'} the usage ledger for ${o.title} — ${usageRows.length} redemption${usageRows.length === 1 ? '' : 's'}`}
+                          className={`ml-auto inline-flex h-6.5 items-center gap-1 rounded-lg border px-2 text-[11px] font-semibold transition active:scale-[0.98] ${
+                            ledgerOpenThis
+                              ? 'border-[#B88E2F]/50 bg-[#FBF7EC] text-[#8A5A00]'
+                              : 'border-[#E3E7E0] bg-white text-[#6B6B6B] hover:border-[#B88E2F]/40 hover:text-[#8A5A00]'
+                          }`}
+                        >
+                          <ReceiptText size={12} aria-hidden className="shrink-0" />
+                          ledger
+                          {ledgerOpenThis ? (
+                            <ChevronUp size={12} aria-hidden className="shrink-0" />
+                          ) : (
+                            <ChevronDown size={12} aria-hidden className="shrink-0" />
+                          )}
+                        </button>
+                      )}
                     </div>
+                    {/* v5.206.0 — the drawer itself: the offer's own book of
+                        redemptions, newest first (the ledger's order, not a
+                        local sort). Each row names BOTH its rupee registers
+                        (5.199's rule at drawer scale): the gold "off" (what
+                        the offer took) and the grey "a ₹X ticket" (what the
+                        ticket walked in with); the row's own ago-voice rides
+                        right, the full stamp in the title. An orphaned row
+                        (no order total) speaks its take and keeps its
+                        silence about the ticket — a missing total is not a
+                        ₹0 ticket. Footer: the average voice from the
+                        suite-owned reducer — "avg ₹X off a ₹Y ticket" when
+                        the ledger carried totals, "avg ₹X off per
+                        redemption" when it did not (a null average never
+                        becomes an invented ₹0). */}
+                    {ledgerOpenThis && usageRows && usageRows.length > 0 && (
+                      <div
+                        className="mt-3 rounded-xl border border-[#EFE3CC] bg-[#FBF9F4] px-3 py-2"
+                        role="region"
+                        aria-label={`Usage ledger for ${o.title}`}
+                        style={{ animation: 'spFadeIn 160ms ease-out' }}
+                      >
+                        <ul className="m-0 list-none p-0">
+                          {usageRows.map((r, i) => (
+                            <li
+                              key={`${r.offerId}-${r.createdAt}-${i}`}
+                              className="flex items-center justify-between gap-2 border-b border-[#EFE3CC]/70 py-1.5 last:border-b-0"
+                              title={`redeemed ${dayTime(r.createdAt)}`}
+                            >
+                              <span className="shrink-0 text-[11.5px] font-semibold tabular-nums text-[#8A5A00]">
+                                {formatMoney(r.discountAmount)} off
+                              </span>
+                              {r.orderTotal != null && (
+                                <span className="min-w-0 truncate text-[11px] tabular-nums text-[#6B6B6B]">
+                                  a {formatMoney(r.orderTotal)} ticket
+                                </span>
+                              )}
+                              <span className="ml-auto shrink-0 text-[11px] tabular-nums text-[#969696]">
+                                {usedAgo(r.createdAt, Date.now())}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                        {usageStats && (
+                          <p
+                            className="mb-0 mt-1.5 border-t border-[#EFE3CC] pt-1.5 text-[11px] font-medium tabular-nums text-[#8A5A00]"
+                            title={
+                              usageStats.avgTicket != null
+                                ? `average take ${formatMoney(usageStats.avgOff)} across ${usageStats.count} redemption${usageStats.count === 1 ? '' : 's'}, average ticket ${formatMoney(usageStats.avgTicket)}`
+                                : `average take ${formatMoney(usageStats.avgOff)} across ${usageStats.count} redemption${usageStats.count === 1 ? '' : 's'}`
+                            }
+                          >
+                            avg {formatMoney(usageStats.avgOff)} off{' '}
+                            {usageStats.avgTicket != null
+                              ? `a ${formatMoney(usageStats.avgTicket)} ticket`
+                              : 'per redemption'}
+                          </p>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
                 {/* v5.149.0 — the card's actions gather under one rule: what
