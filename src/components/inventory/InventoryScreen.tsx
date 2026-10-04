@@ -6,6 +6,7 @@ import {
   ChevronDown,
   ClipboardCheck,
   ClipboardList,
+  Clock,
   Copy,
   Download,
   Layers,
@@ -49,9 +50,9 @@ import {
   type StockAdjustmentReason,
   type StockDeduction,
 } from '../../lib/api';
-import { computeTopMovers, MOVER_WINDOW_DAYS, type Mover } from '../../lib/movers';
+import { computePaceByItem, computeTopMovers, MOVER_WINDOW_DAYS, type Mover } from '../../lib/movers';
 import { formatMoney } from '../../lib/prefs';
-import { LOW_COVER, shelfCoverage } from '../../lib/shelf';
+import { LOW_COVER, shelfCoverage, shelfDaysClause } from '../../lib/shelf';
 import { downloadCsv } from '../../lib/csv';
 import { appTodayIso, appFormatters, appTzTag } from '../../lib/appday';
 import { useDialogA11y } from '../../lib/useDialogA11y';
@@ -76,7 +77,11 @@ import type { MenuItem } from '../../types';
  *      bin short, Cover opens the delivery that fills the gap through the
  *      027 RPC (5.165–5.169). The plan prints: the production sheet (CSV /
  *      copy) speaks the same words the strip does. No recipe ⇒ that item
- *      moves no stock (stated honestly in the UI).
+ *      moves no stock (stated honestly in the UI). 5.174.0 — the planner
+ *      learns the room's own answer to "how big?": the weekBatch preset
+ *      reads the dish's paid units over the movers' window, and the shelf
+ *      strip's answer grows the days clause (shelfDaysClause) the counter
+ *      and the menu already speak — the pace reaches the back office.
  *   3. REORDER — what to buy this week: the stock_deductions ledger prices
  *      each SKU's burn per day (last 14 days), converts to days-left meters
  *      and a 7-day-cover shopping list with estimated cost (copy/CSV).
@@ -338,6 +343,21 @@ export function coverPlan(n: BatchNeed): CoverPlan {
   return { gap, pull: n.need, afterGap: n.have + gap - n.need, afterPull: n.have };
 }
 
+/* ── The week's batch (v5.174.0) — the planner's preset, set by the room ──
+ *
+ *   "How big should a batch be?" — the paid ledger has been answering all
+ *   along: the units the dish actually sold over the movers' window. The
+ *   preset hands that number to the ×N stepper; the operator keeps the
+ *   last word (the stepper, the verdict and the Cover button all still
+ *   read whatever N stands). null when nobody bought the dish this week
+ *   (or the pace hasn't landed) — the planner never invents demand.
+ */
+export function weekBatch(pace: Map<string, number> | null, menuItemId: string | null): number | null {
+  if (!pace || !menuItemId) return null;
+  const units = pace.get(menuItemId) ?? 0;
+  return units > 0 ? units : null;
+}
+
 /* ── The production sheet (v5.169.0) — the batch plan's paper voice ──
  *
  *   5.167.0 planned the batch, 5.168.0 covered its shortfall — but the
@@ -526,6 +546,11 @@ const InventoryInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
    * failed read — the shelf view never waits on the ledger, and a quiet
    * week prints no rows (never a lie). */
   const [movers, setMovers] = useState<Mover[] | null>(null);
+  /* v5.174.0 — the pace behind the week's batch: units per dish over the
+   * movers' window, WHOLE menu (computePaceByItem, the same read the
+   * counter and the menu sheet ride). Set alongside the shortlist from
+   * the same paid rows; null = not read — the planner never invents. */
+  const [pace, setPace] = useState<Map<string, number> | null>(null);
   const [wasteFor, setWasteFor] = useState<InventoryItem | null>(null);
   const [countOpen, setCountOpen] = useState(false);
   const [deleteArm, setDeleteArm] = useState<string | null>(null);
@@ -567,10 +592,18 @@ const InventoryInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
     let alive = true;
     fetchPaidMoverLines(tenantId, MOVER_WINDOW_DAYS)
       .then((rows) => {
-        if (alive) setMovers(computeTopMovers(rows));
+        if (alive) {
+          setMovers(computeTopMovers(rows));
+          /* 5.174.0 — the pace rides the same paid rows: the shelf's
+             movers section and the planner's week preset read ONE ledger. */
+          setPace(computePaceByItem(rows));
+        }
       })
       .catch(() => {
-        if (alive) setMovers([]);
+        if (alive) {
+          setMovers([]);
+          setPace(new Map());
+        }
       });
     return () => {
       alive = false;
@@ -1365,6 +1398,7 @@ const InventoryInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
           onSave={saveRecipe}
           onCover={(item, qty, why) => setRestockFor({ item, suggested: qty, why })}
           storeName={tenant?.name || 'ServePoint store'}
+          pace={pace}
         />
       ) : (
         <ReorderBoard
@@ -1496,7 +1530,11 @@ const RecipeBoard: React.FC<{
   /* 5.169.0 — the production sheet's masthead: the same store name the
    * shopping list prints. */
   storeName: string;
-}> = ({ items, menuItems, recipes, onSave, onCover, storeName }) => {
+  /* 5.174.0 — the paid week's pace per dish (whole menu, computePaceByItem).
+   * Feeds the planner's week preset and the shelf strip's days line; null
+   * = not read — both voices stay silent, never an invented number. */
+  pace: Map<string, number> | null;
+}> = ({ items, menuItems, recipes, onSave, onCover, storeName, pace }) => {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [draft, setDraft] = useState<{ inventory_item_id: string; qty_per_serve: number }[]>([]);
   const [dirty, setDirty] = useState(false);
@@ -1561,6 +1599,12 @@ const RecipeBoard: React.FC<{
   const batchPlan = useMemo(() => batchNeeds(draft, items, batch), [draft, items, batch]);
   const batchFits =
     shelfRead.unknown || shelfRead.coverage == null ? null : shelfRead.coverage >= batch;
+  /* v5.174.0 — the room's own answer to "how big?": the dish's paid units
+   * over the movers' window (weekBatch), and the shelf's answer timed
+   * (shelfDaysClause — the same voice the counter's rail speaks). Both
+   * silent when the pace hasn't landed or nobody bought the dish. */
+  const weekUnits = weekBatch(pace, effectiveId);
+  const daysRead = shelfDaysClause(shelfRead.coverage, pace?.get(effectiveId) ?? null);
   /* v5.169.0 — the production sheet: ONE assembly feeds Copy and CSV both
    * (the 5.146.0 rule, batch edition) — the words and the cells read the
    * same numbers the screen renders, and the verdict is THE sentence
@@ -1846,6 +1890,18 @@ const RecipeBoard: React.FC<{
               `${shelfRead.thin?.name ?? 'A SKU'} binds first — the shelf holds ~${shelfRead.coverage} more serves.`
             )}
           </p>
+          {/* 5.174.0 — the answer, timed: the same days clause the counter's
+              rail and the menu sheet speak (shelfDaysClause, ONE math).
+              Serves say how many; the paid week's pace says how long. */}
+          {daysRead && (
+            <p
+              className="mt-1 flex items-center gap-1 text-[11px] font-semibold tabular-nums text-[#6B6B6B]"
+              title="Days of cover at the paid week's pace (the shelf's answer ÷ that pace) — the same voice the counter's rail speaks"
+            >
+              <Clock size={11} aria-hidden />
+              {daysRead}
+            </p>
+          )}
         </div>
       )}
 
@@ -1855,6 +1911,21 @@ const RecipeBoard: React.FC<{
             <p className="text-[10.5px] font-semibold uppercase tracking-wide text-[#6B6B6B]">
               Plan a batch
             </p>
+            {/* 5.174.0 — the week's batch, preset by the room: the dish's paid
+                units over the movers' window (weekBatch), one tap onto the
+                stepper. Hidden when the pace is silent or already standing —
+                the planner never invents demand, and never repeats itself. */}
+            {weekUnits !== null && weekUnits !== batch && (
+              <button
+                onClick={() => setBatch(weekUnits)}
+                aria-label={`Set the batch to ${weekUnits} — the week's paid demand for ${selected?.name ?? 'this dish'}`}
+                title={`The paid ledger sold ${weekUnits} × ${selected?.name ?? 'this dish'} over the last ${MOVER_WINDOW_DAYS} days — one tap plans the week's batch. The stepper and the Cover button still read whatever stands.`}
+                className="flex h-6 items-center gap-1 rounded-full border border-[#E3E7E0] bg-white px-2 text-[10.5px] font-bold text-[#8A5A00] transition hover:border-[#B88E2F] hover:text-[#B88E2F] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#967221]"
+              >
+                <Clock size={10} aria-hidden />
+                the week sold {weekUnits} · plan it
+              </button>
+            )}
             <div className="flex items-center gap-1" role="group" aria-label="Batch size">
               <button
                 onClick={() => setBatch((b) => Math.max(1, b - 1))}
