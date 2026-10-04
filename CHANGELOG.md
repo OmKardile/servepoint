@@ -3,6 +3,17 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.143.0] — 2026-10-04 — The app boots with what the boot needs
+
+### Added — screen-level code splitting (`src/App.tsx`, new `src/components/shell/ScreenSkeleton.tsx`)
+
+All fourteen staff screens, the platform console and the whole guest module sat in ONE eager index chunk (843.69 KB raw / ~200 KB gzip), and the recharts vendor chunk (407 KB more, gzip 116 KB) loaded at boot because three screens import it — every counter tablet parsed ~1.2 MB of screens it was not looking at, on every boot, before first paint. Now every screen is a door that loads when it is walked through: the eager graph is the shell, the auth gate, the porch pages, the 404 register and a new house-voiced `ScreenSkeleton` (the Splash's pulsing neutrals at screen scale, `role=status`). Boot-critical JS dropped to ~534 KB raw / ~155 KB gzip (65% lighter); first paint no longer blocks on recharts — the landing card streams in after the shell paints; the fourteen door chunks + Platform + GuestPages (~662 KB raw) fetch on first tap and cache forever. A failed chunk import (offline cache miss) rejects into THAT door's `ScreenBoundary` — "hit a snag" with Try again — while the shell stays up: v5.138.0 composes with the split. **Eager on purpose, with reasons recorded in the code:** NotFoundPage (the emergency register must never wait on a fetch) and the porch pages (marketing first paint). The SW's build-time injector picked up all 41 assets (was 12) — every async chunk is precached, so offline boots still find their doors.
+
+### Verified
+
+tsc EXIT=0 (/tmp/tsc182a.log), build EXIT=0 (/tmp/build182a.log). Dev E2E: all fourteen rail doors walked — every lazy screen renders and the per-screen tab-title register fires. PROD E2E (vite preview): boot resource audit shows only the eager set + Dashboard's chart stream — Floor (105 KB), Reports (84 KB), GuestPages (73 KB) et al. load on demand; the public guest deep link fetched the lazy GuestPages chunk with no auth and rendered its honest gate error. Offline warm drill (server killed): `/` boots the shell + auth gate from the SW cache, and the lazy guest chunk serves from ASSET_CACHE — async chunks are offline-first-class. READ-ONLY round (zero cloud writes; the PROD preview ran unauthenticated).
+
+
 ## [5.142.0] — 2026-10-04 — Even offline, the house speaks
 
 ### Fixed — the shell's static assets were precached into a cache nobody reads (`public/sw.js`)

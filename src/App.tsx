@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { lazy, Suspense, useEffect, useState } from 'react';
 import { authService } from './lib/authService';
 import { pingPresence } from './lib/api';
 import { normalizeRole } from './lib/rbac';
@@ -8,27 +8,48 @@ import { SECTION_LABELS } from './components/shell/Sidebar';
 import { AuthScreen } from './components/auth/AuthScreen';
 import { AppShell } from './components/shell/AppShell';
 import { NoWorkspaceScreen } from './components/shell/NoWorkspaceScreen';
-import { DashboardScreen } from './components/dashboard/DashboardScreen';
-import { FoodDrinksScreen } from './components/food/FoodDrinksScreen';
-import { BillsScreen } from './components/bills/BillsScreen';
-import { EodScreen } from './components/eod/EodScreen';
-import { ReportsScreen } from './components/reports/ReportsScreen';
-import { InventoryScreen } from './components/inventory/InventoryScreen';
-import { CustomersScreen } from './components/customers/CustomersScreen';
-import { KitchenScreen } from './components/kitchen/KitchenScreen';
-import { FloorScreen } from './components/floor/FloorScreen';
-import { MenuScreen } from './components/menu/MenuScreen';
-import { NotificationsScreen } from './components/notifications/NotificationsScreen';
-import { MessagesScreen } from './components/messages/MessagesScreen';
-import { SupportScreen } from './components/support/SupportScreen';
-import { SettingsScreen } from './components/settings/SettingsScreen';
-import { PlatformScreen } from './components/platform/PlatformScreen';
+import ScreenSkeleton from './components/shell/ScreenSkeleton';
+import { PwaLayer } from './components/shell/PwaLayer';
+import { ScreenBoundary } from './components/shell/ScreenBoundary';
+
+/* v5.143.0 — the app boots with what the boot needs. Every staff screen (and
+ *  the platform console and the guest surfaces) is a door that loads when it
+ *  is walked through: before this release all fourteen screens plus the whole
+ *  guest module sat in ONE eager 843KB index chunk, and the recharts vendor
+ *  chunk (407KB more) loaded at boot because three screens import it — every
+ *  counter tablet parsed ~1.2MB of screens it was not looking at. Now the
+ *  eager graph is the shell, the auth gate, the porch pages, the 404 register
+ *  and the skeleton; screens fetch on first tap (instant once the SW precache
+ *  is warm — the build's injector adds every async chunk to the precache
+ *  manifest automatically). A failed chunk import (offline cache miss)
+ *  rejects into THAT door's ScreenBoundary — "hit a snag" with Try again —
+ *  while the shell stays up. Eager-on-purpose: NotFoundPage (the emergency
+ *  register must never wait on a fetch) and the porch (marketing first
+ *  paint). */
+const DashboardScreen = lazy(() => import('./components/dashboard/DashboardScreen').then((m) => ({ default: m.DashboardScreen })));
+const FoodDrinksScreen = lazy(() => import('./components/food/FoodDrinksScreen').then((m) => ({ default: m.FoodDrinksScreen })));
+const BillsScreen = lazy(() => import('./components/bills/BillsScreen').then((m) => ({ default: m.BillsScreen })));
+const EodScreen = lazy(() => import('./components/eod/EodScreen').then((m) => ({ default: m.EodScreen })));
+const ReportsScreen = lazy(() => import('./components/reports/ReportsScreen').then((m) => ({ default: m.ReportsScreen })));
+const InventoryScreen = lazy(() => import('./components/inventory/InventoryScreen').then((m) => ({ default: m.InventoryScreen })));
+const CustomersScreen = lazy(() => import('./components/customers/CustomersScreen').then((m) => ({ default: m.CustomersScreen })));
+const KitchenScreen = lazy(() => import('./components/kitchen/KitchenScreen').then((m) => ({ default: m.KitchenScreen })));
+const FloorScreen = lazy(() => import('./components/floor/FloorScreen').then((m) => ({ default: m.FloorScreen })));
+const MenuScreen = lazy(() => import('./components/menu/MenuScreen').then((m) => ({ default: m.MenuScreen })));
+const NotificationsScreen = lazy(() => import('./components/notifications/NotificationsScreen').then((m) => ({ default: m.NotificationsScreen })));
+const MessagesScreen = lazy(() => import('./components/messages/MessagesScreen').then((m) => ({ default: m.MessagesScreen })));
+const SupportScreen = lazy(() => import('./components/support/SupportScreen').then((m) => ({ default: m.SupportScreen })));
+const SettingsScreen = lazy(() => import('./components/settings/SettingsScreen').then((m) => ({ default: m.SettingsScreen })));
+const PlatformScreen = lazy(() => import('./components/platform/PlatformScreen').then((m) => ({ default: m.PlatformScreen })));
+const guestModule = () => import('./components/guest/GuestPages');
+const GuestGatePage = lazy(() => guestModule().then((m) => ({ default: m.GuestGatePage })));
+const GuestMenuPage = lazy(() => guestModule().then((m) => ({ default: m.GuestMenuPage })));
+const GuestTrackPage = lazy(() => guestModule().then((m) => ({ default: m.GuestTrackPage })));
+// Eager on purpose: the porch is first-paint marketing, and the 404 is the
+// emergency register — neither may wait on a chunk fetch.
 import ShowcasePage from './components/pages/ShowcasePage';
 import IndexHelpPage from './components/pages/IndexHelpPage';
 import NotFoundPage from './components/pages/NotFoundPage';
-import { GuestGatePage, GuestMenuPage, GuestTrackPage } from './components/guest/GuestPages';
-import { PwaLayer } from './components/shell/PwaLayer';
-import { ScreenBoundary } from './components/shell/ScreenBoundary';
 import brandLockup from './assets/brand/lockup-light.png';
 
 /* v5.93.0 — the sidebar's words are the URLs. Two rail names differ from
@@ -153,20 +174,26 @@ const CafeApp: React.FC = () => {
           screen (key={section} gives each door a fresh one), so a render error
           takes the content card, never the shell. See ScreenBoundary's header. */}
       <ScreenBoundary key={section} section={section}>
-        {section === 'dashboard' && <DashboardScreen />}
-        {section === 'food' && <FoodDrinksScreen />}
-        {section === 'kitchen' && <KitchenScreen />}
-        {section === 'bills' && <BillsScreen />}
-        {section === 'eod' && <EodScreen />}
-        {section === 'reports' && <ReportsScreen />}
-        {section === 'inventory' && <InventoryScreen />}
-        {section === 'customers' && <CustomersScreen />}
-        {section === 'floor' && <FloorScreen />}
-        {section === 'menu' && <MenuScreen />}
-        {section === 'notifications' && <NotificationsScreen />}
-        {section === 'messages' && <MessagesScreen />}
-        {section === 'support' && <SupportScreen />}
-        {section === 'settings' && <SettingsScreen />}
+        {/* v5.143.0 — the skeleton lives INSIDE the boundary: a chunk that
+            fails to load rejects into THIS door's boundary (the honest snag
+            card with Try again), while the shell and every other door stay
+            up. The skeleton itself is the content card's quiet silhouette. */}
+        <Suspense fallback={<ScreenSkeleton />}>
+          {section === 'dashboard' && <DashboardScreen />}
+          {section === 'food' && <FoodDrinksScreen />}
+          {section === 'kitchen' && <KitchenScreen />}
+          {section === 'bills' && <BillsScreen />}
+          {section === 'eod' && <EodScreen />}
+          {section === 'reports' && <ReportsScreen />}
+          {section === 'inventory' && <InventoryScreen />}
+          {section === 'customers' && <CustomersScreen />}
+          {section === 'floor' && <FloorScreen />}
+          {section === 'menu' && <MenuScreen />}
+          {section === 'notifications' && <NotificationsScreen />}
+          {section === 'messages' && <MessagesScreen />}
+          {section === 'support' && <SupportScreen />}
+          {section === 'settings' && <SettingsScreen />}
+        </Suspense>
       </ScreenBoundary>
     </AppShell>
   );
@@ -203,9 +230,17 @@ const AppRoutes: React.FC = () => {
   if (pathname === '/index-help' || pathname === '/help') return <IndexHelpPage />;
   // Guest QR surfaces (v5.3.0) — public, no session, capabilities only:
   // /t/:qr_token (table gate) · /menu/:qr_token (menu + cart) · /track/:orderId (pager).
-  if (pathname.startsWith('/t/')) return <GuestGatePage qrToken={decodeURIComponent(pathname.split('/')[2] || '')} />;
-  if (pathname.startsWith('/menu/')) return <GuestMenuPage qrToken={decodeURIComponent(pathname.split('/')[2] || '')} />;
-  if (pathname.startsWith('/track/')) return <GuestTrackPage orderId={decodeURIComponent(pathname.split('/')[2] || '')} />;
+  // v5.143.0 — lazy chunk + Splash while it fetches (SW precache makes this
+  // instant warm; cold QR scans pay one fetch for a much lighter eager boot).
+  if (pathname.startsWith('/t/')) {
+    return <Suspense fallback={<Splash />}><GuestGatePage qrToken={decodeURIComponent(pathname.split('/')[2] || '')} /></Suspense>;
+  }
+  if (pathname.startsWith('/menu/')) {
+    return <Suspense fallback={<Splash />}><GuestMenuPage qrToken={decodeURIComponent(pathname.split('/')[2] || '')} /></Suspense>;
+  }
+  if (pathname.startsWith('/track/')) {
+    return <Suspense fallback={<Splash />}><GuestTrackPage orderId={decodeURIComponent(pathname.split('/')[2] || '')} /></Suspense>;
+  }
 
   /* v5.141.0 — no address goes unacknowledged. Every path that is not the
    *  staff root, a porch page, a guest surface, or a staff deep link speaking
@@ -230,7 +265,9 @@ const AppRoutes: React.FC = () => {
     );
   }
 
-  if (session.role === 'superadmin') return <PlatformScreen />;
+  if (session.role === 'superadmin') {
+    return <Suspense fallback={<Splash />}><PlatformScreen /></Suspense>;
+  }
 
   return <CafeApp />;
 };
