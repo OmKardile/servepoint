@@ -6,6 +6,7 @@ import {
   ChefHat,
   CircleAlert,
   CircleOff,
+  Clock,
   Copy,
   FileSpreadsheet,
   ImagePlus,
@@ -32,11 +33,13 @@ import {
   deleteVariant,
   fetchAddons,
   fetchCategories,
+  fetchInventory,
   fetchItemUnitCosts,
   fetchMenuItemAddonIds,
   fetchMenuItems,
   fetchMenuVariants,
   fetchPaidMoverLines,
+  fetchRecipeLines,
   renameCategory,
   removeMenuItemPhoto,
   setItemAddons,
@@ -44,9 +47,12 @@ import {
   uploadMenuItemPhoto,
   type Addon,
   type Category,
+  type InventoryItem,
   type MenuVariant,
+  type RecipeLine,
 } from '../../lib/api';
-import { computeTopMovers, MOVER_WINDOW_DAYS, type Mover } from '../../lib/movers';
+import { computePaceByItem, computeTopMovers, MOVER_WINDOW_DAYS, type Mover } from '../../lib/movers';
+import { shelfCoverage, shelfDays, type ShelfCoverage } from '../../lib/shelf';
 import { appFormatters, appTzTag, appTodayIso } from '../../lib/appday';
 import { useTenant } from '../../lib/tenant';
 import { formatMoney } from '../../lib/prefs';
@@ -74,6 +80,16 @@ import type { MenuItem } from '../../types';
  * together, and an unpriced dish leaves its cost cells EMPTY (never ₹0).
  * The header strip reads the menu's health at a glance — sold out, no
  * recipe, priced under cost, thin — with the names riding the tooltips.
+ *
+ * v5.173.0 — the menu's expiry dates: the shelf's days voice (5.172.0,
+ * src/lib/shelf.ts) joins the owner's sheet. The catalog gains a "Days of
+ * cover" column — the shelf's answer ÷ the paid week's pace, floored ONCE
+ * at the screen's own memo (daysByItem) so the CSV, the strip's amber
+ * "dry within the week" forecast chip and the per-row clock all read ONE
+ * number per dish. Silence rules ride the family: no recipe, unknown shelf
+ * or no paid pace → EMPTY cell, no clock, never an invented figure. Zero
+ * on the sheet is a truth ("dry within a day"), not a fabrication — the
+ * EMPTY-vs-zero line is drawn where the shelf stops answering.
  */
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
@@ -604,6 +620,10 @@ export interface CatalogOpts {
   addonNames: Map<string, string>;
   unitCosts: Map<string, number>;
   moverInfo: Map<string, { rank: number; units: number; tickets: number }>;
+  /* v5.173.0 — the shelf's days per dish, floored once at the screen's
+   * memo. Optional so older callers (and the suite) ride without it —
+   * absent map = every row silent, the 5.171.0 file unchanged. */
+  daysByItem?: Map<string, number | null>;
 }
 
 export interface CatalogRow {
@@ -619,6 +639,10 @@ export interface CatalogRow {
   rank: number | null;
   units: number | null;
   tickets: number | null;
+  /* v5.173.0 — days of cover at the paid week's pace; null = silence (no
+   * recipe / unknown shelf / nobody bought it this week). The sheet prints
+   * the number or EMPTY — never a dash, never an invented figure. */
+  days: number | null;
 }
 
 /* Order follows the screen: categories in their array order, items in
@@ -647,6 +671,7 @@ export function catalogRows(o: CatalogOpts): CatalogRow[] {
         rank: mover ? mover.rank : null,
         units: mover ? mover.units : null,
         tickets: mover ? mover.tickets : null,
+        days: o.daysByItem ? (o.daysByItem.get(i.id) ?? null) : null,
       });
     }
   }
@@ -658,9 +683,9 @@ export function catalogCsvRows(o: CatalogOpts & { storeName: string }): unknown[
   const priced = rows.filter((r) => r.cost !== null).length;
   const out: unknown[][] = [
     [`${o.storeName} — menu catalog`],
-    [`${rows.length} dishes · ${priced} priced from recipes · week ranks and units read the same paid ledger the counter's rail pins`],
+    [`${rows.length} dishes · ${priced} priced from recipes · week ranks and units read the same paid ledger the counter's rail pins · days of cover divide the shelf's answer by that same paid pace`],
     [],
-    ['Category', 'Item', 'Price', 'Cost per serve', 'Kept', 'Kept %', 'Options', 'Add-ons', 'Availability', 'Week rank', 'Units (7d)', 'Tickets (7d)'],
+    ['Category', 'Item', 'Price', 'Cost per serve', 'Kept', 'Kept %', 'Options', 'Add-ons', 'Availability', 'Week rank', 'Units (7d)', 'Tickets (7d)', 'Days of cover'],
   ];
   for (const r of rows) {
     out.push([
@@ -676,6 +701,7 @@ export function catalogCsvRows(o: CatalogOpts & { storeName: string }): unknown[
       r.rank,
       r.units,
       r.tickets,
+      r.days,
     ]);
   }
   return out;
@@ -683,18 +709,29 @@ export function catalogCsvRows(o: CatalogOpts & { storeName: string }): unknown[
 
 /* The menu's health at a glance — the same kept% bands the price chips
  * speak (≥50% healthy, ≥25% thin, else priced under its own kitchen),
- * plus the two silences: sold out, and no recipe on file. */
+ * plus the two silences: sold out, and no recipe on file.
+ * v5.173.0 — dryWeek: dishes the shelf runs dry on WITHIN THE WEEK at the
+ * paid pace (days ≤ 7, the family's own cover horizon). A forecast, not a
+ * fault — the chip is amber, the tooltip names names. Optional days map =
+ * the 5.171.0 signature and its suite unchanged. */
 export interface MenuHealth {
   soldOut: string[];
   noRecipe: string[];
   underCost: string[];
   thin: string[];
+  dryWeek: string[];
 }
 
-export function menuHealth(o: { items: MenuItem[]; unitCosts: Map<string, number> }): MenuHealth {
-  const h: MenuHealth = { soldOut: [], noRecipe: [], underCost: [], thin: [] };
+export function menuHealth(o: {
+  items: MenuItem[];
+  unitCosts: Map<string, number>;
+  daysByItem?: Map<string, number | null>;
+}): MenuHealth {
+  const h: MenuHealth = { soldOut: [], noRecipe: [], underCost: [], thin: [], dryWeek: [] };
   for (const i of o.items) {
     if (i.is_available === false) h.soldOut.push(i.name);
+    const d = o.daysByItem?.get(i.id) ?? null;
+    if (d !== null && d <= 7) h.dryWeek.push(i.name);
     const price = Number(i.price);
     const costVal = o.unitCosts.get(i.id);
     if (costVal === undefined || !Number.isFinite(costVal)) {
@@ -798,16 +835,46 @@ export function MenuScreen(): React.ReactElement {
 
   /* v5.80.0 — the movers read: one reused fetch (the rail's own), the one
    * computeTopMovers definition, deterministic ties. Reloads with the
-   * menu's tick so a refresh never shows stale ranks. */
+   * menu's tick so a refresh never shows stale ranks.
+   * 5.173.0 — the same rows feed the whole-menu pace (computePaceByItem):
+   * the days-of-cover column and the dry-this-week chip divide the shelf's
+   * answer by the SAME ledger the rail ranks — one fetch, one definition. */
   useEffect(() => {
     if (!tenantId) return;
     let alive = true;
     fetchPaidMoverLines(tenantId, MOVER_WINDOW_DAYS)
       .then((rows) => {
-        if (alive) setMovers(computeTopMovers(rows));
+        if (alive) {
+          setMovers(computeTopMovers(rows));
+          setPace(computePaceByItem(rows));
+        }
       })
       .catch(() => {
-        if (alive) setMovers([]);
+        if (alive) {
+          setMovers([]);
+          setPace(new Map());
+        }
+      });
+    return () => {
+      alive = false;
+    };
+  }, [tenantId, tick]);
+
+  /* v5.173.0 — the shelf read, fail-soft exactly as the counter's own
+   * (FoodDrinksScreen): recipes (015) + the stock they draw from. null =
+   * not read (or the read failed) — the days voice stays silent, never an
+   * invented number. */
+  const [shelf, setShelf] = useState<{ items: InventoryItem[]; recipes: RecipeLine[] } | null>(null);
+  const [pace, setPace] = useState<Map<string, number> | null>(null);
+  useEffect(() => {
+    if (!tenantId) return;
+    let alive = true;
+    Promise.all([fetchInventory(tenantId), fetchRecipeLines(tenantId)])
+      .then(([inv, recipes]) => {
+        if (alive) setShelf({ items: inv, recipes });
+      })
+      .catch(() => {
+        if (alive) setShelf(null);
       });
     return () => {
       alive = false;
@@ -820,6 +887,36 @@ export function MenuScreen(): React.ReactElement {
     (movers ?? []).forEach((mv, i) => m.set(mv.menuItemId, { rank: i + 1, units: mv.units, tickets: mv.tickets }));
     return m;
   }, [movers]);
+
+  /* v5.173.0 — the shelf's answer per dish WITH a recipe: the ONE shared
+   * math (src/lib/shelf.ts), built exactly as the counter's own map
+   * (FoodDrinksScreen) so the management sheet and the counter can never
+   * disagree about a dish. No recipe → absent → silence, not zero. */
+  const shelfByItem = useMemo<Map<string, ShelfCoverage>>(() => {
+    const map = new Map<string, ShelfCoverage>();
+    if (!shelf) return map;
+    for (const it of items) {
+      const lines = shelf.recipes.filter((r) => r.menu_item_id === it.id);
+      if (lines.length === 0) continue; /* no recipe → silence, not zero */
+      map.set(it.id, shelfCoverage(lines, shelf.items));
+    }
+    return map;
+  }, [shelf, items]);
+
+  /* v5.173.0 — the shelf's days, floored ONCE here: the CSV column, the
+   * dry-this-week chip and the row clock all read this ONE number per dish
+   * (shelfDays = the math; the floor happens here, not per surface).
+   * null = silence (no recipe / unknown shelf / no paid pace this week). */
+  const daysByItem = useMemo<Map<string, number | null>>(() => {
+    const map = new Map<string, number | null>();
+    for (const it of items) {
+      const c = shelfByItem.get(it.id);
+      if (!c) continue;
+      const d = shelfDays(c.coverage, pace?.get(it.id) ?? null);
+      map.set(it.id, d === null ? null : Math.floor(d));
+    }
+    return map;
+  }, [shelfByItem, pace, items]);
 
   const runAction = useCallback(async (fn: () => Promise<unknown>, okMsg?: string) => {
     if (busyRef.current) return false; // double-dispatch guard (batch-proof, unlike state)
@@ -925,9 +1022,10 @@ export function MenuScreen(): React.ReactElement {
       addonNames,
       unitCosts,
       moverInfo,
+      daysByItem,
     };
-  }, [tenant?.name, categories, items, variants, links, addonNames, unitCosts, moverInfo]);
-  const health = useMemo(() => menuHealth({ items, unitCosts }), [items, unitCosts]);
+  }, [tenant?.name, categories, items, variants, links, addonNames, unitCosts, moverInfo, daysByItem]);
+  const health = useMemo(() => menuHealth({ items, unitCosts, daysByItem }), [items, unitCosts, daysByItem]);
   const downloadCatalog = () => {
     if (items.length === 0) return;
     downloadCsv(`servepoint-menu-catalog-${appTodayIso()}.csv`, catalogCsvRows(catalogOpts));
@@ -974,8 +1072,10 @@ export function MenuScreen(): React.ReactElement {
           )}
           {/* v5.171.0 — the menu's health at a glance: the same kept% bands
               the price chips speak, plus the two silences (sold out, no
-              recipe). Silence when all zero — the strip never congratulates. */}
-          {(health.soldOut.length > 0 || health.noRecipe.length > 0 || health.underCost.length > 0 || health.thin.length > 0) && (
+              recipe). Silence when all zero — the strip never congratulates.
+              5.173.0 — the forecast joins: dryWeek reads the shelf's days
+              (ONE math with the catalog's column), a clock per dish. */}
+          {(health.soldOut.length > 0 || health.noRecipe.length > 0 || health.underCost.length > 0 || health.thin.length > 0 || health.dryWeek.length > 0) && (
             <div className="mt-2 flex flex-wrap gap-1.5">
               {health.soldOut.length > 0 && (
                 <HealthChip
@@ -1014,6 +1114,16 @@ export function MenuScreen(): React.ReactElement {
                   label="thin"
                   title="Keeps 25–50% of its bill — worth a look before the weekend prices go to print."
                   icon={<CircleAlert size={11} aria-hidden />}
+                  className="bg-[#FDF9F0] text-[#8A5A16]"
+                />
+              )}
+              {health.dryWeek.length > 0 && (
+                <HealthChip
+                  count={health.dryWeek.length}
+                  names={health.dryWeek}
+                  label="dry within the week"
+                  title="At the paid week's pace the shelf runs dry within 7 days (days of cover = the shelf's answer ÷ that pace) — cover it from the batch planner before the counter finds out."
+                  icon={<Clock size={11} aria-hidden />}
                   className="bg-[#FDF9F0] text-[#8A5A16]"
                 />
               )}
@@ -1249,6 +1359,11 @@ export function MenuScreen(): React.ReactElement {
                 /* v5.80.0 — the week's rank, from the same paid ledger the
                  * counter's rail reads: management sees what must not run out. */
                 const mover = moverInfo.get(item.id);
+                /* v5.173.0 — the row's clock: dishes the shelf runs dry on
+                   within the week wear it here, the same floored number the
+                   catalog's column prints (ONE daysByItem memo). Silence
+                   when the days are silence — no clock on healthy rows. */
+                const days = daysByItem.get(item.id) ?? null;
                 return (
                   <div key={item.id} className="flex flex-wrap items-center gap-3 border-b border-[#F0F2EE] px-4 py-3 last:border-0 hover:bg-[#FBFBF9]">
                     <PhotoTile item={item} tenantId={tenantId} busy={busy} runAction={runAction} />
@@ -1265,6 +1380,15 @@ export function MenuScreen(): React.ReactElement {
                       <p className="mt-0.5 flex flex-wrap gap-1.5 text-[10.5px]">
                         {itemVariants.length > 0 && <span className="rounded-full bg-[#F1F4F1] px-2 py-0.5 font-medium text-[#0F3D3E]">{itemVariants.length} option{itemVariants.length > 1 ? 's' : ''}</span>}
                         {itemAddonIds.size > 0 && <span className="rounded-full bg-[#FDF9F0] px-2 py-0.5 font-medium text-[#8A5A16]">{itemAddonIds.size} add-on{itemAddonIds.size > 1 ? 's' : ''}</span>}
+                        {days !== null && days <= 7 && (
+                          <span
+                            className="flex items-center gap-0.5 rounded-full bg-[#FDF9F0] px-2 py-0.5 font-semibold text-[#8A5A16]"
+                            title={`Days of cover at the paid week's pace: ${days === 0 ? 'less than a day' : `~${days} day${days === 1 ? '' : 's'}`} — the shelf runs dry within the week. Cover it from the batch planner (Inventory → Recipes).`}
+                          >
+                            <Clock size={10} aria-hidden />
+                            {days === 0 ? 'dry within a day' : `dry in ~${days}d`}
+                          </span>
+                        )}
                       </p>
                     </div>
                     <div className="text-right">

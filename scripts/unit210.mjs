@@ -146,11 +146,14 @@ ok('meta counts dishes and the honestly-priced');
 assert.equal(csv[2].length, 0);
 ok('blank row separates masthead from the table');
 
+/* 5.173.0 — the sheet gains its 13th column, "Days of cover" (the shelf's
+ * answer ÷ the paid week's pace, EMPTY where silent). The twelve below are
+ * unchanged; the days column is asserted in unit212. */
 assert.deepEqual(
   csv[3],
-  ['Category', 'Item', 'Price', 'Cost per serve', 'Kept', 'Kept %', 'Options', 'Add-ons', 'Availability', 'Week rank', 'Units (7d)', 'Tickets (7d)'],
+  ['Category', 'Item', 'Price', 'Cost per serve', 'Kept', 'Kept %', 'Options', 'Add-ons', 'Availability', 'Week rank', 'Units (7d)', 'Tickets (7d)', 'Days of cover'],
 );
-ok('header row: the twelve columns, named');
+ok('header row: the twelve columns, named (+ 5.173.0 days column)');
 
 const latteRow = csv[4];
 assert.equal(latteRow[3], 68);
@@ -196,7 +199,8 @@ assert.equal(h2.soldOut.length, 0);
 ok('zero price with a recipe: skipped, never judged (no divide drama)');
 
 const h3 = menuHealth({ items: [], unitCosts: new Map() });
-assert.deepEqual(h3, { soldOut: [], noRecipe: [], underCost: [], thin: [] });
+/* 5.173.0 — the health object carries dryWeek too; an empty menu keeps every list empty. */
+assert.deepEqual(h3, { soldOut: [], noRecipe: [], underCost: [], thin: [], dryWeek: [] });
 ok('empty menu: total silence — the strip never congratulates');
 
 console.log(`\nunit210 — ${n} asserts, the house catalog (v5.171.0)`);
