@@ -82,6 +82,21 @@ export function bookingDayStartMs(dateIso: string): number {
   return Date.parse(`${dateIso}T00:00:00Z`) - 330 * 60 * 1000;
 }
 
+/** "Sat 3 Oct" — the booking clock's day tag for a promise whose day is
+ *  NOT the reader's today (5.200.0): the bell's body speaks the trigger's
+ *  frozen hour with no day, so a row read a day later reads like tonight's
+ *  promise. The tag rides the same IST clock the slot's hour speaks —
+ *  one clock, one voice, every surface. (en-GB parts — the weekday rides
+ *  the date comma-free, unlike en-IN's "Sat, 3 Oct".) */
+export function bookingDayTag(iso: string): string {
+  return new Intl.DateTimeFormat('en-GB', {
+    timeZone: BOOKING_TZ,
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+  }).format(new Date(iso));
+}
+
 /** True when the owner's reporting timezone is NOT the booking clock — the
  *  surfaces append the "IST" tag to promise labels so the two words are
  *  never confused. On every Indian device this is false and the UI is

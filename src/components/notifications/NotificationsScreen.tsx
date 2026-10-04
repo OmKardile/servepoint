@@ -25,7 +25,7 @@ import {
 } from '../../lib/api';
 import { dbErrorHint } from '../../lib/dbErrors';
 import { getPrefs, subscribePrefs, timeAgo } from '../../lib/prefs';
-import { bookingSlotLabel, bookingDayKey, bookingTodayKey } from '../../lib/bookingday';
+import { bookingSlotLabel, bookingDayKey, bookingTodayKey, bookingDayTag } from '../../lib/bookingday';
 import { useTenant } from '../../lib/tenant';
 import { useUi, type Section } from '../../store/session';
 import { SECTION_LABELS } from '../shell/Sidebar';
@@ -129,14 +129,19 @@ type EchoState = {
   dim: boolean;
   /** The full sentence for title/aria — provenance always included. */
   note: string;
+  /** 5.200.0 — the matched promise's own slot, the day voice's truth. */
+  slotIso: string;
 };
 
-function echoFor(
+/* ── 5.200.0 — the reminder's own match ─────────────────────────────
+ * The echo's exact matcher, extracted so the body's day voice rides the
+ * SAME single match (one read, two derivations — the 5.197 lesson).
+ * Exactly one match speaks. Zero = nobody guesses; more than one =
+ * ambiguous (two identical promises) — silence, never a coin flip. */
+export function matchReminder(
   n: AppNotification,
   reservations: Reservation[] | null,
-  nowMs: number,
-  todayKey: string,
-): EchoState | null {
+): Reservation | null {
   if (n.category !== 'reminder' || !reservations) return null;
   const m = REMINDER_TITLE_RE.exec(n.title);
   if (!m) return null;
@@ -147,10 +152,41 @@ function echoFor(
   const matches = reservations.filter(
     (r) => r.guest_name === name && r.party_size === party && istSlotLabelEcho(r.slot_at) === slotLabel,
   );
-  /* Exactly one match speaks. Zero = the echo doesn't guess; more than one
-   * = ambiguous (two identical promises) — silence, never a coin flip. */
-  if (matches.length !== 1) return null;
-  const r = matches[0];
+  return matches.length === 1 ? matches[0] : null;
+}
+
+/* ── 5.200.0 — the bell's hour names its day ────────────────────────
+ * The trigger composes the body ONCE — "7:30 pm — T1 — …" — and the
+ * bell keeps repeating it on every later day, so a row read tomorrow
+ * reads like tonight's promise. When the row's own match (the echo's
+ * matcher, ONE definition above) holds a slot whose booking-day is not
+ * the reader's today, the slot's first segment gains the booking
+ * clock's day tag — "Sat 3 Oct, 7:30 pm — T1 — …". Today's rows keep
+ * the frozen bytes; an unmatched row keeps its silence (the day voice
+ * never guesses from text alone). The chip's own IST-today rule is a
+ * different register — the chip refuses to promise across days; the
+ * day voice only states where the hour lives. */
+export function reminderDayBody(
+  n: AppNotification,
+  reservations: Reservation[] | null,
+  nowMs: number,
+): string {
+  const raw = n.body || '';
+  const r = matchReminder(n, reservations);
+  if (!r) return raw;
+  if (bookingDayKey(r.slot_at) === bookingDayKey(new Date(nowMs).toISOString())) return raw;
+  const segs = raw.split(' — ');
+  return [`${bookingDayTag(r.slot_at)}, ${segs[0]}`, ...segs.slice(1)].join(' — ');
+}
+
+function echoFor(
+  n: AppNotification,
+  reservations: Reservation[] | null,
+  nowMs: number,
+  todayKey: string,
+): EchoState | null {
+  const r = matchReminder(n, reservations);
+  if (!r) return null;
   const provenance = `Matched to the book by guest, party and hour — the book's truth as of now.`;
   if (r.status === 'cancelled')
     return {
@@ -160,6 +196,7 @@ function echoFor(
       strike: true,
       dim: true,
       note: `This booking was cancelled. ${provenance}`,
+      slotIso: r.slot_at,
     };
   if (r.status === 'seated')
     return {
@@ -169,6 +206,7 @@ function echoFor(
       strike: false,
       dim: false,
       note: `The party is already seated. ${provenance}`,
+      slotIso: r.slot_at,
     };
   if (r.status === 'no_show')
     return {
@@ -178,6 +216,7 @@ function echoFor(
       strike: false,
       dim: false,
       note: `The booking was marked no-show. ${provenance}`,
+      slotIso: r.slot_at,
     };
   /* Still `booked`: the clock speaks only for today-in-IST, same rule as
    * the floor — quiet when the hour went by, expected while it stands. */
@@ -190,6 +229,7 @@ function echoFor(
       strike: false,
       dim: false,
       note: 'The promised hour went by — the party is still booked. Seat them or mark the no-show; the clock does not convict.',
+      slotIso: r.slot_at,
     };
   return {
     label: 'Still expected',
@@ -198,6 +238,7 @@ function echoFor(
     strike: false,
     dim: false,
     note: `The book still holds this promise. ${provenance}`,
+    slotIso: r.slot_at,
   };
 }
 
@@ -273,10 +314,13 @@ const ErrorCard: React.FC<{ message: string; onRetry: () => void }> = ({ message
 const NotificationCard: React.FC<{
   n: AppNotification;
   echo: EchoState | null;
+  /** 5.200.0 — the body's day voice: the trigger's frozen words, dayed by
+   *  the row's own match when the slot is not the reader's today. */
+  dayBody: string;
   marking: boolean;
   onMarkOne: (n: AppNotification) => void;
   onOpen: (n: AppNotification) => void;
-}> = ({ n, echo, marking, onMarkOne, onOpen }) => {
+}> = ({ n, echo, dayBody, marking, onMarkOne, onOpen }) => {
   const Icon = CATEGORY_ICON[n.category] || Bell;
   const unread = !n.is_read;
   const chip = CATEGORY_CHIP[n.category] || CATEGORY_CHIP.message;
@@ -313,7 +357,7 @@ const NotificationCard: React.FC<{
             </h3>
             <span className="sr-only">{CATEGORY_LABEL[n.category] || 'Notification'}</span>
           </div>
-          <p className="mt-1 break-words text-[13px] leading-relaxed text-[#6B6B6B]">{n.body}</p>
+          <p className="mt-1 break-words text-[13px] leading-relaxed text-[#6B6B6B]">{dayBody}</p>
           <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2">
             <p className="flex flex-wrap items-center gap-1.5 text-[12px] text-[#969696]">
               {echo && (
@@ -721,6 +765,7 @@ const NotificationsContent: React.FC<{ onTenantRetry: () => void }> = ({ onTenan
                       key={n.id}
                       n={n}
                       echo={echoFor(n, reservations, nowMs, todayKey)}
+                      dayBody={reminderDayBody(n, reservations, nowMs)}
                       marking={markingId === n.id}
                       onMarkOne={(x) => void onMarkOne(x)}
                       onOpen={onOpen}
