@@ -9,6 +9,7 @@ import {
   Copy,
   CreditCard,
   ExternalLink,
+  Hourglass,
   Link2,
   Loader2,
   Pencil,
@@ -87,7 +88,7 @@ import { MarkHit } from '../shell/MarkHit';
 import { EmptyState } from '../shell/EmptyState';
 import { useCart } from '../../store/cart';
 import type { Order, OrderItem } from '../../types';
-import { seatSpanLabel, computeTurnCensus } from '../../lib/turn';
+import { seatSpanLabel, computeTurnCensus, namedBreachList } from '../../lib/turn';
 import type { TableTurnStats } from '../../lib/turn';
 
 /**
@@ -1157,7 +1158,7 @@ function TableDrill({
               </p>
               {turnStats.breaches > 0 && (
                 <p className="mt-1 text-[11px] font-medium text-[#8A938C]">
-                  A seat runs long exactly when the live camping clock would call it camping.
+                  Worst seat here held {seatSpanLabel(turnStats.worstMin)} — a seat runs long exactly when the live camping clock would call it camping.
                 </p>
               )}
             </div>
@@ -2175,6 +2176,11 @@ export function FloorScreen(): React.ReactElement {
     return computeTurnCensus(orders, settleByOrder, turnMin, startMs, endMs);
   }, [orders, settleByOrder, turnMin]);
 
+  /* v5.183.0 — the named breach list: WHICH tables held past the house
+     line this week, worst span first. One pure sort, recomputed with the
+     census it reads; silent when no seat crossed. */
+  const breachList = useMemo(() => namedBreachList(turnCensus), [turnCensus]);
+
   /* The book (v5.38.0) — lifecycle flips are one honest UPDATE each; the
      board syncs best-effort around them: seating a party claims a FREE
      table (status 'reserved'), any undo releases a table that is still
@@ -2720,7 +2726,7 @@ export function FloorScreen(): React.ReactElement {
                       className={`mt-0.5 text-[10.5px] font-semibold tabular-nums ${
                         turnCensus.breaches > 0 ? 'text-[#8A5A00]' : 'text-[#2E7D32]'
                       }`}
-                      title={`A seat runs long exactly when the live camping clock would call it camping — ${turnCensus.spans} of ${turnCensus.rounds} seated rounds settled this week`}
+                      title={`A seat runs long exactly when the live camping clock would call it camping — ${turnCensus.spans} of ${turnCensus.rounds} seated rounds settled this week${turnCensus.breaches > 0 ? `, the worst held ${seatSpanLabel(turnCensus.worstMin)}` : ''}`}
                     >
                       {turnCensus.breaches > 0
                         ? `${turnCensus.breaches} of ${turnCensus.spans} past the ${turnMin}-min line`
@@ -2735,6 +2741,39 @@ export function FloorScreen(): React.ReactElement {
                 )}
               </div>
             </div>
+            {/* v5.183.0 — the named breach strip: WHICH tables held past the
+                house line this week, worst span first, each wearing its own
+                count and its worst clock. The camping chip's amber family;
+                silent when no seat crossed — an empty strip invents nothing. */}
+            {breachList.length > 0 && (
+              <div
+                className="mt-3 rounded-2xl px-4 py-3"
+                style={{ background: '#FDF9F0', boxShadow: 'inset 0 0 0 1px #F0E4C9' }}
+              >
+                <p className="flex items-center gap-1.5 text-[10.5px] font-bold uppercase tracking-wide text-[#8A5A00]">
+                  <Hourglass size={12} aria-hidden /> Past the {turnMin}-min line · by table
+                </p>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {breachList.slice(0, 8).map((b) => (
+                    <span
+                      key={b.id}
+                      className="inline-flex items-center gap-1 rounded-full bg-white px-2.5 py-1 text-[11px] font-semibold tabular-nums text-[#8A5A16]"
+                      style={{ boxShadow: 'inset 0 0 0 1px #EADFC2' }}
+                      title={`${b.breaches} settled seat${b.breaches === 1 ? '' : 's'} at table ${b.label ?? '—'} held ${seatSpanLabel(b.worstMin)} or longer this week`}
+                    >
+                      {b.label ?? 'Table'}
+                      <span className="font-bold">×{b.breaches}</span>
+                      <span className="text-[#B08968]">· worst {seatSpanLabel(b.worstMin)}</span>
+                    </span>
+                  ))}
+                  {breachList.length > 8 && (
+                    <span className="inline-flex items-center rounded-full bg-white px-2.5 py-1 text-[11px] font-semibold text-[#8A5A16]" style={{ boxShadow: 'inset 0 0 0 1px #EADFC2' }}>
+                      +{breachList.length - 8} more
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
             <div className="h-48" aria-hidden>
               <ResponsiveContainer width="100%" height="100%">
                 <ComposedChart data={rhythm.data} margin={{ top: 4, right: 8, bottom: 0, left: -30 }}>

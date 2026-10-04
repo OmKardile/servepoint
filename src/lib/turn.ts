@@ -75,6 +75,9 @@ export interface TableTurnStats {
   spans: number;
   medianMin: number;
   breaches: number;
+  /** v5.183.0 — this table's longest MEASURED span in minutes (breach or
+   *  not); 0 when nothing settled here. The named breach list sorts on it. */
+  worstMin: number;
 }
 
 export interface TurnCensus {
@@ -82,11 +85,37 @@ export interface TurnCensus {
   spans: number;
   medianMin: number;
   breaches: number;
+  /** v5.183.0 — the floor's longest measured span this window; 0 when
+   *  nothing settled. One number, the same register as the median. */
+  worstMin: number;
   byTable: Map<string, TableTurnStats>;
 }
 
+export interface NamedBreach {
+  id: string;
+  label: string | null;
+  breaches: number;
+  worstMin: number;
+}
+
+/** The week's named breach list (v5.183.0) — the tables whose SETTLED
+ *  seats crossed the house turn line, each carrying its breach count and
+ *  its worst held span. ONE sort rule: worst span first, table label as
+ *  the stable tiebreak; an empty census yields an empty list — silence,
+ *  never invented names. */
+export function namedBreachList(census: TurnCensus): NamedBreach[] {
+  const out: NamedBreach[] = [];
+  for (const [id, s] of census.byTable) {
+    if (s.breaches > 0) out.push({ id, label: s.label, breaches: s.breaches, worstMin: s.worstMin });
+  }
+  return out.sort(
+    (a, b) => b.worstMin - a.worstMin || (a.label ?? '').localeCompare(b.label ?? ''),
+  );
+}
+
 /** The week's turn census: per finished seat, created → last settle, in
- *  minutes; median and breach count per table and across the floor. An
+ *  minutes; median, worst held span and breach count per table and across
+ *  the floor. An
  *  empty/null settle map is HONEST silence (spans 0) — the caller decides
  *  whether the UI speaks. `orders` may carry any population; the census
  *  keeps only what the rhythm's own rules admit (table-bound, not
@@ -110,6 +139,7 @@ export function computeTurnCensus(
     spans: 0,
     medianMin: 0,
     breaches: 0,
+    worstMin: 0,
     byTable: new Map(),
   };
   const spans: number[] = [];
@@ -121,7 +151,7 @@ export function computeTurnCensus(
     census.rounds += 1;
     const stat =
       census.byTable.get(o.table_id) ??
-      ({ label: o.table_label ?? null, rounds: 0, spans: 0, medianMin: 0, breaches: 0 } as TableTurnStats);
+      ({ label: o.table_label ?? null, rounds: 0, spans: 0, medianMin: 0, breaches: 0, worstMin: 0 } as TableTurnStats);
     stat.rounds += 1;
     const settleIso = settleByOrder?.get(o.id);
     const settleMs = settleIso ? new Date(settleIso).getTime() : NaN;
@@ -135,6 +165,8 @@ export function computeTurnCensus(
         census.breaches += 1;
         stat.breaches += 1;
       }
+      if (minutes > census.worstMin) census.worstMin = minutes;
+      if (minutes > stat.worstMin) stat.worstMin = minutes;
       census.spans += 1;
       stat.spans += 1;
     }
