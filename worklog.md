@@ -4559,3 +4559,27 @@ Stage Summary:
 - Watch items carried: DB password ROTATION (RLS hardening); sp_adjust_stock app-session-gated; CheeseBurg stray `t1` + unpaid #97; `sp.guest.lang = hi` default observation; inventory 4 SKUs external drift (LOW/OUT 0 ten rounds running); console buffer process-global + clear-does-not-purge (fresh load is the referee); sidebar textContent concatenates badges (aria-label or startsWith, never ===); external cron auto-commits sweep stray untracked files (benign); agent-browser CDP offline emulation unreliable (kill-the-server is the oracle, 181); CHANGELOG insert-above heading trap (standing gate — replace-the-heading pattern clean this round, 182/183); drill DOM sampling must wait for state to settle (183).
 - Owner action items (carried): (1) delete orphaned drill auth user drill.owner@recoverydrill.in at next pooler session; (2) QR Flow owner password remains provisional; (3) 038 DDL one-command unblock whenever a pooler session happens.
 - Crons: 15-min webDevReview (job 430321) + DAILY deep pass (job 431587, 09:00 IST).
+
+---
+Task ID: DAILY-CLAIM 2026-10-04 (job 431587, trace 1a0fde5e5f51eeed-cron-agent-loop-202610041135)
+Agent: glm-5.3 (DAILY deep pass — maintenance/review loop, separate from the 15-min webDevReview)
+Task: CLAIM — daily maintenance run starting now. Orientation → gates (bun lint; NO build per sandbox policy) → deep code review → fixes → browser QA → commit+push → AGENT_LOG.md summary. The 15-min loop's Task 183 (9e76d57, 5.144.0) is acknowledged as the current HEAD; this run will build on it and append its own full record below when done.
+
+---
+Task ID: DAILY 2026-10-04 (job 431587, trace 1a0fde5e5f51eeed-cron-agent-loop-202610041135 — the record promised by the CLAIM above)
+Agent: glm-5.3 (DAILY deep pass — maintenance/review loop)
+Task: Daily review/QA/commit/push pass on 5.144.0 — security sweep, deferred-item follow-up, one correctness fix, browser QA. Two commits, pushed.
+
+Work Log:
+- Orientation: HEAD 9e76d57 = the 15-min loop's Task 183 (5.144.0, minutes old). Claimed via DAILY-CLAIM entry before editing. Gates: lint PASS; build skipped per sandbox policy (forbidden for this loop); dev :3000 200.
+- Review scans: TODO/FIXME zero; secrets sweep → 3 hits investigated with masked output: (1) help.md REAL service-role JWT + stale anon JWT, both ref vbufsuzzmehsidshopku (retired template project) sitting beside the live project URL; (2) scripts/qa102.har — tracked QA network capture holding an EXPIRED access token for qrowner@qrflowcafe.in + owner/tenant UUIDs (no refresh tokens/passwords — audited via payload decode); (3) worklog.md line 72 — same dead-project anon key (left: append-only record, zero real-world risk). supabase.ts holds the modern sb_publishable_ key (non-JWT — why it dodged the first pattern); render.yaml prose-only; .env.example placeholders.
+- Fixes: help.md scrubbed to placeholders + policy notes (rotation of the retired project's keys flagged as owner action); qa102.har untracked (kept on disk) + *.har gitignored; EodScreen printZReport's blind setTimeout(removeChild, 1500) — the v5.27.1 print-hardening's LAST survivor, missed when ReceiptPrint/FloorScreen swapped — replaced with printHiddenFrame(html), which also fixes the frame leak on the !doc early-return. printFrame.ts is now the only iframe creator in src/.
+- Deferred-item follow-up from yesterday's AGENT_LOG: apply-025.mjs db-creds conversion ✓ (done by the feature loop); FloorScreen print swap ✓ (file moved to src/components/floor/, already on printHiddenFrame). README route-grammar drift (narrates /:slug/pos, /superadmin, v2.8.0-era) documented as tomorrow's docs pass — big surface, needs App.tsx SECTION_SLUGS as source of truth.
+- QA: fresh loads zero errors; Dashboard → Bills (62 cards) → Dashboard; EOD print exercised LIVE: day stepper to Oct 3 (button honestly disabled for order-less today — nice), Print z-report → iframe 0→1, zero console errors. Headless print() is a no-op; the 60s fallback holds the frame by design; cleaned via eval after assertion. Screenshots in scripts/ (this loop's convention).
+- Discipline: staged only intentionally-changed files (never -A); two separate commits (security ≠ correctness); push via clean origin (the task-brief inline token was NOT used — origin already authenticates, and tokens must never hit disk/config/logs); zero cloud writes; no data mutations (print is client-side; day-stepper is pure UI state).
+
+Stage Summary:
+- Daily pass complete: 6211785 (security scrub) + dc717eb (EOD print engine) pushed 9e76d57..dc717eb. AGENT_LOG.md carries the formal daily summary. No app release (no CHANGELOG/sw bump — these were not feature commits; the app surface unchanged except the print engine swap).
+- New standing watch item: HAR captures must never be tracked (*.har gitignored; sweep-guard); JWT sweep added to the daily gate list.
+- Owner action items (carried + new): retired-project key rotation IF vbufsuzzmehsidshopku still exists; DB password rotation; drill auth user cleanup; QR Flow provisional password; 038 DDL unblock (env still UNSET).
+- Crons: 15-min webDevReview (job 430321) + DAILY deep pass (job 431587) — both recorded here; the 15-min loop owns feature releases, this log owns review/hardening.
