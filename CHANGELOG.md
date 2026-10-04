@@ -3,6 +3,21 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.142.0] — 2026-10-04 — Even offline, the house speaks
+
+### Fixed — the shell's static assets were precached into a cache nobody reads (`public/sw.js`)
+
+`SHELL_ASSETS` (favicon ×2, apple-touch-icon, manifest, 3 PWA icons) were precached into `SHELL_CACHE` — but the fetch handler's same-origin branch reads ONLY `ASSET_CACHE` (`cacheFirst(ASSET_CACHE, request)`), and `SHELL_CACHE` is ever read only for the navigation fallback (exact match + `/`). Net: five files were faithfully downloaded at install and stored one cache-key away from every future lookup — offline, the favicon and manifest failed even though they sat in the browser the whole time. Now `/` precaches into `SHELL_CACHE` (where navigations live, where the fallback reads it) and every static asset precaches into `ASSET_CACHE` (where `cacheFirst` reads). Verified live against the PROD build: shell cache = exactly 1 entry (`/`), asset cache = 13 (5 statics + 8 build assets).
+
+### Changed — the last-resort offline page joined the house register (`public/sw.js`)
+
+The SW's floor — the synthetic 503 page served when even the precached shell is missing — was a bare system-ui stub, the last public surface not speaking the house voice, and its copy lied: "ServePoint will reconnect automatically" (nothing reconnects by itself; a person acts). The new page wears the register: cream canvas, teal serif-italic "You're offline." (Instrument Serif when the font cache has it, Georgia otherwise), the brand mark in its cream chip with an `onerror` graceful fallback, honest copy ("nothing was lost — the counter picks up where it left off"), and a real gold **Try again** door (`location.reload()`). Tab title follows the register: "Offline · ServePoint". Status stays 503 — it IS unavailable.
+
+### Verified
+
+node --check sw.js + `npm run build` EXIT=0 (the precache-injection step parses the SW). **Live-fire E2E against the PROD build** (`vite preview`, SW registers only in PROD): online load → SW active, cache contents audited (the fix above, seen in the field); all caches purged via CacheStorage API + server killed (true connection-refused — CDP offline emulation proved unreliable in the harness, so the harder path was used) → navigation to a never-cached path served the house-voiced 503 (title, h1, Try again verified in the DOM; screenshot qa181-offline-page.png captures the true worst case — caches purged, so even the favicon degraded to its chip). Happy path re-verified: warm caches + dead server → navigation fell back to the cached shell, the app booted, and the v5.141.0 404 answered the unknown path — the two releases compose. Dev server on :3000 unaffected (SW is PROD-only); preview servers killed after the drill. READ-ONLY round — zero cloud writes.
+
+
 ## [5.141.0] — 2026-10-04 — No address goes unacknowledged
 
 ### Added — the honest 404 (`src/components/pages/NotFoundPage.tsx`)

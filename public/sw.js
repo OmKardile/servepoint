@@ -6,8 +6,8 @@
  *    The build step injects the dist/assets manifest into BUILD_ASSETS via
  *    scripts/inject-sw-precache.mjs (an empty list here is dev-safe).
  *  - Navigations (any SPA deep link): network-FIRST with a 5s timeout, then
- *    the cached shell, then a minimal offline notice. Freshness wins while
- *    there is a network; the shell wins when there isn't.
+ *    the cached shell, then a house-voiced offline notice. Freshness wins
+ *    while there is a network; the shell wins when there isn't.
  *  - Supabase (data + realtime + auth): NETWORK-ONLY, never cached. Orders,
  *    payments and the counter-gate must never be served from a stale cache.
  *  - Cross-origin fonts: cache-first (immutable by nature).
@@ -15,11 +15,19 @@
  * Release discipline: bump VERSION on every shell-changing deploy so old
  * caches are evicted on activate.
  */
-const VERSION = 'servepoint-v5.141.0-r1';
+const VERSION = 'servepoint-v5.142.0-r1';
 const SHELL_CACHE = `${VERSION}-shell`;
 const ASSET_CACHE = `${VERSION}-assets`;
 const FONT_CACHE = `${VERSION}-fonts`;
 
+/**
+ * v5.142.0 — the static shell assets (favicon, manifest, icons) precache into
+ * ASSET_CACHE, the cache the fetch handler actually READS for same-origin
+ * requests; SHELL_CACHE keeps navigations only ('/' plus every runtime-cached
+ * deep link). Before this fix the static assets were precached into a cache
+ * the runtime lookup never opened — offline, the favicon and manifest failed
+ * even though they sat one cache-key away from where the lookups happen.
+ */
 const SHELL_ASSETS = [
   '/',
   '/manifest.webmanifest',
@@ -73,7 +81,8 @@ async function precacheAll() {
     }
   };
   await Promise.allSettled([
-    ...SHELL_ASSETS.map((url) => put(shell, url)),
+    put(shell, '/'),
+    ...SHELL_ASSETS.filter((url) => url !== '/').map((url) => put(assets, url)),
     ...BUILD_ASSETS.map((url) => put(assets, url)),
   ]);
   await self.skipWaiting();
@@ -118,6 +127,45 @@ async function cacheFirst(cacheName, request) {
 }
 
 /**
+ * v5.142.0 — the last-resort offline page speaks the house register (cream
+ * canvas, teal serif-italic headline, gold reload door, the brand mark with a
+ * graceful no-image fallback). This page is the FLOOR of the offline story:
+ * it only renders when even the precached shell is missing from the cache —
+ * a half-failed install during an outage. It is honest: the old stub claimed
+ * "ServePoint will reconnect automatically", but nothing reconnects by
+ * itself — a person taps Try again. Status stays 503 (it IS unavailable).
+ * The favicon reference renders only if the precache reached ASSET_CACHE;
+ * otherwise the styled chip stands alone and the words carry the page.
+ */
+const OFFLINE_PAGE = `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Offline · ServePoint</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  html,body{margin:0;height:100%}
+  body{font-family:system-ui,-apple-system,'Segoe UI',sans-serif;background:#F6F5F2;color:#1A1A1A;display:grid;place-items:center;padding:24px;box-sizing:border-box}
+  .card{max-width:440px;text-align:center}
+  .mark{width:56px;height:56px;margin:0 auto 18px;border-radius:16px;background:#F6F1E9;border:1px solid #E3E7E0;display:grid;place-items:center;overflow:hidden}
+  .mark img{width:40px;height:40px;object-fit:contain}
+  h1{font-family:'Instrument Serif',Georgia,'Times New Roman',serif;font-style:italic;font-weight:400;color:#0F3D3E;font-size:32px;line-height:1.15;margin:0 0 12px}
+  p{color:#5B6B63;font-size:14.5px;line-height:1.65;margin:0 0 26px}
+  button{font-family:inherit;background:#B88E2F;color:#fff;border:0;border-radius:999px;padding:12px 30px;font-size:14px;font-weight:600;cursor:pointer}
+  button:hover{background:#A67D24}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="mark"><img src="/favicon-32.png" alt="" onerror="this.remove()"></div>
+  <h1>You&rsquo;re offline.</h1>
+  <p>ServePoint needs a connection for orders, bills and the kitchen rail &mdash; nothing was lost. The counter picks up where it left off once you&rsquo;re back online.</p>
+  <button onclick="location.reload()">Try again</button>
+</div>
+</body>
+</html>`;
+
+/**
  * Network-first navigation with a 5s watchdog:
  *   fresh page  ->  cache.put + return
  *   timeout/off ->  exact cached match -> SPA shell ('/') -> offline notice
@@ -135,10 +183,10 @@ async function networkFirstNavigation(request) {
     return (
       (await cache.match(request, { ignoreSearch: true, ignoreVary: true })) ||
       (await cache.match('/', { ignoreVary: true })) ||
-      new Response(
-        '<!doctype html><title>ServePoint — offline</title><meta name="viewport" content="width=device-width,initial-scale=1"><body style="font-family:system-ui;background:#F6F5F2;color:#1A1A1A;display:grid;place-items:center;height:100vh;margin:0"><div style="text-align:center"><h1 style="font-size:20px">You are offline</h1><p style="color:#6B6B6B;font-size:14px">ServePoint will reconnect automatically — try again in a moment.</p></div></body>',
-        { status: 503, headers: { 'Content-Type': 'text/html; charset=utf-8' } }
-      )
+      new Response(OFFLINE_PAGE, {
+        status: 503,
+        headers: { 'Content-Type': 'text/html; charset=utf-8' },
+      })
     );
   }
 }
