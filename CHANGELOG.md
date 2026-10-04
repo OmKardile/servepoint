@@ -3,6 +3,24 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.134.0] — 2026-10-04 — The banner stops promising a queue that was never built
+
+### Fixed — the offline banner's five-month lie
+
+The PWA offline banner (v5.6.0, all surfaces) told staff: **"Orders queue up when you're back."** Nothing queues — audited live this round: `placeOrder` inserts directly through `createOrder` (Supabase), an offline tap gets the same error toast as any other failure, and the tree holds zero outbox / retry / IndexedDB queue code. A banner promising automatic order queuing at a busy counter is the v5.40.0 bell's sin at banner scale — claiming a mechanism the code never backed. The copy now says only what is TRUE: staff read "Offline — ServePoint shows the last synced data. Place new orders when the connection returns." (guidance, not a mechanism); guests read "Offline — the menu may be stale. Place your order when you're back online." The rest of the banner's claims were verified honest ("last synced data" — the SPA keeps its in-memory state through a blip; "menu may be stale" — the SW caches it).
+
+### Added — the offline episode learns its ending
+
+The banner spoke the fall; nothing spoke the landing — the wire returned and the operator got silence. `PwaLayer` now remembers the episode (falling offline arms a ref) and on recovery shows a brief sage whisper — "Back online — live updates resumed." — in the banner's own dark-toast anatomy, steady green dot (no ping: the wire is stable, not struggling), auto-dismissed after 2.6 s. Silence stays the healthy voice; recovery is announced once, where it happened. `role="status"` announces it like the fall was announced.
+
+### Retired before shipping — the round's own duplicate voice
+
+This round first BUILT a second offline voice (a header ConnectionPill) — a broken `rg` search (`--type tsx` → silent empty result) missed the existing banner, and the collision was caught only at screenshot eyeball-QA: two offline notices in two registers on one screen. The pill was retired un-shipped within the round; the collision became the find. Lesson banked: a silent search result is not an absence — verify the empty before building on it.
+
+### Verified
+
+tsc EXIT=0, build EXIT=0. Live E2E: fresh load → no banner (healthy silence); synthetic `offline` → corrected staff copy, amber ping, dismiss button; `online` → sage "Back online — live updates resumed." whisper, auto-dismissed to silence in ~2.6 s; offline→online→offline→online cycle → whisper fires exactly once per episode; console delta ZERO. READ-ONLY round — zero cloud writes.
+
 ## [5.133.0] — 2026-10-04 — The billing clock keeps the café's day
 
 ### Fixed — the device-day seam closes where money is spoken

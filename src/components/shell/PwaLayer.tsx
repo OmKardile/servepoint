@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import brandMark from '../../assets/brand/mark.png';
 
 /**
@@ -13,6 +13,17 @@ import brandMark from '../../assets/brand/mark.png';
  * event — we never render a button we cannot honour. Dismissal cools down
  * for 7 days (localStorage), and the card never shows inside an installed
  * (standalone) session.
+ *
+ * v5.134.0 — the banner stops promising a queue that was never built, and
+ * the episode learns its ending. The staff copy claimed "Orders queue up
+ * when you're back" — but nothing queues: placeOrder inserts directly and
+ * an offline tap gets an error toast like any other (audited this round:
+ * zero outbox/retry/IndexedDB code in the tree). The copy now says only
+ * what is TRUE — the data is the last synced, new orders wait for the
+ * wire. And the offline episode finally CLOSES: when the wire returns, a
+ * brief sage whisper ("Back online — live updates resumed.") confirms the
+ * recovery, then silence again — the banner spoke the fall, the whisper
+ * speaks the landing; silence stays the healthy voice.
  */
 
 type Mode = 'staff' | 'public' | 'guest';
@@ -38,12 +49,25 @@ export function PwaLayer() {
   // ── Offline awareness ────────────────────────────────────────────────────
   const [online, setOnline] = useState(() => navigator.onLine);
   const [bannerGone, setBannerGone] = useState(false); // manual dismiss per episode
+  /* v5.134.0 — the episode remembers itself: falling offline arms the
+   * memory, the next `online` fires the brief recovery whisper (2.6s,
+   * then silence). A reload clears it — recovery is announced once,
+   * where it happened. */
+  const [justBack, setJustBack] = useState(false);
+  const wasOffline = useRef(false);
   useEffect(() => {
     const up = () => {
       setOnline(true);
       setBannerGone(false);
+      if (wasOffline.current) {
+        wasOffline.current = false;
+        setJustBack(true);
+      }
     };
-    const down = () => setOnline(false);
+    const down = () => {
+      setOnline(false);
+      wasOffline.current = true;
+    };
     window.addEventListener('online', up);
     window.addEventListener('offline', down);
     return () => {
@@ -51,6 +75,11 @@ export function PwaLayer() {
       window.removeEventListener('offline', down);
     };
   }, []);
+  useEffect(() => {
+    if (!justBack) return;
+    const t = window.setTimeout(() => setJustBack(false), 2600);
+    return () => window.clearTimeout(t);
+  }, [justBack]);
 
   // ── Install prompt ───────────────────────────────────────────────────────
   const [installEvent, setInstallEvent] = useState<InstallEvent | null>(null);
@@ -142,9 +171,9 @@ export function PwaLayer() {
             </span>
             <span className="whitespace-nowrap text-[11px] font-medium tracking-wide text-[#F6F5F2] sm:text-xs">
               {mode === 'guest' ? (
-                <>Offline — the menu may be stale. Orders go through when you&rsquo;re back.</>
+                <>Offline — the menu may be stale. Place your order when you&rsquo;re back online.</>
               ) : (
-                <>Offline — ServePoint shows the last synced data. Orders queue up when you&rsquo;re back.</>
+                <>Offline — ServePoint shows the last synced data. Place new orders when the connection returns.</>
               )}
             </span>
             <button
@@ -156,6 +185,30 @@ export function PwaLayer() {
                 <path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
               </svg>
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Recovery whisper (v5.134.0) — the episode's landing ──────────── */}
+      {/* The banner spoke the fall; this speaks the landing, once, then
+          silence again. Same dark-toast anatomy as the banner, but the dot
+          is a steady green (the wire is STABLE — no ping) in the layer's
+          own bright-on-dark accent register (#4CAF6D against #1A1A1A, the
+          softened sibling of the banner's #F59E0B). role="status" so the
+          recovery is announced like the fall was. */}
+      {online && justBack && (
+        <div
+          role="status"
+          className="fixed inset-x-0 top-0 z-[90] flex justify-center px-3 pt-2 sm:pt-3"
+          style={{ animation: 'spPwaDrop 260ms cubic-bezier(0.22, 1, 0.36, 1)' }}
+        >
+          <div className="flex items-center gap-2.5 rounded-full border border-[#4CAF6D]/25 bg-[#1A1A1A] py-1.5 pl-3 pr-3.5 shadow-lg shadow-black/20">
+            <span className="relative flex h-2 w-2">
+              <span className="relative inline-flex h-2 w-2 rounded-full bg-[#4CAF6D]" />
+            </span>
+            <span className="whitespace-nowrap text-[11px] font-medium tracking-wide text-[#F6F5F2] sm:text-xs">
+              Back online — live updates resumed.
+            </span>
           </div>
         </div>
       )}
