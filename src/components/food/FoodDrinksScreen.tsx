@@ -25,8 +25,8 @@ import {
 import type { LucideIcon } from 'lucide-react';
 import type { Category, Customer, CustomerStats, MenuItem, MenuItemVariant, Offer, OrderType } from '../../types';
 import { createOrder, fetchAddons, fetchCategories, fetchCustomerOrders, fetchCustomerStats, fetchCustomers, fetchInventory, fetchMenuItemAddonIds, fetchMenuItems, fetchMenuVariants, fetchOffers, fetchPaidMoverLines, fetchRecipeLines, fetchTables, updateMenuItem, type DiningTable, type InventoryItem, type RecipeLine } from '../../lib/api';
-import { computeTopMovers, MOVER_WINDOW_DAYS, type Mover } from '../../lib/movers';
-import { counterShelfLine, shelfCoverage, type ShelfCoverage } from '../../lib/shelf';
+import { computePaceByItem, computeTopMovers, MOVER_WINDOW_DAYS, type Mover } from '../../lib/movers';
+import { counterShelfLine, shelfCoverage, shelfDaysClause, type ShelfCoverage } from '../../lib/shelf';
 import { CounterInbox } from './CounterInbox';
 import { useTenant } from '../../lib/tenant';
 import { useDialogA11y } from '../../lib/useDialogA11y';
@@ -72,12 +72,17 @@ interface MoverEntry {
 function RushRail({
   entries,
   shelf,
+  pace,
   onTap,
 }: {
   entries: MoverEntry[];
   /* 5.91.0 — the shelf's answer per dish (null = the shelf hasn't been read:
      the line stays silent, never an invented number). */
   shelf: Map<string, ShelfCoverage>;
+  /* 5.172.0 — the shelf's days: units per dish over the movers' window
+     (computePaceByItem, whole menu, no cap). null = not read yet — the
+     voice stays serves-only until the pace lands. */
+  pace: Map<string, number> | null;
   onTap: (e: MoverEntry) => void;
 }): React.ReactElement | null {
   if (entries.length === 0) return null;
@@ -147,7 +152,11 @@ function RushRail({
                 {(() => {
                   const c = shelf.get(e.mover.menuItemId);
                   if (!c) return null;
-                  const line = counterShelfLine(c);
+                  /* 5.172.0 — the voice grows a days clause when the paid
+                     pace answers: coverage ÷ pace-per-day, ONE math in
+                     src/lib/shelf.ts. No pace → byte-identical to before. */
+                  const p = pace?.get(e.mover.menuItemId) ?? null;
+                  const line = counterShelfLine(c, p);
                   if (!line) return null;
                   return (
                     <span
@@ -158,7 +167,7 @@ function RushRail({
                           ? 'A recipe SKU is off the shelf — the shelf cannot answer.'
                           : c.coverage === 0
                             ? `The thinnest recipe SKU (${c.thin?.name || 'a SKU'}) is out — the shelf cannot make another.`
-                            : `The shelf can make about ${c.coverage} more — the thinnest recipe SKU (${c.thin?.name || 'a SKU'}) decides.`
+                            : `The shelf can make about ${c.coverage} more — the thinnest recipe SKU (${c.thin?.name || 'a SKU'}) decides.${shelfDaysClause(c.coverage, p) != null ? ` (${shelfDaysClause(c.coverage, p)})` : ''}`
                       }
                     >
                       {line.text}
@@ -1108,6 +1117,10 @@ const FoodDrinksInner: React.FC<{ onRetry: () => void }> = ({ onRetry }) => {
      + the stock they draw from. null = not yet read (or the read failed) —
      the shelf stays silent on the cards, never an invented number. */
   const [shelf, setShelf] = useState<{ items: InventoryItem[]; recipes: RecipeLine[] } | null>(null);
+  /* 5.172.0 — the pace behind the shelf's days: units per dish over the
+     movers' window, WHOLE menu (the item sheet opens any dish). Set
+     alongside the shortlist from the same paid rows; null = not read. */
+  const [pace, setPace] = useState<Map<string, number> | null>(null);
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detailItem, setDetailItem] = useState<MenuItem | null>(null);
@@ -1262,10 +1275,18 @@ const FoodDrinksInner: React.FC<{ onRetry: () => void }> = ({ onRetry }) => {
     let alive = true;
     fetchPaidMoverLines(tenantId, MOVER_WINDOW_DAYS)
       .then((rows) => {
-        if (alive) setMovers(computeTopMovers(rows));
+        if (alive) {
+          setMovers(computeTopMovers(rows));
+          /* 5.172.0 — the pace rides the same paid rows: the rail's rank and
+             the shelf's days read ONE ledger, ONE definition. */
+          setPace(computePaceByItem(rows));
+        }
       })
       .catch(() => {
-        if (alive) setMovers([]);
+        if (alive) {
+          setMovers([]);
+          setPace(new Map());
+        }
       });
     return () => {
       alive = false;
@@ -1572,7 +1593,9 @@ const FoodDrinksInner: React.FC<{ onRetry: () => void }> = ({ onRetry }) => {
       {/* The counter's shortlist (v5.78.0): the week's paid movers, one tap
           each — a speed surface above the gate, gone honest when the week
           was quiet (no paid sales ⇒ no rail, never a lie). */}
-      {moverEntries.length > 0 && <RushRail entries={moverEntries} shelf={shelfByItem} onTap={tapMover} />}
+      {moverEntries.length > 0 && (
+        <RushRail entries={moverEntries} shelf={shelfByItem} pace={pace} onTap={tapMover} />
+      )}
 
       {/* Counter gate (v5.3.0): fresh tickets wait HERE for an Ok — the KDS
           never sees `new`. Self-contained band; vanishes when empty. */}
@@ -1731,6 +1754,7 @@ const FoodDrinksInner: React.FC<{ onRetry: () => void }> = ({ onRetry }) => {
         <ItemDetailModal
           item={detailItem}
           coverage={detailItem ? (shelfByItem.get(detailItem.id) ?? null) : null}
+          pace={detailItem ? (pace?.get(detailItem.id) ?? null) : null}
           onClose={() => setDetailItem(null)}
           onAdded={({ name, qty }) =>
             setToast({ kind: 'added', message: `${qty}× ${name} added to order` })

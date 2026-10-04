@@ -1,5 +1,6 @@
 /* ── The shelf's answer, as ONE shared truth (5.91.0; the recipe editor
- *    joins in 5.166.0, the counter's item sheet in 5.170.0) ──────────
+ *    joins in 5.166.0, the counter's item sheet in 5.170.0, the shelf's
+ *    days in 5.172.0) ─────────────────────────────────────────────
  *
  *   "How many more of this dish can the shelf still make?" — the thinnest
  *   recipe SKU decides, computed from what's actually on file. Born inside
@@ -8,6 +9,16 @@
  *   (5.166.0); the item detail modal speaks it at the moment of selling
  *   (5.170.0) — so ONE answer serves the board, the rail, the editor, and
  *   the sheet.
+ *
+ *   5.172.0 — the shelf learns to speak TIME. Serves alone say "how many";
+ *   the paid ledger says "how fast"; the operator thinks in both. When the
+ *   caller hands counterShelfLine a pace (units over the movers' window,
+ *   from computePaceByItem), the answer grows a days clause — coverage ÷
+ *   pace-per-day, floored and spoken like the family ("~N days at this
+ *   pace"). The number is ONE math (shelfDays); the words are its voice
+ *   (shelfDaysClause). No pace → the answer stays as it always was — a
+ *   dish nobody bought this week has no pace to divide by, and the shelf
+ *   does not pretend it keeps forever.
  *
  *   Honesty rules (inherited verbatim from the shelf's board):
  *   • no recipe lines on file  → coverage null, unknown false — the shelf
@@ -24,6 +35,7 @@
  */
 
 import type { InventoryItem } from './api';
+import { MOVER_WINDOW_DAYS } from './movers';
 
 /** The minimal line the math reads — a full RecipeLine satisfies it, and
  *  so does the recipe editor's in-flight draft (5.166.0). */
@@ -90,10 +102,60 @@ export function shelfVoice(c: ShelfCoverage): string | null {
  *  The item detail modal speaks the same answer the rail speaks, so the
  *  two surfaces can never disagree about a dish (and neither can drift
  *  off the family's tones). Silence for a dish with no recipe on file —
- *  silence, not zero (the rail's own rule since 5.91.0). */
-export function counterShelfLine(c: ShelfCoverage): { text: string; tone: string } | null {
+ *  silence, not zero (the rail's own rule since 5.91.0).
+ *
+ *  5.172.0 — optional `pace`: units the dish sold over the movers' window
+ *  (computePaceByItem's read of the same paid ledger the rail ranks). When
+ *  both coverage and pace answer, the voice grows a days clause; when
+ *  either stays silent, the text is byte-identical to the pace-less call. */
+export function counterShelfLine(
+  c: ShelfCoverage,
+  pace?: number | null,
+): { text: string; tone: string } | null {
   if (c.coverage === null && !c.unknown) return null;
   const v = shelfVoice(c);
   if (!v) return null;
-  return { text: v, tone: shelfTone(c) };
+  const days = shelfDaysClause(c.coverage, pace);
+  return { text: days ? `${v} — ${days}` : v, tone: shelfTone(c) };
+}
+
+/* ── 5.172.0 — the shelf's days ─────────────────────────────────────
+ *
+ *   The join of the shelf's two truths: coverage (how many serves the
+ *   thinnest SKU allows) ÷ the paid week's pace (units over the movers'
+ *   window). shelfDays is the NUMBER — one math; shelfDaysClause is the
+ *   WORDS — floored, like every shelf answer (a floor on reality, never
+ *   an exact promise). Silence unless BOTH sides answer: a dish that
+ *   sold nothing has no pace (the shelf would "last forever" — an
+ *   infinity the shelf refuses to speak), and a shelf that can't make
+ *   another already said so in its own voice.
+ */
+
+/** Days of cover at the paid pace — the number (ONE math). Raw, unfloored;
+ *  the voice floors. null = the shelf stays silent about time. */
+export function shelfDays(
+  coverage: number | null,
+  paceUnits: number | null | undefined,
+): number | null {
+  if (coverage == null || !(coverage > 0)) return null;
+  if (paceUnits == null || !(paceUnits > 0)) return null;
+  const days = (coverage * MOVER_WINDOW_DAYS) / paceUnits;
+  return Number.isFinite(days) ? days : null;
+}
+
+/** The days voice — words built on shelfDays, never re-answering it.
+ *  Under a day speaks honestly ("less than a day"); past a fortnight the
+ *  voice moves to weeks (days stop meaning anything to a kitchen). */
+export function shelfDaysClause(
+  coverage: number | null,
+  paceUnits: number | null | undefined,
+): string | null {
+  const d = shelfDays(coverage, paceUnits);
+  if (d == null) return null;
+  if (d < 1) return 'less than a day at this pace';
+  if (d < 14) {
+    const f = Math.floor(d);
+    return `~${f} ${f === 1 ? 'day' : 'days'} at this pace`;
+  }
+  return `~${Math.floor(d / 7)} weeks at this pace`;
 }

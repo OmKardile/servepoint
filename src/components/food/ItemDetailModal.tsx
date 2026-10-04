@@ -1,11 +1,11 @@
 import React, { useRef, useState } from 'react';
-import { CircleOff, Minus, Plus, RotateCcw, UtensilsCrossed, X } from 'lucide-react';
+import { CircleOff, Clock, Minus, Plus, RotateCcw, UtensilsCrossed, X } from 'lucide-react';
 import type { MenuItem, MenuItemAddon } from '../../types';
 import { useCart } from '../../store/cart';
 import { formatMoney } from '../../lib/prefs';
 import { useDialogA11y } from '../../lib/useDialogA11y';
 import { VegMark } from '../shell/VegMark';
-import { counterShelfLine, type ShelfCoverage } from '../../lib/shelf';
+import { counterShelfLine, shelfDaysClause, type ShelfCoverage } from '../../lib/shelf';
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
@@ -20,6 +20,10 @@ interface ItemDetailModalProps {
   /** v5.170.0 — the shelf's answer for this dish (ONE shared math,
    *  src/lib/shelf.ts). null/absent = no recipe on file → silence. */
   coverage?: ShelfCoverage | null;
+  /** v5.172.0 — the dish's paid pace (units over the movers' window), the
+   *  denominator of the shelf's days. null = no pace on file → the voice
+   *  stays serves-only; the days clause rides when both sides answer. */
+  pace?: number | null;
   onClose: () => void;
   /** Fired after the selection is pushed into the cart (for the toast). */
   onAdded?: (info: { name: string; qty: number }) => void;
@@ -33,6 +37,7 @@ const MAX_QTY = 99;
 export const ItemDetailModal: React.FC<ItemDetailModalProps> = ({
   item,
   coverage = null,
+  pace = null,
   onClose,
   onAdded,
   onToggleAvailability,
@@ -313,19 +318,28 @@ export const ItemDetailModal: React.FC<ItemDetailModalProps> = ({
               {/* v5.170.0 — the shelf answers at the moment of selling: the
                   SAME voice the rail, the shelf's board and the recipe editor
                   speak (ONE shared math, src/lib/shelf.ts). It sits beside
-                  the pull action because that's the decision it informs. */}
+                  the pull action because that's the decision it informs.
+                  5.172.0 — when the paid pace answers too, a clock rides the
+                  line: the same voice, timed. */}
               {(() => {
-                const shelfLine = coverage ? counterShelfLine(coverage) : null;
+                const shelfLine = coverage ? counterShelfLine(coverage, pace) : null;
                 if (!shelfLine) return null;
+                const timed = shelfDaysClause(coverage?.coverage ?? null, pace);
                 return (
                   <p
                     className="mb-2.5 flex items-center justify-between gap-2 rounded-lg bg-[#F7F8F6] px-2.5 py-1.5 text-[11.5px] font-semibold tabular-nums"
-                    title="One shared math (src/lib/shelf.ts) — the same answer the rail, the shelf's board and the recipe editor speak"
+                    title="One shared math (src/lib/shelf.ts) — the same answer the rail, the shelf's board and the recipe editor speak; the days divide coverage by the paid week's pace"
                   >
                     <span className="text-[10.5px] font-bold uppercase tracking-wide text-[#969696]">
                       The shelf
                     </span>
-                    <span style={{ color: shelfLine.tone }}>{shelfLine.text}</span>
+                    <span
+                      className="flex items-center gap-1"
+                      style={{ color: shelfLine.tone }}
+                    >
+                      {timed && <Clock size={11} aria-hidden className="shrink-0 opacity-80" />}
+                      {shelfLine.text}
+                    </span>
                   </p>
                 );
               })()}
