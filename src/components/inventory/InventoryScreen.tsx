@@ -32,7 +32,6 @@ import {
   adjustStock,
   createInventoryItem,
   deleteInventoryItem,
-  fetchDeductionWindow,
   fetchInventory,
   fetchMenuItems,
   fetchPaidMoverLines,
@@ -82,9 +81,14 @@ import type { MenuItem } from '../../types';
  *      reads the dish's paid units over the movers' window, and the shelf
  *      strip's answer grows the days clause (shelfDaysClause) the counter
  *      and the menu already speak — the pace reaches the back office.
- *   3. REORDER — what to buy this week: the stock_deductions ledger prices
- *      each SKU's burn per day (last 14 days), converts to days-left meters
- *      and a 7-day-cover shopping list with estimated cost (copy/CSV).
+ *   3. REORDER — what to buy this week: the ONE burn prices the list
+ *      (computeBurnByIngredient — recipe lines × the dishes' paid pace,
+ *      5.177.0). The stock_deductions ledger it replaces reads sparse:
+ *      trg_orders_deduct_stock fires only at `preparing`, so quick-paid
+ *      counter tickets never move stock, and the two voices disagreed
+ *      (beans: 274d vs ~6 weeks) — the ONE-math doctrine forbids that.
+ *      Converts to days-left meters and a 7-day-cover shopping list
+ *      with estimated cost (copy/CSV).
  *   4. LIVE — the engine deducts the moment a ticket hits `preparing`
  *      (single-engine rule: trg_orders_deduct_stock is THE deduction path);
  *      realtime keeps this board moving while tickets fire.
@@ -105,8 +109,6 @@ import type { MenuItem } from '../../types';
 
 type TabKey = 'stock' | 'recipes' | 'reorder';
 
-/** Burn-rate window for reorder suggestions (ledger days). */
-const REORDER_WINDOW_DAYS = 14;
 /** Days of cover the shopping list buys (suggested = burn × this − stock). */
 const REORDER_COVER_DAYS = 7;
 
@@ -525,7 +527,6 @@ const InventoryInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
   const [recipes, setRecipes] = useState<RecipeLine[]>([]);
   const [deductions, setDeductions] = useState<StockDeduction[]>([]);
   const [adjustments, setAdjustments] = useState<StockAdjustment[]>([]);
-  const [dedWindow, setDedWindow] = useState<StockDeduction[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [rt, setRt] = useState<RealtimeState>('connecting');
@@ -559,20 +560,18 @@ const InventoryInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
     if (!tenantId) return;
     setError(null);
     try {
-      const [inv, mi, rl, sd, sa, sdw] = await Promise.all([
+      const [inv, mi, rl, sd, sa] = await Promise.all([
         fetchInventory(tenantId),
         fetchMenuItems(tenantId),
         fetchRecipeLines(tenantId),
         fetchRecentDeductions(tenantId, 12),
         fetchRecentAdjustments(tenantId, 12),
-        fetchDeductionWindow(tenantId, REORDER_WINDOW_DAYS),
       ]);
       setItems(inv);
       setMenuItems(mi);
       setRecipes(rl);
       setDeductions(sd);
       setAdjustments(sa);
-      setDedWindow(sdw);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not load inventory from the cloud.');
     } finally {
@@ -1462,7 +1461,8 @@ const InventoryInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
       ) : (
         <ReorderBoard
           items={items}
-          deductions={dedWindow}
+          recipes={recipes}
+          pace={pace}
           onRestock={(item, suggested) => setRestockFor({ item, suggested })}
           storeName={tenant?.name || 'ServePoint store'}
         />
@@ -2728,9 +2728,11 @@ const StocktakeDialog: React.FC<{
 
 /* ─────────────────────────── reorder board ────────────────────────────── */
 
-interface ReorderRow {
+export interface ReorderRow {
   item: InventoryItem;
-  /** ledger burn per day across the window (qty units/day) */
+  /** weekly burn (ingredient units) — the ONE burn number itself (5.177.0) */
+  burnWeekly: number;
+  /** the weekly burn spread over the movers' window (qty units/day) */
   burnPerDay: number;
   /** days until the shelf runs dry at this burn — null when nothing burns */
   daysLeft: number | null;
@@ -2783,7 +2785,7 @@ export function buildReorderText(opts: ReorderTextOpts): string {
     out.push(regHr());
     out.push(opts.buys.length === 0 ? 'WATCHING · COVER' : 'ALSO WATCHING');
     for (const w of opts.watching)
-      out.push(regTwo(w.name, `${Math.max(1, Math.round(w.daysLeft))}d cover`));
+      out.push(regTwo(w.name, `${Math.max(1, Math.floor(w.daysLeft))}d cover`));
   }
   out.push(regHr());
   out.push(regCenter(`Shared ${appFormatters().hhmm.format(new Date())} ${appTzTag()}`));
@@ -2791,26 +2793,30 @@ export function buildReorderText(opts: ReorderTextOpts): string {
   return out.join('\n');
 }
 
-/** Pure burn-rate math over the stock_deductions ledger — read-only, no engine. */
-function buildReorderRows(items: InventoryItem[], deductions: StockDeduction[]): ReorderRow[] {
-  const burn = new Map<string, number>();
-  for (const d of deductions) {
-    burn.set(d.inventory_item_id, (burn.get(d.inventory_item_id) ?? 0) + Number(d.qty ?? 0));
-  }
+/** The shopping list's rows over the ONE burn (5.177.0) — weekly burn per
+ *  ingredient from computeBurnByIngredient (recipe lines × the dishes'
+ *  paid pace). The deductions ledger it replaces reads sparse:
+ *  trg_orders_deduct_stock fires only at `preparing`, so quick-paid
+ *  counter tickets never move stock — its 274-day beans verdict against
+ *  the pace's ~6 weeks was the exact two-voice disagreement the
+ *  ONE-math doctrine forbids. Exported pure so the unit suite can
+ *  born-test the join. */
+export function buildReorderRows(items: InventoryItem[], burnWeekly: Map<string, number>): ReorderRow[] {
   return items
     .map((item) => {
-      const burnPerDay = (burn.get(item.id) ?? 0) / REORDER_WINDOW_DAYS;
+      const bw = burnWeekly.get(item.id) ?? 0;
+      const burnPerDay = bw / MOVER_WINDOW_DAYS;
       const daysLeft = burnPerDay > 0 ? Number(item.current_stock) / burnPerDay : null;
       const suggested =
         burnPerDay > 0
-          ? Math.max(0, Math.ceil(burnPerDay * REORDER_COVER_DAYS - Number(item.current_stock)))
+          ? Math.max(0, Math.ceil((bw * REORDER_COVER_DAYS) / MOVER_WINDOW_DAYS - Number(item.current_stock)))
           : 0;
       const estCost = suggested * Number(item.cost_per_unit ?? 0);
       const needsBuy =
         burnPerDay > 0 &&
         (Number(item.current_stock) <= Number(item.reorder_point) ||
           (daysLeft ?? Infinity) < REORDER_COVER_DAYS);
-      return { item, burnPerDay, daysLeft, suggested, estCost, needsBuy };
+      return { item, burnWeekly: bw, burnPerDay, daysLeft, suggested, estCost, needsBuy };
     })
     .sort(
       (a, b) =>
@@ -2829,11 +2835,15 @@ function daysTone(daysLeft: number | null): { text: string; bar: string; label: 
 
 const ReorderBoard: React.FC<{
   items: InventoryItem[];
-  deductions: StockDeduction[];
+  recipes: RecipeLine[];
+  pace: Map<string, number> | null;
   onRestock: (item: InventoryItem, suggested: number) => void;
   storeName: string;
-}> = ({ items, deductions, onRestock, storeName }) => {
-  const rows = useMemo(() => buildReorderRows(items, deductions), [items, deductions]);
+}> = ({ items, recipes, pace, onRestock, storeName }) => {
+  /* 5.177.0 — the list reads the ONE burn: the same computeBurnByIngredient
+   * map the Stock tab's clock reads — the two tabs can never disagree. */
+  const burnWeekly = useMemo(() => computeBurnByIngredient(recipes, pace), [recipes, pace]);
+  const rows = useMemo(() => buildReorderRows(items, burnWeekly), [items, burnWeekly]);
   const [edits, setEdits] = useState<Record<string, string>>({});
   /* v5.150.0 — the copy button joins the arc's honest tri-state: ok/fail
    * said out loud (aria-live), the 1.8s reset the bill taught (5.145.0);
@@ -2920,8 +2930,8 @@ const ReorderBoard: React.FC<{
         </span>
         <h2 className="mt-1 text-[15px] font-bold text-[#1A1A1A]">Nothing to buy yet</h2>
         <p className="max-w-sm text-[12.5px] text-[#6B6B6B]">
-          Reorder suggestions need burn history — place a few tickets and the ledger will price your
-          shopping list automatically. No recipes yet? Link ingredients to menu items under Recipes.
+          Reorder suggestions need the room's pace and recipes — link ingredients to menu items under
+          Recipes, and the dishes' paid week prices the shopping list automatically.
         </p>
       </div>
     );
@@ -2935,7 +2945,7 @@ const ReorderBoard: React.FC<{
           <div>
             <h2 className="text-[15px] font-bold text-[#1A1A1A]">Shopping list</h2>
             <p className="text-[11.5px] text-[#969696]">
-              Burn rates from the last {REORDER_WINDOW_DAYS} days of the deductions ledger · the list
+              Burn rates from the dishes' paid pace — recipe lines × the week's sales · the list
               buys {REORDER_COVER_DAYS} days of cover
             </p>
           </div>
@@ -3000,7 +3010,7 @@ const ReorderBoard: React.FC<{
                 const tone = daysTone(r.daysLeft);
                 const q = effectiveQty(r);
                 const cost = q * Number(r.item.cost_per_unit ?? 0);
-                const meterPct = r.daysLeft == null ? 100 : Math.min(100, (r.daysLeft / REORDER_WINDOW_DAYS) * 100);
+                const meterPct = r.daysLeft == null ? 100 : Math.min(100, (r.daysLeft / REORDER_COVER_DAYS) * 100);
                 return (
                   <li key={r.item.id} className="flex flex-wrap items-center gap-3 py-3" aria-label={`${r.item.name} shopping list row`}>
                     <div className="min-w-0 flex-1 basis-56">
@@ -3016,7 +3026,7 @@ const ReorderBoard: React.FC<{
                           <div className="h-full rounded-full transition-all duration-700" style={{ width: `${Math.max(2, meterPct)}%`, backgroundColor: tone.bar }} />
                         </div>
                         <span className={`shrink-0 text-[11px] tabular-nums font-bold ${tone.text}`}>
-                          {r.daysLeft == null ? '—' : `${r.daysLeft.toFixed(1)}d left`}
+                          {shelfDaysClause(Number(r.item.current_stock), r.burnWeekly, 'burn') ?? '—'}
                         </span>
                       </div>
                       <p className="mt-1 text-[10.5px] font-semibold text-[#969696]">
@@ -3083,7 +3093,7 @@ const ReorderBoard: React.FC<{
                   </span>
                   <span className="shrink-0 text-[11.5px] tabular-nums text-[#6B6B6B]">
                     <span className={`font-bold ${tone.text}`}>
-                      {r.daysLeft == null ? '—' : `${r.daysLeft.toFixed(1)}d`}
+                      {shelfDaysClause(Number(r.item.current_stock), r.burnWeekly, 'burn') ?? '—'}
                     </span>{' '}
                     · {fmtRate(r.burnPerDay)} {r.item.unit}/day
                   </span>
