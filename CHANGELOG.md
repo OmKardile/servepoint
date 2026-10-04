@@ -3,6 +3,20 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.157.0] — 2026-10-04 — The drawer speaks in chat, and the arc's parked list closes
+
+### Added — the drawer-honesty card gets a pocket voice (`src/components/reports/ReportsScreen.tsx`)
+
+The share arc's twelfth member, and the last parked surface: `buildDrawerText(opts)` (exported pure, E2E-assertable) answers the end-of-day owner question — "did the drawer balance?" — in the same chat where the day's money travels. The card's own doctrine holds verbatim: sealed shifts only, expected is the ledger's math, variance is STORED truth never re-derived. Net variance right-aligned with the card's exact word riding as full-width prose ("small slip — noted on the shift", 31 columns on one line — prose never indents into the money aligner), then shift by shift newest-first: the when, the variance via the money aligner, expected/counted as packed detail, a compact chat word from the same tone tiers (clean keeps "matches the ledger"; slips shorten to "small slip — noted"; investigations name their direction), and the closing note quoted as indented prose at the detail width — a clean shift's silence is deliberate (the minority marked, never the majority). Chat caps mirror the screen's (5 shifts) with `shiftTotal` keeping the `+ N more sealed in range` line honest. Assembly from the same `shiftsInRange`/`shiftAgg` memos the screen renders (the 5.146.0 rule); Copy + WhatsApp chips join CSV in the card's own `h-7` cream-gold grammar, gated on sealed shifts existing; Copy rides the honest tri-state. Built on the hardened helpers from birth and joined to the standing torture suite before shipping — the arc's birth rule, now followed for the last member too.
+
+### Changed — shift notes stop hiding behind a truncation ellipsis
+
+On the card, a closing note longer than one line used to `truncate` — the full story existed only in the CSV. Notes now clamp to two lines and carry a `title` tooltip with the full text, so the coin-tray excuse survives the scroll.
+
+### Verified
+
+`tsc` EXIT=0 · `vite build` EXIT=0 · node --check sw.js OK · unit suite (vite-node, literals) ALL PASS: torture now guards TWELVE builders ≤ 32 columns (drawer case includes clean/slip/investigate tiers + over-long note) + 11 drawer semantic asserts (net row, card word, sealed count, shift rows, exp/counted detail, per-tier words, quoted note, clean-shift silence, over-cap honesty, footer) · E2E on the live Reports screen (Last 7 days): chips render on fresh load, the wa.me href decodes to the exact builder text — QR Flow Cafe / THE DRAWER · LAST 7 DAYS / Net variance −₹7.00 · small slip — noted on the shift / 2 shifts sealed in range / 30 Sept, 7:10 pm −₹7.00 · exp ₹962.00 · counted ₹955.00 · small slip — noted · "Coin tray ran light during the evening rush." / 29 Sept, 6:05 pm ₹0.00 · exp ₹500.00 · counted ₹500.00 · matches the ledger — every number matching the card to the rupee, Copy honest tri-state with the 1.8s reset, console delta 0 across two fresh loads (6 stale HMR-recovery entries from the mid-edit assembly-move cycle attributed, zero live).
+
 ## [5.156.0] — 2026-10-04 — The guest voices speak in chat, and every twin's frame is unbreakable
 
 ### Added — the satisfaction card gets a pocket voice (`src/components/reports/ReportsScreen.tsx`)

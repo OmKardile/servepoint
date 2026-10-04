@@ -884,6 +884,116 @@ export function buildRatingsText(opts: GuestVoiceOpts): string {
   return out.join('\n');
 }
 
+/* ── v5.157.0 — the drawer speaks in chat ───────────────────────────
+ * The share arc's twelfth member, and the last parked surface: the
+ * drawer-honesty card gets a pocket voice. "Did the drawer balance?"
+ * is the end-of-day owner question, and the answer rides home in the
+ * same chat as everything else. The card's own doctrine holds: sealed
+ * shifts only, expected is the ledger's math, variance is STORED
+ * truth never re-derived. Net variance with the card's own word, then
+ * shift by shift (newest first): the when, the variance right-aligned
+ * via the money aligner, expected/counted as packed detail, the
+ * per-shift chat word, and the closing note quoted as the indented
+ * prose it is — a clean shift says "matches the ledger" and stays
+ * silent otherwise (the minority marked, never the majority). Chat
+ * caps mirror the screen's (5 shifts; the CSV stays complete). Built
+ * on the hardened helpers from birth and joins the standing torture
+ * suite before it ships. Exported pure so E2E can assert the text
+ * without the clipboard. */
+export interface DrawerOpts {
+  storeName: string;
+  rangeLabel: string;
+  net: number;
+  netWord: string;
+  sealed: number;
+  shifts: {
+    when: string;
+    expected: number;
+    counted: number;
+    variance: number;
+    word: string | null;
+    note: string | null;
+  }[];
+  shiftTotal: number;
+}
+
+export function buildDrawerText(opts: DrawerOpts): string {
+  const W = 32;
+  const hr = '-'.repeat(W);
+  const center = (s: string): string => {
+    const t = s.length > W ? `${s.slice(0, W - 1)}…` : s;
+    return t.length >= W ? t : ' '.repeat(Math.floor((W - t.length) / 2)) + t;
+  };
+  const two = (l: string, r: string): string => {
+    const cut = Math.max(1, W - r.length - 1);
+    const left = l.length > cut ? `${l.slice(0, cut - 1)}…` : l;
+    return left.padEnd(W - r.length, ' ') + r;
+  };
+  const wrap = (s: string, width = W): string[] => {
+    const words = s.split(/\s+/).filter(Boolean);
+    const lines: string[] = [];
+    let cur = '';
+    for (const w of words) {
+      const t = cur ? `${cur} ${w}` : w;
+      if (t.length <= width) {
+        cur = t;
+        continue;
+      }
+      if (cur) lines.push(cur);
+      cur = w.length > width ? `${w.slice(0, width - 1)}…` : w;
+    }
+    if (cur) lines.push(cur);
+    return lines;
+  };
+  const detail = (segs: (string | false | null | undefined)[]): string[] => {
+    const lines: string[] = [];
+    let cur = '';
+    for (const raw of segs) {
+      if (!raw) continue;
+      const s = String(raw);
+      if (s.length > W - 3) {
+        if (cur) {
+          lines.push(cur);
+          cur = '';
+        }
+        for (const w of wrap(s, W - 3)) lines.push(w);
+        continue;
+      }
+      const t = cur ? `${cur} · ${s}` : s;
+      if (t.length <= W - 3) {
+        cur = t;
+        continue;
+      }
+      if (cur) lines.push(cur);
+      cur = s;
+    }
+    if (cur) lines.push(cur);
+    return lines;
+  };
+
+  const out: string[] = [];
+  out.push(center(opts.storeName));
+  out.push(center(`THE DRAWER · ${opts.rangeLabel.toUpperCase()}`));
+  out.push(hr);
+  out.push(two('Net variance', signedMoney(opts.net)));
+  // the card's own word rides as full-width prose — never indented, so the
+  // exact label ("small slip — noted on the shift", 31 cols) fits the frame
+  if (opts.netWord) for (const line of wrap(opts.netWord)) out.push(line);
+  out.push(`${opts.sealed} shift${opts.sealed === 1 ? '' : 's'} sealed in range`);
+  out.push(hr);
+  for (const s of opts.shifts) {
+    out.push(two(s.when, signedMoney(s.variance)));
+    for (const line of detail([`exp ${formatMoney(s.expected)}`, `counted ${formatMoney(s.counted)}`, s.word]))
+      out.push(`   ${line}`);
+    if (s.note && s.note.trim().length > 0)
+      for (const line of wrap(`“${s.note.trim()}”`, W - 3)) out.push(`   ${line}`);
+  }
+  if (opts.shiftTotal > opts.shifts.length) out.push(`+ ${opts.shiftTotal - opts.shifts.length} more sealed in range`);
+  out.push(center(`Shared ${appFormatters().hhmm.format(new Date())} ${appTzTag()}`));
+  out.push(center('· · · end of the drawer · · ·'));
+  return out.join('\n');
+}
+
 /* ── Kitchen speed (5.67.0) — the clock reads the hop ledger ──────────────── */
 
 interface SpeedTicket {
@@ -1908,6 +2018,52 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
     for (const s of shiftsInRange) net += Number(s.variance ?? 0);
     return { net, count: shiftsInRange.length };
   }, [shiftsInRange]);
+
+  /* v5.157.0 — one assembly feeds Copy + WhatsApp (5.146.0 rule, drawer
+   * edition): built from the same shiftsInRange/shiftAgg memos the screen
+   * renders (declared just above). Hooks stay above the early returns —
+   * the 192 rule. The chat word is the card's tone tiers in compact
+   * register (clean keeps the full "matches the ledger"; slips and
+   * investigations shorten to fit the detail width without wrapping);
+   * the closing note rides as quoted prose, and a clean shift's silence
+   * about notes is deliberate. */
+  const drawerChatWord = (v: number): string | null => {
+    const abs = Math.abs(v);
+    if (abs < 0.005) return 'matches the ledger';
+    if (abs <= 20) return 'small slip — noted';
+    return v > 0 ? 'over — investigate' : 'short — investigate';
+  };
+  const drawerShareOpts = useMemo<DrawerOpts>(() => ({
+    storeName: tenant?.name || 'ServePoint store',
+    rangeLabel: RANGE_LABEL[range],
+    net: shiftAgg.net,
+    netWord: varianceTone(shiftAgg.net).label,
+    sealed: shiftAgg.count,
+    shifts: shiftsInRange.slice(0, 5).map((s) => {
+      const v = Number(s.variance ?? 0);
+      return {
+        when: s.closed_at ? appFormatters().dt.format(new Date(s.closed_at)) : '—',
+        expected: Number(s.expected_cash ?? 0),
+        counted: Number(s.counted_cash ?? 0),
+        variance: v,
+        word: drawerChatWord(v),
+        note: s.closing_note,
+      };
+    }),
+    shiftTotal: shiftsInRange.length,
+  }), [tenant?.name, range, shiftAgg, shiftsInRange]);
+  const drawerText = shiftAgg.count > 0 ? buildDrawerText(drawerShareOpts) : '';
+  const [drawerCopyState, setDrawerCopyState] = useState<'idle' | 'ok' | 'fail'>('idle');
+  const copyDrawer = async () => {
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error('clipboard unavailable');
+      await navigator.clipboard.writeText(drawerText);
+      setDrawerCopyState('ok');
+    } catch {
+      setDrawerCopyState('fail');
+    }
+    window.setTimeout(() => setDrawerCopyState('idle'), 1800);
+  };
 
   /* ── trends — the shape of the range, IST day by day (2.0 section) ─────── */
 
@@ -4039,14 +4195,45 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
               <div className="mb-1 flex items-center justify-between gap-2">
                 <h2 className="text-[15px] font-bold text-[#1A1A1A]">Drawer honesty</h2>
                 {shiftAgg.count > 0 && (
-                  <button
-                    onClick={exportShifts}
-                    aria-label="Export drawer shifts as CSV"
-                    title="Export the sealed shifts — expected, counted, variance — as CSV"
-                    className="inline-flex h-7 items-center rounded-lg border border-[#B88E2F]/45 bg-[#FDF9F0] px-2.5 text-[11px] font-bold text-[#8A5A00] transition hover:bg-[#B88E2F] hover:text-white active:scale-[0.97]"
-                  >
-                    CSV
-                  </button>
+                  <div className="flex shrink-0 items-center gap-1.5">
+                    <button
+                      onClick={copyDrawer}
+                      aria-live="polite"
+                      aria-label="Copy the drawer as text"
+                      title="Copy the drawer's sealed-shift honesty as text"
+                      className="inline-flex h-7 items-center gap-1 rounded-lg border border-[#B88E2F]/45 bg-[#FDF9F0] px-2.5 text-[11px] font-bold text-[#8A5A00] transition hover:bg-[#B88E2F] hover:text-white active:scale-[0.97]"
+                    >
+                      {drawerCopyState === 'ok' ? (
+                        <Check size={12} aria-hidden />
+                      ) : (
+                        <Copy size={12} aria-hidden />
+                      )}
+                      {drawerCopyState === 'ok'
+                        ? 'Copied'
+                        : drawerCopyState === 'fail'
+                          ? 'Copy blocked'
+                          : 'Copy'}
+                    </button>
+                    <a
+                      href={`https://wa.me/?text=${encodeURIComponent(drawerText)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      aria-label="Share the drawer on WhatsApp"
+                      title="Share the drawer's sealed-shift honesty on WhatsApp"
+                      className="inline-flex h-7 items-center gap-1 rounded-lg border border-[#B88E2F]/45 bg-[#FDF9F0] px-2.5 text-[11px] font-bold text-[#8A5A00] transition hover:bg-[#B88E2F] hover:text-white active:scale-[0.97]"
+                    >
+                      <MessageCircle size={12} aria-hidden />
+                      WhatsApp
+                    </a>
+                    <button
+                      onClick={exportShifts}
+                      aria-label="Export drawer shifts as CSV"
+                      title="Export the sealed shifts — expected, counted, variance — as CSV"
+                      className="inline-flex h-7 items-center rounded-lg border border-[#B88E2F]/45 bg-[#FDF9F0] px-2.5 text-[11px] font-bold text-[#8A5A00] transition hover:bg-[#B88E2F] hover:text-white active:scale-[0.97]"
+                    >
+                      CSV
+                    </button>
+                  </div>
                 )}
               </div>
               <p className="mb-4 text-[11.5px] text-[#969696]">
@@ -4177,7 +4364,10 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
                             </span>
                           </div>
                           {s.closing_note ? (
-                            <p className="mt-0.5 truncate pl-0.5 text-[10.5px] italic text-[#969696]">
+                            <p
+                              className="mt-0.5 line-clamp-2 pl-0.5 text-[10.5px] italic text-[#969696]"
+                              title={s.closing_note}
+                            >
                               “{s.closing_note}”
                             </p>
                           ) : null}

@@ -131,6 +131,18 @@ torture('buildChaseText', () =>
     total: 2,
   }));
 
+torture('buildDrawerText', () =>
+  reports.buildDrawerText({
+    storeName: LONG, rangeLabel: 'Last 7 days',
+    net: -7, netWord: 'small slip — noted on the shift', sealed: 7,
+    shifts: [
+      { when: '30 Sept, 7:10 pm', expected: 962, counted: 955, variance: -7, word: 'small slip — noted', note: LONGCOMMENT },
+      { when: '29 Sept, 6:05 pm', expected: 500, counted: 500, variance: 0, word: 'matches the ledger', note: null },
+      { when: '28 Sept, 9:40 pm', expected: 1200, counted: 1350, variance: 150, word: 'over — investigate', note: null },
+    ],
+    shiftTotal: 7,
+  }));
+
 torture('buildOfferText', () =>
   custM.buildOfferText({
     id: 'o1', tenant_id: 't1',
@@ -188,6 +200,33 @@ assert('no-comment voice', t2.includes('no comment — the stars spoke'));
 assert('recover comment quoted', t2.includes('“cold coffee, sorry folks”'));
 assert('over-cap honesty', t2.includes('+ 4 more in the CSV'));
 assert('recover max 32 cols', maxCol(t2) <= 32);
+
+/* ── Part C: drawer semantics ────────────────────────────────────── */
+const { buildDrawerText } = reports;
+const d1 = buildDrawerText({
+  storeName: 'QR Flow Cafe', rangeLabel: 'Last 7 days',
+  net: -7, netWord: 'small slip — noted on the shift', sealed: 2,
+  shifts: [
+    { when: '30 Sept, 7:10 pm', expected: 962, counted: 955, variance: -7, word: 'small slip — noted', note: 'Coin tray ran light during the evening rush.' },
+    { when: '29 Sept, 6:05 pm', expected: 500, counted: 500, variance: 0, word: 'matches the ledger', note: null },
+  ],
+  shiftTotal: 2,
+});
+console.log('--- drawer ---\n' + d1 + '\n--------------');
+assert('net row aligned', /Net variance\s+−₹7\.00/.test(d1));
+assert('card word rides', d1.includes('small slip — noted on the shift'));
+assert('sealed count voice', d1.includes('2 shifts sealed in range'));
+assert('shift row with variance', /30 Sept, 7:10 pm\s+−₹7\.00/.test(d1));
+assert('exp/counted detail', /exp ₹962\.00 · counted ₹955\.00/.test(d1));
+assert('clean shift speaks matches', d1.includes('matches the ledger'));
+assert('note quoted indented', d1.includes('“Coin tray ran light during'));
+assert('clean shift carries no note line', !/matches the ledger\n   “/.test(d1));
+assert('over-cap honesty', buildDrawerText({
+  storeName: 'S', rangeLabel: 'Today', net: 0, netWord: 'matches the ledger', sealed: 7,
+  shifts: [], shiftTotal: 7,
+}).includes('+ 7 more sealed in range'));
+assert('drawer footer signature', d1.includes('· · · end of the drawer · · ·'));
+assert('drawer max 32 cols', maxCol(d1) <= 32);
 
 console.log(fails === 0 ? '\nALL ASSERTS PASS' : `\n${fails} ASSERT(S) FAILED`);
 process.exit(fails === 0 ? 0 : 1);
