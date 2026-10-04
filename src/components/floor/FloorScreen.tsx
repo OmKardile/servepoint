@@ -44,6 +44,7 @@ import {
   moveOrderTable,
   fetchOrderById,
   fetchOrders,
+  fetchPaymentMoments,
   fetchReservations,
   fetchTableSessions,
   fetchTables,
@@ -359,6 +360,24 @@ export interface SeatClock {
   camping: boolean;
 }
 
+/** The floor's DURATION register — minutes to words ("<1m" · "45m" ·
+ *  "1h 5m"). The census's median reads this: a finished seat that held
+ *  under a minute lasted "<1m", never "just sat" — that word belongs to
+ *  the LIVE clock below (a seat that just sat is a state, not a span).
+ *  Every real duration (≥1m) is byte-identical across both. */
+export function seatSpanLabel(minutes: number): string {
+  const h = Math.floor(minutes / 60);
+  return minutes < 1 ? '<1m' : h > 0 ? `${h}h ${minutes % 60}m` : `${minutes}m`;
+}
+
+/** The seat clock's label, from MINUTES alone — the ONE live register
+ *  the floor speaks ("just sat" · "45m" · "1h 5m"). The tile's clock and
+ *  the census's median share the arithmetic (seatSpanLabel), so a tile's
+ *  "sat 1h 5m" and the rhythm's "median 1h 5m" can never disagree. */
+export function seatLabelFor(minutes: number): string {
+  return minutes < 1 ? 'just sat' : seatSpanLabel(minutes);
+}
+
 /** The seat clock from a round's placed-at instant, in the floor's own
  *  TimeAgo register ("45m" · "1h 5m" · "just sat"). Null when the ledger
  *  input is unreadable — silence, not invention. `turnAfterMin` is the
@@ -371,14 +390,106 @@ export function seatClockFor(
   const t = new Date(placedAt).getTime();
   if (!Number.isFinite(t)) return null;
   const minutes = Math.max(0, Math.floor((nowMs - t) / 60000));
-  const h = Math.floor(minutes / 60);
-  const label =
-    minutes < 1
-      ? 'just sat'
-      : h > 0
-        ? `${h}h ${minutes % 60}m`
-        : `${minutes}m`;
-  return { minutes, label, camping: minutes >= turnAfterMin };
+  return { minutes, label: seatLabelFor(minutes), camping: minutes >= turnAfterMin };
+}
+
+/* ── The held time (v5.181.0) — the week's finished seats, measured ──
+ *  The camping clock (5.158.0) speaks the LIVE seat; the ledger behind it
+ *  also holds every seat the week FINISHED, and the floor never summed
+ *  them. The census measures a finished seat the way the live clock does —
+ *  created → freed — where freed is the payments ledger's LAST settle for
+ *  the ticket (a split frees the table when its final part lands). One
+ *  line, one comparison: a seat ran long exactly when the live clock
+ *  would have called it camping (minutes >= turnAfterMin, the house's own
+ *  line from Settings). Silence rules: an unpaid ticket has no end and is
+ *  counted but never measured; a cancelled ticket never happened; a
+ *  counter ticket holds no table; an unread settle ledger silences the
+ *  whole census — nothing is invented from a half-read. */
+
+/** The rhythm's own 7-IST-day window (v5.22.0 math, hoisted 5.181.0 so the
+ *  census measures the SAME week the hour chart draws). */
+export function floorWeekWindow(): { startMs: number; endMs: number; prevStartMs: number } {
+  const endMs = istDayStartFloor(istTodayIsoFloor()) + 24 * 3600 * 1000; // end of today (IST)
+  const startMs = endMs - 7 * 24 * 3600 * 1000; // last 7 IST calendar days
+  const prevStartMs = startMs - 7 * 24 * 3600 * 1000; // the 7 days before that
+  return { startMs, endMs, prevStartMs };
+}
+
+export interface TableTurnStats {
+  label: string | null;
+  rounds: number;
+  spans: number;
+  medianMin: number;
+  breaches: number;
+}
+
+export interface TurnCensus {
+  rounds: number;
+  spans: number;
+  medianMin: number;
+  breaches: number;
+  byTable: Map<string, TableTurnStats>;
+}
+
+/** The week's turn census: per finished seat, created → last settle, in
+ *  minutes; median and breach count per table and across the floor. An
+ *  empty/null settle map is HONEST silence (spans 0) — the caller decides
+ *  whether the UI speaks. `orders` may carry any population; the census
+ *  keeps only what the rhythm's own rules admit (table-bound, not
+ *  cancelled, inside [startMs, endMs)). */
+export function computeTurnCensus(
+  orders: Order[],
+  settleByOrder: Map<string, string> | null,
+  turnAfterMin: number,
+  startMs: number,
+  endMs: number,
+): TurnCensus {
+  const census: TurnCensus = {
+    rounds: 0,
+    spans: 0,
+    medianMin: 0,
+    breaches: 0,
+    byTable: new Map(),
+  };
+  const spans: number[] = [];
+  const tableSpans = new Map<string, number[]>();
+  for (const o of orders) {
+    if (o.table_id == null || o.status === 'cancelled') continue;
+    const t = new Date(o.created_at).getTime();
+    if (!Number.isFinite(t) || t < startMs || t >= endMs) continue;
+    census.rounds += 1;
+    const stat =
+      census.byTable.get(o.table_id) ??
+      ({ label: o.table_label ?? null, rounds: 0, spans: 0, medianMin: 0, breaches: 0 } as TableTurnStats);
+    stat.rounds += 1;
+    const settleIso = settleByOrder?.get(o.id);
+    const settleMs = settleIso ? new Date(settleIso).getTime() : NaN;
+    if (Number.isFinite(settleMs)) {
+      const minutes = Math.max(0, Math.floor((settleMs - t) / 60000));
+      spans.push(minutes);
+      const arr = tableSpans.get(o.table_id) ?? [];
+      arr.push(minutes);
+      tableSpans.set(o.table_id, arr);
+      if (minutes >= turnAfterMin) {
+        census.breaches += 1;
+        stat.breaches += 1;
+      }
+      census.spans += 1;
+      stat.spans += 1;
+    }
+    census.byTable.set(o.table_id, stat);
+  }
+  const median = (arr: number[]): number => {
+    if (arr.length === 0) return 0;
+    const s = [...arr].sort((a, b) => a - b);
+    const mid = Math.floor(s.length / 2);
+    return s.length % 2 === 1 ? s[mid] : Math.round((s[mid - 1] + s[mid]) / 2);
+  };
+  census.medianMin = median(spans);
+  for (const [id, stat] of census.byTable) {
+    stat.medianMin = median(tableSpans.get(id) ?? []);
+  }
+  return census;
 }
 
 /* ── The book (v5.38.0) — reservation status tones + booking-clock slot labels.
@@ -903,6 +1014,7 @@ function TableDrill({
   order,
   hold,
   turnAfterMin,
+  turnStats,
   promises,
   onSeat,
   onNoShow,
@@ -927,6 +1039,10 @@ function TableDrill({
    *  obeys the same number the tile and the header chip obey: one floor,
    *  one line, the house's own word. */
   turnAfterMin: number;
+  /** v5.181.0 — the table's own turn census for the week (rounds, median
+   *  held time, seats past the line). Null or spans 0 = silence — the
+   *  panel never invents a history from a half-read ledger. */
+  turnStats?: TableTurnStats | null;
   /** v5.83.0 — the hold audit rides into the drill: the same verdict the card
    *  shows, so the panel the owner opens to investigate carries the alarm too. */
   hold?: HoldVerdict | null;
@@ -1107,6 +1223,33 @@ function TableDrill({
 
         {/* body */}
         <div className="flex-1 space-y-3 overflow-y-auto p-4">
+          {/* v5.181.0 — the table's held time: the week's finished seats at
+              THIS table, measured the way the live clock measures. Speaks
+              only when a round actually settled here. */}
+          {turnStats && turnStats.spans > 0 && (
+            <div className="rounded-2xl border border-[#E3E7E0] bg-white p-4 shadow-sm">
+              <p className="flex items-center gap-2 text-[12px] font-bold uppercase tracking-wide text-[#0F3D3E]">
+                <Clock size={13} aria-hidden /> Held time · 7d
+              </p>
+              <p className="mt-1.5 text-[12.5px] leading-snug text-[#5F6B63]">
+                {turnStats.rounds} round{turnStats.rounds === 1 ? '' : 's'} seated ·{' '}
+                <span className="font-bold tabular-nums text-[#1A1A1A]">{seatSpanLabel(turnStats.medianMin)} median</span>{' '}
+                settled ·{' '}
+                <span
+                  className={`font-bold tabular-nums ${turnStats.breaches > 0 ? 'text-[#8A5A16]' : 'text-[#2E7D32]'}`}
+                >
+                  {turnStats.breaches === 0
+                    ? `none past the ${turnAfterMin}-min line`
+                    : `${turnStats.breaches} past the ${turnAfterMin}-min line`}
+                </span>
+              </p>
+              {turnStats.breaches > 0 && (
+                <p className="mt-1 text-[11px] font-medium text-[#8A938C]">
+                  A seat runs long exactly when the live camping clock would call it camping.
+                </p>
+              )}
+            </div>
+          )}
           {hold && hold !== 'live' && (
             <div
               role="status"
@@ -1606,6 +1749,11 @@ export function FloorScreen(): React.ReactElement {
   const showSeatChip = floorPrefs.showLongestSeatChip;
   const [tables, setTables] = useState<DiningTable[] | null>(null);
   const [orders, setOrders] = useState<Order[]>([]);
+  /* v5.181.0 — the settle moments behind the week's turn census: order_id →
+     its LAST payment's instant. null = not read yet (the census stays
+     silent); an empty map after a read is the honest zero. Fails soft —
+     the census is a glance, never a load-bearing read. */
+  const [settleByOrder, setSettleByOrder] = useState<Map<string, string> | null>(null);
   const [sessions, setSessions] = useState<TableSession[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -1658,6 +1806,16 @@ export function FloorScreen(): React.ReactElement {
       const [t, o] = await Promise.all([fetchTables(tenantId), fetchOrders(tenantId, 100)]);
       setTables(t);
       setOrders(o);
+      // The settle moments (v5.181.0) ride along FAIL-SOFT, like the session
+      // trail: the turn census reads them only when the week's table-bound
+      // tickets exist, and a hiccup silences the census without touching
+      // the board.
+      const tableIds = o
+        .filter((x) => x.table_id != null && x.status !== 'cancelled')
+        .map((x) => x.id);
+      fetchPaymentMoments(tenantId, tableIds)
+        .then((m) => setSettleByOrder(m))
+        .catch(() => setSettleByOrder(new Map()));
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : 'Could not load the floor.');
     }
@@ -2057,9 +2215,9 @@ export function FloorScreen(): React.ReactElement {
      cafe, or a ledger window that doesn't reach back); the compare mode
      says so instead of drawing a fake baseline. */
   const rhythm = useMemo(() => {
-    const endMs = istDayStartFloor(istTodayIsoFloor()) + 24 * 3600 * 1000; // end of today (IST)
-    const startMs = endMs - 7 * 24 * 3600 * 1000; // last 7 IST calendar days
-    const prevStartMs = startMs - 7 * 24 * 3600 * 1000; // the 7 days before that
+    /* v5.181.0 — the window math lives in floorWeekWindow() now, so the
+       turn census below measures the SAME week the hour chart draws. */
+    const { startMs, endMs, prevStartMs } = floorWeekWindow();
     const inWindow = (o: Order, from: number, to: number) => {
       const t = new Date(o.created_at).getTime();
       return (
@@ -2094,6 +2252,16 @@ export function FloorScreen(): React.ReactElement {
     }
     return { data, max, peakHour, total: rows.length, busiest, prevData: prevBuckets, prevTotal, prevMax };
   }, [orders]);
+
+  /* The held time (v5.181.0) — the week's turn census over the SAME window
+     the rhythm draws: median seat span (created → last settle) and the
+     seats that ran past the house turn line, across the floor and per
+     table. The settle map arrives fail-soft; null or empty means the
+     census never speaks (silence, never an invented median). */
+  const turnCensus = useMemo(() => {
+    const { startMs, endMs } = floorWeekWindow();
+    return computeTurnCensus(orders, settleByOrder, turnMin, startMs, endMs);
+  }, [orders, settleByOrder, turnMin]);
 
   /* The book (v5.38.0) — lifecycle flips are one honest UPDATE each; the
      board syncs best-effort around them: seating a party claims a FREE
@@ -2587,7 +2755,7 @@ export function FloorScreen(): React.ReactElement {
           </div>
         ) : (
           <>
-            <div className="mb-3 grid grid-cols-3 gap-2">
+            <div className="mb-3 grid grid-cols-2 gap-2 md:grid-cols-4">
               <div className="rounded-2xl border border-[#E3E7E0] bg-white px-3 py-2">
                 <p className="text-[10.5px] font-semibold uppercase tracking-wide text-[#6B6B6B]">Seated rounds · 7d</p>
                 <p className="mt-0.5 text-[18px] font-bold tabular-nums text-[#1A1A1A]">{rhythm.total}</p>
@@ -2623,6 +2791,36 @@ export function FloorScreen(): React.ReactElement {
                   {rhythm.busiest ? rhythm.busiest.label : '—'}{' '}
                   <span className="text-[12px] font-semibold text-[#6B6B6B]">{rhythm.busiest ? `· ${rhythm.busiest.n}` : ''}</span>
                 </p>
+              </div>
+              {/* v5.181.0 — the held time: the week's median finished seat and
+                  the seats that ran past the house line, measured the way the
+                  live camping clock measures (created → freed; freed = the
+                  ledger's last settle). Silent until a round settles. */}
+              <div className="rounded-2xl border border-[#E3E7E0] bg-white px-3 py-2">
+                <p className="text-[10.5px] font-semibold uppercase tracking-wide text-[#6B6B6B]">Held time · 7d</p>
+                {turnCensus.spans > 0 ? (
+                  <>
+                    <p className="mt-0.5 text-[18px] font-bold tabular-nums text-[#0F3D3E]">
+                      {seatSpanLabel(turnCensus.medianMin)}{' '}
+                      <span className="text-[12px] font-semibold text-[#6B6B6B]">median</span>
+                    </p>
+                    <p
+                      className={`mt-0.5 text-[10.5px] font-semibold tabular-nums ${
+                        turnCensus.breaches > 0 ? 'text-[#8A5A00]' : 'text-[#2E7D32]'
+                      }`}
+                      title={`A seat runs long exactly when the live camping clock would call it camping — ${turnCensus.spans} of ${turnCensus.rounds} seated rounds settled this week`}
+                    >
+                      {turnCensus.breaches > 0
+                        ? `${turnCensus.breaches} of ${turnCensus.spans} past the ${turnMin}-min line`
+                        : `none past the ${turnMin}-min line`}
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p className="mt-0.5 text-[18px] font-bold tabular-nums text-[#969696]">—</p>
+                    <p className="mt-0.5 text-[10.5px] font-semibold text-[#969696]">no settled rounds yet</p>
+                  </>
+                )}
               </div>
             </div>
             <div className="h-48" aria-hidden>
@@ -3148,6 +3346,7 @@ export function FloorScreen(): React.ReactElement {
           table={drillTable}
           order={drillOrder}
           turnAfterMin={turnMin}
+          turnStats={turnCensus.byTable.get(drillTable.id) ?? null}
           hold={drillTable ? holdVerdictFor(drillTable, orderByTable, holdAudit, holdFailed) : null}
           promises={promisesByTable.get(drillTable.id) ?? []}
           onSeat={(r) => void runAction(`res-${r.id}`, () => seatThePromise(r))}

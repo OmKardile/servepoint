@@ -2689,6 +2689,35 @@ export async function fetchOrderPayments(
   }));
 }
 
+/**
+ * v5.181.0 — the settle moments for MANY orders in one read: the floor's
+ * turn census measures a finished seat as created → LAST settle (a split
+ * ticket frees the table when its final part lands, so the newest row per
+ * order is the seat's end). Empty map on any failure — the census reads
+ * silence from an unread ledger and from an honest zero alike, and the
+ * caller cannot tell them apart by design (neither may speak).
+ */
+export async function fetchPaymentMoments(
+  tenantId: string,
+  orderIds: string[],
+): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  if (orderIds.length === 0) return out;
+  requireCloud();
+  const { data, error } = await supabase
+    .from('payments')
+    .select('order_id, created_at')
+    .eq('tenant_id', tenantId)
+    .in('order_id', orderIds)
+    .order('created_at', { ascending: false });
+  if (error || !data) return out;
+  for (const r of data as { order_id: string; created_at: string }[]) {
+    // rows arrive newest-first: first sight of an order IS its last settle
+    if (!out.has(r.order_id)) out.set(r.order_id, String(r.created_at || ''));
+  }
+  return out;
+}
+
 /** Records ONE NON-COVERING part of a split: a ledger row and nothing else —
  * the order stays honestly pending until a later part covers the ticket.
  * Amount/positive are re-guarded here (the table CHECK also holds). */
