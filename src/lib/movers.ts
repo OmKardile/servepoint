@@ -4,7 +4,8 @@
  * names what the whole ROOM keeps ordering. Same paid truth, wider window:
  *
  *   paid tickets only (isPaidTicket — status ≠ cancelled, payment completed),
- *   last 7 days, grouped per menu item, deterministic tie-breaks
+ *   the last 7 REPORTING days (moverWindow — the ledger's week, 5.202.0),
+ *   grouped per menu item, deterministic tie-breaks
  *   (units → tickets → rupees → name) so two reloads can never disagree.
  *
  * The rail is a speed surface, not a report: the counter taps a chip and the
@@ -19,8 +20,13 @@
  * a dish sells.
  */
 import type { OrderItem } from '../types';
+import { lastNDaysMs } from './appday';
 
-/** How far back the shortlist looks (ledger days, rolling from now). */
+/** How far back the shortlist looks — REPORTING days (5.202.0): N calendar
+ *  days ending today, the ledger's own week, not a private rolling
+ *  now−N·24h. moverWindow() builds it through appday's one builder so the
+ *  medallion's "this week" and Reports' "Last 7 days" are the same window
+ *  and the same number. */
 export const MOVER_WINDOW_DAYS = 7;
 
 /** How many movers the rail pins. */
@@ -73,6 +79,23 @@ function rankMovers(rows: MoverRow[]): Mover[] {
 
 export function computeTopMovers(rows: MoverRow[]): Mover[] {
   return rankMovers(rows).slice(0, MOVER_LIMIT);
+}
+
+/* ── 5.202.0 — the movers keep the ledger's week ──────────────────────────
+ * The shortlist's window is no longer its own: moverWindow delegates to
+ * appday's lastNDaysMs — the exact shape Reports' "Last 7 days" speaks
+ * (N calendar days of the reporting day, today inclusive). Before this,
+ * the fetch rolled `now − N·24h`, so the medallion, the rail chips and
+ * the shelf's pace quoted "this week" over one window while Reports'
+ * rank quoted the ledger's week over the other — 30 sold on the Menu,
+ * 25 on Reports, both true to their own math and neither wrong alone;
+ * the disagreement was the debt. One window, one population (isPaidTicket
+ * at the DB floor), one number. `now` is the suites' seam. */
+export function moverWindow(
+  days: number,
+  now: Date = new Date(),
+): { startMs: number; endMs: number } {
+  return lastNDaysMs(days, now);
 }
 
 /* ── 5.172.0 — the pace behind the shelf's days ─────────────────────────

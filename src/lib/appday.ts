@@ -91,6 +91,28 @@ export function appDayEndMs(dateIso: string, tz: string = appTimezone()): number
   return appDayStartMs(d.toISOString().slice(0, 10), tz);
 }
 
+/* ── 5.202.0 — the last-N-days window, ONE builder ─────────────────────────
+ * "Last N days" in this app means N calendar days of the REPORTING day
+ * ending today (today inclusive) — the shape Reports' ranges have spoken
+ * since v5.19.0. The movers' week (5.78.0) used to roll `now − N·24h`
+ * instead: two windows both answering "this week / last 7 days", and as
+ * the ledger aged past the boundary the Menu medallion's 30 and the
+ * Reports rank's 25 answered the same question with different numbers.
+ * One builder now owns the shape — Reports' rangeWindow and the movers'
+ * moverWindow both delegate, so two surfaces quoting the week quote one
+ * number (5.198's agreement, now structural instead of incidental). The
+ * day shift anchors at NOON (v5.83.0's argument) and the bounds resolve
+ * through this lib, so the owner's timezone word rules here too. */
+export function lastNDaysMs(
+  days: number,
+  now: Date = new Date(),
+): { startMs: number; endMs: number } {
+  const today = appTodayIso(appTimezone(), now);
+  const d = new Date(`${today}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() - (days - 1));
+  return { startMs: appDayStartMs(d.toISOString().slice(0, 10)), endMs: appDayEndMs(today) };
+}
+
 /** [00:00, next 00:00) ISO window of a calendar day in `tz`. */
 export function appDayBoundsIso(
   dateIso: string,
@@ -102,14 +124,15 @@ export function appDayBoundsIso(
   };
 }
 
-/** YYYY-MM-DD of "now" in `tz` (en-CA gives calendar order). */
-export function appTodayIso(tz: string = appTimezone()): string {
+/** YYYY-MM-DD of "now" in `tz` (en-CA gives calendar order). The optional
+ *  `now` is the suites' seam — day windows are pinned, not hoped (5.202.0). */
+export function appTodayIso(tz: string = appTimezone(), now: Date = new Date()): string {
   return new Intl.DateTimeFormat('en-CA', {
     timeZone: tz,
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
-  }).format(new Date());
+  }).format(now);
 }
 
 /** YYYY-MM-DD bucket key for an instant in `tz` — the trends/day-book key. */

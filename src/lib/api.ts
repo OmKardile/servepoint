@@ -1,5 +1,6 @@
 import { supabase, isSupabaseConfigured } from './supabase';
 import { appTodayIso, appDayKey, appDayBoundsIso } from './appday';
+import { moverWindow } from './movers';
 import type {
   AppNotification,
   AuditLogEntry,
@@ -2163,13 +2164,20 @@ export interface PaidMoverLine {
 }
 
 /** The shortlist's raw material: every line of every PAID ticket in the last
- *  `days` days. Paid truth mirrors isPaidTicket at the DB level (status ≠
- *  cancelled AND payment_status = completed) — one definition, two floors.
- *  The !inner embed on orders is a FILTER, not a join fetch: order_items
- *  denormalize everything the rail needs. */
+ *  `days` REPORTING days — moverWindow's ledger week (5.202.0: N calendar
+ *  days ending today, the same shape Reports' "Last 7 days" speaks; the
+ *  old private rolling `now − days·24h` let the medallion and the rank
+ *  disagree as the ledger aged past the boundary). Paid truth mirrors
+ *  isPaidTicket at the DB level (status ≠ cancelled AND payment_status =
+ *  completed) — one definition, two floors. The !inner embed on orders is
+ *  a FILTER, not a join fetch: order_items denormalize everything the rail
+ *  needs. The window is [start, end) — .lt end-cap keeps exact parity with
+ *  the client-side range filter (t >= end excluded, no future leak). */
 export async function fetchPaidMoverLines(tenantId: string, days: number): Promise<PaidMoverLine[]> {
   requireCloud();
-  const sinceIso = new Date(Date.now() - days * 86400000).toISOString();
+  const { startMs, endMs } = moverWindow(days);
+  const sinceIso = new Date(startMs).toISOString();
+  const untilIso = new Date(endMs).toISOString();
   const { data, error } = await supabase
     .from('order_items')
     .select(
@@ -2178,7 +2186,8 @@ export async function fetchPaidMoverLines(tenantId: string, days: number): Promi
     .eq('tenant_id', tenantId)
     .neq('orders.status', 'cancelled')
     .eq('orders.payment_status', 'completed')
-    .gte('orders.created_at', sinceIso);
+    .gte('orders.created_at', sinceIso)
+    .lt('orders.created_at', untilIso);
   if (error) throw error;
   return ((data || []) as unknown as PaidMoverLine[]).map((r) => ({
     order_id: r.order_id,

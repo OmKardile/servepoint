@@ -87,6 +87,7 @@ import {
   appDayKey,
   appFormatters,
   appTzTag,
+  lastNDaysMs,
 } from '../../lib/appday';
 import { useTenant } from '../../lib/tenant';
 import { useUi } from '../../store/session';
@@ -171,12 +172,14 @@ function shiftDayIso(days: number): string {
 
 /* Windows keep the v5.19.0 semantics EXACTLY: "N days" = N calendar days
    ENDING today (today inclusive) — only the midnight math is now DST-safe
-   through the lib instead of a +05:30 literal. */
+   through the lib instead of a +05:30 literal. 5.202.0: the shape itself
+   moved into appday's ONE builder (lastNDaysMs) and this delegates — the
+   movers' week (Menu medallion, rail chips, shelf pace) speaks the same
+   window now, so two surfaces quoting the week quote one number. */
 function rangeWindow(range: RangeKey): { startMs: number | null; endMs: number } {
-  const endMs = appDayEndMs(appTodayIso()); // end of the reporting day
-  if (range === 'all') return { startMs: null, endMs };
+  if (range === 'all') return { startMs: null, endMs: appDayEndMs(appTodayIso()) };
   const days = range === 'today' ? 1 : range === '7d' ? 7 : 30;
-  return { startMs: appDayStartMs(shiftDayIso(-(days - 1))), endMs };
+  return lastNDaysMs(days);
 }
 
 /** The EQUAL-LENGTH window immediately before the current one (v5.19.0) —
