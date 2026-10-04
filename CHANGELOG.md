@@ -3,6 +3,20 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.154.0] — 2026-10-04 — The offer scorecard speaks in chat
+
+### Added — the promo review gets a pocket voice (`src/components/reports/ReportsScreen.tsx`)
+
+The share arc's ninth member: the offer scorecard answers "is the discount pulling its weight?" in the same chat where the offers themselves travel (5.149.0). `buildOfferScoreText(opts)` (exported pure, E2E-assertable) speaks the house's 32-column register from the same `offerAgg` memo the screen renders: one block per offer — title with its live/paused state right-aligned, then detail segments (ticket count, the offer's own badge voice, brought-in money, discount cost, last rode) greedy-packed like the best sellers' list, never truncated mid-segment. Zero-ride offers speak honest zeros instead of vanishing — the dead offer is the one the owner most needs to see. The range totals close the block (`N tickets rode offers`, `₹X off the gross`, `₹Y walked in`) and the screen's own honesty rides as full-width prose: revenue rode in with the offers, but the counter can't prove they wouldn't have come anyway.
+
+### Changed — the Offer scorecard card gains a share row
+
+Copy + WhatsApp chips join the CSV chip in the scorecard header in the card's own compact grammar (`h-7 rounded-lg`, cream-gold family). Copy rides the honest tri-state (`aria-live="polite"`, 1.8s reset); WhatsApp is the house PICKER (`wa.me/?text=`); the row renders only when offers exist on the books.
+
+### Verified
+
+`tsc` EXIT=0 · `vite build` EXIT=0 · node --check sw.js OK · E2E on the live Reports screen (Last 7 days): chips render beside CSV, the wa.me href decodes to the exact builder text — ₹50 off over ₹300 · live · 3 tickets · ₹50.00 off · brought ₹997.50 · cost ₹150.00 · last rode 3 Oct, 4:58 pm / Morning flat white — 10% o… · live · 1 ticket · 10% off · brought ₹415.80 · cost ₹44.00 / 4 tickets rode offers / ₹194.00 off the gross / ₹1,413.30 walked in / the caveat prose — every number matching the screen's rows to the rupee, detail lines ≤ 32 columns, Copy honest tri-state with the 1.8s reset, zero new console errors (hooks above the early returns — the 192 rule applied from birth).
+
 ## [5.153.0] — 2026-10-04 — The best sellers speak in chat
 
 ### Added — the house's own book joins the share arc (`src/components/reports/ReportsScreen.tsx`)

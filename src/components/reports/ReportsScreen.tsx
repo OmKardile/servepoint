@@ -417,6 +417,97 @@ export function buildTopText(opts: TopTextOpts): string {
   return out.join('\n');
 }
 
+/* ── v5.154.0 — the offer scorecard speaks in chat ──────────────────
+ * The share arc's ninth member: the promo review gets a pocket voice.
+ * "Is the discount pulling its weight?" is a weekly owner question,
+ * and the answer rides in chat the same way the offers themselves do
+ * (5.149.0). Same house register; zero-ride offers speak honest zeros
+ * instead of vanishing — the dead offer is the one the owner most
+ * needs to see. The screen's own caveat rides as full-width prose:
+ * revenue rode IN with the offers, but the counter can't prove they
+ * wouldn't have come anyway. Exported pure so E2E can assert the
+ * text without the clipboard. */
+export interface OfferScoreOpts {
+  storeName: string;
+  rangeLabel: string;
+  offers: {
+    title: string;
+    voice: string;
+    isActive: boolean;
+    uses: number;
+    revenue: number;
+    discount: number;
+    lastRode: string | null;
+  }[];
+  totalUses: number;
+  totalDiscount: number;
+  totalRevenue: number;
+}
+
+export function buildOfferScoreText(opts: OfferScoreOpts): string {
+  const W = 32;
+  const hr = '-'.repeat(W);
+  const center = (s: string): string =>
+    s.length >= W ? s : ' '.repeat(Math.floor((W - s.length) / 2)) + s;
+  const two = (l: string, r: string): string => {
+    const cut = Math.max(1, W - r.length - 1);
+    const left = l.length > cut ? `${l.slice(0, cut - 1)}…` : l;
+    return left.padEnd(W - r.length, ' ') + r;
+  };
+  const wrap = (s: string): string[] => {
+    const words = s.split(/\s+/).filter(Boolean);
+    const lines: string[] = [];
+    let cur = '';
+    for (const w of words) {
+      const t = cur ? `${cur} ${w}` : w;
+      if (t.length <= W) {
+        cur = t;
+        continue;
+      }
+      if (cur) lines.push(cur);
+      cur = w.length > W ? `${w.slice(0, W - 1)}…` : w;
+    }
+    if (cur) lines.push(cur);
+    return lines;
+  };
+  const detail = (segs: string[]): string[] => {
+    const lines: string[] = [];
+    let cur = '';
+    for (const s of segs) {
+      const t = cur ? `${cur} · ${s}` : s;
+      if (t.length <= W - 3) {
+        cur = t;
+        continue;
+      }
+      if (cur) lines.push(cur);
+      cur = s;
+    }
+    if (cur) lines.push(cur);
+    return lines;
+  };
+
+  const out: string[] = [];
+  out.push(center(opts.storeName));
+  out.push(center(`OFFER SCORECARD · ${opts.rangeLabel.toUpperCase()}`));
+  out.push(hr);
+  for (const o of opts.offers) {
+    out.push(two(o.title, o.isActive ? 'live' : 'paused'));
+    const segs = [`${o.uses} ticket${o.uses === 1 ? '' : 's'}`];
+    if (o.voice) segs.push(o.voice);
+    segs.push(`brought ${formatMoney(o.revenue)}`, `cost ${formatMoney(o.discount)}`);
+    if (o.lastRode) segs.push(`last rode ${o.lastRode}`);
+    for (const line of detail(segs)) out.push(`   ${line}`);
+  }
+  out.push(hr);
+  out.push(`${opts.totalUses} ticket${opts.totalUses === 1 ? '' : 's'} rode offers`);
+  for (const line of detail([`${formatMoney(opts.totalDiscount)} off the gross`, `${formatMoney(opts.totalRevenue)} walked in`])) out.push(line);
+  out.push(hr);
+  for (const line of wrap("Revenue rode in with the offers — the counter can't prove they wouldn't have come anyway.")) out.push(line);
+  out.push(center(`Shared ${appFormatters().hhmm.format(new Date())} ${appTzTag()}`));
+  out.push(center('· · · end of scorecard · · ·'));
+  return out.join('\n');
+}
+
 /**
  * v5.148.0 — the range report's PAPER voice: the quad completes. The screen
  * shows the range, the CSVs carry it complete to a spreadsheet, chat pockets
@@ -1292,6 +1383,39 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
     }
     downloadCsv(`servepoint-offer-scorecard-${appTodayIso()}.csv`, rows);
   }, [offerAgg]);
+
+  /* v5.154.0 — one assembly feeds Copy + WhatsApp (5.146.0 rule, scorecard
+   * edition): built from the same offerAgg memo the screen renders. Hooks
+   * stay above the early returns — the 192 rule. Zero-ride offers ride
+   * along with honest zeros, exactly as the screen shows them. */
+  const offerScoreOpts = useMemo<OfferScoreOpts>(() => ({
+    storeName: tenant?.name || 'ServePoint store',
+    rangeLabel: RANGE_LABEL[range],
+    offers: offerAgg.list.map((o) => ({
+      title: o.title,
+      voice: o.voice,
+      isActive: o.isActive,
+      uses: o.uses,
+      revenue: o.revenue,
+      discount: o.discountSum,
+      lastRode: o.lastAt ? appFormatters().dt.format(new Date(o.lastAt)) : null,
+    })),
+    totalUses: offerAgg.totalUses,
+    totalDiscount: offerAgg.totalDiscount,
+    totalRevenue: offerAgg.totalRevenue,
+  }), [tenant?.name, range, offerAgg]);
+  const offerScoreText = offerAgg.list.length > 0 ? buildOfferScoreText(offerScoreOpts) : '';
+  const [scoreCopyState, setScoreCopyState] = useState<'idle' | 'ok' | 'fail'>('idle');
+  const copyScore = async () => {
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error('clipboard unavailable');
+      await navigator.clipboard.writeText(offerScoreText);
+      setScoreCopyState('ok');
+    } catch {
+      setScoreCopyState('fail');
+    }
+    window.setTimeout(() => setScoreCopyState('idle'), 1800);
+  };
 
   const exportRatings = useCallback(() => {
     if (fbAgg.count === 0) return;
@@ -2284,14 +2408,41 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
                 Offer scorecard
               </h2>
               {offerAgg.list.length > 0 && (
-                <button
-                  onClick={exportOffers}
-                  aria-label="Export offer scorecard as CSV"
-                  title="Export how each offer performed — tickets, money in, discount cost — as CSV"
-                  className="inline-flex h-7 items-center rounded-lg border border-[#B88E2F]/45 bg-[#FDF9F0] px-2.5 text-[11px] font-bold text-[#8A5A00] transition hover:bg-[#B88E2F] hover:text-white active:scale-[0.97]"
-                >
-                  CSV
-                </button>
+                <div className="flex shrink-0 items-center gap-1.5">
+                  <button
+                    onClick={copyScore}
+                    aria-live="polite"
+                    aria-label="Copy the offer scorecard as text"
+                    title="Copy how each offer performed as text"
+                    className="inline-flex h-7 items-center gap-1 rounded-lg border border-[#B88E2F]/45 bg-[#FDF9F0] px-2.5 text-[11px] font-bold text-[#8A5A00] transition hover:bg-[#B88E2F] hover:text-white active:scale-[0.97]"
+                  >
+                    {scoreCopyState === 'ok' ? (
+                      <Check size={12} aria-hidden />
+                    ) : (
+                      <Copy size={12} aria-hidden />
+                    )}
+                    {scoreCopyState === 'ok' ? 'Copied' : scoreCopyState === 'fail' ? 'Copy blocked' : 'Copy'}
+                  </button>
+                  <a
+                    href={`https://wa.me/?text=${encodeURIComponent(offerScoreText)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label="Share the offer scorecard on WhatsApp"
+                    title="Share how each offer performed on WhatsApp"
+                    className="inline-flex h-7 items-center gap-1 rounded-lg border border-[#B88E2F]/45 bg-[#FDF9F0] px-2.5 text-[11px] font-bold text-[#8A5A00] transition hover:bg-[#B88E2F] hover:text-white active:scale-[0.97]"
+                  >
+                    <MessageCircle size={12} aria-hidden />
+                    WhatsApp
+                  </a>
+                  <button
+                    onClick={exportOffers}
+                    aria-label="Export offer scorecard as CSV"
+                    title="Export how each offer performed — tickets, money in, discount cost — as CSV"
+                    className="inline-flex h-7 items-center rounded-lg border border-[#B88E2F]/45 bg-[#FDF9F0] px-2.5 text-[11px] font-bold text-[#8A5A00] transition hover:bg-[#B88E2F] hover:text-white active:scale-[0.97]"
+                  >
+                    CSV
+                  </button>
+                </div>
               )}
             </div>
             <p className="mb-3 text-[11.5px] text-[#969696]">
