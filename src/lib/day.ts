@@ -182,3 +182,19 @@ export function chaseAge(createdIso: string, nowMs: number): string {
   const days = Math.floor(hours / 24);
   return days === 0 ? 'today' : `${days}d old`;
 }
+
+/** ── v5.190.0 — the event's ago-voice ────────────────────────────────
+ *  How long since something last happened, in the EVENT register: events
+ *  pass ("Nd ago", "today") — debts stand ("Nd old", chaseAge above).
+ *  The deliberate fork is named (5.187) and asserted side by side so it
+ *  never silently collapses. The arithmetic is the family's own — the
+ *  same max(0,·) clamp and floor-of-full-days chaseAge speaks.
+ *  The offer board's usage tally is the first speaker (5.190.0): the
+ *  redemption ledger always knew WHEN an offer last moved a ticket, but
+ *  the card only said "used 3×" — a count you can't date is a count you
+ *  can't trust (5.187's doctrine, carried to the CRM). */
+export function usedAgo(iso: string, nowMs: number): string {
+  const hours = Math.max(0, (nowMs - new Date(iso).getTime()) / 36e5);
+  const days = Math.floor(hours / 24);
+  return days === 0 ? 'today' : `${days}d ago`;
+}

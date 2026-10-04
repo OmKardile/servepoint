@@ -7,6 +7,7 @@ import {
   Crown,
   Download,
   Gift,
+  History,
   Loader2,
   MessageCircle,
   Pencil,
@@ -31,6 +32,7 @@ import {
   fetchCustomerOrders,
   fetchCustomerStats,
   fetchCustomers,
+  fetchOfferRedemptions,
   fetchOffers,
   fetchReservations,
   subscribeCrmRealtime,
@@ -44,6 +46,7 @@ import {
 } from '../../lib/api';
 import { formatMoney } from '../../lib/prefs';
 import { downloadCsv } from '../../lib/csv';
+import { dayTime, usedAgo } from '../../lib/day';
 import { appTodayIso, appFormatters, appTzTag } from '../../lib/appday';
 import { bookingSlotLabel, bookingDayKey, bookingTodayKey, bookingTzIsForeign } from '../../lib/bookingday';
 import { useTenant } from '../../lib/tenant';
@@ -198,7 +201,16 @@ function offerBadgeLabel(o: Offer): string {
  * can assert the text without touching the clipboard. Same house
  * text-voice as the receipt, the Z and the range: 32 columns, centered
  * headline, aligned two() rows, honest usage and status. */
-export function buildOfferText(o: Offer, storeName: string): string {
+export function buildOfferText(
+  o: Offer,
+  storeName: string,
+  /* v5.190.0 — optional ledger date: given, the Used line grows the same
+   * "last used Nd ago" clause the card speaks (the pairing discipline —
+   * Copy and WhatsApp say what the screen says); absent, the paper is
+   * byte-identical to its old self (silence is not zero). */
+  lastUsedIso?: string | null,
+  nowMs?: number,
+): string {
   const W = 32;
   const hr = '-'.repeat(W);
   const center = (s: string): string => {
@@ -246,12 +258,39 @@ export function buildOfferText(o: Offer, storeName: string): string {
         : 'no minimum'
     )
   );
+  /* v5.190.0 — the tally learns its date: the ledger's newest redemption
+   * for this offer, in the event register usedAgo speaks ("Nd ago" —
+   * events pass; debts stand "Nd old", the named fork). ONE rule (the
+   * ledger's newest created_at), ONE sentence shape ("last used Nd ago"
+   * — the card's clause, split into the paper's own label/value grammar
+   * so the 32-col frame never truncates the label). Silence when the
+   * ledger has no row — the paper byte-identical to its old self. */
   out.push(two('Used so far', `${o.usage_count}×`));
+  if (lastUsedIso && nowMs != null) {
+    out.push(two('Last used', usedAgo(lastUsedIso, nowMs)));
+  }
   out.push(two('Status', o.is_active ? 'Live' : 'Paused'));
   out.push(hr);
   out.push(center(`Shared ${appFormatters().hhmm.format(new Date())} ${appTzTag()}`));
   out.push(center('· · · end of offer · · ·'));
   return out.join('\n');
+}
+
+/** ── v5.190.0 — the usage fact's full sentence ───────────────────────
+ *  The card's date clause rides a hover title and an aria name; both
+ *  compose from THIS function so the suite reads the exact sentences the
+ *  card speaks (227's doorOf pattern, 228's billsCsvRows). The count
+ *  always speaks ("used 3 times"); the date joins only when the ledger
+ *  has a row for the offer — no row, no clause, the base sentence
+ *  byte-identical to the tally's old voice (silence is not zero). */
+export function offerUsageAria(
+  usageCount: number,
+  lastUsedIso: string | null | undefined,
+  nowMs: number,
+): string {
+  const base = `used ${usageCount} time${usageCount === 1 ? '' : 's'}`;
+  if (!lastUsedIso) return base;
+  return `${base}, last used ${usedAgo(lastUsedIso, nowMs)}`;
 }
 
 /* ── The CRM reads the book (5.90.0) — a guest row carries today's promise.
@@ -434,6 +473,12 @@ const GuestsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry })
   const [guests, setGuests] = useState<Customer[]>([]);
   const [stats, setStats] = useState<Map<string, CustomerStats>>(new Map());
   const [offers, setOffers] = useState<Offer[]>([]);
+  /* v5.190.0 — the tally's dates: offerId → the ledger's newest redemption
+   * created_at. Derived, never stored (the CRM's own doctrine — the count
+   * cannot drift because it is not a count, it is the ledger read). null =
+   * the ledger has not been read (or could not): the date voice stays
+   * SILENT — an unread ledger never becomes an invented never. */
+  const [lastUsed, setLastUsed] = useState<Map<string, string> | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [rt, setRt] = useState<RealtimeState>('connecting');
@@ -494,6 +539,20 @@ const GuestsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry })
     fetchReservations(tenantId, 100)
       .then((rows) => setBook(rows))
       .catch(() => setBook(null));
+    /* v5.190.0 — the redemption ledger rides along the same way, fail-soft:
+       its dates are context for the offers tab, never a load-blocker. The
+       newest row per offer is taken EXPLICITLY (the read arrives
+       newest-first, but the max is never trusted to the sort order). */
+    fetchOfferRedemptions(tenantId, 500)
+      .then((rows) => {
+        const m = new Map<string, string>();
+        for (const r of rows) {
+          const prev = m.get(r.offerId);
+          if (!prev || r.createdAt > prev) m.set(r.offerId, r.createdAt);
+        }
+        setLastUsed(m);
+      })
+      .catch(() => setLastUsed(null));
   }, [tenantId]);
 
   useEffect(() => {
@@ -850,6 +909,7 @@ const GuestsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry })
           busyId={busyId}
           activeOffers={activeOffers}
           storeName={tenant?.name || 'ServePoint store'}
+          lastUsed={lastUsed}
         />
       )}
 
@@ -1207,7 +1267,10 @@ const OffersTab: React.FC<{
   busyId: string | null;
   activeOffers: number;
   storeName: string;
-}> = ({ offers, loading, onEdit, onToggle, onDelete, deleteArm, setDeleteArm, busyId, activeOffers, storeName }) => {
+  /* v5.190.0 — the tally's dates (offerId → newest ledger created_at);
+   * null = the ledger is unread and the date voice stays silent. */
+  lastUsed: Map<string, string> | null;
+}> = ({ offers, loading, onEdit, onToggle, onDelete, deleteArm, setDeleteArm, busyId, activeOffers, storeName, lastUsed }) => {
   /* v5.149.0 — per-card copy feedback: one state cell keyed by offer id,
    * ok/fail honest (headless and denied-permission browsers say so), the
    * 1.8s reset the bill's copy button taught (5.145.0). */
@@ -1215,7 +1278,9 @@ const OffersTab: React.FC<{
   const copyOffer = async (o: Offer) => {
     try {
       if (!navigator.clipboard?.writeText) throw new Error('clipboard unavailable');
-      await navigator.clipboard.writeText(buildOfferText(o, storeName));
+      await navigator.clipboard.writeText(
+        buildOfferText(o, storeName, lastUsed?.get(o.id) ?? null, Date.now())
+      );
       setOfferCopy({ id: o.id, ok: true });
     } catch {
       setOfferCopy({ id: o.id, ok: false });
@@ -1253,6 +1318,10 @@ const OffersTab: React.FC<{
           {offers.map((o) => {
             const armed = deleteArm === o.id;
             const pct = o.discount_type === 'percent';
+            /* v5.190.0 — the tally's date: the ledger's newest redemption
+             * for THIS offer (null when the ledger has no row — silence,
+             * never an invented never). One read, one fact, two surfaces. */
+            const lastIso = lastUsed?.get(o.id) ?? null;
             return (
               <div
                 key={o.id}
@@ -1299,8 +1368,22 @@ const OffersTab: React.FC<{
                           min {formatMoney(Number(o.min_order_amount))}
                         </span>
                       )}
-                      <span>
+                      {/* v5.190.0 — the tally learns the date: "used 3×" alone
+                          was a count you couldn't date (5.187's doctrine);
+                          the History icon is the shelf's own past-voice
+                          (5.187), quiet grey — the date informs, it never
+                          alarms. The title carries the exact stamp. */}
+                      <span
+                        aria-label={offerUsageAria(o.usage_count, lastIso, Date.now())}
+                        title={lastIso ? `last redemption ${dayTime(lastIso)}` : undefined}
+                      >
                         used <b className="text-[#1A1A1A]">{o.usage_count}</b>×
+                        {lastIso && (
+                          <span className="ml-1.5 inline-flex items-center gap-1 tabular-nums">
+                            <History size={12} aria-hidden className="shrink-0 text-[#969696]" />
+                            last used {usedAgo(lastIso, Date.now())}
+                          </span>
+                        )}
                       </span>
                     </div>
                   </div>
@@ -1385,7 +1468,9 @@ const OffersTab: React.FC<{
                         : 'Copy'}
                     </button>
                     <a
-                      href={`https://wa.me/?text=${encodeURIComponent(buildOfferText(o, storeName))}`}
+                      href={`https://wa.me/?text=${encodeURIComponent(
+                        buildOfferText(o, storeName, lastUsed?.get(o.id) ?? null, Date.now())
+                      )}`}
                       target="_blank"
                       rel="noopener noreferrer"
                       aria-label={`Share the ${o.title} offer on WhatsApp`}
