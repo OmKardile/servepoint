@@ -1,11 +1,13 @@
 /* ── The shelf's answer, as ONE shared truth (5.91.0; the recipe editor
- *    joins in 5.166.0) ────────────────────────────────────────────────
+ *    joins in 5.166.0, the counter's item sheet in 5.170.0) ──────────
  *
  *   "How many more of this dish can the shelf still make?" — the thinnest
  *   recipe SKU decides, computed from what's actually on file. Born inside
  *   InventoryScreen (v5.81.0); the counter's shortlist now speaks the same
  *   answer (5.91.0); the Recipes tab's draft strip reads the same math
- *   (5.166.0), so ONE answer serves the board, the rail, and the editor.
+ *   (5.166.0); the item detail modal speaks it at the moment of selling
+ *   (5.170.0) — so ONE answer serves the board, the rail, the editor, and
+ *   the sheet.
  *
  *   Honesty rules (inherited verbatim from the shelf's board):
  *   • no recipe lines on file  → coverage null, unknown false — the shelf
@@ -82,4 +84,16 @@ export function shelfVoice(c: ShelfCoverage): string | null {
   if (c.coverage === 0) return `can't make another — ${c.thin?.name || 'a SKU'} is out`;
   if (c.coverage < LOW_COVER) return `~${c.coverage} more left`;
   return `~${c.coverage} more on the shelf`;
+}
+
+/** The counter's paired line — voice and tone as ONE contract (5.170.0).
+ *  The item detail modal speaks the same answer the rail speaks, so the
+ *  two surfaces can never disagree about a dish (and neither can drift
+ *  off the family's tones). Silence for a dish with no recipe on file —
+ *  silence, not zero (the rail's own rule since 5.91.0). */
+export function counterShelfLine(c: ShelfCoverage): { text: string; tone: string } | null {
+  if (c.coverage === null && !c.unknown) return null;
+  const v = shelfVoice(c);
+  if (!v) return null;
+  return { text: v, tone: shelfTone(c) };
 }

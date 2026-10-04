@@ -5,6 +5,7 @@ import { useCart } from '../../store/cart';
 import { formatMoney } from '../../lib/prefs';
 import { useDialogA11y } from '../../lib/useDialogA11y';
 import { VegMark } from '../shell/VegMark';
+import { counterShelfLine, type ShelfCoverage } from '../../lib/shelf';
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
@@ -16,6 +17,9 @@ const round2 = (n: number) => Math.round(n * 100) / 100;
 
 interface ItemDetailModalProps {
   item: MenuItem;
+  /** v5.170.0 — the shelf's answer for this dish (ONE shared math,
+   *  src/lib/shelf.ts). null/absent = no recipe on file → silence. */
+  coverage?: ShelfCoverage | null;
   onClose: () => void;
   /** Fired after the selection is pushed into the cart (for the toast). */
   onAdded?: (info: { name: string; qty: number }) => void;
@@ -28,6 +32,7 @@ const MAX_QTY = 99;
 
 export const ItemDetailModal: React.FC<ItemDetailModalProps> = ({
   item,
+  coverage = null,
   onClose,
   onAdded,
   onToggleAvailability,
@@ -305,6 +310,25 @@ export const ItemDetailModal: React.FC<ItemDetailModalProps> = ({
               <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#6B6B6B]">
                 Counter
               </h3>
+              {/* v5.170.0 — the shelf answers at the moment of selling: the
+                  SAME voice the rail, the shelf's board and the recipe editor
+                  speak (ONE shared math, src/lib/shelf.ts). It sits beside
+                  the pull action because that's the decision it informs. */}
+              {(() => {
+                const shelfLine = coverage ? counterShelfLine(coverage) : null;
+                if (!shelfLine) return null;
+                return (
+                  <p
+                    className="mb-2.5 flex items-center justify-between gap-2 rounded-lg bg-[#F7F8F6] px-2.5 py-1.5 text-[11.5px] font-semibold tabular-nums"
+                    title="One shared math (src/lib/shelf.ts) — the same answer the rail, the shelf's board and the recipe editor speak"
+                  >
+                    <span className="text-[10.5px] font-bold uppercase tracking-wide text-[#969696]">
+                      The shelf
+                    </span>
+                    <span style={{ color: shelfLine.tone }}>{shelfLine.text}</span>
+                  </p>
+                );
+              })()}
               <button
                 type="button"
                 onClick={handleToggleAvailability}

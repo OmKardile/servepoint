@@ -26,7 +26,7 @@ import type { LucideIcon } from 'lucide-react';
 import type { Category, Customer, CustomerStats, MenuItem, MenuItemVariant, Offer, OrderType } from '../../types';
 import { createOrder, fetchAddons, fetchCategories, fetchCustomerOrders, fetchCustomerStats, fetchCustomers, fetchInventory, fetchMenuItemAddonIds, fetchMenuItems, fetchMenuVariants, fetchOffers, fetchPaidMoverLines, fetchRecipeLines, fetchTables, updateMenuItem, type DiningTable, type InventoryItem, type RecipeLine } from '../../lib/api';
 import { computeTopMovers, MOVER_WINDOW_DAYS, type Mover } from '../../lib/movers';
-import { shelfCoverage, shelfTone, shelfVoice, type ShelfCoverage } from '../../lib/shelf';
+import { counterShelfLine, shelfCoverage, type ShelfCoverage } from '../../lib/shelf';
 import { CounterInbox } from './CounterInbox';
 import { useTenant } from '../../lib/tenant';
 import { useDialogA11y } from '../../lib/useDialogA11y';
@@ -140,16 +140,19 @@ function RushRail({
                 {/* 5.91.0 — the shelf's voice at the moment of selling: the same
                     answer the inventory board speaks, in the board's own tones
                     (green comfortable · amber low · red out · grey can't-say).
-                    A dish with no recipe stays silent — silence, not zero. */}
+                    A dish with no recipe stays silent — silence, not zero.
+                    5.170.0 — the pairing rides the ONE contract
+                    (counterShelfLine), so the rail and the item sheet can
+                    never disagree about a dish's voice or tone. */}
                 {(() => {
                   const c = shelf.get(e.mover.menuItemId);
                   if (!c) return null;
-                  const v = shelfVoice(c);
-                  if (!v) return null;
+                  const line = counterShelfLine(c);
+                  if (!line) return null;
                   return (
                     <span
                       className="mt-0.5 block text-[10.5px] font-semibold tabular-nums"
-                      style={{ color: shelfTone(c) }}
+                      style={{ color: line.tone }}
                       title={
                         c.unknown
                           ? 'A recipe SKU is off the shelf — the shelf cannot answer.'
@@ -158,7 +161,7 @@ function RushRail({
                             : `The shelf can make about ${c.coverage} more — the thinnest recipe SKU (${c.thin?.name || 'a SKU'}) decides.`
                       }
                     >
-                      {v}
+                      {line.text}
                     </span>
                   );
                 })()}
@@ -1286,17 +1289,21 @@ const FoodDrinksInner: React.FC<{ onRetry: () => void }> = ({ onRetry }) => {
     };
   }, [tenantId, reloadTick]);
 
-  /* one coverage verdict per dish on the shortlist — the ONE shared math
-     (src/lib/shelf.ts), the same answer the shelf's board computes. */
+  /* one coverage verdict per dish WITH a recipe — the ONE shared math
+     (src/lib/shelf.ts), the same answer the shelf's board computes.
+     v5.170.0 — the map reads the WHOLE menu now, not just the shortlist:
+     the item detail modal speaks the same answer at the moment of
+     selling, so the rail and the sheet can never disagree about a dish. */
   const shelfByItem = useMemo<Map<string, ShelfCoverage>>(() => {
     const map = new Map<string, ShelfCoverage>();
-    if (!shelf || !movers) return map;
-    for (const m of movers) {
-      const lines = shelf.recipes.filter((r) => r.menu_item_id === m.menuItemId);
-      map.set(m.menuItemId, shelfCoverage(lines, shelf.items));
+    if (!shelf) return map;
+    for (const it of items) {
+      const lines = shelf.recipes.filter((r) => r.menu_item_id === it.id);
+      if (lines.length === 0) continue; /* no recipe → silence, not zero */
+      map.set(it.id, shelfCoverage(lines, shelf.items));
     }
     return map;
-  }, [shelf, movers]);
+  }, [shelf, items]);
 
   /* Toast auto-dismiss. */
   useEffect(() => {
@@ -1723,6 +1730,7 @@ const FoodDrinksInner: React.FC<{ onRetry: () => void }> = ({ onRetry }) => {
       {detailItem && (
         <ItemDetailModal
           item={detailItem}
+          coverage={detailItem ? (shelfByItem.get(detailItem.id) ?? null) : null}
           onClose={() => setDetailItem(null)}
           onAdded={({ name, qty }) =>
             setToast({ kind: 'added', message: `${qty}× ${name} added to order` })

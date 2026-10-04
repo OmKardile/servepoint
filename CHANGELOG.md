@@ -3,6 +3,16 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.170.0] — 2026-10-04 — The shelf at the counter: the item detail modal speaks the ONE shared coverage voice at the moment of selling — beside the pull action, because that's the decision it informs — and the pairing becomes ONE contract (counterShelfLine) that the rail and the sheet now share
+
+### Added — the fourth surface (`src/lib/shelf.ts`, `src/components/food/FoodDrinksScreen.tsx`, `src/components/food/ItemDetailModal.tsx`)
+
+A guest asks for a dish; the counter opens it — and until now the modal was the one selling surface where the shelf stayed silent. The Counter zone now opens with THE SHELF line: the same voice the rail speaks under favourites, in the family's own tones (green comfortable · amber low · red out · grey can't-say), rendered from the shared `shelfCoverage` math that already answers for the board, the rail and the recipe editor. A dish with no recipe stays silent — silence, not zero, the rail's own rule since 5.91.0. The voice+tone pairing was lifted into ONE exported contract, `counterShelfLine(c)` (unit-asserted structural identity with shelfVoice + shelfTone), and the rail now rides it too — two surfaces, one contract, no drift possible by construction. The modal's coverage rides the widened `shelfByItem` map, which now reads the WHOLE menu instead of just the shortlist (movers without recipes were already silent; nothing changes for them). The line sits directly above "Mark sold out" because that is the decision it informs: the shelf saying "can't make another" and the pull action are one glance apart.
+
+### Verified
+
+`tsc` EXIT=0; `node --check` OK (`servepoint-v5.170.0-r1`); build EXIT=0 (`/tmp/build209a.log`); unit suite `scripts/unit209.mjs` 8/8 first-run (no-recipe silence, red out with the bin named, amber low, the LOW_COVER=5 boundary speaking comfortable green, pairing structural identity across all four states, unknown-is-a-voice-not-silence) plus regression suites unit195 (torture) / 197–208 ALL PASS (144 + 8 = 152 asserts); live E2E — Blueberry Muffin's modal speaks "~59 more on the shelf" and Flat White's "~235 more on the shelf", each matching its rail card's number exactly (one math, two surfaces, agreeing live); Truffle Parmesan Fries speaks ~25 (a recipe the live data gained since the last census — the map reads the whole menu honestly); the recipe-less silence path is unit-covered (no recipe-less dish exists on the live menu to force it); console fresh-load delta ZERO across the counter walk. READ-ONLY round (zero cloud writes).
+
 ## [5.169.0] — 2026-10-04 — The production sheet: the batch plan learns to ship — a Copy that speaks the house's 32-column register (WhatsApp, the printer) and a CSV for the kitchen door, both fed by ONE assembly whose verdict words are THE words the strip speaks
 
 ### Added — the plan's paper voice (`src/components/inventory/InventoryScreen.tsx`)
