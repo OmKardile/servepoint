@@ -65,7 +65,7 @@ import type { Order } from '../../types';
  * a bill the list swore wasn't there.
  */
 
-type StatusFilter = 'all' | 'active' | 'paid' | 'cancelled';
+type StatusFilter = 'all' | 'active' | 'paid' | 'cancelled' | 'stuck';
 type DateFilter = 'today' | '7d' | 'all';
 type MethodKey = 'cash' | 'card' | 'upi';
 
@@ -247,6 +247,14 @@ const WHITE_PILL =
  *  amber-ink text. Landed from a door, you can see the filter landed too. */
 const FILTER_PILL_ACTIVE =
   'h-11 w-full appearance-none rounded-full border border-[#B88E2F] bg-[#FDF6E3] pl-4 pr-9 text-[13px] font-bold text-[#8A5A00] transition hover:border-[#967221] focus:border-[#B88E2F] focus:outline-none focus:ring-2 focus:ring-[#B88E2F]/25';
+
+/* 5.203.0 — the ghost answers when called: the 'stuck' filter wears the
+ *  ghost chip's own ink and wash (the 5.196 register's colors) — the
+ *  dashboard points here with the same word, the pill that filters to the
+ *  ghosts wears the ghosts' amber, and the pointer's promise lands
+ *  pre-armed. */
+const FILTER_PILL_GHOST =
+  'h-11 w-full appearance-none rounded-full border border-[#8A5A16] bg-[#FDF3E4] pl-4 pr-9 text-[13px] font-bold text-[#8A5A16] transition hover:border-[#6F4A12] focus:border-[#8A5A16] focus:outline-none focus:ring-2 focus:ring-[#8A5A16]/25';
 
 function capitalize(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
@@ -509,6 +517,10 @@ const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRet
   useEffect(() => {
     const hint = consumeSectionHint();
     if (hint === 'unpaid') setStatusFilter('active');
+    /* 5.203.0 — the kitchen-ghost door's hint: 'stuck' lands on the ghost
+     * view itself (isGhostTicket — the ONE population the strip counted),
+     * the same word the strip and the chips speak. */
+    if (hint === 'stuck') setStatusFilter('stuck');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -632,7 +644,14 @@ const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRet
     const q = search.trim().toLowerCase().replace(/^#/, '');
     const weekAgo = Date.now() - 7 * 24 * 3600 * 1000;
     return orders.filter((o) => {
-      if (statusFilter !== 'all' && displayStatus(o) !== statusFilter) return false;
+      /* 5.203.0 — 'stuck' is its own view, not a trio value: a ghost is
+       * paid OR unpaid (the dashboard's mixed ghost set), so the predicate
+       * — not displayStatus — decides. The same isGhostTicket the row
+       * chips and the dashboard's staleKitchen speak: one population, no
+       * fork to close (5.196's pointer now has a view of its own). */
+      if (statusFilter === 'stuck') {
+        if (!isGhostTicket(o, Date.now())) return false;
+      } else if (statusFilter !== 'all' && displayStatus(o) !== statusFilter) return false;
       if (dateFilter === 'today' && !isSameLocalDay(o.created_at)) return false;
       if (dateFilter === '7d' && new Date(o.created_at).getTime() < weekAgo) return false;
       if (q) {
@@ -1013,7 +1032,9 @@ const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRet
         ? 'paid'
         : statusFilter === 'cancelled'
           ? 'cancelled'
-          : '';
+          : statusFilter === 'stuck'
+            ? 'stuck'
+            : '';
   const windowPhrase = dateFilter === 'today' ? 'from today' : dateFilter === '7d' ? 'in the last 7 days' : '';
   const filterLabels = [
     statusFilter !== 'all' ? statusFilter.charAt(0).toUpperCase() + statusFilter.slice(1) : '',
@@ -1042,6 +1063,12 @@ const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRet
         </>
       )}
     </>
+  ) : statusWord === 'stuck' && dateFilter === 'today' ? (
+    /* 5.203.0 — the impossible combo says why: a ghost is older-day by
+     * definition (isGhostTicket's own rule), so Stuck ∧ Today is empty
+     * BEFORE the ledger is consulted — the sentence teaches the
+     * definition instead of counting an empty list. */
+    <>Stuck tickets are, by definition, from an earlier day — none can be from today. Widen the window, or clear the filters.</>
   ) : statusWord && windowPhrase ? (
     <>The ledger holds {orders.length} bills — none are {statusWord} AND {windowPhrase}. Loosen one, or clear both.</>
   ) : statusWord ? (
@@ -1191,12 +1218,19 @@ const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRet
               aria-label="Filter bills by status"
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
-              className={statusFilter !== 'all' ? FILTER_PILL_ACTIVE : WHITE_PILL}
+              className={
+                statusFilter === 'stuck'
+                  ? FILTER_PILL_GHOST
+                  : statusFilter !== 'all'
+                    ? FILTER_PILL_ACTIVE
+                    : WHITE_PILL
+              }
             >
               <option value="all">All Orders</option>
               <option value="active">Active</option>
               <option value="paid">Paid</option>
               <option value="cancelled">Cancelled</option>
+              <option value="stuck">Stuck</option>
             </select>
             <ChevronDown
               size={15}

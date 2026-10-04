@@ -1336,9 +1336,13 @@ const NeedsNow: React.FC = () => {
          edition: the inbox card got it, this card never did): the board when
          it holds today's work, Bills when only the ghosts remain — an
          "Open Kitchen — 0 tickets" door walks the counter to an empty board
-         while the very tickets it named wait in Bills. No unpaid hint on
-         the door: the ghost set is mixed (paid-but-never-bumped and unpaid
-         alike); Bills' own unpaid-priority sort floats the money out first. */
+         while the very tickets it named wait in Bills. 5.203.0 — the door's
+         hint follows the truth too: 'stuck' lands on Bills' ghost view
+         (isGhostTicket — the ONE population staleKitchen counted), so the
+         tickets this strip named are exactly the tickets the counter finds.
+         The old no-hint landing dissolved the moment Bills had a view for
+         the word the strip speaks; the unpaid-first sort no longer has to
+         apologize for a mixed set that now has a view of its own. */
       door:
         inKitchen.length > 0
           ? {
@@ -1349,7 +1353,7 @@ const NeedsNow: React.FC = () => {
           : {
               label: 'Bills',
               aria: `Open Bills — ${staleKitchen.length} older ${staleKitchen.length === 1 ? 'ticket waits' : 'tickets wait'} off today's board`,
-              onOpen: () => go('bills', ['Dashboard', 'Bills']),
+              onOpen: () => go('bills', ['Dashboard', 'Bills'], 'stuck'),
             },
     });
   /* 5.89.0 — the late card carries the KDS's own escalation clock: amber at
