@@ -213,8 +213,12 @@ export interface DashboardData {
   /* v5.113.0 — the week is real: seven complete calendar days (local midnights,
    * oldest first), the same live grammar as the today cards (cancelled never
    * happened). Today's bucket IS the today card's numbers — the two views
-   * must never disagree. */
+   * must never disagree. 5.204.0 — each row carries its own day key: the
+   * morning paper's replay door passes THE BUCKET'S key to Close-out, so
+   * the day the tile names is the day the landing opens — the key travels
+   * with the rupees instead of being re-derived from a second clock. */
   weeklyRevenue: {
+    key: string;
     label: string;
     full: string;
     dineIn: number;

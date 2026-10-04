@@ -1157,8 +1157,12 @@ export async function fetchDashboard(tenantId: string): Promise<DashboardData> {
     const d = new Date();
     d.setHours(0, 0, 0, 0);
     d.setDate(d.getDate() - i);
+    /* 5.204.0 — the key is the calendar string itself (en-CA's YYYY-MM-DD,
+     * browser-local midnights): it doubles as the replay door's payload,
+     * and Close-out's day-hint regex only accepts that shape. The old
+     * toDateString key could name a day no door could carry. */
     weekBuckets.push({
-      key: d.toDateString(),
+      key: d.toLocaleDateString('en-CA'),
       label: i === 0 ? 'Today' : d.toLocaleDateString('en-IN', { weekday: 'short' }),
       full: d.toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'short' }),
       dineIn: 0,
@@ -1170,13 +1174,19 @@ export async function fetchDashboard(tenantId: string): Promise<DashboardData> {
   const weekLiveIds = new Set<string>();
   rows.forEach((r) => {
     if (String(r.status) === 'cancelled') return;
-    const idx = weekIndex.get(new Date(r.created_at).toDateString());
+    /* 5.204.0 — the lookup speaks the SAME day word as the buckets: the key
+     * moved to en-CA's calendar string, so the row side moves with it. The
+     * old pair (toDateString bucket, toDateString lookup) was internally
+     * consistent; mixing the bucket key with the old lookup silently
+     * emptied every bucket — the paper read silence and no tile spoke. */
+    const idx = weekIndex.get(new Date(r.created_at).toLocaleDateString('en-CA'));
     if (idx === undefined) return;
     weekLiveIds.add(r.id);
     const type = typeMap[String(r.order_type || 'dine_in').toLowerCase()] || 'dineIn';
     weekBuckets[idx][type] += Number(r.total);
   });
   const weeklyRevenue = weekBuckets.map((b) => ({
+    key: b.key,
     label: b.label,
     full: b.full,
     dineIn: b.dineIn,

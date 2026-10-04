@@ -39,13 +39,13 @@ import {
 } from 'recharts';
 import { fetchDashboard, fetchFeedbackStats, fetchInventory, fetchMenuItems, fetchOpenPaymentSums, fetchOrders, fetchReservations, fetchTables, fetchTodayCostMargin, type DiningTable, type FeedbackStats, type InventoryItem, type Reservation, type TodayCostMargin } from '../../lib/api';
 import { formatMoney } from '../../lib/prefs';
-/* v5.175.0 — the morning paper borrows two clocks, each already the law of
-   its own room: the BOOK speaks the booking voice (lib/bookingday — the
-   database's word, the same lib the floor's book, the bell and the guest
-   drawer speak) and the CLOSE-OUT door key speaks the reporting day
-   (lib/appday — the same clock Reports' day bars use for the day: hint). */
+/* v5.175.0 — the morning paper borrows the booking clock for its book (the
+   database's word, lib/bookingday — the same lib the floor's book, the bell
+   and the guest drawer speak). 5.204.0 — the CLOSE-OUT door no longer keeps
+   a second clock of its own: the replay key is the tile's own bucket key
+   (api's week rows), so the day the paper names is the day the landing
+   opens — one derivation, carried with the rupees. */
 import { bookingDayKey, bookingSlotLabel, bookingTodayKey, bookingTzIsForeign } from '../../lib/bookingday';
-import { appDayKey, appTodayIso } from '../../lib/appday';
 import { CHART_TOOLTIP_LABEL, CHART_TOOLTIP_STYLE } from '../../lib/chartvoice';
 import { chaseAge, isSameLocalDay } from '../../lib/day';
 import { useTenant } from '../../lib/tenant';
@@ -690,8 +690,11 @@ const TrendingDishesCard: React.FC<{ data: DashboardData }> = ({ data }) => {
 /* ─────────────────── The morning paper (v5.175.0) ──────────────────────── */
 
 export interface MorningTake {
-  /** Yesterday's bucket from the week's own rows — null when the day sold nothing. */
-  yesterday: { full: string; total: number; lead: string | null } | null;
+  /** Yesterday's bucket from the week's own rows — null when the day sold nothing.
+   *  5.204.0 — the row carries its own day key: the replay door passes THE
+   *  BUCKET'S key to Close-out, so the day the tile names is the day the
+   *  landing opens. The key travels with the rupees — one derivation, not two. */
+  yesterday: { key: string; full: string; total: number; lead: string | null } | null;
   /** The six days before today — null when the week so far sold nothing. */
   week: { total: number; sellingDays: number; best: { label: string; total: number } | null } | null;
 }
@@ -711,6 +714,7 @@ export const morningTake = (data: Pick<DashboardData, 'weeklyRevenue'>): Morning
   const yesterday =
     yRow && yRow.total > 0
       ? {
+          key: yRow.key,
           full: yRow.full,
           total: yRow.total,
           lead:
@@ -798,11 +802,15 @@ const MorningPaper: React.FC<{ data: DashboardData }> = ({ data }) => {
 
   const go = useUi.getState().goSection;
   const foreign = bookingTzIsForeign();
-  /* Yesterday's door key in the reporting day (Close-out's clock) — stepped
-     as a calendar STRING through noon UTC, Reports' own DST-safe stride. */
-  const yDoor = new Date(`${appTodayIso()}T12:00:00Z`);
-  yDoor.setUTCDate(yDoor.getUTCDate() - 1);
-  const yesterdayKey = appDayKey(yDoor.toISOString());
+  /* 5.204.0 — the door carries the tile's own bucket key: the day the paper
+   * names is the day Close-out opens. The old code re-derived "yesterday"
+   * from a SECOND clock here (the reporting day stepped back one) while the
+   * tile's rupees came from the week rows' own day — two computations of
+   * one word in one file, and on any device whose clock sits across the
+   * reporting day's midnight the promise named one day while the landing
+   * opened another ("Replay yesterday (Saturday, 3 Oct)" landing on Sun 4
+   * Oct, live-caught). The key rides the rupees now — one derivation, the
+   * 5.196 rule at the door: the landing IS the named thing. */
 
   return (
     <div className="mx-auto mt-9 grid w-full max-w-4xl grid-cols-1 gap-4 text-left md:grid-cols-3">
@@ -820,7 +828,10 @@ const MorningPaper: React.FC<{ data: DashboardData }> = ({ data }) => {
           )}
           <button
             type="button"
-            onClick={() => go('eod', ['Dashboard', 'Close-out'], `day:${yesterdayKey}`)}
+            onClick={() => {
+              const y = take.yesterday;
+              if (y) go('eod', ['Dashboard', 'Close-out'], `day:${y.key}`);
+            }}
             aria-label={`Replay yesterday (${take.yesterday.full}) in Close-out`}
             className="mt-3 inline-flex items-center gap-1.5 self-start rounded-lg border border-[#E3E7E0] px-3 py-1.5 text-[11.5px] font-semibold text-[#0F3D3E] transition hover:bg-[#F6F5F2] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#B88E2F]/40"
           >
