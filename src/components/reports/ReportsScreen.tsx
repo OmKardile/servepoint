@@ -1218,6 +1218,11 @@ export interface TurnoverTable {
   timed: number;
   avgSpanMin: number | null;
   longestSpanMin: number | null;
+  /** v5.184.0 — the table's own timed spans that ran past the house line
+   *  (the same >= boundary the camping pill and the floor's breach strip
+   *  use). A turn without a settle is never a breach — the clock never
+   *  guesses. */
+  past: number;
 }
 
 /** One hour-of-day bucket of the room's breathing: how many seated spans
@@ -1360,6 +1365,9 @@ export function tableTurnover(
           ? cell.spans.reduce((s, m) => s + m, 0) / cell.spans.length
           : null,
       longestSpanMin: cell.spans.length > 0 ? Math.max(...cell.spans) : null,
+      /* v5.184.0 — the table's own breach count, measured at the ONE
+       * boundary (>= the house line) inside the ONE writer (this agg). */
+      past: cell.spans.filter((m) => m >= line).length,
     }))
     .sort(
       (a, b) =>
@@ -4320,17 +4328,36 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
                       <li key={t.tableLabel}>
                         <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5 text-[12.5px]">
                           <span className="font-semibold text-[#1A1A1A]">{t.tableLabel}</span>
-                          <span className="tabular-nums text-[#6B6B6B]">
-                            {t.turns} turn{t.turns === 1 ? '' : 's'}
-                            {t.avgSpanMin != null
-                              ? ` · avg ${turnoverSpanLabel(t.avgSpanMin)}`
-                              : ' · no span yet'}
+                          {/* v5.184.0 — the table's own worst joins the row (the
+                              CSV has spoken it since 5.161 — the screen catches
+                              up), and the table's own breaches wear the floor's
+                              amber family. Silent when zero: a chip that says
+                              "0 past" would repeat the row's own silence. */}
+                          <span className="flex flex-wrap items-center gap-1.5">
+                            <span className="tabular-nums text-[#6B6B6B]">
+                              {t.turns} turn{t.turns === 1 ? '' : 's'}
+                              {t.avgSpanMin != null
+                                ? ` · avg ${turnoverSpanLabel(t.avgSpanMin)}`
+                                : ' · no span yet'}
+                              {t.longestSpanMin != null
+                                ? ` · worst ${turnoverSpanLabel(t.longestSpanMin)}`
+                                : ''}
+                            </span>
+                            {t.past > 0 && (
+                              <span
+                                className="inline-flex items-center rounded-full bg-white px-2 py-0.5 text-[10.5px] font-semibold tabular-nums text-[#8A5A16]"
+                                style={{ boxShadow: 'inset 0 0 0 1px #EADFC2' }}
+                                title={`${t.past} of ${t.timed} timed span${t.timed === 1 ? '' : 's'} at ${t.tableLabel} ran past the ${turnover.line.turnAfterMin}-minute house line in this range`}
+                              >
+                                {t.past} past
+                              </span>
+                            )}
                           </span>
                         </div>
                         <div
                           className="mt-1 h-1.5 overflow-hidden rounded-full bg-[#E3E7E0]"
                           role="img"
-                          aria-label={`${t.tableLabel}: ${t.turns} turn${t.turns === 1 ? '' : 's'}${t.avgSpanMin != null ? `, average span ${turnoverSpanLabel(t.avgSpanMin)}` : ', no timed span'}`}
+                          aria-label={`${t.tableLabel}: ${t.turns} turn${t.turns === 1 ? '' : 's'}${t.avgSpanMin != null ? `, average span ${turnoverSpanLabel(t.avgSpanMin)}` : ', no timed span'}${t.longestSpanMin != null ? `, worst ${turnoverSpanLabel(t.longestSpanMin)}` : ''}${t.past > 0 ? `, ${t.past} past the ${turnover.line.turnAfterMin}-minute line` : ''}`}
                         >
                           <div
                             className="h-full rounded-full bg-[#0F3D3E]/70"
