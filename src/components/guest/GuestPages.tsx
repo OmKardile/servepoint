@@ -44,6 +44,18 @@ import {
 } from '../../lib/guest';
 import { GUEST_LANGS, useGuestLang } from '../../lib/guest-i18n';
 import { useDialogA11y } from '../../lib/useDialogA11y';
+/* v5.212.0 — the offer's own words, borrowed from the ONE composer. The
+   guest menu composed its badge/rule locally since the banner was born
+   (5.71's disease reaching the guest side): a no-paise badge plus a local
+   min clause while the offers tab's card said "₹50.00 off over ₹300.00" —
+   two composers of one offer's words can disagree, and the guest heard
+   the dialect.
+   The compact register (the tiny-chip "₹50") also lives in the lib now —
+   one composer for BOTH guest badge sites, its paise branch honest
+   (formatMoney, never a toFixed rounding lie). PublicOffer satisfies
+   the lib's OfferVoice triple — the guest side borrows the words without
+   owning an Offer-shaped shadow of the owner's row. */
+import { offerBadgeShort, offerRuleLabel } from '../../lib/offerLabel';
 
 /**
  * Guest QR surfaces (v5.3.0) — the customer side of the main flow.
@@ -917,20 +929,21 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
                     type="button"
                     onClick={() => toggleOffer(o.id)}
                     aria-pressed={selected}
-                    aria-label={`${o.title}${selected && unlockable ? ` — ${t('offerApplied')}` : ''}`}
+                    aria-label={`${o.title} — ${offerRuleLabel(o)}${selected && unlockable ? ` — ${t('offerApplied')}` : ''}`}
                     className={`relative flex min-w-[240px] max-w-[300px] flex-1 items-center gap-3 rounded-2xl border px-3.5 py-3 text-left shadow-sm transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#B88E2F] ${
                       selected
                         ? 'border-[#B88E2F] bg-white ring-2 ring-[#B88E2F]'
                         : 'border-[#EED9B8] bg-gradient-to-br from-[#FBF3E4] to-[#F6EAD8] hover:border-[#B88E2F]'
                     }`}
                   >
+                    {/* v5.212.0 — min-w + px, not a fixed w-9: a paise badge
+                        ("₹44.50") needs room to breathe; the circle becomes
+                        a pill without losing its seat at the chip's head. */}
                     <span
-                      className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-[11px] font-bold leading-none text-white"
+                      className="relative flex h-9 min-w-9 shrink-0 items-center justify-center rounded-xl px-1 text-[11px] font-bold leading-none text-white"
                       style={{ background: selected ? brand.teal : '#B88E2F' }}
                     >
-                      {o.discount_type === 'percent'
-                        ? `${Number(o.discount_value)}%`
-                        : `₹${Number(o.discount_value) % 1 === 0 ? Number(o.discount_value) : Number(o.discount_value).toFixed(0)}`}
+                      {offerBadgeShort(o)}
                       {selected && (
                         <span className="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full border-2 border-white bg-[#2E7D32]">
                           <Check size={9} className="text-white" aria-hidden />
@@ -940,8 +953,7 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
                     <span className="min-w-0">
                       <span className="block truncate text-[12.5px] font-bold text-[#5B4300]">{o.title}</span>
                       <span className="block truncate text-[11px] text-[#8A5A00]">
-                        {o.discount_type === 'percent' ? `${Number(o.discount_value)}% off` : `₹${Number(o.discount_value)} off`}
-                        {min > 0 && ` · min ₹${min}`}
+                        {offerRuleLabel(o)}
                         {o.description ? ` — ${o.description}` : ''}
                       </span>
                       <span
@@ -1157,6 +1169,26 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
                 </div>
               )}
 
+              {/* v5.212.0 — the drawer's honest state line. An offer the guest
+                  picked but hasn't unlocked used to sit silently in the totals:
+                  the discount line never came, the reason lived only in the
+                  pill's hover title (a tooltip a thumb can never lift). The
+                  line now speaks HERE — the i18n's own "add more" voice plus
+                  the rule from the ONE composer ("Add ₹55.00 more to unlock —
+                  ₹50.00 off over ₹300.00"). Selected-and-applied keeps the
+                  green discount line below — one state, one voice, never both. */}
+              {lines.length > 0 && selectedOffer && !offerReady && (
+                <p
+                  role="status"
+                  className="mt-4 text-[12px] font-semibold text-[#B4483C]"
+                  style={{ animation: 'spFadeIn 200ms ease-out' }}
+                >
+                  {t('offerAddMore', { amt: money(round2(Math.max(Number(selectedOffer.min_order_amount) - cartSubtotal, 0))) })}
+                  {' — '}
+                  {offerRuleLabel(selectedOffer)}
+                </p>
+              )}
+
               {/* offer picker — the same toggles as the menu chips, compacted for the drawer */}
               {lines.length > 0 && offers.length > 0 && (
                 <div className="mt-4" aria-label={t('offersAria')}>
@@ -1184,9 +1216,7 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
                             className="flex h-5 min-w-5 items-center justify-center rounded-md px-1 text-[9.5px] font-bold text-white"
                             style={{ background: selected ? brand.teal : '#B88E2F' }}
                           >
-                            {o.discount_type === 'percent'
-                              ? `${Number(o.discount_value)}%`
-                              : `₹${Number(o.discount_value) % 1 === 0 ? Number(o.discount_value) : Number(o.discount_value).toFixed(0)}`}
+                            {offerBadgeShort(o)}
                           </span>
                           <span className="max-w-[150px] truncate">{o.title}</span>
                           {selected && <Check size={12} className="text-[#2E7D32]" aria-hidden />}

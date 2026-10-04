@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { MenuItem, Offer, OrderType } from '../types';
+import type { OfferVoice } from '../lib/offerLabel';
 
 export interface CartLine {
   key: string;
@@ -166,8 +167,11 @@ export const useCart = create<CartState>((set, get) => ({
 export const cartTotal = (lines: CartLine[]): number =>
   Math.round(lines.reduce((s, l) => s + l.qty * l.unitPrice, 0) * 100) / 100;
 
-/** Offer discount in rupees against a subtotal — percent or flat, never below zero, capped at the subtotal. */
-export const offerDiscount = (offer: Offer | null, subtotal: number): number => {
+/** Offer discount in rupees against a subtotal — percent or flat, never below zero, capped at the subtotal.
+ *  v5.212.0 — the parameter speaks the voice triple, not the whole row: the
+ *  guest menu's PublicOffer projection (and any future projection) can share
+ *  this ONE arithmetic — Offer still satisfies it, every caller unchanged. */
+export const offerDiscount = (offer: OfferVoice | null, subtotal: number): number => {
   if (!offer || subtotal <= 0) return 0;
   if (subtotal < offer.min_order_amount) return 0;
   const raw = offer.discount_type === 'percent'

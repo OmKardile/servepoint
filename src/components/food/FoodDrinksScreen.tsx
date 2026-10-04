@@ -31,7 +31,7 @@ import { CounterInbox } from './CounterInbox';
 import { useTenant } from '../../lib/tenant';
 import { useDialogA11y } from '../../lib/useDialogA11y';
 import { formatMoney } from '../../lib/prefs';
-import { offerRuleLabel } from '../../lib/offerLabel';
+import { offerRuleLabel, type OfferVoice } from '../../lib/offerLabel';
 import { computeUsual, USUAL_WINDOW } from '../../lib/usual';
 import { useUi } from '../../store/session';
 import { cartTotal, offerDiscount, useCart } from '../../store/cart';
@@ -225,17 +225,21 @@ const round2 = (n: number) => Math.round(n * 100) / 100;
  * speak of. */
 export interface OfferFit {
   kind: 'applied' | 'applies' | 'unlock';
-  offer: Offer;
+  /* v5.212.0 — the voice triple + id, not the whole row: the fit's
+     arithmetic reads the triple and needs the id to tell applied from
+     applies, and the guest menu's PublicOffer projection can now share
+     the family (the body is untouched — unit249's guards hold). */
+  offer: OfferVoice & { id: string };
   /** the money this offer takes off the CURRENT line set (applied/applies) */
   take: number;
   /** the rupees still short of the threshold (unlock only) */
   missing: number;
-  /** the offer's full spoken rule — "₹50 off over ₹300" (the lib's own composer) */
+  /** the offer's full spoken rule — "₹50.00 off over ₹300.00" (the lib's own composer) */
   rule: string;
 }
 
 export function offerFit(
-  offers: Offer[] | null | undefined,
+  offers: (OfferVoice & { id: string })[] | null | undefined,
   subtotal: number,
   appliedId: string | null,
 ): OfferFit | null {

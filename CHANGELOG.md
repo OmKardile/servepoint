@@ -3,6 +3,26 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.212.0] — 2026-10-05 — The guest hears the offer's own words: the QR menu's chips composed their badge and rule locally since the banner was born — a no-paise badge plus a local min clause while the offers tab's card said "₹50.00 off over ₹300.00" — and the compact badge's flat branch rounded a ₹44.50 offer into a "₹45" chip; the ONE composer now reaches the guest side, the rounding lie is dead, and a picked-but-locked offer finally speaks its reason inline
+
+### Changed — the own-words rule reaches the guest side (`src/components/guest/GuestPages.tsx`, `src/lib/offerLabel.ts`)
+
+The guest menu's three local composers are retired: the banner chip's badge circle, the chip's subtitle, and the cart drawer's offer pill badge all compose from `lib/offerLabel` now — the subtitle speaks `offerRuleLabel(o)` verbatim ("₹50.00 off over ₹300.00", the same words the offers tab's card, the share paper and the counter's fit whisper say about the same offer); the "₹50 off · min ₹300" dialect is gone. The compact tiny-chip register ("50%" / "₹50") lives in the lib as `offerBadgeShort` — one composer for BOTH guest badge sites, whose flat branch is honest: whole rupees stay bare, paise speak `formatMoney`'s own voice ("₹44.50") — the `toFixed(0)` branch that chipped a ₹44.50 offer as "₹45" is dead (a money register never rounds).
+
+### Added — the OfferVoice borrow + the drawer's honest state line
+
+`lib/offerLabel.ts` names the voice triple (`OfferVoice` = `Pick<Offer, 'discount_type' | 'discount_value' | 'min_order_amount'>`): the composers need only three fields, so the guest's read-only `PublicOffer` projection (migration 016) borrows the words WITHOUT owning an Offer-shaped shadow of the owner's row — `offerDiscount` (store) and `offerFit` (counter, `OfferVoice & { id: string }` — the id tells applied from applies) widened to the same door, bodies untouched. New in the cart drawer: the honest state line — an offer the guest picked but hasn't unlocked used to sit silently in the totals (the discount line never came; the reason lived only in the pill's hover title, a tooltip a thumb can never lift). The line now speaks inline, `role="status"`, in the i18n's own three-language "add more" voice plus the rule from the ONE composer: "Add ₹55.00 more to unlock — ₹50.00 off over ₹300.00". Selected-and-applied keeps the green discount line — one state, one voice, never both.
+
+### Fixed — the aria the guest could not hear
+
+The banner chip's `aria-label` used to replace the chip's content with the title alone (plus an applied tag) — the rule was invisible to screen readers. The aria now names the rule: "₹50 off over ₹300 — ₹50.00 off over ₹300.00 — Applied" — the SR hears what the sighted read. The badge circle dropped its fixed `w-9` for `min-w-9` + `px-1`: a paise badge ("₹44.50") breathes instead of clipping.
+
+### Verified
+
+- `unit251` born (vite-node): 12 groups green — the rounding lie asserted dead (44.5 → "₹44.50"), the structural borrow byte-identical ("₹50.00 off over ₹300.00" from a triple-only literal), compact↔full agreement at two sizes, `offerDiscount` on the voice triple, source guards (no local ternary / no "min ₹" dialect / no `toFixed(0)` survives in GuestPages; `offerBadgeShort(o)` exactly twice; the state line's guard + i18n voice + live region; the aria prefix), the counter's fit family surviving the widening.
+- Regression battery: unit194/195/197–250 all PASS (57 suites incl. 251, zero failures — unit249's composer/store guards hold).
+- tsc EXIT=0 ×3 (before the walk, mid-edit on the `best.id` tell, after); build EXIT=0 (VERSION → servepoint-v5.212.0-r1).
+
 ## [5.211.0] — 2026-10-05 — The window speaks the offer's own rides: the Reports scorecard answered for every offer in aggregates (uses, brought-in, cost) but kept the window's rides themselves locked in the read — now every row that rode opens the family's ledger door
 
 ### Added — the scorecard's ledger door (`src/components/reports/ReportsScreen.tsx`)
