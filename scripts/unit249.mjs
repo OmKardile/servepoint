@@ -29,7 +29,10 @@ import { readFileSync } from 'node:fs';
 let n = 0;
 const ok = (name) => console.log(`  ok ${++n} - ${name}`);
 
-const { offerFit } = await import('/src/components/food/FoodDrinksScreen.tsx');
+/* v5.214.0 — the fit family moved to its cart-domain home (lib/offerFit):
+   the body guards now read the LIB file; the screen guards still assert
+   the surface (import line, pill chip, aria clause). */
+const { offerFit, offerFitVoice } = await import('/src/lib/offerFit.ts');
 const { offerDiscount } = await import('/src/store/cart.ts');
 const { offerRuleLabel, offerBadgeLabel } = await import('/src/lib/offerLabel.ts');
 
@@ -41,6 +44,7 @@ const strip = (p) =>
 const foodCode = strip('../src/components/food/FoodDrinksScreen.tsx');
 const crmCode = strip('../src/components/customers/CustomersScreen.tsx');
 const libCode = strip('../src/lib/offerLabel.ts');
+const fitLibCode = strip('../src/lib/offerFit.ts');
 
 /* the fixture — the live CheeseBurg register's own shape */
 const flat50 = { id: 'flat50', discount_type: 'flat', discount_value: 50, min_order_amount: 300, is_active: true };
@@ -92,7 +96,9 @@ assert.ok(foodCode.includes('${fit ? `, ${fitVoice}` : \'\'}') || foodCode.inclu
 assert.ok(foodCode.includes('{fit && (') && foodCode.includes('{fitVoice}'), 'the pill renders the whisper chip');
 assert.ok(foodCode.includes('if (drawerOpen) setOffersTick((t) => t + 1)'), 'every drawer open re-reads (the picker meets mid-shift offers)');
 assert.ok(libCode.includes('export function offerRuleLabel') && crmCode.includes("from '../../lib/offerLabel'"), 'the ONE composer lives in lib, the offers tab borrows from it');
-assert.ok(foodCode.includes('offerDiscount(best, subtotal)'), "the fit computes with the store's own arithmetic");
+assert.ok(fitLibCode.includes('offerDiscount(best, subtotal)'), "the fit computes with the store's own arithmetic (the lib home owns the body since 5.214)");
+assert.ok(foodCode.includes("from '../../lib/offerFit'") && !foodCode.includes('export function offerFit'), 'the screen renders the fit, the lib owns the body (no component file is a lib)');
+assert.ok(fitLibCode.includes('export function offerFitVoice'), 'the fit sentence has ONE composer — the screen no longer composes the voice locally');
 ok('source guards: one read, one composer, one register, the picker null-guarded');
 
 console.log(`\nunit249 — ${n} groups green`);

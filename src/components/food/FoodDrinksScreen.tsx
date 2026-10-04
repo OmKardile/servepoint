@@ -31,7 +31,12 @@ import { CounterInbox } from './CounterInbox';
 import { useTenant } from '../../lib/tenant';
 import { useDialogA11y } from '../../lib/useDialogA11y';
 import { formatMoney } from '../../lib/prefs';
-import { offerRuleLabel, type OfferVoice } from '../../lib/offerLabel';
+/* v5.214.0 — the fit family moved to its cart-domain home (lib/offerFit):
+   the guest menu's floating bar whispers the SAME fit, and a component
+   file must never be a lib (the guest would have imported this screen's
+   whole module graph to reach one reducer). One body, one voice — the
+   screen renders it, the lib owns it. */
+import { offerFit, offerFitVoice } from '../../lib/offerFit';
 import { computeUsual, USUAL_WINDOW } from '../../lib/usual';
 import { useUi } from '../../store/session';
 import { cartTotal, offerDiscount, useCart } from '../../store/cart';
@@ -207,74 +212,12 @@ const ORDER_TYPES: { value: OrderType; label: string }[] = [
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
 /* ── v5.210.0 — the cart hears the offers ────────────────────────────
- * The counter builds an order on this screen and the only surface that
- * ever mentioned offers was the review drawer's picker — a fit the
- * counter had to discover by opening things. The order pill now
- * whispers the offer's fit for the line set AS IT STANDS: an offer the
- * cart already qualifies for speaks "applies", a threshold just out of
- * reach speaks "add ₹X more", and an offer already applied speaks its
- * confirmation. Exported pure so the suite owns the fit (228's
- * billsCsvRows pattern). The arithmetic is the store's own
- * offerDiscount — the SAME number the drawer's discount line speaks
- * when the offer is applied (one arithmetic, never a second one). The
- * best take wins among eligible offers (ties keep the read's order —
- * no sort, a loop); among unlocks the CLOSEST threshold speaks (a
- * smaller min is nearer). Null offers (unread or failed) and an empty
- * line set → null: the pill stays silent — an unread register never
- * becomes a fabricated "no offers", and an empty cart has no fit to
- * speak of. */
-export interface OfferFit {
-  kind: 'applied' | 'applies' | 'unlock';
-  /* v5.212.0 — the voice triple + id, not the whole row: the fit's
-     arithmetic reads the triple and needs the id to tell applied from
-     applies, and the guest menu's PublicOffer projection can now share
-     the family (the body is untouched — unit249's guards hold). */
-  offer: OfferVoice & { id: string };
-  /** the money this offer takes off the CURRENT line set (applied/applies) */
-  take: number;
-  /** the rupees still short of the threshold (unlock only) */
-  missing: number;
-  /** the offer's full spoken rule — "₹50.00 off over ₹300.00" (the lib's own composer) */
-  rule: string;
-}
-
-export function offerFit(
-  offers: (OfferVoice & { id: string })[] | null | undefined,
-  subtotal: number,
-  appliedId: string | null,
-): OfferFit | null {
-  if (!offers || offers.length === 0 || !(subtotal > 0)) return null;
-  const eligible = offers.filter((o) => subtotal >= Number(o.min_order_amount));
-  if (eligible.length > 0) {
-    let best = eligible[0];
-    let bestTake = offerDiscount(best, subtotal);
-    for (const o of eligible.slice(1)) {
-      const t = offerDiscount(o, subtotal);
-      if (t > bestTake) {
-        best = o;
-        bestTake = t;
-      }
-    }
-    return {
-      kind: appliedId && best.id === appliedId ? 'applied' : 'applies',
-      offer: best,
-      take: bestTake,
-      missing: 0,
-      rule: offerRuleLabel(best),
-    };
-  }
-  let closest = offers[0];
-  for (const o of offers.slice(1)) {
-    if (Number(o.min_order_amount) < Number(closest.min_order_amount)) closest = o;
-  }
-  return {
-    kind: 'unlock',
-    offer: closest,
-    take: 0,
-    missing: round2(Number(closest.min_order_amount) - subtotal),
-    rule: offerRuleLabel(closest),
-  };
-}
+ * The fit's REDUCER and VOICE live in lib/offerFit.ts since v5.214.0
+ * (cart-domain, borrowed by the guest menu's floating bar too — a
+ * component file must never be a lib: the guest would have imported
+ * this screen's whole module graph to reach one reducer). This screen
+ * owns the SURFACE: the pill's chip and aria render the fit the lib
+ * computes. */
 
 /** What the drawer knows about the phone being keyed — CRM identity +
  *  ledger facts + the guest's most-ordered dish, matched against the live menu.
@@ -1536,19 +1479,15 @@ const FoodDrinksInner: React.FC<{ onRetry: () => void }> = ({ onRetry }) => {
   /* v5.210.0 — the pill's fit whisper: the best live offer for this line
      set, computed from the screen's ONE offers register with the store's
      own offerDiscount arithmetic (the same number the drawer's discount
-     line speaks when the offer is applied). */
+     line speaks when the offer is applied). v5.214.0 — the sentence
+     composes from the lib's ONE voice (offerFitVoice) — the guest bar
+     says the same words the pill does. */
   const appliedOfferId = useCart((s) => s.offer?.id ?? null);
   const fit = useMemo(
     () => offerFit(offers, linesTotal, appliedOfferId),
     [offers, linesTotal, appliedOfferId],
   );
-  const fitVoice =
-    fit &&
-    (fit.kind === 'applied'
-      ? `${formatMoney(fit.take)} off applied`
-      : fit.kind === 'applies'
-        ? `${fit.rule} applies`
-        : `Add ${formatMoney(fit.missing)} more for ${fit.rule}`);
+  const fitVoice = fit && offerFitVoice(fit);
 
   /* ── Tenant loading → skeleton (frame 26844) ── */
   if (tenant.loading || (tenantId && dataLoading && categories.length === 0 && items.length === 0)) {

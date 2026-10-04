@@ -64,6 +64,15 @@ import { offerBadgeShort, offerRuleLabel } from '../../lib/offerLabel';
    threshold), so the savings never lies about an offer the cart can't
    take yet. */
 import { offerDiscount } from '../../store/cart';
+/* v5.214.0 — the floating bar whispers the fit: the LAST silent offer
+   surface on the guest side borrows the family home (lib/offerFit) — the
+   SAME reducer the counter's pill reads (best take among eligible, the
+   closest threshold among unlocks, the honest 'a better offer fits'
+   upsell) and the SAME sentence composer (offerFitVoice — 5.211's
+   own-words rule for the fit: two surfaces never say it in two
+   dialects). The bar's own total already includes the discount when one
+   is applied — '₹40.00 off applied' explains why the number moved. */
+import { offerFit, offerFitVoice } from '../../lib/offerFit';
 
 /**
  * Guest QR surfaces (v5.3.0) — the customer side of the main flow.
@@ -704,6 +713,14 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
     : 0;
   const cartTax = round2((cartSubtotal - cartDiscount) * 0.05);
   const cartTotal = round2(cartSubtotal - cartDiscount + cartTax);
+  /* v5.214.0 — the bar's fit: the best live offer for this line set, the
+     counter pill's exact grammar (offerFit picks it — best take wins,
+     closest threshold speaks among unlocks). The register is the screen's
+     ONE offers read; the applied id is the guest's own selection. */
+  const fit = useMemo(
+    () => offerFit(offers, cartSubtotal, selectedOfferId),
+    [offers, cartSubtotal, selectedOfferId],
+  );
 
   // a paused/removed offer must not ride along silently — drop it once offers load
   useEffect(() => {
@@ -1098,9 +1115,29 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
       {/* floating cart bar */}
       {phase === 'ready' && cartCount > 0 && !drawerOpen && (
         <div className="fixed inset-x-0 bottom-0 z-40 border-t border-[#E3E7E0] bg-white/95 p-3 backdrop-blur">
+          {/* v5.214.0 — the bar's fit whisper, always visible (guests are on
+              phones — the counter's hidden-sm:inline chip would never show
+              here). The state colors are the chips' own palette: applied
+              green, applies gold, unlock red. tabular-nums so the money
+              holds still while the cart moves. */}
+          {fit && (
+            <p
+              className={`mx-auto mb-1.5 max-w-xl text-[11.5px] font-semibold tabular-nums ${
+                fit.kind === 'applied'
+                  ? 'text-[#2E7D32]'
+                  : fit.kind === 'applies'
+                    ? 'text-[#967221]'
+                    : 'text-[#B4483C]'
+              }`}
+              style={{ animation: 'spFadeIn 200ms ease-out' }}
+            >
+              {offerFitVoice(fit)}
+            </p>
+          )}
           <button
             type="button"
             onClick={() => setDrawerOpen(true)}
+            aria-label={`${t('viewOrder', { amt: money(cartTotal) })}${fit ? `, ${offerFitVoice(fit)}` : ''}`}
             className="mx-auto flex w-full max-w-xl items-center justify-between rounded-full px-5 text-white shadow-lg transition-opacity hover:opacity-95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#B88E2F]"
             style={{ background: brand.teal, height: 52 }}
           >

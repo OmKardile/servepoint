@@ -3,6 +3,23 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.214.0] — 2026-10-05 — The guest bar whispers the fit: the floating cart bar was the LAST silent offer surface on the guest side — it said "2 items · View order · ₹total" while the counter's pill whispered the offer's fit; the fit family moved to its cart-domain home and both surfaces now borrow ONE reducer and ONE sentence
+
+### Changed — the fit family finds its home (`src/lib/offerFit.ts`, new)
+
+The fit is CART-domain, not food-screen-domain — and a component file must never be a lib (the guest menu would have imported the food screen's whole module graph to reach one reducer). `OfferFit` and `offerFit` move to `lib/offerFit.ts` (body untouched — the store's own `offerDiscount`, best take wins among eligible with ties keeping the read's order, the closest threshold speaks among unlocks, null/empty/zero stays structurally silent). The counter's local voice ternary retires with the move: **`offerFitVoice` is the sentence's ONE composer** — "₹50.00 off applied" / "₹50.00 off over ₹300.00 applies" / "Add ₹80.00 more for ₹50.00 off over ₹300.00" — 5.211's own-words rule finally covering the fit itself.
+
+### Added — the guest bar's fit whisper (`src/components/guest/GuestPages.tsx`)
+
+The floating cart bar now whispers the best fit for the line set AS IT STANDS, always visible (guests are on phones — the counter's `hidden sm:inline-flex` chip would never show there): the sentence rides in the chips' own state palette (applied green #2E7D32, applies gold #967221, unlock red #B4483C) with `tabular-nums`, and the button's aria names the fit (the counter pill's own grammar: `, ${fitVoice}`). Deliberately NOT a live region — the bar re-renders on every cart move, and a live region there would re-announce every add; the button's aria carries the voice for the SR moment instead. The register is the screen's ONE offers read; the applied id is the guest's own selection — the honest upsell crosses surfaces intact (10% applied while flat ₹50 fits → "applies" names the better one).
+
+### Verified
+
+- `unit253` born (vite-node): 9 groups green — `offerFitVoice`'s three byte-cases (the counter's exact sentences), the selection grammar on a PublicOffer-shaped fixture (best-take, closest-threshold, honest upsell, structural silence), the family agreement (the fit's take == `offerDiscount`'s number), source guards (the guest imports the lib home — never the food screen, never a local copy; `offerFitVoice(fit)` exactly twice: line + aria, one sentence two ears; the palette + tabular-nums; no live-region chatter; the counter composes from the lib and hosts no body).
+- `unit249` guards migrated to the lib home (the body guards read `libCode` — the screen guards still assert the surface: import line, pill chip, aria clause); `unit251`'s group 7 updated to the same truth.
+- Regression battery: unit194/195/197–252 all PASS (59 suites incl. 253, zero failures).
+- tsc EXIT=0 ×3; build EXIT=0 (43 assets injected, VERSION → servepoint-v5.214.0-r1).
+
 ## [5.213.0] — 2026-10-05 — The chip knows what it saves: the guest banner's chips said WHY an offer exists (the rule, 5.212) but never why the guest should tap one NOW — "Tap to apply" with no number on the table; the chip now whispers the savings, read from the store's ONE arithmetic, and the aria speaks every state the sighted read
 
 ### Added — the savings preview on the guest chips (`src/components/guest/GuestPages.tsx`, `src/lib/guest-i18n.ts`)

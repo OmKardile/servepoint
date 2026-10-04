@@ -105,9 +105,11 @@ const ariaPrefix = 'aria-label={`${o.title} — ${offerRuleLabel(o)}`'.replace(/
 assert.ok(guestCode.includes(ariaPrefix), 'the chip\'s aria-label names the rule — the SR hears what the sighted read');
 ok('the honest state line + the speakable aria: the reason is never tooltip-only');
 
-/* ── 7 — the counter side survives the widening untouched ── */
-assert.ok(foodCode.includes('offerDiscount(best, subtotal)'), 'offerFit\'s body still computes with the store\'s ONE arithmetic');
-assert.ok(foodCode.includes('OfferVoice & { id: string }'), 'the fit\'s shape is the voice triple + id (the applied/applies tell)');
-ok('the counter\'s fit family survived the widening (unit249\'s guards re-run in the battery)');
+/* ── 7 — the fit family survives (v5.214.0: the body moved to lib/offerFit.ts —
+      the cart-domain home the guest bar borrows; unit249's guards re-run migrated) ── */
+const fitLibCode = strip('../src/lib/offerFit.ts');
+assert.ok(fitLibCode.includes('offerDiscount(best, subtotal)'), 'offerFit\'s body computes with the store\'s ONE arithmetic — from its cart-domain home');
+assert.ok(fitLibCode.includes('OfferVoice & { id: string }'), 'the fit\'s shape is the voice triple + id (the applied/applies tell)');
+ok('the fit family survived — now in the lib home, borrowed by both surfaces');
 
 console.log(`\n  ${n} groups — unit251 (v5.212.0 the guest hears the offer's own words)`);
