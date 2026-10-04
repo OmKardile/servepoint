@@ -17,6 +17,7 @@ import {
   Repeat,
   Search,
   Sparkles,
+  Tag,
   Trash2,
   TrendingUp,
   Users,
@@ -210,6 +211,14 @@ export function buildOfferText(
    * byte-identical to its old self (silence is not zero). */
   lastUsedIso?: string | null,
   nowMs?: number,
+  /* v5.197.0 — the offer's cost: the ledger's own sum of the rupees this
+   * offer took off tickets. Present (even 0.00 — a provable zero, the
+   * ledger SPOKE) the paper grows the "Given away" row right after
+   * "Used so far" — the card's chip order (count → cost → date), the
+   * same words the card and the aria speak. Absent (no ledger row for
+   * this offer, or the ledger unread) → the row never renders and the
+   * paper is byte-identical — silence, never an invented ₹0. */
+  givenRupees?: number | null,
 ): string {
   const W = 32;
   const hr = '-'.repeat(W);
@@ -266,6 +275,9 @@ export function buildOfferText(
    * so the 32-col frame never truncates the label). Silence when the
    * ledger has no row — the paper byte-identical to its old self. */
   out.push(two('Used so far', `${o.usage_count}×`));
+  if (givenRupees != null) {
+    out.push(two('Given away', formatMoney(givenRupees)));
+  }
   if (lastUsedIso && nowMs != null) {
     out.push(two('Last used', usedAgo(lastUsedIso, nowMs)));
   }
@@ -276,21 +288,46 @@ export function buildOfferText(
   return out.join('\n');
 }
 
+/** ── v5.197.0 — the offer's cost, reduced from the ledger ──────────
+ *  The same redemption ride that dates the tally (5.190) already
+ *  carries each row's discount_amount — the rupees the offer actually
+ *  took off tickets — and the sum was being discarded. ONE reducer,
+ *  exported so the suite owns the arithmetic: offerId → the SUM of the
+ *  ledger's stored paise. A key exists only when the ledger has a row
+ *  (an offer never redeemed stays out — silence, never a fabricated
+ *  ₹0; a row whose discount is genuinely 0.00 sums to 0.00 and SPEAKS
+ *  — a provable zero, not silence). */
+export function offerGivenAway(
+  rows: { offerId: string; discountAmount: number | string | null }[],
+): Map<string, number> {
+  const m = new Map<string, number>();
+  for (const r of rows) {
+    m.set(r.offerId, (m.get(r.offerId) ?? 0) + Number(r.discountAmount ?? 0));
+  }
+  return m;
+}
+
 /** ── v5.190.0 — the usage fact's full sentence ───────────────────────
  *  The card's date clause rides a hover title and an aria name; both
  *  compose from THIS function so the suite reads the exact sentences the
  *  card speaks (227's doorOf pattern, 228's billsCsvRows). The count
  *  always speaks ("used 3 times"); the date joins only when the ledger
  *  has a row for the offer — no row, no clause, the base sentence
- *  byte-identical to the tally's old voice (silence is not zero). */
+ *  byte-identical to the tally's old voice (silence is not zero).
+ *  v5.197.0 — the cost clause, optional 4th param: present, the sentence
+ *  grows ", ₹X given away" between count and date (the card's chip
+ *  order — count → cost → date); absent, the old sentence is
+ *  byte-identical (229's contract holds unchanged). */
 export function offerUsageAria(
   usageCount: number,
   lastUsedIso: string | null | undefined,
   nowMs: number,
+  givenRupees?: number | null,
 ): string {
   const base = `used ${usageCount} time${usageCount === 1 ? '' : 's'}`;
-  if (!lastUsedIso) return base;
-  return `${base}, last used ${usedAgo(lastUsedIso, nowMs)}`;
+  const cost = givenRupees != null ? `, ${formatMoney(givenRupees)} given away` : '';
+  if (!lastUsedIso) return `${base}${cost}`;
+  return `${base}${cost}, last used ${usedAgo(lastUsedIso, nowMs)}`;
 }
 
 /* ── The CRM reads the book (5.90.0) — a guest row carries today's promise.
@@ -501,6 +538,14 @@ const GuestsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry })
    * the ledger has not been read (or could not): the date voice stays
    * SILENT — an unread ledger never becomes an invented never. */
   const [lastUsed, setLastUsed] = useState<Map<string, string> | null>(null);
+  /* v5.197.0 — the tally's cost: offerId → the SUM of the ledger's own
+   * discount_amount (the rupees the offer actually took off tickets).
+   * Same ride as lastUsed, ONE read, the reducer exported (offerGivenAway)
+   * so the suite owns the arithmetic. null = the ledger unread (or
+   * could not): the cost voice stays SILENT — an unread ledger never
+   * becomes an invented ₹0, and an offer with no rows never wears a
+   * cost chip (silence is not zero — only a row with 0.00 speaks it). */
+  const [givenAway, setGivenAway] = useState<Map<string, number> | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [rt, setRt] = useState<RealtimeState>('connecting');
@@ -573,8 +618,15 @@ const GuestsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry })
           if (!prev || r.createdAt > prev) m.set(r.offerId, r.createdAt);
         }
         setLastUsed(m);
+        /* v5.197.0 — the same rows, the cost reduced: the sum was riding
+         * in every read and being discarded. ONE read, TWO derivations,
+         * the reducer suite-owned. */
+        setGivenAway(offerGivenAway(rows));
       })
-      .catch(() => setLastUsed(null));
+      .catch(() => {
+        setLastUsed(null);
+        setGivenAway(null);
+      });
   }, [tenantId]);
 
   useEffect(() => {
@@ -932,6 +984,7 @@ const GuestsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry })
           activeOffers={activeOffers}
           storeName={tenant?.name || 'ServePoint store'}
           lastUsed={lastUsed}
+          givenAway={givenAway}
         />
       )}
 
@@ -1292,7 +1345,11 @@ const OffersTab: React.FC<{
   /* v5.190.0 — the tally's dates (offerId → newest ledger created_at);
    * null = the ledger is unread and the date voice stays silent. */
   lastUsed: Map<string, string> | null;
-}> = ({ offers, loading, onEdit, onToggle, onDelete, deleteArm, setDeleteArm, busyId, activeOffers, storeName, lastUsed }) => {
+  /* v5.197.0 — the tally's cost (offerId → the ledger's summed
+   * discount_amount); null = the ledger unread, no key = no rows —
+   * both keep the cost chip silent. */
+  givenAway: Map<string, number> | null;
+}> = ({ offers, loading, onEdit, onToggle, onDelete, deleteArm, setDeleteArm, busyId, activeOffers, storeName, lastUsed, givenAway }) => {
   /* v5.149.0 — per-card copy feedback: one state cell keyed by offer id,
    * ok/fail honest (headless and denied-permission browsers say so), the
    * 1.8s reset the bill's copy button taught (5.145.0). */
@@ -1301,7 +1358,7 @@ const OffersTab: React.FC<{
     try {
       if (!navigator.clipboard?.writeText) throw new Error('clipboard unavailable');
       await navigator.clipboard.writeText(
-        buildOfferText(o, storeName, lastUsed?.get(o.id) ?? null, Date.now())
+        buildOfferText(o, storeName, lastUsed?.get(o.id) ?? null, Date.now(), givenAway?.get(o.id) ?? null)
       );
       setOfferCopy({ id: o.id, ok: true });
     } catch {
@@ -1344,6 +1401,11 @@ const OffersTab: React.FC<{
              * for THIS offer (null when the ledger has no row — silence,
              * never an invented never). One read, one fact, two surfaces. */
             const lastIso = lastUsed?.get(o.id) ?? null;
+            /* v5.197.0 — the cost, from the same ledger: `?? null` keeps the
+             * register honest — a MISSING key stays null (the ledger never
+             * spoke for this offer), a present 0.00 stays 0.00 (the ledger
+             * spoke a provable zero, the chip says so). */
+            const givenRupees = givenAway?.get(o.id) ?? null;
             return (
               <div
                 key={o.id}
@@ -1396,7 +1458,7 @@ const OffersTab: React.FC<{
                           (5.187), quiet grey — the date informs, it never
                           alarms. The title carries the exact stamp. */}
                       <span
-                        aria-label={offerUsageAria(o.usage_count, lastIso, Date.now())}
+                        aria-label={offerUsageAria(o.usage_count, lastIso, Date.now(), givenRupees)}
                         title={lastIso ? `last redemption ${dayTime(lastIso)}` : undefined}
                       >
                         used <b className="text-[#1A1A1A]">{o.usage_count}</b>×
@@ -1407,6 +1469,23 @@ const OffersTab: React.FC<{
                           </span>
                         )}
                       </span>
+                      {/* v5.197.0 — the offer names its cost: the ledger's own
+                          sum of the rupees this offer took off tickets. The
+                          Tag icon is 5.192's giveaway voice (the Z-report's
+                          "Offers given" tile whisper), the gold register —
+                          the money the house GAVE reads where the offer
+                          lives, next to the count it came from. Chip only
+                          when the ledger has a row for THIS offer; no rows,
+                          no chip — silence, never a fabricated ₹0. */}
+                      {givenRupees != null && (
+                        <span
+                          className="inline-flex items-center gap-1 rounded-md bg-[#FBF7EC] px-1.5 py-0.5 font-medium tabular-nums text-[#8A5A00]"
+                          title={`${formatMoney(givenRupees)} taken off tickets by this offer — the redemption ledger's own sum`}
+                        >
+                          <Tag size={12} aria-hidden className="shrink-0" />
+                          {formatMoney(givenRupees)} given
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -1491,7 +1570,7 @@ const OffersTab: React.FC<{
                     </button>
                     <a
                       href={`https://wa.me/?text=${encodeURIComponent(
-                        buildOfferText(o, storeName, lastUsed?.get(o.id) ?? null, Date.now())
+                        buildOfferText(o, storeName, lastUsed?.get(o.id) ?? null, Date.now(), givenAway?.get(o.id) ?? null)
                       )}`}
                       target="_blank"
                       rel="noopener noreferrer"
