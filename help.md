@@ -107,9 +107,18 @@ Configure these in your local `.env` or in your cloud deployment settings (Rende
 
 ```env
 # Supabase Live Cloud Project
+# The URL and the PUBLIC anon key ship as embedded fallback defaults in
+# src/lib/supabase.ts (owner decision v2.6.4: the anon key is a public
+# client key — RLS protects the data, not key secrecy). Copy live values
+# from there; they are not duplicated in docs.
 VITE_SUPABASE_URL="https://gehjsxopcowmotgrrcgc.supabase.co"
-VITE_SUPABASE_ANON_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZidWZzdXp6bWVoc2lkc2hvcGt1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTAyOTE0MjMsImV4cCI6MjEwNTg2NzQyM30.kymgulEpO3R7FRhrfFO-lpmYrAcOqBF82sSW4unZHBE"
-SUPABASE_SERVICE_ROLE_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZidWZzdXp6bWVoc2lkc2hvcGt1Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc5MDI5MTQyMywiZXhwIjoyMTA1ODY3NDIzfQ.7ChyfZnWQeb5V0ZWJZD5hYY1-DpN-yg4gK_PXfrvSlk"
+VITE_SUPABASE_ANON_KEY="<public anon key — see the embedded default in src/lib/supabase.ts>"
+# Server-side ONLY. NEVER commit this value; NEVER ship it in a client
+# bundle or a doc. (An earlier version of this file embedded a real
+# service-role key from a retired template project — scrubbed in the
+# 2026-10-04 daily hygiene pass. If that old Supabase project still
+# exists anywhere, rotate its keys.)
+SUPABASE_SERVICE_ROLE_KEY="<service-role key — Supabase Dashboard → Settings → API — server-side only>"
 ```
 
 

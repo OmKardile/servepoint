@@ -14,3 +14,7 @@ tsbuildinfo
 # vite dev-server runtime logs (cron snapshot sweep guard)
 dev.err.log
 dev.log
+
+# QA network captures — HAR files hold live session tokens + identity
+# metadata; they must never be tracked (2026-10-04 daily hygiene pass)
+*.har
