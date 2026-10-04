@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Check,
   ChevronDown,
+  Clock,
   Copy,
   Download,
   History,
@@ -136,6 +137,10 @@ export interface ChaseOpts {
     note: string | null;
   }[];
   total: number;
+  /** v5.186.0 — the chase head's own age ('today' | 'Nd old'), the strip's
+   *  oldest voice echoed on the paper's count line. Optional — silence
+   *  when absent (a head exists whenever tickets do). */
+  oldestAge?: string | null;
 }
 
 export function buildChaseText(opts: ChaseOpts): string {
@@ -181,7 +186,15 @@ export function buildChaseText(opts: ChaseOpts): string {
   }
   out.push(hr);
   out.push(two('TOTAL TO COLLECT', formatMoney(opts.total)));
-  out.push(center(`${opts.tickets.length} ticket${opts.tickets.length === 1 ? '' : 's'}`));
+  /* v5.186.0 — the count line speaks the age the strip speaks: how many ·
+   * how old. Silence when the head is absent (no tickets, no age). */
+  out.push(
+    center(
+      opts.oldestAge
+        ? `${opts.tickets.length} ticket${opts.tickets.length === 1 ? '' : 's'} · oldest ${opts.oldestAge}`
+        : `${opts.tickets.length} ticket${opts.tickets.length === 1 ? '' : 's'}`
+    )
+  );
   out.push(hr);
   out.push(center(`Shared ${appFormatters().hhmm.format(new Date())} ${appTzTag()}`));
   out.push(center('· · · end of chase list · · ·'));
@@ -622,6 +635,14 @@ const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRet
     [orders, paidSums]
   );
   const chaseTotal = useMemo(() => chaseTickets.reduce((s, t) => s + t.open, 0), [chaseTickets]);
+  /* ── v5.186.0 — the strip knows the age: the chase list runs oldest first,
+   * so the head IS the oldest — no second sort, no second writer. The title
+   * speaks the dashboard mirror's EXACT sentence (5.185's ageVoice) — ONE
+   * register, two surfaces. ── */
+  const chaseOldest = chaseTickets[0] ?? null;
+  const chaseAgeTitle = chaseOldest
+    ? `oldest ${chaseOldest.num} owes ${formatMoney(chaseOldest.open)}, ${chaseOldest.age}`
+    : null;
   const [chaseCopyState, setChaseCopyState] = useState<'idle' | 'ok' | 'fail'>('idle');
   const copyChase = async () => {
     try {
@@ -631,6 +652,7 @@ const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRet
           storeName: tenant?.name || 'ServePoint store',
           tickets: chaseTickets,
           total: chaseTotal,
+          oldestAge: chaseOldest?.age ?? null,
         })
       );
       setChaseCopyState('ok');
@@ -1037,10 +1059,20 @@ const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRet
           <div
             className="mt-3 flex flex-wrap items-center gap-2"
             role="group"
-            aria-label="Share the chase list"
+            aria-label={`Share the chase list — ${formatMoney(chaseTotal)} out, ${chaseTickets.length} unpaid${chaseAgeTitle ? `, ${chaseAgeTitle}` : ''}`}
           >
             <span className="inline-flex h-[34px] items-center rounded-xl bg-[#FDF6E3] px-3 text-[10.5px] font-bold uppercase tracking-[0.08em] text-[#8A5A00]">
               {formatMoney(chaseTotal)} out · {chaseTickets.length} unpaid
+            </span>
+            {/* v5.186.0 — the age voice joins the strip: how much · how many ·
+                how old. The quiet chip (the alarm tones stay on the per-row
+                age chips); the title carries the mirror's exact sentence. ── */}
+            <span
+              className="inline-flex h-[34px] items-center gap-1.5 rounded-xl border border-[#E3E7E0] bg-white px-3 text-[12px] font-semibold tabular-nums text-[#5B6B66]"
+              title={chaseAgeTitle ?? undefined}
+            >
+              <Clock size={14} aria-hidden className="shrink-0 text-[#8A5A00]" />
+              oldest {chaseTickets[0].age}
             </span>
             <button
               onClick={copyChase}
@@ -1061,6 +1093,7 @@ const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRet
                   storeName: tenant?.name || 'ServePoint store',
                   tickets: chaseTickets,
                   total: chaseTotal,
+                  oldestAge: chaseOldest?.age ?? null,
                 })
               )}`}
               target="_blank"

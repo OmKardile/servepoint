@@ -15,13 +15,22 @@ const ok = (name) => console.log(`  ok ${++n} - ${name}`);
 
 const todayKey = bookingTodayKey();
 const yesterdayKey = bookingDayKey(new Date(Date.now() - 86_400_000).toISOString());
+/* v5.186.0 determinism repair (fixture-side, source untouched — proven not a
+ * 5.186 regression by a stash run on unmodified HEAD): the original fixtures
+ * built stamps from HOUR OFFSETS (at(20) etc.), which land on today or
+ * yesterday depending on the RUN HOUR — t2@20h rode 'yesterday' before 20:00
+ * IST and 'today' after, so the suite flipped at 20:00 IST (first fired this
+ * round). Stamps are now built ON the day keys at fixed IST times — the
+ * assertion no longer depends on when the clock runs. */
+const earlierKey = bookingDayKey(new Date(Date.now() - 72 * 3600_000).toISOString());
 ok('yesterday key derives on the same booking clock (5.198 pattern)');
 
-const at = (hoursAgo) => new Date(Date.now() - hoursAgo * 3600_000).toISOString();
+/* a stamp ON a booking day at a fixed IST time (India is UTC+5:30, no DST) */
+const at = (dayKey, time) => `${dayKey}T${time}:00+05:30`;
 
-const ticket = (id, hoursAgo) => ({ kind: 'ticket', id, itemId: 'x', qty: -30, at: at(hoursAgo) });
-const adjust = (id, hoursAgo) => ({
-  kind: 'adjust', id, itemId: 'x', qty: 500, at: at(hoursAgo), reason: 'delivery', note: '',
+const ticket = (id, dayKey, time) => ({ kind: 'ticket', id, itemId: 'x', qty: -30, at: at(dayKey, time) });
+const adjust = (id, dayKey, time) => ({
+  kind: 'adjust', id, itemId: 'x', qty: 500, at: at(dayKey, time), reason: 'delivery', note: '',
 });
 
 /* ── empty room ─────────────────────────────────────────────────────── */
@@ -31,7 +40,7 @@ ok('empty diary: no groups, honestly shaped');
 
 /* ── all today: single group ────────────────────────────────────────── */
 
-const g1 = groupDiaryByDay([ticket('a', 1), ticket('b', 2)], todayKey, yesterdayKey);
+const g1 = groupDiaryByDay([ticket('a', todayKey, '09:15'), ticket('b', todayKey, '08:00')], todayKey, yesterdayKey);
 assert.equal(g1.length, 1);
 assert.equal(g1[0].key, 'today');
 assert.equal(g1[0].label, 'Today');
@@ -43,11 +52,11 @@ ok('all-today feed: one Today group, tally 2 tickets 0 hands');
 /* ── three groups in reading order, order preserved within ─────────── */
 
 const rows = [
-  ticket('t1', 1), // today
-  adjust('h1', 2), // today
-  ticket('t2', 20), // yesterday (if <24h but different day key may vary; use 30h)
-  adjust('h2', 5), // today
-  ticket('t3', 49), // earlier
+  ticket('t1', todayKey, '09:00'), // today
+  adjust('h1', todayKey, '10:30'), // today
+  ticket('t2', yesterdayKey, '12:00'), // yesterday (the comment's own intent — "use 30h" meant the PREVIOUS day, not 20h-ago)
+  adjust('h2', todayKey, '11:15'), // today
+  ticket('t3', earlierKey, '15:45'), // earlier
 ];
 const g2 = groupDiaryByDay(rows, todayKey, yesterdayKey);
 assert.ok(g2.length >= 2);
@@ -77,7 +86,7 @@ ok('no row lost in bucketing (every move lands exactly once)');
 
 /* ── hands-only and mixed tallies ──────────────────────────────────── */
 
-const g4 = groupDiaryByDay([adjust('h1', 1), adjust('h2', 2)], todayKey, yesterdayKey);
+const g4 = groupDiaryByDay([adjust('h1', todayKey, '09:30'), adjust('h2', todayKey, '10:00')], todayKey, yesterdayKey);
 assert.equal(g4[0].tickets, 0);
 assert.equal(g4[0].hands, 2);
 ok('hands-only day: tally 0 tickets 2 hands (quantities never summed)');
