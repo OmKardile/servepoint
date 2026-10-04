@@ -96,7 +96,7 @@ export const Sidebar: React.FC = () => {
     useChatUnread.getState().ensure(tenantId, email, name);
     return () => useChatUnread.getState().release();
   }, [tenantId, email, name]);
-  const chatCounts = useChatUnread((s) => s.counts);
+  const chatCounts = useChatUnread((s) => s.value);
   const chatUnread = useMemo(() => sumChatUnread(chatCounts), [chatCounts]);
 
   /* v5.114.0 — the third bell hums: the shelf's count reaches the rail the
@@ -108,7 +108,7 @@ export const Sidebar: React.FC = () => {
     useStockUnread.getState().ensure(tenantId);
     return () => useStockUnread.getState().release();
   }, [tenantId]);
-  const stockLow = useStockUnread((s) => s.count);
+  const stockLow = useStockUnread((s) => s.value);
 
   /* v5.111.0 — the rail speaks its changes. One polite live region announces
    * unread deltas for ears that can't watch two badges: skips the state you

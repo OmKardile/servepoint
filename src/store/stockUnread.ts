@@ -2,8 +2,11 @@ import { createUnreadFeed } from './createUnreadFeed';
 import { fetchLowStockCount, subscribeInventoryRealtime } from '../lib/api';
 
 /**
- * ServePoint stock alerts — the THIRD bell's feed (v5.114.0), and the first
- * consumer of the unread-feed factory (src/store/createUnreadFeed.ts).
+ * ServePoint stock alerts — the THIRD bell's feed (v5.114.0), the first
+ * consumer of the unread-feed factory (src/store/createUnreadFeed.ts) and
+ * its simplest shape: a single-number VALUE over a single-element SCOPE
+ * (the tenant). The factory grew its generic form in v5.135.0 (chat
+ * migrated with a scope triple); this feed reads exactly as it did.
  *
  * Until now a low shelf spoke only inside the Inventory screen: you learned
  * milk had crossed its reorder point by going to look. During service the
@@ -29,14 +32,14 @@ import { fetchLowStockCount, subscribeInventoryRealtime } from '../lib/api';
  * loud by nature. (The announcement only fires on N→M moves, so service
  * deductions that don't cross a reorder point never speak.)
  */
-export const useStockUnread = createUnreadFeed({
+export const useStockUnread = createUnreadFeed<[string], number>({
   tag: 'stock',
-  fetch: fetchLowStockCount,
+  fetch: ([tenantId]) => fetchLowStockCount(tenantId),
   /* own channel tag — the screen's board subscription keeps 'screen'; a
    * shared name would let the feed steal the room and crash the screen on
    * its next postgres_changes add (caught live in the first E2E — the
    * unread.ts 'badge' lesson, paid for twice now). */
-  subscribe: (tenantId, onPing, onState) =>
+  subscribe: ([tenantId], onPing, onState) =>
     subscribeInventoryRealtime(tenantId, onPing, onState, 'railfeed'),
   pollMs: 60_000,
 });

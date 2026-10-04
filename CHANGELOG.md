@@ -3,6 +3,18 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.135.0] — 2026-10-04 — One lifecycle, spoken once
+
+### Changed — the chat feed moves into the factory it inspired
+
+- **The factory grows the identity hook its own header promised** (`src/store/createUnreadFeed.ts`): since 5.114.0 the header said a chat migration "would be ceremony without a consumer" — the factory keyed on the tenant alone, and the chat feed's truth is per READER (tenant + email + display name, because the watermark arithmetic is per reader). The ceremony now has its consumer: the factory is generic over **SCOPE** (the tuple `ensure` receives — `[tenantId]` for the stock feed, `[tenantId, email, name]` for chat) and over **VALUE** (a number for stock, a per-room record for chat), with scope keys joined by the ASCII unit separator so distinct identities can't collide. The store field is honestly named `value`; the contract is unchanged (ref-counted ensure/release, teardown at zero or scope switch, null-on-failure, realtime + poll, resurrection guard, nudge).
+- **chatUnread migrates** (`src/store/chatUnread.ts`): 130 lines of hand-rolled lifecycle become a 25-line config; the feed's semantics are byte-for-byte the same (same RPC, same channel, same 30 s poll, same nudge the Messages screen pulls on watermark advance). `sumChatUnread` keeps its job — the badge's math lives where it always did. `unread.ts` (notifications) stays hand-rolled by its own documented reason: its value is a prefs-shaped categories record with a mute-aware sum, not a number a rail can wear.
+- **The carried list learns the tree's truth**: the round's QA audited the parked ledger itself and found its first stale line — "aria-live rail badges (deferred — tuning)" shipped in **5.111.0** (the tuned implementation with skip-loaded-state, burst coalescing and the live-caught cold-open fix has been in the rail since Task 150) and had been carried forward as pending ever since. Retired. The banner stopped promising an unbuilt mechanism (5.134.0); the parked list stops promising a built one.
+
+### Verified
+
+tsc EXIT=0, build EXIT=0. Live E2E: fresh load — three rail badges render from the migrated feeds (Notifications 10 unread, Messages "no unread", Inventory "stock healthy"); the sr-only live region stays silent on load (skip-initial intact); Messages opens, rooms list loads with per-room counts from the migrated feed's VALUE record, opening a room nudges a recount and the rail stays honest; full visual audit of Dashboard / Guests / Floor / Messages found zero drift (ladder rows, tier tiles, floor tiles, day dividers all as shipped). Chat realtime live-fire skipped deliberately — proving the ping path would mean fabricating messages on the real staff line; equivalence is carried by the unchanged config wiring + render E2E, stated honestly. Console-buffer lesson re-proven: the process-global buffer still held Task 173's HMR residue even after `console clear` and on a neutral page (example.com) — fresh-load truth judged via served-module curl + tree search + behavior.
+
 ## [5.134.0] — 2026-10-04 — The banner stops promising a queue that was never built
 
 ### Fixed — the offline banner's five-month lie
