@@ -16,9 +16,8 @@
  */
 import assert from 'node:assert/strict';
 
-const { computeTurnCensus, seatLabelFor, seatSpanLabel, seatClockFor } = await import(
-  '/src/components/floor/FloorScreen.tsx'
-);
+const { seatLabelFor, seatClockFor } = await import('/src/components/floor/FloorScreen.tsx');
+const { computeTurnCensus, seatSpanLabel } = await import('/src/lib/turn.ts');
 
 let n = 0;
 const ok = (name) => console.log(`  ok ${++n} - ${name}`);
@@ -199,7 +198,9 @@ assert.equal(unread.medianMin, 0);
 assert.equal(unread.breaches, 0);
 ok('null settle map: the census counts rounds and measures nothing (silence, never an invented median)');
 
-/* 10 — garbage settle iso skipped; pre-seat settle clamps to 0 */
+/* 10 — garbage settle skipped; a settle at or before the ticket's creation
+ *      is ledger NOISE — skipped too (5.182.0 unifies with turnover's born
+ *      rule: the clock never winds backwards, never fakes a 0-minute seat) */
 const weird = computeTurnCensus(
   [order('u', '10', 1, 9, 0), order('v', '10', 2, 9, 0)],
   new Map([
@@ -210,9 +211,10 @@ const weird = computeTurnCensus(
   START,
   END,
 );
-assert.equal(weird.spans, 1);
+assert.equal(weird.rounds, 2);
+assert.equal(weird.spans, 0);
 assert.equal(weird.medianMin, 0);
 assert.equal(weird.breaches, 0);
-ok('unreadable settle skipped; a pre-seat settle clamps to 0 minutes, never negative');
+ok('unreadable settle skipped; a pre-seat settle is noise — skipped, never a fake 0-minute seat');
 
 console.log(`\nunit220 — ${n} asserts born (the held time)`);

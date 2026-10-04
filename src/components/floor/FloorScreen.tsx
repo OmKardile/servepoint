@@ -87,6 +87,8 @@ import { MarkHit } from '../shell/MarkHit';
 import { EmptyState } from '../shell/EmptyState';
 import { useCart } from '../../store/cart';
 import type { Order, OrderItem } from '../../types';
+import { seatSpanLabel, computeTurnCensus } from '../../lib/turn';
+import type { TableTurnStats } from '../../lib/turn';
 
 /**
  * Floor (v5.26.0) — the counter's table cockpit. dining_tables stream over
@@ -360,20 +362,11 @@ export interface SeatClock {
   camping: boolean;
 }
 
-/** The floor's DURATION register — minutes to words ("<1m" · "45m" ·
- *  "1h 5m"). The census's median reads this: a finished seat that held
- *  under a minute lasted "<1m", never "just sat" — that word belongs to
- *  the LIVE clock below (a seat that just sat is a state, not a span).
- *  Every real duration (≥1m) is byte-identical across both. */
-export function seatSpanLabel(minutes: number): string {
-  const h = Math.floor(minutes / 60);
-  return minutes < 1 ? '<1m' : h > 0 ? `${h}h ${minutes % 60}m` : `${minutes}m`;
-}
-
 /** The seat clock's label, from MINUTES alone — the ONE live register
- *  the floor speaks ("just sat" · "45m" · "1h 5m"). The tile's clock and
- *  the census's median share the arithmetic (seatSpanLabel), so a tile's
- *  "sat 1h 5m" and the rhythm's "median 1h 5m" can never disagree. */
+ *  the floor speaks ("just sat" · "45m" · "1h 5m"). The arithmetic rides
+ *  the lib's seatSpanLabel (5.182.0 — the ONE duration register, shared
+ *  with Reports' turnover), wrapped with the live clock's state word:
+ *  a seat that just sat is a state, not a span. */
 export function seatLabelFor(minutes: number): string {
   return minutes < 1 ? 'just sat' : seatSpanLabel(minutes);
 }
@@ -393,18 +386,14 @@ export function seatClockFor(
   return { minutes, label: seatLabelFor(minutes), camping: minutes >= turnAfterMin };
 }
 
-/* ── The held time (v5.181.0) — the week's finished seats, measured ──
+/* ── The held time (v5.181.0, lib 5.182.0) — the week's finished seats ──
  *  The camping clock (5.158.0) speaks the LIVE seat; the ledger behind it
- *  also holds every seat the week FINISHED, and the floor never summed
- *  them. The census measures a finished seat the way the live clock does —
- *  created → freed — where freed is the payments ledger's LAST settle for
- *  the ticket (a split frees the table when its final part lands). One
- *  line, one comparison: a seat ran long exactly when the live clock
- *  would have called it camping (minutes >= turnAfterMin, the house's own
- *  line from Settings). Silence rules: an unpaid ticket has no end and is
- *  counted but never measured; a cancelled ticket never happened; a
- *  counter ticket holds no table; an unread settle ledger silences the
- *  whole census — nothing is invented from a half-read. */
+ *  also holds every seat the week FINISHED. The census lives in
+ *  src/lib/turn.ts now — ONE finish line (the payments ledger's last
+ *  settle) shared with Reports' table turnover, which read the kitchen's
+ *  completed hop until 5.182 and disagreed with this card in the live
+ *  app (78m avg vs <1m median for the same room, the same week). The
+ *  floor imports it like every other room: one lib, one math. */
 
 /** The rhythm's own 7-IST-day window (v5.22.0 math, hoisted 5.181.0 so the
  *  census measures the SAME week the hour chart draws). */
@@ -413,83 +402,6 @@ export function floorWeekWindow(): { startMs: number; endMs: number; prevStartMs
   const startMs = endMs - 7 * 24 * 3600 * 1000; // last 7 IST calendar days
   const prevStartMs = startMs - 7 * 24 * 3600 * 1000; // the 7 days before that
   return { startMs, endMs, prevStartMs };
-}
-
-export interface TableTurnStats {
-  label: string | null;
-  rounds: number;
-  spans: number;
-  medianMin: number;
-  breaches: number;
-}
-
-export interface TurnCensus {
-  rounds: number;
-  spans: number;
-  medianMin: number;
-  breaches: number;
-  byTable: Map<string, TableTurnStats>;
-}
-
-/** The week's turn census: per finished seat, created → last settle, in
- *  minutes; median and breach count per table and across the floor. An
- *  empty/null settle map is HONEST silence (spans 0) — the caller decides
- *  whether the UI speaks. `orders` may carry any population; the census
- *  keeps only what the rhythm's own rules admit (table-bound, not
- *  cancelled, inside [startMs, endMs)). */
-export function computeTurnCensus(
-  orders: Order[],
-  settleByOrder: Map<string, string> | null,
-  turnAfterMin: number,
-  startMs: number,
-  endMs: number,
-): TurnCensus {
-  const census: TurnCensus = {
-    rounds: 0,
-    spans: 0,
-    medianMin: 0,
-    breaches: 0,
-    byTable: new Map(),
-  };
-  const spans: number[] = [];
-  const tableSpans = new Map<string, number[]>();
-  for (const o of orders) {
-    if (o.table_id == null || o.status === 'cancelled') continue;
-    const t = new Date(o.created_at).getTime();
-    if (!Number.isFinite(t) || t < startMs || t >= endMs) continue;
-    census.rounds += 1;
-    const stat =
-      census.byTable.get(o.table_id) ??
-      ({ label: o.table_label ?? null, rounds: 0, spans: 0, medianMin: 0, breaches: 0 } as TableTurnStats);
-    stat.rounds += 1;
-    const settleIso = settleByOrder?.get(o.id);
-    const settleMs = settleIso ? new Date(settleIso).getTime() : NaN;
-    if (Number.isFinite(settleMs)) {
-      const minutes = Math.max(0, Math.floor((settleMs - t) / 60000));
-      spans.push(minutes);
-      const arr = tableSpans.get(o.table_id) ?? [];
-      arr.push(minutes);
-      tableSpans.set(o.table_id, arr);
-      if (minutes >= turnAfterMin) {
-        census.breaches += 1;
-        stat.breaches += 1;
-      }
-      census.spans += 1;
-      stat.spans += 1;
-    }
-    census.byTable.set(o.table_id, stat);
-  }
-  const median = (arr: number[]): number => {
-    if (arr.length === 0) return 0;
-    const s = [...arr].sort((a, b) => a - b);
-    const mid = Math.floor(s.length / 2);
-    return s.length % 2 === 1 ? s[mid] : Math.round((s[mid - 1] + s[mid]) / 2);
-  };
-  census.medianMin = median(spans);
-  for (const [id, stat] of census.byTable) {
-    stat.medianMin = median(tableSpans.get(id) ?? []);
-  }
-  return census;
 }
 
 /* ── The book (v5.38.0) — reservation status tones + booking-clock slot labels.

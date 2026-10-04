@@ -57,6 +57,7 @@ import {
   fetchPaymentsInRange,
   fetchWasteMoves,
 } from '../../lib/api';
+import { seatSpanLabel, buildSettleMap, medianMinOf } from '../../lib/turn';
 import type {
   DrawerSession,
   FeedbackRow,
@@ -1213,14 +1214,14 @@ function fmtDuration(minutes: number): string {
 export interface TurnoverTable {
   tableLabel: string;
   turns: number;
-  /** tickets from this table whose span is provable (placed → paid hop) */
+  /** tickets from this table whose span is provable (placed → settle) */
   timed: number;
   avgSpanMin: number | null;
   longestSpanMin: number | null;
 }
 
 /** One hour-of-day bucket of the room's breathing: how many seated spans
- *  FINISHED at that hour (the paid hop is the finish line) and their average
+ *  FINISHED at that hour (the settle is the finish line) and their average
  *  length. All 24 buckets always exist — the gaps are the quiet hours, and
  *  a live seat never guesses its way into one. */
 export interface TurnoverHour {
@@ -1246,26 +1247,31 @@ export interface TurnoverAgg {
   line: { turnAfterMin: number; past: number; share: number | null };
 }
 
-/** The floor's TimeAgo register for seated spans ("45m" · "1h 5m") — the
- *  same clock voice the camping pill speaks, minus "just sat": a finished
- *  span of zero minutes still reads "0m", not a greeting. */
+/** The floor's TimeAgo register for seated spans — since 5.182.0 this IS
+ *  the lib's ONE duration register (seatSpanLabel, "<1m · 45m · 1h 5m"),
+ *  the same words the floor's census speaks. A finished sub-minute span
+ *  reads "<1m", never a greeting and never a "0m" that means nothing. */
 export function turnoverSpanLabel(minutes: number): string {
-  const m = Math.max(0, Math.floor(minutes));
-  const h = Math.floor(m / 60);
-  return h > 0 ? `${h}h ${m % 60}m` : `${m}m`;
+  return seatSpanLabel(minutes);
 }
 
-/** The room's honest breathing, off the ledger the kitchen stopwatch reads
- *  (007's trigger-written hop trail). Dine-in = the ticket carries a
- *  table_id; cancelled tickets never entered the room. The seat span is
- *  placed → the earliest 'completed' hop; a ticket still at its table has
- *  no finish line, so it donates a TURN but never a span — the clock never
- *  guesses. A hop older than the ticket itself would wind the clock
- *  backwards and is skipped, never negative. The day shape (v5.163.0)
- *  buckets each finished span into the hour its table actually freed. */
+/** The room's honest breathing, off the SAME finish line the floor's turn
+ *  census reads (5.182.0): the payments ledger's LAST settle per ticket —
+ *  a split frees the table when its final part lands. Until 5.182 this
+ *  read the status ledger's earliest completed hop (the kitchen's own
+ *  close), and the live app answered this region 1h 18m average while the
+ *  floor's census said <1m median for the same room, the same week — the
+ *  216 class (one question, two ledgers), settled for the money's own
+ *  timestamps. Dine-in = the ticket carries a table_id; cancelled tickets
+ *  never entered the room. The seat span is placed → settle; a ticket
+ *  still at its table (unpaid, or settled outside the range) donates a
+ *  TURN but never a span — the clock never guesses. A settle at or before
+ *  the ticket itself is ledger noise and is skipped, never negative. The
+ *  day shape (v5.163.0) buckets each finished span into the hour its
+ *  table actually freed. */
 export function tableTurnover(
   rows: Order[],
-  hopRows: StatusHop[],
+  settleByOrder: Map<string, string> | null,
   turnAfterMin: number = DEFAULT_TURN_AFTER_MIN,
 ): TurnoverAgg {
   /* the line arrives through the prefs layer's own validator — one house,
@@ -1274,15 +1280,15 @@ export function tableTurnover(
   const dineIn = rows.filter(
     (o) => o.table_id && String(o.status || '').toLowerCase() !== 'cancelled',
   );
-  const byId = new Map(dineIn.map((o) => [o.id, o]));
   const doneAt = new Map<string, Date>();
-  for (const h of hopRows) {
-    if (h.toStatus !== 'completed') continue;
-    if (!byId.has(h.orderId)) continue;
-    const at = new Date(h.atIso);
-    if (Number.isNaN(at.getTime())) continue;
-    const prev = doneAt.get(h.orderId);
-    if (!prev || at < prev) doneAt.set(h.orderId, at);
+  if (settleByOrder) {
+    for (const o of dineIn) {
+      const iso = settleByOrder.get(o.id);
+      if (!iso) continue;
+      const at = new Date(iso);
+      if (Number.isNaN(at.getTime())) continue;
+      doneAt.set(o.id, at);
+    }
   }
   const spans: { orderNumber: number; tableLabel: string; minutes: number; doneIso: string }[] = [];
   const perTable = new Map<string, { turns: number; spans: number[] }>();
@@ -1307,15 +1313,18 @@ export function tableTurnover(
   spans.sort((a, b) => a.minutes - b.minutes);
   const n = spans.length;
   const avgMin = n > 0 ? spans.reduce((s, t) => s + t.minutes, 0) / n : null;
-  const medianMin = n > 0 ? spans[Math.floor((n - 1) / 2)].minutes : null;
+  /* 5.182.0 — the ONE median rule (medianMinOf): even counts round the
+     mean of the two middles — the census's definition, not 5.161's
+     lower-element pick, so the two surfaces can never disagree. */
+  const medianMin = n > 0 ? medianMinOf(spans.map((s) => s.minutes)) : null;
   const last = n > 0 ? spans[n - 1] : null;
   const longest = last
     ? { orderNumber: last.orderNumber, tableLabel: last.tableLabel, minutes: last.minutes }
     : null;
   /* v5.163.0 — the day shape: each finished span lands in the hour its table
-   * actually freed (the paid hop's hour, app clock). The earliest completed
-   * hop is the truth, so a retry hop can't re-bucket a ticket; a skew hop
-   * never made a span, so it never lands in an hour. All 24 buckets always
+   * actually freed (the settle's hour, app clock). The LAST settle is the
+   * truth, so a split's early parts can't re-bucket a ticket; a noise
+   * settle never made a span, so it never lands in an hour. All 24 buckets always
    * exist — the gaps are the quiet hours. Ties for peak go to the earlier
    * hour (a strict-greater scan from midnight). */
   const hourCells = Array.from({ length: 24 }, (_, hour) => ({ hour, timed: 0, sumMin: 0 }));
@@ -2158,18 +2167,30 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
 
   const kitchen = useMemo(() => kitchenSpeed(inRange, hops), [inRange, hops]);
 
-  /* v5.161.0 — the room's breathing, off the same two streams the kitchen
-   * stopwatch reads (inRange + hop ledger): zero new fetches. Hooks stay
-   * above the early returns — the 192 rule. */
+  /* 5.182.0 — the settle moments from the ledger rows the mix already
+     fetched: orderId → its LAST payment's instant (buildSettleMap,
+     newest wins — a split frees the table when its final part lands).
+     Empty map on a failed read = honest silence for every span.
+     Declared BEFORE the turnover memo that reads it (TDZ discipline). */
+  const settleByOrder = useMemo(() => buildSettleMap(ledger), [ledger]);
+
+  /* v5.161.0 — the room's breathing; 5.182.0 rides the ONE finish line
+   * (the settle map above) instead of the kitchen's hop ledger. Hooks
+   * stay above the early returns — the 192 rule. */
   const turnover = useMemo(
-    () => tableTurnover(inRange, hops, getPrefs().floor.turnAfterMin),
-    [inRange, hops],
+    () =>
+      tableTurnover(
+        inRange,
+        settleByOrder,
+        getPrefs().floor.turnAfterMin,
+      ),
+    [inRange, settleByOrder],
   );
 
   const exportTurnover = useCallback(() => {
     if (turnover.tickets === 0) return;
     const rows: (string | number)[][] = [
-      [`Table turnover (placed → paid, ${appTzTag()})`, ''],
+      [`Table turnover (placed → settle, ${appTzTag()})`, ''],
       ['Dine-in tickets', turnover.tickets],
       ['Tables touched', turnover.tablesTouched],
       ['Spans timed', turnover.spans.n],
@@ -4200,7 +4221,9 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
             </div>
             <p className="mb-4 text-[11.5px] text-[#969696]">
               How the room breathes — turns per table and the seated span, placed to
-              paid, off the status ledger the kitchen stopwatch reads.
+              the settle — the payments ledger's last word, the same finish line the
+              floor's Held-time census reads. The kitchen's own hop trail stays with
+              Kitchen speed, where it is honest.
             </p>
             {turnover.tickets === 0 ? (
               <p className="text-[13px] leading-relaxed text-[#6B6B6B]">
@@ -4365,7 +4388,7 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
                       ))}
                     </div>
                     <p className="mt-1.5 text-[11px] leading-relaxed text-[#969696]">
-                      A bar counts only finished seats — the paid hop is the finish line; seats
+                      A bar counts only finished seats — the settle is the finish line; seats
                       still at their table join when they pay.
                     </p>
                   </div>
@@ -4376,7 +4399,7 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
                     style={{ background: '#FCF1DF' }}
                     role="status"
                   >
-                    No ticket has left its table in this range — a span needs the paid hop;
+                    No ticket has left its table in this range — a span needs a settle;
                     live seats donate turns only.
                   </p>
                 )}
