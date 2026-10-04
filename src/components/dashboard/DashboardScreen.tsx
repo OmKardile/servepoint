@@ -695,22 +695,31 @@ export interface MorningTake {
    *  BUCKET'S key to Close-out, so the day the tile names is the day the
    *  landing opens. The key travels with the rupees — one derivation, not two. */
   yesterday: { key: string; full: string; total: number; lead: string | null } | null;
-  /** The six days before today — null when the week so far sold nothing. */
+  /** The reporting week ending today (today's money included as it happens) —
+   *  null when the week so far sold nothing.
+   *  5.205.0 — the week is THE LEDGER'S week: all seven reporting-day
+   *  buckets, so the tile's number IS what Reports' 'Last 7 days' reads —
+   *  the paper's pointer promises the landing's number and the promise now
+   *  holds structurally (5.198's rule, the paper's edition). The old
+   *  six-day voice (v5.175.0) excluded today's money — a number no landing
+   *  surface could answer. */
   week: { total: number; sellingDays: number; best: { label: string; total: number } | null } | null;
 }
 
 /**
  * Reads the morning take out of fetchDashboard's OWN week rows — the paper
  * never re-answers the money: the buckets are the same live grammar the week
- * chart speaks (cancelled never happened, browser days, oldest first, the
- * last row being TODAY by the fetch's own contract). A dead yesterday reads
- * silence; a silent week reads silence; the lead service is a deterministic
- * tie-break (Dine-in, then Takeaway), not a judgment.
+ * chart speaks (cancelled never happened, the reporting calendar, oldest
+ * first, the last row being TODAY by the fetch's own contract). A dead
+ * yesterday reads silence; a silent week reads silence; the lead service is
+ * a deterministic tie-break (Dine-in, then Takeaway), not a judgment.
+ * 5.205.0 — "the week so far" sums ALL seven rows: today's business is the
+ * week's business so far, and the number must equal Reports' 7d GROSS, the
+ * only landing the tile's door opens.
  */
 export const morningTake = (data: Pick<DashboardData, 'weeklyRevenue'>): MorningTake => {
   const rows = data.weeklyRevenue || [];
-  const past = rows.slice(0, Math.max(0, rows.length - 1)); // everything before TODAY
-  const yRow = past.length > 0 ? past[past.length - 1] : null;
+  const yRow = rows.length > 1 ? rows[rows.length - 2] : null;
   const yesterday =
     yRow && yRow.total > 0
       ? {
@@ -727,13 +736,17 @@ export const morningTake = (data: Pick<DashboardData, 'weeklyRevenue'>): Morning
                   : 'Delivery',
         }
       : null;
-  const weekTotal = past.reduce((s, r) => s + r.total, 0);
+  /* 5.205.0 — the week reads ALL the buckets: today's money belongs to the
+   * week so far, and the tile's total must equal Reports' 'Last 7 days'
+   * GROSS — the only surface its door opens. (The old `past` slice dropped
+   * the last row from the sum, a six-day number wearing a week's name.) */
+  const weekTotal = rows.reduce((s, r) => s + r.total, 0);
   let best: { label: string; total: number } | null = null;
-  for (const r of past)
+  for (const r of rows)
     if (r.total > 0 && (!best || r.total > best.total)) best = { label: r.label, total: r.total };
   const week =
     weekTotal > 0
-      ? { total: weekTotal, sellingDays: past.filter((r) => r.total > 0).length, best }
+      ? { total: weekTotal, sellingDays: rows.filter((r) => r.total > 0).length, best }
       : null;
   return { yesterday, week };
 };
@@ -771,7 +784,8 @@ export const bookAhead = (
  *   • THE BOOK — promises still standing for the rest of today, the first
  *     one named (hour in the booking voice, guest, party), quiet ones
  *     whispered, the floor's book one door away.
- *   • THE WEEK SO FAR — the six days before today, their best day named,
+ *   • THE WEEK SO FAR — the reporting week ending today, today's money
+ *     counted as it happens (the ledger's week, 5.205.0), best day named,
  *     Reports one door away.
  * The book read is fail-soft: an unread or empty book is silence, never an
  * invented calm; when ALL three cards are silent the paper renders nothing

@@ -21,6 +21,11 @@
  * passes the bucket's key, the second clock (yDoor/yesterdayKey) extinct,
  * Close-out's absolute-day consumption intact.
  * Run: bunx vite-node scripts/unit243.mjs
+ * 5.205.0 note — the buckets now walk the REPORTING calendar (lastNDayKeys
+ * + appDayKey, not the browser's en-CA midnights), so the source guards
+ * below pin the new words; and the week includes TODAY's money (the
+ * ledger's week — unit244 owns that doctrine, this suite keeps its pins
+ * aligned: the todayOnly fixture's money now counts).
  */
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -47,8 +52,8 @@ assert.equal(take.yesterday.key, '2026-10-03', 'the key is the row’s own day')
 assert.equal(take.yesterday.full, 'Saturday, 3 Oct');
 assert.equal(take.yesterday.total, 294);
 assert.equal(take.yesterday.lead, 'Dine-in');
-assert.equal(take.week.total, 664, 'the week reads the six past days (the zero day speaks 0)');
-assert.equal(take.week.sellingDays, 5, 'five of the six past days sold');
+assert.equal(take.week.total, 664, 'the week reads all seven rows (the zero today adds nothing)');
+assert.equal(take.week.sellingDays, 5, 'five of the seven days sold');
 assert.equal(take.week.best.label, 'Sat', 'the best day is the short-label voice, top total wins');
 ok('morningTake: the key travels with the rupees, the voices unchanged');
 
@@ -64,8 +69,8 @@ const todayOnly = rows.map((r, i) => (i === 6 ? { ...r, total: 555, dineIn: 555 
 const take2 = morningTake({ weeklyRevenue: todayOnly });
 assert.equal(take2.yesterday.key, '2026-10-03');
 assert.equal(take2.yesterday.total, 294);
-assert.equal(take2.week.total, 664, 'the TODAY row stays out of the week too');
-ok('the TODAY row never becomes yesterday — slice boundary holds');
+assert.equal(take2.week.total, 1219, 'the TODAY row’s money belongs to the week so far (5.205)');
+ok('the TODAY row never becomes yesterday — but its money is the week’s (5.205)');
 
 /* 4 — a dead yesterday stays silent (the family's own rule). */
 const dead = rows.map((r, i) => (i === 5 ? { ...r, total: 0, dineIn: 0 } : r));
@@ -84,23 +89,25 @@ const apiCode = strip('../src/lib/api.ts');
 const dashCode = strip('../src/components/dashboard/DashboardScreen.tsx');
 const eodCode = strip('../src/components/eod/EodScreen.tsx');
 
-/* 5 — the bucket's key is the calendar string itself; the toDateString key
- * (a shape no door could carry) is extinct. */
+/* 5 — the buckets walk the REPORTING day sequence; the browser-local key
+ * pair (en-CA bucket + en-CA lookup) is extinct. */
 assert.ok(
-  apiCode.includes("key: d.toLocaleDateString('en-CA')"),
-  'the week bucket keys en-CA YYYY-MM-DD',
+  apiCode.includes('lastNDayKeys(7)'),
+  'the buckets walk lastNDayKeys — the reporting day sequence',
 );
-assert.ok(!apiCode.includes('key: d.toDateString()'), 'the toDateString bucket key is extinct');
+assert.ok(
+  apiCode.includes('weekIndex.get(appDayKey(r.created_at))'),
+  'the row lookup speaks the SAME day word as the buckets (appDayKey)',
+);
+assert.ok(
+  !apiCode.includes("toLocaleDateString('en-CA')"),
+  'the browser-local en-CA pair is extinct — one calendar owns the buckets',
+);
 assert.ok(
   apiCode.includes('const weeklyRevenue = weekBuckets.map((b) => ({\n    key: b.key,'),
   'the rows carry the key to the screen',
 );
-assert.ok(
-  apiCode.includes("weekIndex.get(new Date(r.created_at).toLocaleDateString('en-CA'))"),
-  'the row lookup speaks the SAME day word as the buckets',
-);
-assert.ok(!apiCode.includes("weekIndex.get(new Date(r.created_at).toDateString())"), 'the old lookup word is extinct — one day word per bucket loop');
-ok('api: the key is born in the bucket and rides the row — lookup and bucket one word');
+ok('api: the buckets walk the reporting sequence — lookup and bucket one word');
 
 /* 6 — the door passes THE BUCKET'S key; the second clock is extinct. */
 assert.ok(

@@ -1,5 +1,5 @@
 import { supabase, isSupabaseConfigured } from './supabase';
-import { appTodayIso, appDayKey, appDayBoundsIso } from './appday';
+import { appTodayIso, appDayKey, appDayBoundsIso, appHour, lastNDaysMs, lastNDayKeys } from './appday';
 import { moverWindow } from './movers';
 import type {
   AppNotification,
@@ -1065,17 +1065,20 @@ function pct(current: number, previous: number): number {
 
 export async function fetchDashboard(tenantId: string): Promise<DashboardData> {
   requireCloud();
-  /* v5.113.0 — the window aligns to LOCAL MIDNIGHT six days back, not a
-   * rolling 168h: the week card buckets are calendar days, and a rolling
-   * window would undercount the oldest bar by whatever part of that day
-   * fell outside the 168h. The today slice is unaffected (today begins at
-   * local midnight either way). Same day grammar as the today cards —
-   * toDateString local days; the reporting-tz flip is a Floor-book/CRM
-   * seam, the Dashboard has always read the browser's own days. */
-  const weekStart = new Date();
-  weekStart.setHours(0, 0, 0, 0);
-  weekStart.setDate(weekStart.getDate() - 6);
-  const since = weekStart.toISOString();
+  /* 5.205.0 — the whole read speaks the REPORTING calendar (appday). The
+   * fetch window, the today/yesterday slices, the hour buckets and the week
+   * buckets all resolve through ONE clock — the owner's word — so every
+   * number on this screen equals the surfaces it points at (Reports' ranges,
+   * Close-out's day fetch, the movers' window) on ANY device, not just IST
+   * ones. The old read spoke the BROWSER's own days (v5.113.0's local
+   * midnights, toDateString slices, getHours buckets): two calendars
+   * answering one word — the morning paper promised "the week so far reads
+   * ₹9,267.30" and the Reports landing read ₹8,112.30, live-caught on the
+   * very pointer the paper ships. The reporting-tz flip is a
+   * Floor-book/CRM seam still (the device's wall clock belongs to the
+   * device); the money register belongs to the ledger. */
+  const { startMs } = lastNDaysMs(7);
+  const since = new Date(startMs).toISOString();
   const { data: orders, error } = await supabase
     .from('orders')
     .select('id, order_type, status, total, customer_name, created_at')
@@ -1095,12 +1098,15 @@ export async function fetchDashboard(tenantId: string): Promise<DashboardData> {
     .select('id, name, is_veg, image_url')
     .eq('tenant_id', tenantId);
 
-  const today = new Date();
-  const todayKey = today.toDateString();
-  const yestKey = new Date(Date.now() - 24 * 3600 * 1000).toDateString();
+  /* 5.205.0 — the today/yesterday slices speak the reporting day's key
+   * (appDayKey), the same word the week buckets and Close-out's day fetch
+   * use — the browser's toDateString pair is extinct from the money read. */
+  const dayKeys = lastNDayKeys(7);
+  const todayKey = dayKeys[dayKeys.length - 1];
+  const yestKey = dayKeys[dayKeys.length - 2];
 
-  const todays = rows.filter((r) => new Date(r.created_at).toDateString() === todayKey);
-  const yesterdays = rows.filter((r) => new Date(r.created_at).toDateString() === yestKey);
+  const todays = rows.filter((r) => appDayKey(r.created_at) === todayKey);
+  const yesterdays = rows.filter((r) => appDayKey(r.created_at) === yestKey);
 
   /* 5.99.0 — the counts join the revenue's grammar: cancelled never happened.
    * "Total Order" read todays.length (ALL of the day's rows), so a day with 1
@@ -1131,7 +1137,10 @@ export async function fetchDashboard(tenantId: string): Promise<DashboardData> {
 
   todays.forEach((r) => {
     if (String(r.status) === 'cancelled') return;
-    const h = new Date(r.created_at).getHours();
+    /* 5.205.0 — the hour bucket speaks the reporting clock (appHour), not
+     * the device's getHours: a 01:16 IST order belongs to the "12 PM" band's
+     * day arithmetic on every device, not just IST ones. */
+    const h = appHour(r.created_at);
     const bucket = bucketFor(h);
     const type = typeMap[String(r.order_type || 'dine_in').toLowerCase()] || 'dineIn';
     hourBuckets[bucket][type] += Number(r.total);
@@ -1141,7 +1150,7 @@ export async function fetchDashboard(tenantId: string): Promise<DashboardData> {
   /* v5.113.0 — the week is real. The query has walked seven days since the
    * card shipped; until now everything except today was dropped on the
    * floor and the Week view showed an honest stub instead of honest data.
-   * Seven complete local-day buckets, oldest first, the SAME live grammar
+   * Seven complete day buckets, oldest first, the SAME live grammar
    * (cancelled never happened) and the SAME typeMap — today's bucket must
    * equal the today card or the two views disagree. One pass, no extra
    * query: the buckets ride the rows the query already carried. */
@@ -1153,33 +1162,45 @@ export async function fetchDashboard(tenantId: string): Promise<DashboardData> {
     takeaway: number;
     delivery: number;
   }[];
-  for (let i = 6; i >= 0; i--) {
-    const d = new Date();
-    d.setHours(0, 0, 0, 0);
-    d.setDate(d.getDate() - i);
-    /* 5.204.0 — the key is the calendar string itself (en-CA's YYYY-MM-DD,
-     * browser-local midnights): it doubles as the replay door's payload,
-     * and Close-out's day-hint regex only accepts that shape. The old
-     * toDateString key could name a day no door could carry. */
+  /* 5.205.0 — the buckets walk the REPORTING day sequence (lastNDayKeys),
+   * the same seven days the fetch window covers and Reports' 'Last 7 days'
+   * spans; today's bucket is the sequence's last key. The weekday voices
+   * anchor at NOON of the key's own date and read it with timeZone:'UTC' —
+   * the key's calendar, pinned, never the device's interpretation of the
+   * instant. The old voices came from browser-local Date objects and could
+   * name a weekday the key didn't carry. */
+  dayKeys.forEach((key, i) => {
+    const anchor = new Date(`${key}T12:00:00Z`);
     weekBuckets.push({
-      key: d.toLocaleDateString('en-CA'),
-      label: i === 0 ? 'Today' : d.toLocaleDateString('en-IN', { weekday: 'short' }),
-      full: d.toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'short' }),
+      key,
+      label:
+        i === dayKeys.length - 1
+          ? 'Today'
+          : anchor.toLocaleDateString('en-IN', { weekday: 'short', timeZone: 'UTC' }),
+      full: anchor.toLocaleDateString('en-IN', {
+        weekday: 'long',
+        day: 'numeric',
+        month: 'short',
+        timeZone: 'UTC',
+      }),
       dineIn: 0,
       takeaway: 0,
       delivery: 0,
     });
-  }
+  });
   const weekIndex = new Map(weekBuckets.map((b, idx) => [b.key, idx]));
   const weekLiveIds = new Set<string>();
   rows.forEach((r) => {
     if (String(r.status) === 'cancelled') return;
-    /* 5.204.0 — the lookup speaks the SAME day word as the buckets: the key
-     * moved to en-CA's calendar string, so the row side moves with it. The
-     * old pair (toDateString bucket, toDateString lookup) was internally
-     * consistent; mixing the bucket key with the old lookup silently
-     * emptied every bucket — the paper read silence and no tile spoke. */
-    const idx = weekIndex.get(new Date(r.created_at).toLocaleDateString('en-CA'));
+    /* 5.205.0 — the lookup speaks the SAME day word as the buckets: both
+     * sides resolve through appDayKey (the reporting calendar). 5.204.0's
+     * en-CA pair fixed the key's SHAPE (a door-carriable YYYY-MM-DD) but
+     * kept the browser's midnight as the boundary — the replay's day and
+     * the bucket's day could still part ways across the seam, because
+     * Close-out fetches the named day on the reporting clock while the
+     * bucket summed the browser's. Now the bucket's IST day IS Close-out's
+     * IST day: the 5.204 promise holds structurally, not incidentally. */
+    const idx = weekIndex.get(appDayKey(r.created_at));
     if (idx === undefined) return;
     weekLiveIds.add(r.id);
     const type = typeMap[String(r.order_type || 'dine_in').toLowerCase()] || 'dineIn';

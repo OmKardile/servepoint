@@ -2,9 +2,12 @@
  * Covers the new pure voices in DashboardScreen:
  *   morningTake(data) — the paper's sync read of fetchDashboard's OWN
  *   weeklyRevenue buckets: yesterday = the row before TODAY (the fetch's
- *   last row by contract), null when the day sold nothing; the week = the
- *   six days before today, null when they sold nothing; the lead service
- *   tie-break is deterministic (Dine-in, then Takeaway), not a judgment.
+ *   last row by contract), null when the day sold nothing; the week = ALL
+ *   the buckets, TODAY'S MONEY INCLUDED (5.205.0: the ledger's week — the
+ *   tile's number is what Reports' 'Last 7 days' reads; the old six-day
+ *   voice predated the ledger family), null when they sold nothing; the
+ *   lead service tie-break is deterministic (Dine-in, then Takeaway), not
+ *   a judgment.
  *   bookAhead(reservations, nowMs, todayKey) — the floor's exact ahead/
  *   quiet grammar lifted pure: booked rows only (seated/no_show/cancelled
  *   never speak), today in the booking clock (the passed key), ahead vs
@@ -63,7 +66,8 @@ const w2 = weekOf([
 assert.equal(morningTake(w2).yesterday, null);
 ok('a dead yesterday is silence, not a zero');
 
-// 3. week sum covers exactly the past rows and never today
+// 3. week sum covers ALL the rows — today's money is the week's money so
+//    far (5.205.0: the ledger's week; the tile must read what Reports reads)
 const w3 = weekOf([
   row('Mon', 'Monday, 28 Sep', 100, 50, 0),
   row('Tue', 'Tuesday, 29 Sep', 0, 40, 10),
@@ -71,10 +75,10 @@ const w3 = weekOf([
   row('Today', 'Friday, 3 Oct', 777, 0, 0),
 ]);
 const t3 = morningTake(w3);
-assert.equal(t3.week.total, 200); // 150 + 50, today's 777 excluded
-assert.equal(t3.week.sellingDays, 2); // the dead Wednesday never sold
-assert.deepEqual(t3.week.best, { label: 'Mon', total: 150 });
-ok('the week sums the past only, counts only selling days, names the best');
+assert.equal(t3.week.total, 977); // 150 + 50 + today's 777 — the week so far
+assert.equal(t3.week.sellingDays, 3); // the dead Wednesday never sold
+assert.deepEqual(t3.week.best, { label: 'Today', total: 777 }); // today can lead
+ok('the week sums ALL rows (today included), counts selling days, names the best');
 
 // 4. lead service tie-break: dine-in wins ties, then takeaway, then delivery
 const t4a = morningTake(weekOf([row('A', 'A', 100, 100, 0), row('Today', 'T', 0, 0, 0)]));

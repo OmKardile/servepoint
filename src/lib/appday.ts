@@ -124,6 +124,30 @@ export function appDayBoundsIso(
   };
 }
 
+/* ── 5.205.0 — the day-KEY sequence, sibling of lastNDaysMs ────────────────
+ * A window answers "the money between two instants"; a bucket ROW answers
+ * "which reporting day did this instant belong to". The dashboard's read
+ * used to build BOTH halves from the BROWSER's clock — local midnights,
+ * toDateString slices, getHours buckets — while every surface it points at
+ * (Reports' ranges, Close-out's day fetch, the movers' window) resolves
+ * through THIS lib. Two calendars answering one word: the morning paper
+ * promised "the week so far reads ₹9,267.30" and the landing read
+ * ₹8,112.30 — same morning, same ledger, live-caught. One builder now owns
+ * the sequence: the last N reporting days' YYYY-MM-DD keys, oldest first,
+ * ending today. Noon-anchored (the v5.83.0 argument), so the keys never
+ * drift with the device they're computed on. */
+export function lastNDayKeys(days: number, now: Date = new Date()): string[] {
+  const today = appTodayIso(appTimezone(), now);
+  const d = new Date(`${today}T12:00:00Z`);
+  const keys: string[] = [];
+  for (let i = days - 1; i >= 0; i--) {
+    const t = new Date(d);
+    t.setUTCDate(t.getUTCDate() - i);
+    keys.push(t.toISOString().slice(0, 10));
+  }
+  return keys;
+}
+
 /** YYYY-MM-DD of "now" in `tz` (en-CA gives calendar order). The optional
  *  `now` is the suites' seam — day windows are pinned, not hoped (5.202.0). */
 export function appTodayIso(tz: string = appTimezone(), now: Date = new Date()): string {
