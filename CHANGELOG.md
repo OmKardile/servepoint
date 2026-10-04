@@ -3,6 +3,16 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.161.0] — 2026-10-04 — The room's breathing: Reports grows a Table turnover card — turns per table and seated spans read off the hop ledger the kitchen stopwatch already rides
+
+### Added — Table turnover (`src/components/reports/ReportsScreen.tsx`)
+
+The floor's data finally gets a report voice. `tableTurnover(rows, hops)` (exported pure, unit-asserted) reads the SAME two streams the kitchen speed reads — the range's tickets and 007's trigger-written hop ledger — with zero new fetches: dine-in is a ticket carrying a `table_id` (the floor's own truth; cancelled tickets never entered the room), a turn is such a ticket in range, and the seat span is placed → the earliest `completed` hop, with the kitchen's honesty rules intact — a ticket still at its table donates a TURN but never a span (the clock never guesses), a retry hop can't inflate the span (earliest wins), and a hop older than the ticket itself would wind the clock backwards and is skipped. The card answers the walking question the floor's camping clock opened: turns, tables touched, average span and the longest span (`#91 · T1 · 1h 0m`) in a four-tile strip, then per-table rows with turn bars in the house teal; the span labels speak the floor's own TimeAgo register via `turnoverSpanLabel` ("45m" · "1h 5m" — the camping pill's family, minus "just sat": a finished span of zero minutes reads "0m", not a greeting). An amber note tells the truth when turns exist but no span does — a span needs the paid hop. CSV export rides the sibling-card convention (`servepoint-table-turnover-<date>.csv`); the share arc stays closed, so no chat twin — screen voice and file only.
+
+### Verified
+
+`tsc` EXIT=0; `node --check` OK (`servepoint-v5.161.0-r1`); build EXIT=0; unit suite `scripts/unit200.mjs` 12/12 (register: zero/clamp/floor cases; ledger: takeaway + cancelled excluded, retry-hop earliest-wins, skew hop donates a turn never a span, live seat turn-only, empty room shape); regression suites unit197/198/199 ALL PASS; live E2E — the card renders beside Kitchen speed with the honest data the range holds; console buffer delta stable on fresh loads, zero live.
+
 ## [5.160.0] — 2026-10-04 — The turn line, settable: Settings grows a Floor & service section and the camping clock reads the house's own number
 
 ### Added — Floor & service section (`src/components/settings/SettingsScreen.tsx`, `src/lib/prefs.ts`)

@@ -1149,6 +1149,102 @@ function fmtDuration(minutes: number): string {
   return `${m}m ${String(s).padStart(2, '0')}s`;
 }
 
+/* ── Table turnover (v5.161.0) — the room's breathing, off the same ledger ── */
+
+export interface TurnoverTable {
+  tableLabel: string;
+  turns: number;
+  /** tickets from this table whose span is provable (placed → paid hop) */
+  timed: number;
+  avgSpanMin: number | null;
+  longestSpanMin: number | null;
+}
+
+export interface TurnoverAgg {
+  /** dine-in tickets in range (a table_id on the ticket is the floor's truth) */
+  tickets: number;
+  tablesTouched: number;
+  perTable: TurnoverTable[];
+  spans: { n: number; avgMin: number | null; medianMin: number | null };
+  longest: { orderNumber: number; tableLabel: string; minutes: number } | null;
+}
+
+/** The floor's TimeAgo register for seated spans ("45m" · "1h 5m") — the
+ *  same clock voice the camping pill speaks, minus "just sat": a finished
+ *  span of zero minutes still reads "0m", not a greeting. */
+export function turnoverSpanLabel(minutes: number): string {
+  const m = Math.max(0, Math.floor(minutes));
+  const h = Math.floor(m / 60);
+  return h > 0 ? `${h}h ${m % 60}m` : `${m}m`;
+}
+
+/** The room's honest breathing, off the ledger the kitchen stopwatch reads
+ *  (007's trigger-written hop trail). Dine-in = the ticket carries a
+ *  table_id; cancelled tickets never entered the room. The seat span is
+ *  placed → the earliest 'completed' hop; a ticket still at its table has
+ *  no finish line, so it donates a TURN but never a span — the clock never
+ *  guesses. A hop older than the ticket itself would wind the clock
+ *  backwards and is skipped, never negative. */
+export function tableTurnover(rows: Order[], hopRows: StatusHop[]): TurnoverAgg {
+  const dineIn = rows.filter(
+    (o) => o.table_id && String(o.status || '').toLowerCase() !== 'cancelled',
+  );
+  const byId = new Map(dineIn.map((o) => [o.id, o]));
+  const doneAt = new Map<string, Date>();
+  for (const h of hopRows) {
+    if (h.toStatus !== 'completed') continue;
+    if (!byId.has(h.orderId)) continue;
+    const at = new Date(h.atIso);
+    if (Number.isNaN(at.getTime())) continue;
+    const prev = doneAt.get(h.orderId);
+    if (!prev || at < prev) doneAt.set(h.orderId, at);
+  }
+  const spans: { orderNumber: number; tableLabel: string; minutes: number }[] = [];
+  const perTable = new Map<string, { turns: number; spans: number[] }>();
+  for (const o of dineIn) {
+    const label = (o.table_label || '').trim() || 'Unnamed table';
+    const cell = perTable.get(label) || { turns: 0, spans: [] as number[] };
+    cell.turns += 1;
+    const placed = new Date(o.created_at).getTime();
+    const done = doneAt.get(o.id)?.getTime();
+    if (Number.isFinite(placed) && done && done > placed) {
+      const minutes = (done - placed) / 60000;
+      cell.spans.push(minutes);
+      spans.push({ orderNumber: Number(o.order_number), tableLabel: label, minutes });
+    }
+    perTable.set(label, cell);
+  }
+  spans.sort((a, b) => a.minutes - b.minutes);
+  const n = spans.length;
+  const avgMin = n > 0 ? spans.reduce((s, t) => s + t.minutes, 0) / n : null;
+  const medianMin = n > 0 ? spans[Math.floor((n - 1) / 2)].minutes : null;
+  const longest = n > 0 ? spans[n - 1] : null;
+  const tables: TurnoverTable[] = [...perTable.entries()]
+    .map(([tableLabel, cell]) => ({
+      tableLabel,
+      turns: cell.turns,
+      timed: cell.spans.length,
+      avgSpanMin:
+        cell.spans.length > 0
+          ? cell.spans.reduce((s, m) => s + m, 0) / cell.spans.length
+          : null,
+      longestSpanMin: cell.spans.length > 0 ? Math.max(...cell.spans) : null,
+    }))
+    .sort(
+      (a, b) =>
+        b.turns - a.turns ||
+        (b.avgSpanMin ?? -1) - (a.avgSpanMin ?? -1) ||
+        a.tableLabel.localeCompare(b.tableLabel),
+    );
+  return {
+    tickets: dineIn.length,
+    tablesTouched: perTable.size,
+    perTable: tables,
+    spans: { n, avgMin, medianMin },
+    longest,
+  };
+}
+
 function hourLabel(h: number): string {
   if (h === 0) return '12a';
   if (h === 12) return '12p';
@@ -1910,6 +2006,40 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
   /* ── kitchen speed (5.67.0) — the stopwatch that reads the hop ledger ───── */
 
   const kitchen = useMemo(() => kitchenSpeed(inRange, hops), [inRange, hops]);
+
+  /* v5.161.0 — the room's breathing, off the same two streams the kitchen
+   * stopwatch reads (inRange + hop ledger): zero new fetches. Hooks stay
+   * above the early returns — the 192 rule. */
+  const turnover = useMemo(() => tableTurnover(inRange, hops), [inRange, hops]);
+
+  const exportTurnover = useCallback(() => {
+    if (turnover.tickets === 0) return;
+    const rows: (string | number)[][] = [
+      [`Table turnover (placed → paid, ${appTzTag()})`, ''],
+      ['Dine-in tickets', turnover.tickets],
+      ['Tables touched', turnover.tablesTouched],
+      ['Spans timed', turnover.spans.n],
+      ['Average span', turnover.spans.avgMin != null ? fmtDuration(turnover.spans.avgMin) : '—'],
+      [
+        'Longest span',
+        turnover.longest
+          ? `#${turnover.longest.orderNumber} · ${turnover.longest.tableLabel} · ${fmtDuration(turnover.longest.minutes)}`
+          : '—',
+      ],
+      [],
+      ['Table', 'Turns', 'Timed spans', 'Average span', 'Longest span'],
+    ];
+    for (const t of turnover.perTable) {
+      rows.push([
+        t.tableLabel,
+        t.turns,
+        t.timed,
+        t.avgSpanMin != null ? fmtDuration(t.avgSpanMin) : '—',
+        t.longestSpanMin != null ? fmtDuration(t.longestSpanMin) : '—',
+      ]);
+    }
+    downloadCsv(`servepoint-table-turnover-${appTodayIso()}.csv`, rows);
+  }, [turnover]);
 
   const exportKitchenSpeed = useCallback(() => {
     if (kitchen.sample.length === 0) return;
@@ -3801,6 +3931,117 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
                     </li>
                   ) : null}
                 </ul>
+              </>
+            )}
+          </section>
+
+          {/* ── v5.161.0 — TABLE TURNOVER: the room's breathing, off the same ledger ── */}
+          <section className="sp-card p-5" aria-label="Table turnover">
+            <div className="mb-1 flex items-center justify-between gap-2">
+              <h2 className="flex items-center gap-1.5 text-[15px] font-bold text-[#1A1A1A]">
+                <UtensilsCrossed size={14} aria-hidden className="text-[#0F3D3E]" />
+                Table turnover
+              </h2>
+              {turnover.tickets > 0 && (
+                <button
+                  onClick={exportTurnover}
+                  aria-label="Export table turnover as CSV"
+                  title="Export the range's turns and seated spans as CSV"
+                  className="inline-flex h-7 items-center rounded-lg border border-[#B88E2F]/45 bg-[#FDF9F0] px-2.5 text-[11px] font-bold text-[#8A5A00] transition hover:bg-[#B88E2F] hover:text-white active:scale-[0.97]"
+                >
+                  CSV
+                </button>
+              )}
+            </div>
+            <p className="mb-4 text-[11.5px] text-[#969696]">
+              How the room breathes — turns per table and the seated span, placed to
+              paid, off the status ledger the kitchen stopwatch reads.
+            </p>
+            {turnover.tickets === 0 ? (
+              <p className="text-[13px] leading-relaxed text-[#6B6B6B]">
+                No dine-in tickets in this range — the room hasn't sat yet.
+              </p>
+            ) : (
+              <>
+                <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  <div className="rounded-xl bg-[#EAF0EC] px-3 py-2.5">
+                    <p className="text-[10.5px] font-semibold uppercase tracking-wide text-[#6B6B6B]">
+                      Turns
+                    </p>
+                    <p className="text-[18px] font-bold tabular-nums text-[#1A1A1A]">
+                      {turnover.tickets}
+                    </p>
+                  </div>
+                  <div className="rounded-xl bg-[#EAF0EC] px-3 py-2.5">
+                    <p className="text-[10.5px] font-semibold uppercase tracking-wide text-[#6B6B6B]">
+                      Tables touched
+                    </p>
+                    <p className="text-[18px] font-bold tabular-nums text-[#1A1A1A]">
+                      {turnover.tablesTouched}
+                    </p>
+                  </div>
+                  <div className="rounded-xl bg-[#EAF0EC] px-3 py-2.5">
+                    <p className="text-[10.5px] font-semibold uppercase tracking-wide text-[#6B6B6B]">
+                      Avg span
+                    </p>
+                    <p className="text-[18px] font-bold tabular-nums text-[#1A1A1A]">
+                      {turnover.spans.avgMin != null ? turnoverSpanLabel(turnover.spans.avgMin) : '—'}
+                    </p>
+                  </div>
+                  <div className="rounded-xl bg-[#EAF0EC] px-3 py-2.5">
+                    <p className="text-[10.5px] font-semibold uppercase tracking-wide text-[#6B6B6B]">
+                      Longest
+                    </p>
+                    <p className="truncate text-[13px] font-bold tabular-nums text-[#1A1A1A]" title={turnover.longest ? `#${turnover.longest.orderNumber} · ${turnover.longest.tableLabel} · ${turnoverSpanLabel(turnover.longest.minutes)}` : undefined}>
+                      {turnover.longest
+                        ? `#${turnover.longest.orderNumber} · ${turnoverSpanLabel(turnover.longest.minutes)}`
+                        : '—'}
+                    </p>
+                  </div>
+                </div>
+                <ul className="space-y-2.5">
+                  {turnover.perTable.slice(0, 6).map((t) => {
+                    const maxTurns = turnover.perTable[0]?.turns || 1;
+                    return (
+                      <li key={t.tableLabel}>
+                        <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5 text-[12.5px]">
+                          <span className="font-semibold text-[#1A1A1A]">{t.tableLabel}</span>
+                          <span className="tabular-nums text-[#6B6B6B]">
+                            {t.turns} turn{t.turns === 1 ? '' : 's'}
+                            {t.avgSpanMin != null
+                              ? ` · avg ${turnoverSpanLabel(t.avgSpanMin)}`
+                              : ' · no span yet'}
+                          </span>
+                        </div>
+                        <div
+                          className="mt-1 h-1.5 overflow-hidden rounded-full bg-[#E3E7E0]"
+                          role="img"
+                          aria-label={`${t.tableLabel}: ${t.turns} turn${t.turns === 1 ? '' : 's'}${t.avgSpanMin != null ? `, average span ${turnoverSpanLabel(t.avgSpanMin)}` : ', no timed span'}`}
+                        >
+                          <div
+                            className="h-full rounded-full bg-[#0F3D3E]/70"
+                            style={{ width: `${Math.max(6, Math.round((t.turns / maxTurns) * 100))}%` }}
+                          />
+                        </div>
+                      </li>
+                    );
+                  })}
+                  {turnover.perTable.length > 6 ? (
+                    <li className="pt-1 text-center text-[11.5px] text-[#969696]">
+                      + {turnover.perTable.length - 6} more in the CSV export
+                    </li>
+                  ) : null}
+                </ul>
+                {turnover.spans.n === 0 && (
+                  <p
+                    className="mt-3 rounded-xl px-3.5 py-2.5 text-[12px] leading-relaxed text-[#8A5A0B]"
+                    style={{ background: '#FCF1DF' }}
+                    role="status"
+                  >
+                    No ticket has left its table in this range — a span needs the paid hop;
+                    live seats donate turns only.
+                  </p>
+                )}
               </>
             )}
           </section>
