@@ -71,8 +71,11 @@ import type { MenuItem } from '../../types';
  *      restock / waste / edit / delete and the STOCK DIARY: one feed that
  *      merges the engine's ticket deductions with the hand-made moves
  *      (deliveries, spoilage, spills, damage, corrections — 027).
- *   2. RECIPES — what one serve of each menu item consumes. No recipe ⇒
- *      that item moves no stock (stated honestly in the UI).
+ *   2. RECIPES — what one serve of each menu item consumes; what it costs,
+ *      what the shelf holds, what a batch pulls — and when a batch runs a
+ *      bin short, Cover opens the delivery that fills the gap through the
+ *      027 RPC (5.165–5.168). No recipe ⇒ that item moves no stock (stated
+ *      honestly in the UI).
  *   3. REORDER — what to buy this week: the stock_deductions ledger prices
  *      each SKU's burn per day (last 14 days), converts to days-left meters
  *      and a 7-day-cover shopping list with estimated cost (copy/CSV).
@@ -310,6 +313,30 @@ export function batchNeeds(
   return needs;
 }
 
+/* ── The cover plan (v5.168.0) — what a delivery must answer ──
+ *
+ *   The honest arithmetic behind the batch planner's Cover action. Two
+ *   plain-data numbers and where the bin ends under each:
+ *   • gap — what covers THIS batch exactly (deliver the gap and the bin
+ *     empties as the batch bakes: afterGap = 0 on a short bin, the
+ *     leftover on a covered one);
+ *   • pull — the batch's full draw (deliver the pull and the bin ends
+ *     where it stands: afterPull = the shelf on file).
+ *   How much to actually order stays the operator's and the Reorder
+ *   tab's call — this voice only names the two thresholds.
+ */
+export interface CoverPlan {
+  gap: number;
+  pull: number;
+  afterGap: number;
+  afterPull: number;
+}
+
+export function coverPlan(n: BatchNeed): CoverPlan {
+  const gap = Math.max(0, n.short);
+  return { gap, pull: n.need, afterGap: n.have + gap - n.need, afterPull: n.have };
+}
+
 /* ─────────────────────────────── screen ────────────────────────────────── */
 
 /* v5.120.0 — the gold glint, consolidated: one truth now lives in
@@ -355,7 +382,13 @@ const InventoryInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
   // dialog state
   const [editorOpen, setEditorOpen] = useState(false);
   const [editing, setEditing] = useState<InventoryItem | null>(null);
-  const [restockFor, setRestockFor] = useState<{ item: InventoryItem; suggested: number | null } | null>(null);
+  const [restockFor, setRestockFor] = useState<{
+    item: InventoryItem;
+    suggested: number | null;
+    /** why the suggestion reads what it reads — the Reorder tab's 7-day
+     *  cover by default, the batch planner names its batch (5.168.0) */
+    why?: string;
+  } | null>(null);
   /* v5.81.0 — the room's movers, so the shelf answers in their terms.
    * Fail-soft like every ledger read: null = unread, [] = quiet week or
    * failed read — the shelf view never waits on the ledger, and a quiet
@@ -1198,6 +1231,7 @@ const InventoryInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
           menuItems={menuItems}
           recipes={recipes}
           onSave={saveRecipe}
+          onCover={(item, qty, why) => setRestockFor({ item, suggested: qty, why })}
         />
       ) : (
         <ReorderBoard
@@ -1223,6 +1257,7 @@ const InventoryInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
         <RestockDialog
           item={restockFor.item}
           suggestedQty={restockFor.suggested}
+          suggestedWhy={restockFor.why}
           busy={busyId === restockFor.item.id}
           onClose={() => setRestockFor(null)}
           onConfirm={(qty) => void doRestock(restockFor.item, qty)}
@@ -1322,7 +1357,10 @@ const RecipeBoard: React.FC<{
   menuItems: MenuItem[];
   recipes: RecipeLine[];
   onSave: (menuItemId: string, lines: { inventory_item_id: string; qty_per_serve: number }[]) => Promise<void>;
-}> = ({ items, menuItems, recipes, onSave }) => {
+  /* 5.168.0 — a shortfall row's Cover: the planner suggests the exact gap,
+   * the existing RestockDialog (027 RPC, on the diary) does the writing. */
+  onCover: (item: InventoryItem, qty: number, why: string) => void;
+}> = ({ items, menuItems, recipes, onSave, onCover }) => {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [draft, setDraft] = useState<{ inventory_item_id: string; qty_per_serve: number }[]>([]);
   const [dirty, setDirty] = useState(false);
@@ -1678,34 +1716,57 @@ const RecipeBoard: React.FC<{
           ) : (
             <>
               <ul className="flex flex-col gap-1.5" aria-label="Batch needs">
-                {batchPlan.map((n) => (
-                  <li key={n.item.id} className="flex items-center gap-2 text-[11.5px]">
-                    <span className="min-w-0 flex-1 truncate font-semibold text-[#1A1A1A]">
-                      {n.item.name}
-                    </span>
-                    <span
-                      className="shrink-0 tabular-nums text-[#6B6B6B]"
-                      title={`${n.item.name}: ${n.need} ${n.item.unit} for ×${batch} (≈ ${n.need / batch} ${n.item.unit}/serve)`}
+                {batchPlan.map((n) => {
+                  const cover = coverPlan(n);
+                  return (
+                    <li
+                      key={n.item.id}
+                      className="flex items-center gap-2 rounded-md px-1 text-[11.5px] transition-colors hover:bg-[#F7F8F6]"
                     >
-                      needs {fmtQty(n.need)} {n.item.unit}
-                    </span>
-                    <span className="w-28 shrink-0 text-right tabular-nums text-[#969696]">
-                      shelf {fmtQty(n.have)} {n.item.unit}
-                    </span>
-                    {n.short > 0 ? (
+                      <span className="min-w-0 flex-1 truncate font-semibold text-[#1A1A1A]">
+                        {n.item.name}
+                      </span>
                       <span
-                        className="w-24 shrink-0 text-right text-[11px] font-bold tabular-nums text-[#B3261E]"
-                        title={`${n.item.name} falls ${fmtQty(n.short)} ${n.item.unit} short for this batch`}
+                        className="shrink-0 tabular-nums text-[#6B6B6B]"
+                        title={`${n.item.name}: ${n.need} ${n.item.unit} for ×${batch} (≈ ${n.need / batch} ${n.item.unit}/serve)`}
                       >
-                        short {fmtQty(n.short)}
+                        needs {fmtQty(n.need)} {n.item.unit}
                       </span>
-                    ) : (
-                      <span className="w-24 shrink-0 text-right text-[11px] font-semibold tabular-nums text-[#2E7D32]">
-                        covered
+                      <span className="w-28 shrink-0 text-right tabular-nums text-[#969696]">
+                        shelf {fmtQty(n.have)} {n.item.unit}
                       </span>
-                    )}
-                  </li>
-                ))}
+                      {n.short > 0 ? (
+                        <>
+                          <span
+                            className="shrink-0 text-[11px] font-bold tabular-nums text-[#B3261E]"
+                            title={`${n.item.name} falls ${fmtQty(n.short)} ${n.item.unit} short for this batch`}
+                          >
+                            short {fmtQty(n.short)}
+                          </span>
+                          <button
+                            onClick={() =>
+                              onCover(
+                                n.item,
+                                cover.gap,
+                                `covers this batch of ${batch} × ${selected?.name ?? 'the dish'}`
+                              )
+                            }
+                            aria-label={`Cover the ${fmtQty(cover.gap)} ${n.item.unit} shortfall of ${n.item.name} from a delivery`}
+                            title={`A delivery of ${fmtQty(cover.gap)} ${n.item.unit} covers this batch — but the bin empties as it bakes. The full pull is ${fmtQty(cover.pull)} ${n.item.unit}; deliver that and the shelf ends where it stands.`}
+                            className="flex h-6 shrink-0 items-center gap-1 rounded-md border border-[#E3E7E0] bg-white px-2 text-[10.5px] font-bold text-[#8A5A00] transition hover:border-[#B88E2F] hover:text-[#B88E2F]"
+                          >
+                            <PackagePlus size={11} aria-hidden />
+                            Cover
+                          </button>
+                        </>
+                      ) : (
+                        <span className="w-24 shrink-0 text-right text-[11px] font-semibold tabular-nums text-[#2E7D32]">
+                          covered
+                        </span>
+                      )}
+                    </li>
+                  );
+                })}
               </ul>
               <p className="mt-2 text-[11px] leading-relaxed text-[#969696]">
                 {batchFits === null ? (
@@ -1722,8 +1783,8 @@ const RecipeBoard: React.FC<{
                   </span>
                 ) : (
                   <span className="text-[#8A5A0B]">
-                    The shelf runs dry at ~{shelfRead.coverage} — a batch of {batch} needs a
-                    restock first (shortfalls above).
+                    A batch of {batch} runs the shelf dry at ~{shelfRead.coverage} — Cover on a
+                    shortfall row opens the delivery that fills the gap.
                   </span>
                 )}
               </p>
@@ -1959,10 +2020,13 @@ const IngredientDialog: React.FC<{
 const RestockDialog: React.FC<{
   item: InventoryItem;
   suggestedQty?: number | null;
+  /* why the suggestion is what it is — "7-day cover" from the Reorder
+   * tab, the batch planner names its batch (5.168.0) */
+  suggestedWhy?: string;
   busy: boolean;
   onClose: () => void;
   onConfirm: (qty: number) => void;
-}> = ({ item, suggestedQty = null, busy, onClose, onConfirm }) => {
+}> = ({ item, suggestedQty = null, suggestedWhy = '7-day cover', busy, onClose, onConfirm }) => {
   const [qty, setQty] = useState(suggestedQty != null && suggestedQty > 0 ? String(suggestedQty) : '');
   const valid = Number(qty) > 0;
   /* v5.110.0 — Escape/trap/restore; Escape stands down while a restock lands. */
@@ -1988,7 +2052,7 @@ const RestockDialog: React.FC<{
               >
                 {fmtQty(suggestedQty)} {item.unit}
               </button>{' '}
-              (7-day cover)
+              ({suggestedWhy})
             </>
           )}
         </p>
