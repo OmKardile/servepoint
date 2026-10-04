@@ -3,6 +3,20 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.159.0] — 2026-10-04 — The briefing finds its hours: the bell feed reads in day groups
+
+### Added — Today / Yesterday / Earlier on the notifications screen (`src/components/notifications/NotificationsScreen.tsx`)
+
+A flat feed of bells scans poorly at 7 am; the owner reads the day in groups. `groupNotificationsForFeed(items, todayKey, yesterdayKey)` (exported pure, unit-asserted) buckets the visible feed on the booking clock's own IST day keys — the same clock the book and the echo speak — and renders each group under a gold small-caps label with its count (unread called out) and a hairline: the house editorial grammar. Within a group, newest first; an unreadable stamp lands in "Earlier" (honest, never dropped). Beside the category chips sits the missed-bells toggle: `Unread 10` arms gold and composes with the category filter (AND), so "System + unread" is one tap. Adaptive by the 5.42.0 honesty rule — the chip renders only while unread bells exist, so no chip is ever a dead end.
+
+### Fixed — the echo's boundary now walks on the clock, as its comment always promised
+
+The echo's own comment claimed a 30s tick ("the quiet/expected boundary walks on its own 30s tick") — but `echoTick` had no driver: `nowMs`/`todayKey` froze at mount and a "Still expected" reminder stayed expected after its hour passed, until a refetch happened to remount the memo. One interval wires the walk; the boundary now flips on time with no fetch attached.
+
+### Verified
+
+`tsc` EXIT=0 · `vite build` EXIT=0 · node --check sw.js OK · unit suite (vite-node) 10/10 PASS — empty feed, all-today single group, three-group reading order, every bell surviving the bucketing, within-group newest-first, unreadable-stamp-to-Earlier, yesterday key derived from the same booking clock, read-state composition neutrality · E2E on the live feed: `Unread10` chip renders, arming it leaves exactly the 10 unread cards (4 read bells honestly hidden), the section announces `Yesterday: 14 notifications, 10 unread` · console delta referee 21 → 21, zero live.
+
 ## [5.158.0] — 2026-10-04 — The camping clock: the floor's seats answer "how long have they been sitting?"
 
 ### Added — the seat-time voice on every occupied table (`src/components/floor/FloorScreen.tsx`)

@@ -199,6 +199,44 @@ function echoFor(
   };
 }
 
+/* ── The briefing's hours (v5.159.0) ────────────────────────────────
+   A flat feed of bells scans poorly at 7 am; the owner reads the day in
+   groups. The clock is the booking clock's own IST day key — the same
+   one the book and the echo speak. Unreadable stamps land in "Earlier"
+   (honest, never dropped), and each group reads newest-first. */
+export interface NotificationGroup {
+  label: string;
+  items: AppNotification[];
+}
+
+export function groupNotificationsForFeed(
+  items: AppNotification[],
+  todayKey: string,
+  yesterdayKey: string,
+): NotificationGroup[] {
+  const today: AppNotification[] = [];
+  const yesterday: AppNotification[] = [];
+  const earlier: AppNotification[] = [];
+  for (const n of items) {
+    let key: string | null = null;
+    try {
+      key = bookingDayKey(n.created_at);
+    } catch {
+      key = null; // an unreadable stamp never drops the bell — Earlier holds it
+    }
+    if (key === todayKey) today.push(n);
+    else if (key === yesterdayKey) yesterday.push(n);
+    else earlier.push(n);
+  }
+  const byNewest = (a: AppNotification, b: AppNotification) =>
+    new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+  const groups: NotificationGroup[] = [];
+  if (today.length) groups.push({ label: 'Today', items: today.sort(byNewest) });
+  if (yesterday.length) groups.push({ label: 'Yesterday', items: yesterday.sort(byNewest) });
+  if (earlier.length) groups.push({ label: 'Earlier', items: earlier.sort(byNewest) });
+  return groups;
+}
+
 /* ── Skeletons ───────────────────────────────────────────────────────── */
 
 const NotificationsSkeleton: React.FC = () => (
@@ -332,6 +370,11 @@ const NotificationsContent: React.FC<{ onTenantRetry: () => void }> = ({ onTenan
   const [markError, setMarkError] = useState<string | null>(null);
   const [rt, setRt] = useState<RealtimeState>('connecting');
   const [filter, setFilter] = useState<NotificationCategory | 'all'>('all');
+  /* v5.159.0 — the missed-bells filter: one tap answers "what haven't I
+   *  read?" without scrolling the whole feed. Composes with the category
+   *  chips (AND); renders only while there is something unread, so no
+   *  chip is ever a dead end — the 5.42.0 honesty rule. */
+  const [unreadOnly, setUnreadOnly] = useState(false);
   /* v5.88.0 — the echo's book: today's reservations, fail-soft. Null = the
    *  echo goes silent; the list itself never depends on it. */
   const [reservations, setReservations] = useState<Reservation[] | null>(null);
@@ -400,6 +443,15 @@ const NotificationsContent: React.FC<{ onTenantRetry: () => void }> = ({ onTenan
   const nowMs = useMemo(() => Date.now(), [echoTick]);
   const todayKey = useMemo(() => bookingTodayKey(), [echoTick]);
 
+  /* v5.159.0 — the ticker the comment above always promised: echoTick had
+   *  no driver, so nowMs/todayKey froze at mount and the Went-quiet
+   *  boundary never walked on the clock alone. One interval — the echo
+   *  flips on time now, no fetch attached. */
+  useEffect(() => {
+    const t = window.setInterval(() => setEchoTick((k) => k + 1), 30_000);
+    return () => window.clearInterval(t);
+  }, []);
+
   /* 5.103.0 — the alert surface: only categories the owner kept. A category
    * the panel doesn't name yet (a future one) alerts by default — the
    * toggle mutes only what it names. */
@@ -417,9 +469,21 @@ const NotificationsContent: React.FC<{ onTenantRetry: () => void }> = ({ onTenan
   }, [items, notify]);
 
   const visible = useMemo(
-    () => (filter === 'all' ? kept : kept.filter((n) => n.category === filter)),
-    [items, filter, notify]
+    () => {
+      const base = filter === 'all' ? kept : kept.filter((n) => n.category === filter);
+      return unreadOnly ? base.filter((n) => !n.is_read) : base;
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [items, filter, notify, unreadOnly]
   );
+
+  /* v5.159.0 — the day groups ride the visible set; yesterday's key
+   *  derives from the same booking clock so the boundary is one clock,
+   *  never two. */
+  const groups = useMemo(() => {
+    const yesterdayKey = bookingDayKey(new Date(Date.now() - 86_400_000).toISOString());
+    return groupNotificationsForFeed(visible, todayKey, yesterdayKey);
+  }, [visible, todayKey]);
 
   const onMarkAllRead = async () => {
     if (!tenant.tenantId || marking) return;
@@ -520,6 +584,25 @@ const NotificationsContent: React.FC<{ onTenantRetry: () => void }> = ({ onTenan
       {/* v5.42.0 — honest category filters (adaptive: only what exists) */}
       {!loading && !error && items.length > 0 && (
         <div className="flex flex-wrap items-center gap-2 pb-4" role="group" aria-label="Filter by category">
+          {/* v5.159.0 — the missed-bells toggle, gold when armed. Adaptive:
+              rendered only while unread bells exist — an Unread-0 chip
+              would be a dead end, and no chip here may lie. */}
+          {unreadCount > 0 && (
+            <button
+              onClick={() => setUnreadOnly((v) => !v)}
+              aria-pressed={unreadOnly}
+              className={`rounded-full border px-3.5 py-1.5 text-[12.5px] font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#967221] ${
+                unreadOnly
+                  ? 'border-[#B88E2F] bg-[#B88E2F] text-white'
+                  : 'border-[#E3E7E0] bg-white text-[#0F3D3E] hover:bg-[#F6F5F2]'
+              }`}
+            >
+              Unread
+              <span className={`ml-1.5 tabular-nums ${unreadOnly ? 'text-white/70' : 'text-[#8A5A00]'}`}>
+                {unreadCount}
+              </span>
+            </button>
+          )}
           <button
             onClick={() => setFilter('all')}
             aria-pressed={filter === 'all'}
@@ -589,17 +672,40 @@ const NotificationsContent: React.FC<{ onTenantRetry: () => void }> = ({ onTenan
           Nothing under this filter right now.
         </p>
       ) : (
-        <div className="space-y-3">
-          {visible.map((n) => (
-            <NotificationCard
-              key={n.id}
-              n={n}
-              echo={echoFor(n, reservations, nowMs, todayKey)}
-              marking={markingId === n.id}
-              onMarkOne={(x) => void onMarkOne(x)}
-              onOpen={onOpen}
-            />
-          ))}
+        /* v5.159.0 — the briefing reads in day groups: gold small-caps
+         *  label + the group's count (unread called out) + a hairline —
+         *  the house editorial grammar; the cards keep their own voice. */
+        <div className="space-y-6">
+          {groups.map((g) => {
+            const gUnread = g.items.filter((x) => !x.is_read).length;
+            return (
+              <section
+                key={g.label}
+                aria-label={`${g.label}: ${g.items.length} ${g.items.length === 1 ? 'notification' : 'notifications'}${gUnread > 0 ? `, ${gUnread} unread` : ''}`}
+              >
+                <div className="flex items-center gap-2.5 pb-2.5">
+                  <h2 className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#8A5A00]">{g.label}</h2>
+                  <span className="text-[11px] tabular-nums text-[#969696]">
+                    {g.items.length}
+                    {gUnread > 0 ? ` · ${gUnread} unread` : ''}
+                  </span>
+                  <span className="h-px flex-1 bg-[#E3E7E0]" aria-hidden />
+                </div>
+                <div className="space-y-3">
+                  {g.items.map((n) => (
+                    <NotificationCard
+                      key={n.id}
+                      n={n}
+                      echo={echoFor(n, reservations, nowMs, todayKey)}
+                      marking={markingId === n.id}
+                      onMarkOne={(x) => void onMarkOne(x)}
+                      onOpen={onOpen}
+                    />
+                  ))}
+                </div>
+              </section>
+            );
+          })}
         </div>
       )}
     </div>
