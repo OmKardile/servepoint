@@ -3,6 +3,7 @@ import {
   Armchair,
   ArrowLeftRight,
   BadgeCheck,
+  BookOpen,
   CalendarClock,
   CircleAlert,
   Clock,
@@ -385,6 +386,48 @@ export function seatClockFor(
   if (!Number.isFinite(t)) return null;
   const minutes = Math.max(0, Math.floor((nowMs - t) / 60000));
   return { minutes, label: seatLabelFor(minutes), camping: minutes >= turnAfterMin };
+}
+
+/* ── v5.193.0 — the book dates the seat ──────────────────────────────────
+ *  The camping clock (5.158.0) read ONE ledger — the round's placed-at —
+ *  so a seat the BOOK created (the host's Seat gesture, no ticket keyed
+ *  yet) sat undated forever: no chip, no camping pill, no word in the
+ *  header's longest-seat count. But the book remembers the flip: a
+ *  `seated` reservation row carries the trigger's own updated_at stamp —
+ *  a provable instant, not an invention. The doctrine amends to TWO
+ *  provable sources (the round in hand; the book's flip stamp) with the
+ *  same silence rule as before: NEITHER in hand → silence, never a
+ *  number. ONE clock — this returns seatClockFor's own shape, so the
+ *  label register and the turn line cannot fork from the ticket's.
+ *  Precedence lives at the call sites: ticket in hand → the round's
+ *  clock; no ticket → the book's; no book row → silence. */
+/** The seat clock from the BOOK's own stamp: the newest `seated` row at
+ *  this table (max taken explicitly, never trusted to read order), timed
+ *  from the flip's updated_at — NOT the row's created_at, which dates the
+ *  phone promise, not the arrival. Null when the book holds no seated row
+ *  here, or the book itself is unread (null reservations) — the board
+ *  never invents a seat from a shelf it hasn't read (5.187's doctrine). */
+export function bookSeatClockFor(
+  tableId: string,
+  reservations: { table_id: string | null; status: string; updated_at: string }[] | null | undefined,
+  nowMs: number,
+  turnAfterMin: number = CAMPING_AFTER_MIN,
+): SeatClock | null {
+  if (!reservations) return null;
+  let newest: string | null = null;
+  for (const r of reservations) {
+    if (r.table_id !== tableId || r.status !== 'seated') continue;
+    if (!newest || r.updated_at > newest) newest = r.updated_at;
+  }
+  if (!newest) return null;
+  return seatClockFor(newest, nowMs, turnAfterMin);
+}
+
+/** The book chip's words — the ticket clock's pill says "sat {label}";
+ *  "sat just sat" is broken English, so the just-sat state keeps its own
+ *  state word bare. ONE sentence shape, both surfaces. */
+export function bookSeatWords(label: string): string {
+  return label === 'just sat' ? 'just sat' : `sat ${label}`;
 }
 
 /* ── The held time (v5.181.0, lib 5.182.0) — the week's finished seats ──
@@ -925,6 +968,7 @@ function ItemLines({ items }: { items: OrderItem[] }): React.ReactElement {
 function TableDrill({
   table,
   order,
+  bookSeat,
   hold,
   turnAfterMin,
   turnStats,
@@ -948,6 +992,11 @@ function TableDrill({
 }: {
   table: DiningTable;
   order: Order | undefined;
+  /** v5.193.0 — the book's own seat stamp, when no ticket is in hand and
+   *  the book holds the seated row (the parent applies the same precedence
+   *  the cards do: ticket → book → silence). Null = the book holds nothing
+   *  provable here — the drill stays honest-silent, never a number. */
+  bookSeat?: SeatClock | null;
   /** v5.160.0 — the house turn line, from prefs. The drill's seat clock
    *  obeys the same number the tile and the header chip obey: one floor,
    *  one line, the house's own word. */
@@ -1120,6 +1169,25 @@ function TableDrill({
                   title={`The round was placed ${appFormatters().dt.format(new Date(order.created_at))} — ${seatD.label} ago, past the ${turnAfterMin}-minute house turn line.`}
                 >
                   <Clock size={11} aria-hidden /> sat {seatD.label}
+                </span>
+              )}
+              {/* v5.193.0 — the book's chip: no ticket in hand, but the book
+                  holds the seated row — the same clock, the book's glyph. */}
+              {isLive && !order && bookSeat && !bookSeat.camping && (
+                <span
+                  className="flex items-center gap-1 tabular-nums"
+                  title="The book's own stamp — the flip to seated"
+                >
+                  <BookOpen size={11} aria-hidden /> {bookSeatWords(bookSeat.label)}
+                </span>
+              )}
+              {isLive && !order && bookSeat?.camping && (
+                <span
+                  className="flex items-center gap-1 rounded-full px-2 py-0.5 text-[10.5px] font-bold tabular-nums"
+                  style={{ background: '#FDF3E4', color: '#8A5A16' }}
+                  title={`The book seated them ${bookSeat.label} ago — the flip's own stamp, and no ticket sits on the board yet. Past the ${turnAfterMin}-minute house turn line.`}
+                >
+                  <BookOpen size={11} aria-hidden /> {bookSeatWords(bookSeat.label)}
                 </span>
               )}
             </p>
@@ -1393,6 +1461,12 @@ function TableDrill({
           {isLive && !order && (
             <p className="rounded-2xl border border-dashed border-[#E3E7E0] bg-white px-4 py-6 text-center text-[12.5px] text-[#6B6B6B]">
               The live order isn't on this board right now — open Bills for the full ticket.
+              {bookSeat && (
+                <>
+                  {' '}
+                  The book seated this party {bookSeat.label} ago — the flip's own stamp.
+                </>
+              )}
             </p>
           )}
 
@@ -2012,23 +2086,30 @@ export function FloorScreen(): React.ReactElement {
   );
 
   /* v5.158.0 — the header's camping voice: the longest PROVABLE seat on
-     the floor. Only rounds actually in hand speak (window or audit);
-     stale holds already own their alarm and stay out of this count.
-     promiseTick rides the deps so the label ages honestly. */
+     the floor. v5.193.0 — TWO provable sources: the round in hand (window
+     or audit — verdict-gated as before) or the book's own flip stamp when
+     no ticket is in hand; a disproved hold's alarm still owns the story
+     and stays out of this count. promiseTick rides the deps so the label
+     ages honestly. */
   const longestSeat = useMemo(() => {
     let longest: SeatClock | null = null;
     for (const t of tables || []) {
       if (t.status !== 'occupied' && t.status !== 'billing') continue;
-      if (!t.active_order_id) continue;
       const v = holdVerdictFor(t, orderByTable, holdAudit, holdFailed);
-      if (v !== 'live') continue;
-      const o = orderByTable.get(t.active_order_id) ?? holdAudit.get(t.active_order_id);
-      if (!o) continue;
-      const c = seatClockFor(o.created_at, Date.now(), turnMin);
+      if (v && v !== 'live') continue;
+      const o = t.active_order_id
+        ? (orderByTable.get(t.active_order_id) ?? holdAudit.get(t.active_order_id))
+        : undefined;
+      const c =
+        o && v === 'live'
+          ? seatClockFor(o.created_at, Date.now(), turnMin)
+          : !o
+            ? bookSeatClockFor(t.id, reservations, Date.now(), turnMin)
+            : null;
       if (c && c.camping && (!longest || c.minutes > longest.minutes)) longest = c;
     }
     return longest;
-  }, [tables, orderByTable, holdAudit, holdFailed, promiseTick, turnMin]);
+  }, [tables, orderByTable, holdAudit, holdFailed, reservations, promiseTick, turnMin]);
 
   const stats = useMemo(() => {
     const list = tables || [];
@@ -2092,6 +2173,15 @@ export function FloorScreen(): React.ReactElement {
   const drillOrder = useMemo(
     () => (drillTable?.active_order_id ? orderByTable.get(drillTable.active_order_id) : undefined),
     [drillTable, orderByTable],
+  );
+  /* v5.193.0 — the drill rides the same precedence: ticket in hand → the
+     round's clock; no ticket → the book's flip stamp. promiseTick ages it. */
+  const drillBookSeat = useMemo(
+    () =>
+      drillTable && (drillTable.status === 'occupied' || drillTable.status === 'billing') && !drillOrder
+        ? bookSeatClockFor(drillTable.id, reservations, Date.now(), turnMin)
+        : null,
+    [drillTable, drillOrder, reservations, turnMin, promiseTick],
   );
   /* v5.59.0 — honest move targets: free tables only, never this one. A
      reserved table is promised to someone else and never appears here. */
@@ -2324,7 +2414,7 @@ export function FloorScreen(): React.ReactElement {
             {showSeatChip && longestSeat && (
               <span
                 className="mx-1 rounded-full bg-[#FDF3E4] px-2 py-0.5 font-bold text-[#8A5A16]"
-                title={`The longest provable seat on the floor — from the live round's own placed-at clock, past the ${turnMin}-minute house turn line.`}
+                title={`The longest provable seat on the floor — from the round's own placed-at clock, or the book's own seat stamp when no ticket sits on the board yet — past the ${turnMin}-minute house turn line.`}
               >
                 · longest seat {longestSeat.label}
               </span>
@@ -2911,6 +3001,14 @@ export function FloorScreen(): React.ReactElement {
                 isLive && seatOrder && !staleHold
                   ? seatClockFor(seatOrder.created_at, Date.now(), turnMin)
                   : null;
+              /* v5.193.0 — the book dates the pointer-less seat: no ticket
+                 in hand, no disproved hold (the alarm owns that story),
+                 and the book holding a seated row → the book's clock. Same
+                 precedence every surface: ticket → book → silence. */
+              const bookSeat =
+                isLive && !seatOrder && !staleHold
+                  ? bookSeatClockFor(t.id, reservations, Date.now(), turnMin)
+                  : null;
               /* v5.84.0 — this table's next promise, from the book. */
               const nextPromise = nextPromiseByTable.get(t.id);
               return (
@@ -2950,6 +3048,16 @@ export function FloorScreen(): React.ReactElement {
                             <Clock size={11} aria-hidden /> <TimeAgo iso={activeOrder.created_at} />
                           </span>
                         )}
+                        {/* v5.193.0 — the book's quiet chip: the seat the host
+                            created, dated from the book's own flip stamp. */}
+                        {bookSeat && !bookSeat.camping && (
+                          <span
+                            className="ml-auto flex items-center gap-1 tabular-nums"
+                            title="The book's own stamp — the flip to seated"
+                          >
+                            <BookOpen size={11} aria-hidden /> {bookSeatWords(bookSeat.label)}
+                          </span>
+                        )}
                       </p>
                     </div>
                     <span className="flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-bold" style={{ background: meta.bg, color: meta.fg }}>
@@ -2983,6 +3091,22 @@ export function FloorScreen(): React.ReactElement {
                     >
                       <Clock size={13} className="shrink-0" aria-hidden />
                       <span>sat {seat.label} — camping</span>
+                    </div>
+                  )}
+
+                  {/* v5.193.0 — the book's camping pill: the same amber
+                      family, the book's glyph — a party the host seated who
+                      never keyed a ticket still owes the house a turn. */}
+                  {bookSeat?.camping && (
+                    <div
+                      role="status"
+                      aria-label={`Table ${t.table_number} has been seated ${bookSeat.label} per the book — past the ${turnMin}-minute turn line. Check on them.`}
+                      title={`The book seated them ${bookSeat.label} ago — the flip's own stamp, and no ticket sits on the board yet. Past the ${turnMin}-minute house turn line.`}
+                      className="flex items-center gap-2 rounded-xl px-3 py-2 text-[12px] font-semibold leading-snug"
+                      style={{ background: '#FDF3E4', color: '#8A5A16', boxShadow: 'inset 0 0 0 1px #F3E3C3' }}
+                    >
+                      <BookOpen size={13} className="shrink-0" aria-hidden />
+                      <span>{bookSeatWords(bookSeat.label)} — camping</span>
                     </div>
                   )}
 
@@ -3296,6 +3420,7 @@ export function FloorScreen(): React.ReactElement {
         <TableDrill
           table={drillTable}
           order={drillOrder}
+          bookSeat={drillBookSeat}
           turnAfterMin={turnMin}
           turnStats={turnCensus.byTable.get(drillTable.id) ?? null}
           hold={drillTable ? holdVerdictFor(drillTable, orderByTable, holdAudit, holdFailed) : null}
