@@ -264,6 +264,52 @@ export function recipeCost(
   return { cost: unpriced.length > 0 ? null : sum, unpriced };
 }
 
+/* ── The batch plan (v5.167.0) — the recipe editor's production voice ── */
+
+export interface BatchNeed {
+  item: InventoryItem;
+  /** qty_per_serve × batch for this ingredient */
+  need: number;
+  /** stock on file, read at zero for a negative ledger (a bin can't hold
+   *  less than nothing) */
+  have: number;
+  /** how much the shelf falls short for THIS batch (0 when covered) */
+  short: number;
+}
+
+/** Reads what ONE BATCH of the drafted recipe would pull off the shelf:
+ *  each line's need is qty_per_serve × batch, the shortfall is what the
+ *  bin can't cover. The honesty doctrine is the house's own: an
+ *  ingredient the shelf no longer knows (a deleted SKU) or one with an
+ *  unreadable stock refuses the WHOLE plan — null, never a partial plan
+ *  (Number(null) is 0, and an unreadable bin must not plan as an empty
+ *  one). The coverage question — how many SERVES the shelf holds — stays
+ *  with shelfCoverage, the ONE shared math; this voice only prices the
+ *  batch the operator asked for and never re-answers coverage. A garbage
+ *  or non-positive quantity line is the editor's own mid-edit noise and
+ *  counts nothing; a batch below 1 plans nothing ([]). */
+export function batchNeeds(
+  lines: { inventory_item_id: string; qty_per_serve: number }[],
+  items: InventoryItem[],
+  batch: number,
+): BatchNeed[] | null {
+  if (!Number.isFinite(batch) || batch < 1) return [];
+  const byId = new Map(items.map((i) => [i.id, i]));
+  const needs: BatchNeed[] = [];
+  for (const l of lines) {
+    const ing = byId.get(l.inventory_item_id);
+    if (!ing) return null;
+    const stock = ing.current_stock == null ? NaN : Number(ing.current_stock);
+    if (!Number.isFinite(stock)) return null;
+    const qty = Number(l.qty_per_serve);
+    if (!Number.isFinite(qty) || qty <= 0) continue;
+    const need = qty * batch;
+    const have = Math.max(0, stock); // a negative ledger reads at zero, like the shared math
+    needs.push({ item: ing, need, have, short: Math.max(0, need - have) });
+  }
+  return needs;
+}
+
 /* ─────────────────────────────── screen ────────────────────────────────── */
 
 /* v5.120.0 — the gold glint, consolidated: one truth now lives in
@@ -1333,6 +1379,14 @@ const RecipeBoard: React.FC<{
    * Stock tab's shortlist and the counter's rail speak — re-read on every
    * keystroke. */
   const shelfRead = useMemo(() => shelfCoverage(draft, items), [draft, items]);
+  /* v5.167.0 — the batch plan: what a production run of the drafted recipe
+   * would pull off the shelf. A dozen by default — bakers think in dozens;
+   * the stepper moves it, the read re-plans on every step. The verdict
+   * borrows the shared coverage math, never a private re-answer. */
+  const [batch, setBatch] = useState(12);
+  const batchPlan = useMemo(() => batchNeeds(draft, items, batch), [draft, items, batch]);
+  const batchFits =
+    shelfRead.unknown || shelfRead.coverage == null ? null : shelfRead.coverage >= batch;
 
   const addLine = () => {
     if (!addIng) return;
@@ -1578,6 +1632,103 @@ const RecipeBoard: React.FC<{
               `${shelfRead.thin?.name ?? 'A SKU'} binds first — the shelf holds ~${shelfRead.coverage} more serves.`
             )}
           </p>
+        </div>
+      )}
+
+      {draft.length > 0 && (
+        <div className="mb-4 rounded-xl border border-[#E3E7E0] bg-white px-3.5 py-3">
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+            <p className="text-[10.5px] font-semibold uppercase tracking-wide text-[#6B6B6B]">
+              Plan a batch
+            </p>
+            <div className="flex items-center gap-1" role="group" aria-label="Batch size">
+              <button
+                onClick={() => setBatch((b) => Math.max(1, b - 1))}
+                aria-label="One fewer in the batch"
+                className="flex h-8 w-8 items-center justify-center rounded-lg border border-[#E3E7E0] text-[#6B6B6B] transition hover:border-[#B88E2F] hover:text-[#B88E2F] disabled:opacity-40"
+                disabled={batch <= 1}
+              >
+                <Minus size={13} aria-hidden />
+              </button>
+              <span
+                className="w-12 text-center text-[14px] font-extrabold tabular-nums text-[#1A1A1A]"
+                aria-live="polite"
+                title="How many serves this batch makes"
+              >
+                ×{batch}
+              </span>
+              <button
+                onClick={() => setBatch((b) => Math.min(999, b + 1))}
+                aria-label="One more in the batch"
+                className="flex h-8 w-8 items-center justify-center rounded-lg border border-[#E3E7E0] text-[#6B6B6B] transition hover:border-[#B88E2F] hover:text-[#B88E2F] disabled:opacity-40"
+                disabled={batch >= 999}
+              >
+                <Plus size={13} aria-hidden />
+              </button>
+            </div>
+          </div>
+          {batchPlan === null ? (
+            <p className="text-[11px] leading-relaxed text-[#8A5A0B]">
+              The batch can't plan — the recipe names an ingredient the shelf no longer knows.
+            </p>
+          ) : batchPlan.length === 0 ? (
+            <p className="text-[11px] leading-relaxed text-[#969696]">
+              Give at least one line a real per-serve quantity and the batch plans itself.
+            </p>
+          ) : (
+            <>
+              <ul className="flex flex-col gap-1.5" aria-label="Batch needs">
+                {batchPlan.map((n) => (
+                  <li key={n.item.id} className="flex items-center gap-2 text-[11.5px]">
+                    <span className="min-w-0 flex-1 truncate font-semibold text-[#1A1A1A]">
+                      {n.item.name}
+                    </span>
+                    <span
+                      className="shrink-0 tabular-nums text-[#6B6B6B]"
+                      title={`${n.item.name}: ${n.need} ${n.item.unit} for ×${batch} (≈ ${n.need / batch} ${n.item.unit}/serve)`}
+                    >
+                      needs {fmtQty(n.need)} {n.item.unit}
+                    </span>
+                    <span className="w-28 shrink-0 text-right tabular-nums text-[#969696]">
+                      shelf {fmtQty(n.have)} {n.item.unit}
+                    </span>
+                    {n.short > 0 ? (
+                      <span
+                        className="w-24 shrink-0 text-right text-[11px] font-bold tabular-nums text-[#B3261E]"
+                        title={`${n.item.name} falls ${fmtQty(n.short)} ${n.item.unit} short for this batch`}
+                      >
+                        short {fmtQty(n.short)}
+                      </span>
+                    ) : (
+                      <span className="w-24 shrink-0 text-right text-[11px] font-semibold tabular-nums text-[#2E7D32]">
+                        covered
+                      </span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-2 text-[11px] leading-relaxed text-[#969696]">
+                {batchFits === null ? (
+                  <span className="text-[#8A5A0B]">
+                    The shelf can't answer for this recipe yet — the needs above are the plan; the
+                    verdict waits.
+                  </span>
+                ) : batchFits ? (
+                  <span className="text-[#2E7D32]">
+                    The shelf covers a batch of {batch}
+                    {costRead.cost != null
+                      ? ` — about ${formatMoney(costRead.cost * batch)} in ingredients at the costs on file.`
+                      : '.'}
+                  </span>
+                ) : (
+                  <span className="text-[#8A5A0B]">
+                    The shelf runs dry at ~{shelfRead.coverage} — a batch of {batch} needs a
+                    restock first (shortfalls above).
+                  </span>
+                )}
+              </p>
+            </>
+          )}
         </div>
       )}
 

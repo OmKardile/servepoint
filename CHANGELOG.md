@@ -3,6 +3,16 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.167.0] — 2026-10-04 — The batch plan: the recipe editor grows a production voice — what one batch pulls off the shelf, needs per ingredient against the stock on file, shortfalls named in red, and a verdict that borrows the shared coverage math instead of re-answering it
+
+### Added — the batch planner (`src/components/inventory/InventoryScreen.tsx`)
+
+The editor now prices one serve (5.165.0) and knows the shelf's capacity (5.166.0) — but an operator baking for Saturday thinks in BATCHES. `batchNeeds(lines, items, batch)` (exported pure, unit-asserted) reads what one production run would pull off the shelf: each line's need is qty_per_serve × batch, the shortfall is what the bin can't cover — named in red ("short 920 g") beside the shelf's holding, "covered" in green beside a bin that holds. The block rides a ×N stepper (a dozen by default — bakers think in dozens; aria-live on the count, one-math verdict): "the shelf covers a batch of 12 — about ₹408.00 in ingredients at the costs on file" (the 5.165.0 serve cost, honestly scaled as plain data), or amber "the shelf runs dry at ~58 — a batch of 59 needs a restock first". The honesty doctrine holds the house line: a deleted SKU or an unreadable stock refuses the WHOLE plan (null — a partial plan is a lie), a negative ledger reads at zero like the shared math, garbage quantity lines are the editor's own mid-edit noise and plan nothing, and the verdict NEVER re-answers coverage — it reads `shelfCoverage(…) >= batch` from the ONE shared truth (5.91.0/5.166.0); this voice only prices the batch the operator asked for.
+
+### Verified
+
+`tsc` EXIT=0; `node --check` OK (`servepoint-v5.167.0-r1`); build EXIT=0; unit suite `scripts/unit206.mjs` 12/12 first-run (honest ×12 plan, exact-cover boundary, shortfall naming, zero-stock shorts-the-need, negative clamp, batch<1 silence, deleted-SKU refusal, the Number(null) trap, garbage-qty noise, empty draft, fractional needs, verdict-borrows-shared-math) plus regression suites unit197/198/199/200/201/202/203/204/205 ALL PASS (110 asserts); live E2E — ×12 plans 960 g + 240 g covered with the ₹408.00 verdict, stepping to ×59 flips the verdict amber live ("runs dry at ~58") with zero cloud writes; console buffer delta stable on fresh loads, zero live.
+
 ## [5.166.0] — 2026-10-04 — The shelf's answer, at the editor's desk: the Recipes tab reads the ONE shared coverage math — how many more serves the shelf holds, the thinnest bin deciding, with the Number(null) stock trap now guarded in the shared truth itself
 
 ### Added — the shelf's capacity voice at the editor's desk (`src/components/inventory/InventoryScreen.tsx`, `src/lib/shelf.ts`)
