@@ -152,6 +152,43 @@ export const BillingSection: React.FC = () => {
             <StatusChip status={sub.status} />
           </div>
 
+          {/* v5.133.0 — the trial clock's rail: the window drawn to scale,
+              anchored at INSTANTS (timezone-proof), its caption spoken in
+              the café's day (the same calendar the count reads). Absent
+              without both ends of the window — never an invented line. */}
+          {isTrial && sub.trial_end && (sub.trial_start || sub.created_at) && (() => {
+            const start = new Date(sub.trial_start || sub.created_at).getTime();
+            const end = new Date(sub.trial_end).getTime();
+            const total = end - start;
+            if (!(total > 0)) return null;
+            const now = Date.now();
+            const elapsed = Math.min(Math.max(now - start, 0), total);
+            const pct = Math.round((elapsed / total) * 100);
+            const dayOf = Math.floor(elapsed / 86400000) + 1;
+            const totalDays = Math.round(total / 86400000);
+            return (
+              <div
+                className="mt-3.5"
+                role="img"
+                aria-label={`Trial day ${dayOf} of ${totalDays} — ${pct}% of the window has passed`}
+              >
+                <div className="h-1.5 overflow-hidden rounded-full bg-white/80">
+                  <div
+                    className="h-full rounded-full bg-[#B88E2F] transition-[width] duration-500"
+                    style={{ width: `${pct}%` }}
+                  />
+                </div>
+                <p className="mt-1.5 flex items-center justify-between text-[10.5px] font-semibold text-[#52655C]">
+                  <span>
+                    Trial day <span style={{ fontVariantNumeric: 'tabular-nums' }}>{dayOf}</span> of{' '}
+                    <span style={{ fontVariantNumeric: 'tabular-nums' }}>{totalDays}</span>
+                  </span>
+                  <span style={{ fontVariantNumeric: 'tabular-nums' }}>{pct}% passed</span>
+                </p>
+              </div>
+            );
+          })()}
+
           <dl className="mt-4 rounded-xl bg-white px-4 py-1">
             <Row label="Billing cycle">{sub.billing_cycle === 'monthly' ? 'Monthly' : sub.billing_cycle}</Row>
             <Row label="Monthly price">{formatMoney(sub.monthly_price ?? 0)}</Row>

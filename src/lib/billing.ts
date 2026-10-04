@@ -1,4 +1,5 @@
 import type { Subscription } from '../types';
+import { appDayKey, appTodayIso, appTimezone } from './appday';
 
 /* v5.126.0 — the billing clock, consolidated. PlatformScreen's private math
  * (5.125.0) handed over one release later, the same arc MarkHit (5.120.0) and
@@ -7,26 +8,44 @@ import type { Subscription } from '../types';
  * console now read ONE clock.
  *
  * Day-window math is calendar-day based (midnight-to-midnight), not 24h
- * blocks, so "ends today" lands on the day itself. */
+ * blocks, so "ends today" lands on the day itself.
+ *
+ * v5.133.0 — the clock keeps the CAFÉ'S day. daysUntil counted DEVICE-local
+ * midnights and formatBillingDate formatted in the DEVICE zone, so a UTC
+ * laptop and an IST tablet could disagree about the same trial by a whole
+ * day (the "documented device-day seam" the QA logs kept noting). Billing
+ * is an owner surface — the reporting day (Settings › Language & Region)
+ * is its truth, the same word Reports and Close-out read. On every Indian
+ * device both truths say IST and nothing moves; elsewhere the lie stops. */
 
 const DAY_MS = 86400000;
 
-/** Calendar days from now until `iso` (negative = past). NaN when unparsable. */
+const dayNumber = (dayKey: string): number => {
+  const [y, m, d] = dayKey.split('-').map(Number);
+  return Date.UTC(y, m - 1, d);
+};
+
+/** Calendar days from the OWNER'S today to the calendar day `iso` lands on
+ *  in the owner's timezone (negative = past). NaN when unparsable. */
 export function daysUntil(iso: string): number {
+  if (!iso) return NaN;
   const target = new Date(iso);
-  const now = new Date();
   if (Number.isNaN(target.getTime())) return NaN;
-  target.setHours(0, 0, 0, 0);
-  now.setHours(0, 0, 0, 0);
-  return Math.round((target.getTime() - now.getTime()) / DAY_MS);
+  return Math.round((dayNumber(appDayKey(iso)) - dayNumber(appTodayIso())) / DAY_MS);
 }
 
-/** The house date grammar: "16 Oct 2026". Unparsable or missing → "—". */
+/** The house date grammar: "16 Oct 2026", spoken in the owner's timezone —
+ *  the same calendar the day-count reads. Unparsable or missing → "—". */
 export function formatBillingDate(iso: string | null | undefined): string {
   if (!iso) return '—';
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '—';
-  return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+  return new Intl.DateTimeFormat('en-IN', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    timeZone: appTimezone(),
+  }).format(d);
 }
 
 /** The trial's urgency bucket. calm > 7 days out; soon inside a week;
@@ -83,7 +102,18 @@ export function subscriptionWords(s: Subscription): {
   }
   return {
     primary: s.next_billing_at ? formatBillingDate(s.next_billing_at) : '—',
+    secondary: activeRenewalWords(s),
     urgent: false,
     bucket: null,
   };
+}
+
+/** v5.133.0 — the active plan's clock speaks the same grammar the trial's
+ *  does: the date plus the honest day-count. A row with no scheduled charge
+ *  stays wordless — silence, never an invented date. */
+function activeRenewalWords(s: Subscription): string | undefined {
+  if (!s.next_billing_at) return undefined;
+  const d = daysUntil(s.next_billing_at);
+  if (Number.isNaN(d)) return undefined;
+  return d === 0 ? 'renews today' : d === 1 ? 'renews tomorrow' : d > 1 ? `renews in ${d} days` : 'renewal window passed';
 }

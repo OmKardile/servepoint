@@ -3,6 +3,22 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.133.0] — 2026-10-04 — The billing clock keeps the café's day
+
+### Fixed — the device-day seam closes where money is spoken
+
+- **The seam**: `daysUntil` counted DEVICE-local midnights and `formatBillingDate` formatted in the DEVICE zone — so a UTC laptop and an IST tablet could disagree about the same subscription by a whole day. Proven live this round: CheeseBurg's next charge (`2026-10-31T18:50Z` — already 1 November in India) rendered as "31 Oct 2026" on a UTC device and "01 Nov 2026" on an Indian one. The trial band, the Platform Subscriptions rows and Settings' Plan & billing panel all read one shared clock (`src/lib/billing.ts`, 5.126.0) — so one fix corrects all three.
+- **The fix**: the billing clock now speaks the OWNER'S calendar — `daysUntil` diffs calendar days in the reporting day (`appDayKey` / `appTodayIso`), `formatBillingDate` formats in `appTimezone()`. The doctrine's own words, kept: billing is an owner surface, and on every Indian device both truths say IST, so nothing moves for the real tenant — elsewhere the lie stops.
+
+### Added — the active plan's clock speaks
+
+- **"renews in N days"** (`src/lib/billing.ts`): the trial's grammar (date + honest day-count) extends to active plans — Platform's CheeseBurg row now reads *"01 Nov 2026 · renews in 28 days"* (was a bare date). "renews today" / "renews tomorrow" / "renewal window passed" complete the grammar; a row with no scheduled charge stays wordless.
+- **The trial clock's rail** (`src/components/settings/BillingSection.tsx`): the Plan & billing panel draws the window to scale — a slim gold rail anchored at INSTANTS (timezone-proof), captioned *"Trial day 2 of 14 · 12% passed"* in tabular-nums, with a `role="img"` aria sentence. Absent without both ends of the window — never an invented line.
+
+### Verified
+
+- tsc EXIT=0; build EXIT=0. Live E2E on a UTC device (the exact device the seam lies to): QR Flow band unchanged ("ends 16 Oct 2026 — 12 days left"); Platform's CheeseBurg row now "01 Nov 2026 · renews in 28 days" (was "31 Oct 2026"); the panel rail renders day 2 of 14 at 12% against trial started 02 Oct 08:47Z; divergence arithmetic shown in-console (UTC "31 Oct" vs Asia/Kolkata "01 Nov" for the same instant). Console delta ZERO. READ-ONLY round — zero cloud writes.
+
 ## [5.132.0] — 2026-10-04 — The charts stand down
 
 ### Added — keyboard dignity for every chart surface
