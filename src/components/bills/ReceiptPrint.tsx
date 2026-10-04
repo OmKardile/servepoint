@@ -219,3 +219,85 @@ export function buildReceiptHtml(opts: ReceiptOpts): string {
 export function printReceipt(opts: ReceiptOpts): void {
   printHiddenFrame(buildReceiptHtml(opts));
 }
+
+/**
+ * v5.145.0 — the bill's chat voice. The SAME ReceiptOpts the thermal print
+ * consumes, rendered as aligned plain text for Copy / WhatsApp share —
+ * every figure from the same stored columns (never recomputed), the same
+ * CGST/SGST display halving, the same PAID/split/PAYMENT DUE semantics, the
+ * same legal-identity lines when present. The logo has no chat form and is
+ * deliberately absent; the words carry the bill (the offline page's rule).
+ * Text width targets a 32-column monospace frame — WhatsApp renders it
+ * proportionally, where the right column may drift but the rows stay
+ * readable. Exported pure like buildReceiptHtml so browser E2E can assert
+ * the exact share text without touching the clipboard.
+ */
+export function buildReceiptText(opts: ReceiptOpts): string {
+  const W = 32;
+  const two = (l: string, r: string): string => {
+    const cut = Math.max(1, W - r.length - 1);
+    const left = l.length > cut ? `${l.slice(0, cut - 1)}…` : l;
+    return left.padEnd(W - r.length, ' ') + r;
+  };
+  const hr = '-'.repeat(W);
+  const center = (s: string): string =>
+    s.length >= W ? s : ' '.repeat(Math.floor((W - s.length) / 2)) + s;
+
+  const cgst = Math.round((opts.tax / 2) * 100) / 100;
+  const sgst = Math.round((opts.tax - cgst) * 100) / 100;
+  const discount = Number(opts.discount ?? 0);
+
+  const out: string[] = [];
+  out.push(center(opts.storeName.toUpperCase()));
+  const legal = opts.legalName && opts.legalName.trim() !== '' && opts.legalName.trim() !== opts.storeName ? opts.legalName.trim() : '';
+  if (legal) out.push(center(legal));
+  if (opts.address && opts.address.trim() !== '') out.push(center(opts.address.trim()));
+  if (opts.phone && opts.phone.trim() !== '') out.push(center(opts.phone.trim()));
+  if (opts.gstNumber && opts.gstNumber.trim() !== '') out.push(center(`GSTIN: ${opts.gstNumber.trim().toUpperCase()}`));
+  if (opts.fssaiNumber && opts.fssaiNumber.trim() !== '') out.push(center(`FSSAI Lic. No: ${opts.fssaiNumber.trim()}`));
+  out.push(center(opts.gstNumber && opts.gstNumber.trim() !== '' ? 'TAX INVOICE' : 'CUSTOMER RECEIPT'));
+
+  const metaBits = [
+    ORDER_TYPE_LABEL[String(opts.orderType)] || String(opts.orderType),
+    opts.tableLabel || '',
+    opts.customerName || '',
+  ].filter(Boolean);
+  out.push(`#${opts.orderNumber}${metaBits.length > 0 ? ` · ${metaBits.join(' · ')}` : ''}`);
+  out.push(`${istDateTime(opts.createdAt)} IST`);
+  out.push(hr);
+
+  if (opts.items.length === 0) {
+    out.push('No item lines recorded.');
+  } else {
+    for (const it of opts.items) {
+      out.push(two(`${it.name} x${it.qty}`, formatMoney(it.lineTotal)));
+      const subs: string[] = [];
+      if (it.variantName) subs.push(it.variantName);
+      for (const a of it.addons || []) subs.push(`+ ${a.name}`);
+      if (it.notes) subs.push(`- ${it.notes}`);
+      for (const s of subs) out.push(`  ${s}`);
+    }
+  }
+  out.push(hr);
+  out.push(two('Subtotal', formatMoney(opts.subtotal)));
+  if (discount > 0) out.push(two(`DISCOUNT${opts.offerTitle ? ` - ${opts.offerTitle}` : ''}`, `-${formatMoney(discount)}`));
+  out.push(two('CGST 2.5%', formatMoney(cgst)));
+  out.push(two('SGST 2.5%', formatMoney(sgst)));
+  out.push(two('TOTAL', formatMoney(opts.total)));
+  out.push(hr);
+
+  const split = (opts.splitPayments || []).filter((p) => p.amount > 0);
+  if (opts.isPaid) {
+    if (split.length > 1) {
+      for (const p of split) out.push(two(`PAID - ${p.label}`, formatMoney(p.amount)));
+      out.push(two('SETTLED', opts.paidAt ? istTime(opts.paidAt) : ''));
+    } else {
+      out.push(two(`PAID${opts.paymentLabel ? ` - ${opts.paymentLabel}` : ''}`, opts.paidAt ? istTime(opts.paidAt) : ''));
+    }
+  } else {
+    out.push('PAYMENT DUE');
+  }
+  out.push(hr);
+  out.push(center('Thank you! Visit again.'));
+  return out.join('\n');
+}

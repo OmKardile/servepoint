@@ -3,6 +3,17 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.145.0] — 2026-10-04 — The bill speaks in chat
+
+### Added — Copy + WhatsApp share on the bill detail (`src/components/bills/ReceiptPrint.tsx`, `src/components/bills/BillsScreen.tsx`, `src/types.ts`)
+
+help.md has promised for a hundred releases that a bill "opens wa.me with the plain-text bill pre-filled" — the current Bills screen never shipped it (a v2.x-era feature lost in the rebuild). The promise is now code: a new pure builder `buildReceiptText(opts)` renders the SAME `ReceiptOpts` the thermal print consumes into an aligned 32-column text bill — same stored columns (never recomputed), same CGST/SGST display halving, same PAID/split/PAYMENT DUE semantics, same legal-identity block, logo deliberately absent (the words carry the bill). The receipt opts assembly moved out of the print button's onClick into one shared `receiptOpts()` — paper and chat can never disagree about the money. The detail pane gains a two-button share row under Print receipt: "Copy bill" (clipboard, inline honest feedback — flips to "Copied" for a breath, or "Copy blocked" when the clipboard is unavailable; the app keeps no toast system) and "WhatsApp" (a real `wa.me` anchor: with a guest phone it opens the DIRECT chat — bare 10-digit numbers assume +91, India-first like the house's ₹/GST/IST frame; without one, WhatsApp's own share picker). `Order.customer_phone` typed (loaded by fetchOrders' `select('*')` all along; now declared).
+
+### Verified
+
+tsc EXIT=0, build EXIT=0 (/tmp/build184a.log), sw VERSION 5.145.0-r1. Live E2E (dev, bill #96 — the known stray unpaid ticket): share text decoded from the real wa.me href matches the pane to the rupee (Flat White ₹220.00 → CGST ₹5.50 + SGST ₹5.50 → TOTAL ₹231.00, PAYMENT DUE); the pane shows ₹231.00 — one source of truth proven across paper and chat. Clipboard write+read is permission-blocked in the headless harness — the button's honest "Copy blocked" fail path was exercised instead, and the builder was asserted through the href decode (real opts, real render, no clipboard needed). Copy state resets after its 1.8 s breath. Zero console errors. READ-ONLY round (zero cloud writes). Screenshot .qa-screens/qa184-bill-share.png.
+
+
 ## [5.144.0] — 2026-10-04 — The update episode learns its ending
 
 ### Fixed — the waiting contract is finally true (`public/sw.js`)

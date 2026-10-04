@@ -2,9 +2,11 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Check,
   ChevronDown,
+  Copy,
   Download,
   History,
   Loader2,
+  MessageCircle,
   MoreHorizontal,
   Plus,
   Receipt,
@@ -27,7 +29,7 @@ import {
   recordPayment,
 } from '../../lib/api';
 import type { OrderStatusEvent, PaymentMethod, ReceiptPayment } from '../../lib/api';
-import { printReceipt } from './ReceiptPrint';
+import { buildReceiptText, printReceipt, type ReceiptOpts } from './ReceiptPrint';
 import { preloadPrintImage } from '../../lib/printFrame';
 import { formatMoney, getPrefs } from '../../lib/prefs';
 import { downloadCsv } from '../../lib/csv';
@@ -525,6 +527,82 @@ const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRet
   }, [sorted, selectedId, ordersLoading]);
 
   const selected = orders.find((o) => o.id === selectedId) || null;
+
+  /* ── v5.145.0 — the bill's chat voice ─────────────────────────────────
+   * ONE opts assembly feeds the thermal print AND the share row (Copy /
+   * WhatsApp), so every surface says the same numbers from the same stored
+   * columns — the money-doctrine, now three surfaces wide. Copy feedback is
+   * inline (the app keeps no toast system): the button flips to "Copied"
+   * for a breath, or honestly says "Copy blocked" when the clipboard is
+   * unavailable (insecure context / permission denial). */
+  const [billCopyState, setBillCopyState] = useState<'idle' | 'ok' | 'fail'>('idle');
+  const receiptOpts = (): ReceiptOpts | null => {
+    if (!selected) return null;
+    return {
+      storeName: tenant?.name || 'ServePoint store',
+      // Task 90 — the legal identity rides the paper: GSTIN turns the
+      // printout into a TAX INVOICE, FSSAI is the food licence the law
+      // wants shown. Absent → the pre-5.51 receipt, byte for byte.
+      legalName: tenant?.legal_name || null,
+      gstNumber: tenant?.gst_number || null,
+      fssaiNumber: tenant?.fssai_number || null,
+      address: tenant?.address || null,
+      phone: tenant?.owner_phone || null,
+      orderNumber: selected.order_number,
+      orderType: String(selected.order_type || ''),
+      tableLabel: selected.table_label,
+      customerName: selected.customer_name,
+      createdAt: selected.created_at,
+      items: (selected.items || []).map((it) => ({
+        name: it.name,
+        qty: it.qty,
+        variantName: it.variant_name,
+        notes: it.notes,
+        addons: it.addons,
+        lineTotal: it.item_total ?? it.unit_price * it.qty,
+      })),
+      subtotal: selected.subtotal,
+      discount: selected.discount_amount,
+      offerTitle: receiptMeta?.offerTitle || null,
+      tax: selected.tax_amount,
+      total: selected.total,
+      paymentLabel:
+        (receiptMeta?.payment?.method &&
+          (METHOD_LABEL[receiptMeta.payment.method as MethodKey] ||
+            receiptMeta.payment.method)) ||
+        (selected.payment_method
+          ? METHOD_LABEL[selected.payment_method as MethodKey] || null
+          : null),
+      /* 5.63.0 — a settled split prints one PAID line per part. */
+      splitPayments:
+        ledger.length > 1
+          ? ledger.map((p) => ({
+              label: METHOD_LABEL[p.method as MethodKey] || p.method,
+              amount: Number(p.amount || 0),
+            }))
+          : null,
+      paidAt:
+        receiptMeta?.payment?.paidAt ||
+        (displayStatus(selected) === 'paid'
+          ? [...trail].reverse().find((ev) => displayStatus({ status: ev.to_status, payment_status: '' }) === 'paid')?.created_at || null
+          : null),
+      isPaid: displayStatus(selected) === 'paid',
+      printedBy: null,
+      logoUrl: tenant?.logo_url || null,
+    };
+  };
+  const copyBillText = async () => {
+    const opts = receiptOpts();
+    if (!opts) return;
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error('clipboard unavailable');
+      await navigator.clipboard.writeText(buildReceiptText(opts));
+      setBillCopyState('ok');
+    } catch {
+      setBillCopyState('fail');
+    }
+    window.setTimeout(() => setBillCopyState('idle'), 1800);
+  };
 
   /* ── Split math (5.63.0) — paise-exact, ledger-derived ──────────────────
    * paidSum / balance come from the LEDGER (server truth), never from a
@@ -1446,76 +1524,64 @@ const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRet
                 </div>
               )}
 
-              {/* Customer receipt (Task 49) — thermal 80mm print for any live ticket */}
-              {displayStatus(selected) !== 'cancelled' && (
-                <button
-                  onClick={async () => {
-                    // v5.29.0 — the café's face rides the paper receipt too.
-                    // Warm the remote logo BEFORE the iframe prints (print()
-                    // won't wait for a cold image); dead/absent logo → the
-                    // pre-5.29 text-only header, never a hole.
-                    const logoUrl = tenant?.logo_url || null;
-                    if (logoUrl) await preloadPrintImage(logoUrl);
-                    printReceipt({
-                      storeName: tenant?.name || 'ServePoint store',
-                      // Task 90 — the legal identity rides the paper: GSTIN
-                      // turns the printout into a TAX INVOICE, FSSAI is the
-                      // food licence the law wants shown. Absent → the
-                      // pre-5.51 receipt, byte for byte.
-                      legalName: tenant?.legal_name || null,
-                      gstNumber: tenant?.gst_number || null,
-                      fssaiNumber: tenant?.fssai_number || null,
-                      address: tenant?.address || null,
-                      phone: tenant?.owner_phone || null,
-                      orderNumber: selected.order_number,
-                      orderType: String(selected.order_type || ''),
-                      tableLabel: selected.table_label,
-                      customerName: selected.customer_name,
-                      createdAt: selected.created_at,
-                      items: (selected.items || []).map((it) => ({
-                        name: it.name,
-                        qty: it.qty,
-                        variantName: it.variant_name,
-                        notes: it.notes,
-                        addons: it.addons,
-                        lineTotal: it.item_total ?? it.unit_price * it.qty,
-                      })),
-                      subtotal: selected.subtotal,
-                      discount: selected.discount_amount,
-                      offerTitle: receiptMeta?.offerTitle || null,
-                      tax: selected.tax_amount,
-                      total: selected.total,
-                      paymentLabel:
-                        (receiptMeta?.payment?.method &&
-                          (METHOD_LABEL[receiptMeta.payment.method as MethodKey] ||
-                            receiptMeta.payment.method)) ||
-                        (selected.payment_method
-                          ? METHOD_LABEL[selected.payment_method as MethodKey] || null
-                          : null),
-                      /* 5.63.0 — a settled split prints one PAID line per part. */
-                      splitPayments:
-                        ledger.length > 1
-                          ? ledger.map((p) => ({
-                              label: METHOD_LABEL[p.method as MethodKey] || p.method,
-                              amount: Number(p.amount || 0),
-                            }))
-                          : null,
-                      paidAt:
-                        receiptMeta?.payment?.paidAt ||
-                        (displayStatus(selected) === 'paid'
-                          ? [...trail].reverse().find((ev) => displayStatus({ status: ev.to_status, payment_status: '' }) === 'paid')?.created_at || null
-                          : null),
-                      isPaid: displayStatus(selected) === 'paid',
-                      printedBy: null,
-                      logoUrl,
-                    });
-                  }}
-                  className="mt-4 flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-[#B88E2F]/45 bg-[#FDF9F0] text-[12.5px] font-semibold text-[#8A6A20] transition hover:border-[#B88E2F] hover:bg-[#F8EFDB] active:scale-[0.99]"
-                >
-                  <Receipt size={15} aria-hidden />
-                  Print receipt
-                </button>
-              )}
+              {/* Customer receipt (Task 49) — thermal 80mm print for any live ticket.
+                  v5.145.0 — the bill's chat voice: the SAME opts now feed the
+                  thermal print AND the share row (Copy / WhatsApp), so the
+                  paper and the chat can never disagree about the money. The
+                  wa.me grammar follows help.md's long-standing promise: with
+                  a guest phone the link opens the DIRECT chat; without one,
+                  WhatsApp's own share picker. India-first: a bare 10-digit
+                  number assumes +91 (the house's ₹/GST/IST frame); longer
+                  digit strings pass through as dialed. */}
+              {displayStatus(selected) !== 'cancelled' &&
+                (() => {
+                  const opts = receiptOpts();
+                  if (!opts) return null;
+                  const rawDigits = (selected.customer_phone || '').replace(/\D/g, '');
+                  const waNumber =
+                    rawDigits.length === 10 ? `91${rawDigits}` : rawDigits.length > 10 ? rawDigits : '';
+                  const waHref = `https://wa.me/${waNumber}?text=${encodeURIComponent(buildReceiptText(opts))}`;
+                  return (
+                    <>
+                      <button
+                        onClick={async () => {
+                          // v5.29.0 — the café's face rides the paper receipt too.
+                          // Warm the remote logo BEFORE the iframe prints (print()
+                          // won't wait for a cold image); dead/absent logo → the
+                          // pre-5.29 text-only header, never a hole.
+                          if (opts.logoUrl) await preloadPrintImage(opts.logoUrl);
+                          printReceipt(opts);
+                        }}
+                        className="mt-4 flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-[#B88E2F]/45 bg-[#FDF9F0] text-[12.5px] font-semibold text-[#8A6A20] transition hover:border-[#B88E2F] hover:bg-[#F8EFDB] active:scale-[0.99]"
+                      >
+                        <Receipt size={15} aria-hidden />
+                        Print receipt
+                      </button>
+                      <div className="mt-2 grid grid-cols-2 gap-2">
+                        <button
+                          onClick={copyBillText}
+                          className="flex h-11 items-center justify-center gap-1.5 rounded-xl border border-[#E3E7E0] bg-white text-[12.5px] font-semibold text-[#0F3D3E] transition hover:border-[#0F3D3E]/40 hover:bg-[#F6F5F2] active:scale-[0.99]"
+                        >
+                          {billCopyState === 'ok' ? (
+                            <Check size={15} className="text-[#2E7D32]" aria-hidden />
+                          ) : (
+                            <Copy size={15} aria-hidden />
+                          )}
+                          {billCopyState === 'ok' ? 'Copied' : billCopyState === 'fail' ? 'Copy blocked' : 'Copy bill'}
+                        </button>
+                        <a
+                          href={waHref}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex h-11 items-center justify-center gap-1.5 rounded-xl border border-[#E3E7E0] bg-white text-[12.5px] font-semibold text-[#0F3D3E] transition hover:border-[#0F3D3E]/40 hover:bg-[#F6F5F2] active:scale-[0.99]"
+                        >
+                          <MessageCircle size={15} aria-hidden />
+                          WhatsApp
+                        </a>
+                      </div>
+                    </>
+                  );
+                })()}
             </>
           )}
         </div>

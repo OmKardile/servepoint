@@ -75,6 +75,9 @@ export interface Order {
   table_label?: string | null;
   guest_count?: number | null;
   customer_name?: string | null;
+  /** v5.145.0 — loaded via fetchOrders' select(*); the bill's WhatsApp share
+   *  opens the guest's DIRECT chat when present (wa.me grammar). */
+  customer_phone?: string | null;
   subtotal: number;
   tax_amount: number;
   discount_amount?: number | null;
