@@ -10,6 +10,7 @@ import {
   Loader2,
   MessageSquare,
   RefreshCw,
+  Search,
   Star,
   Tag,
   Wifi,
@@ -64,6 +65,19 @@ import type { Reservation } from '../../lib/api';
  * went quiet/still expected); zero or several matches stay silent — the
  * echo never guesses, and an unread book (null) never becomes an
  * invented all-clear. Read-only: the bell never writes to the book.
+ *
+ * v5.234.0 — the bell answers its name: this screen joins the 5.116
+ * shell-search contract (the box learns its vocabulary — "Search
+ * bells…" — instead of not existing here). One state, two doors: the
+ * header box and a local row above the chips share useUi.search, so
+ * either door moves the other and `/` focuses, Esc clears, free. The
+ * matcher is ONE pure closure over title+body — every whitespace-
+ * separated token must appear ("stock flour" finds the shelf's flour
+ * bell, not just any stock bell); an empty query filters nothing, so
+ * the zero-term view is byte-true. The term narrows the VIEW, never
+ * the chips (the chips keep the shelf's own counts — the 5.42.0
+ * honesty), and a miss names the term in its own empty state — the
+ * 5.116 doctrine: a search miss never dresses as a filter miss.
  */
 
 const CATEGORY_ICON: Record<NotificationCategory, React.ComponentType<{ size?: number; className?: string }>> = {
@@ -240,6 +254,23 @@ function echoFor(
     note: `The book still holds this promise. ${provenance}`,
     slotIso: r.slot_at,
   };
+}
+
+/* ── The bell answers its name (v5.234.0) ───────────────────────────
+   The ONE matcher both search doors narrow through. Every whitespace-
+   separated token must appear in the title or the body — terms AND
+   together, order-free, case riding lowercase on both sides. An empty
+   or whitespace-only query filters nothing: silence is no filter,
+   never a fabricated zero. Exported pure so the suite owns the truth
+   table (253's doorOf pattern). */
+export function notificationMatchesQuery(
+  n: Pick<AppNotification, 'title' | 'body'>,
+  q: string,
+): boolean {
+  const terms = q.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  if (terms.length === 0) return true;
+  const hay = `${n.title}\n${n.body}`.toLowerCase();
+  return terms.every((t) => hay.includes(t));
 }
 
 /* ── The briefing's hours (v5.159.0) ────────────────────────────────
@@ -421,6 +452,16 @@ const NotificationsContent: React.FC<{ onTenantRetry: () => void }> = ({ onTenan
   const [markError, setMarkError] = useState<string | null>(null);
   const [rt, setRt] = useState<RealtimeState>('connecting');
   const [filter, setFilter] = useState<NotificationCategory | 'all'>('all');
+  /* v5.234.0 — the 5.116 shell-search contract: the screen registers its
+   *  vocabulary on mount (the header box exists only where a screen
+   *  honors it) and reads the ONE search state — no local copy, so the
+   *  header door and the local door move together and Esc clears both. */
+  const query = useUi((s) => s.search);
+  const setQuery = useUi((s) => s.setSearch);
+  useEffect(() => {
+    useUi.getState().setSearchMeta({ placeholder: 'Search bells…' });
+    return () => useUi.getState().setSearchMeta(null);
+  }, []);
   /* v5.159.0 — the missed-bells filter: one tap answers "what haven't I
    *  read?" without scrolling the whole feed. Composes with the category
    *  chips (AND); renders only while there is something unread, so no
@@ -519,13 +560,22 @@ const NotificationsContent: React.FC<{ onTenantRetry: () => void }> = ({ onTenan
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [items, notify]);
 
-  const visible = useMemo(
+  /* v5.234.0 — the term is the LAST stage: category ∧ unread first, the
+   *  search terms last, so the count line's "of M" names the room the
+   *  term actually searched (a chip's room, not the whole shelf). The
+   *  narrowed memo keeps the old pipeline byte-true; the term stage is
+   *  a pure pass-through when the query is empty (zero-term = old bytes). */
+  const narrowed = useMemo(
     () => {
       const base = filter === 'all' ? kept : kept.filter((n) => n.category === filter);
       return unreadOnly ? base.filter((n) => !n.is_read) : base;
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [items, filter, notify, unreadOnly]
+  );
+  const visible = useMemo(
+    () => narrowed.filter((n) => notificationMatchesQuery(n, query)),
+    [narrowed, query]
   );
 
   /* v5.159.0 — the day groups ride the visible set; yesterday's key
@@ -649,9 +699,47 @@ const NotificationsContent: React.FC<{ onTenantRetry: () => void }> = ({ onTenan
         </p>
       )}
 
-      {/* v5.42.0 — honest category filters (adaptive: only what exists) */}
+      {/* v5.42.0 — honest category filters (adaptive: only what exists).
+          v5.234.0 — the local search door rides the same block: the
+          header box hides below md, so this row is the door mobile
+          readers actually have; both doors wear the header's own
+          clothes (sp-input, the same rounded-full hairline) — one
+          contract, one state, one ink. */}
       {!loading && !error && items.length > 0 && (
-        <div className="flex flex-wrap items-center gap-2 pb-4" role="group" aria-label="Filter by category">
+        <div className="pb-4">
+          <div className="relative">
+            <Search
+              size={15}
+              aria-hidden
+              className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[#969696]"
+            />
+            <input
+              type="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') {
+                  setQuery('');
+                  e.currentTarget.blur();
+                }
+              }}
+              placeholder="Search bells…"
+              aria-label="Search notifications"
+              title="Search bells — press / to focus, Esc clears"
+              className="sp-input w-full rounded-full py-2 pl-9 pr-8 text-[13px] [&::-webkit-search-cancel-button]:hidden"
+            />
+          </div>
+          {/* v5.234.0 — the count line: the term's honest answer to "did
+              this word find anything HERE" — N of the room it searched
+              (narrowed), not the whole shelf. Line-grey 11.5px, the
+              KPI-hint register; silent when the term is empty. */}
+          {query.trim() ? (
+            <p className="pt-2 text-[11.5px] text-[#6B6B6B]" aria-live="polite">
+              “{query.trim()}” — {visible.length} of {narrowed.length}{' '}
+              {narrowed.length === 1 ? 'bell' : 'bells'}
+            </p>
+          ) : null}
+          <div className="flex flex-wrap items-center gap-2 pt-3" role="group" aria-label="Filter by category">
           {/* v5.159.0 — the missed-bells toggle, gold when armed. Adaptive:
               rendered only while unread bells exist — an Unread-0 chip
               would be a dead end, and no chip here may lie. */}
@@ -702,6 +790,7 @@ const NotificationsContent: React.FC<{ onTenantRetry: () => void }> = ({ onTenan
               </span>
             </button>
           ))}
+          </div>
         </div>
       )}
 
@@ -737,7 +826,15 @@ const NotificationsContent: React.FC<{ onTenantRetry: () => void }> = ({ onTenan
         </div>
       ) : visible.length === 0 ? (
         <p className="rounded-2xl border border-dashed border-[#E3E7E0] bg-white px-4 py-8 text-center text-[13px] text-[#6B6B6B]">
-          Nothing under this filter right now.
+          {/* v5.234.0 — two states, one cell: a term miss names the term
+              (the 5.116 doctrine — a search miss never dresses as a
+              filter miss) and points at the narrower word; the filter
+              miss keeps its bytes. */}
+          {query.trim()
+            ? `No bell matches “${query.trim()}”${
+                filter !== 'all' || unreadOnly ? ' under this filter' : ''
+              } — try a shorter word.`
+            : 'Nothing under this filter right now.'}
         </p>
       ) : (
         /* v5.159.0 — the briefing reads in day groups: gold small-caps
