@@ -117,7 +117,10 @@ assert.ok(ylmSlice.includes('youngestLiveWindow(rows, nowMs)'),
   'the ms composes the named argmin — no second minimum arithmetic');
 ok('the youngest-window arithmetic lives in the lib, reads the tick, seeds at Infinity');
 
-assert.ok(pillSlice.includes('const pillWarm = youngest < 180_000;'),
+// 5.259.0 re-anchor — the gate rides appday's WARM_WINDOW_MS now (the literal
+// was the constant spelled by hand); the law stands: three minutes, one
+// arithmetic, every room.
+assert.ok(pillSlice.includes('const pillWarm = youngest < WARM_WINDOW_MS;'),
   'warm gates at the ribbon\'s three-minute line');
 ok('the youngest-window arithmetic reads the tick, gated at three minutes');
 

@@ -135,8 +135,13 @@ assert.ok(mapSlice.includes(': tone.label}'), 'consumed/revoked keep their own l
 ok('the live row says "ends in", the expired row keeps its ago-form');
 
 // The warm voice: under three minutes the countdown speaks the ribbon's amber.
-assert.ok(mapSlice.includes("const warm = st === 'live' && msLeft < 180_000;"),
+// 5.259.0 re-anchor — the gate rides appday's WARM_WINDOW_MS now (the literal
+// was the constant spelled by hand; one window, one arithmetic). The LAW does
+// not move: three minutes, one constant, every room.
+assert.ok(mapSlice.includes("const warm = st === 'live' && msLeft < WARM_WINDOW_MS;"),
   'warm gates at the ribbon\'s three-minute line');
+assert.ok(/import \{[^}]*WARM_WINDOW_MS[^}]*\} from '\.\.\/\.\.\/lib\/appday';/.test(floor),
+  'the constant is imported, not re-spelled');
 assert.ok(mapSlice.includes("font-semibold text-[#8A5A16]"), 'warm speaks the ribbon\'s amber, semibold');
 assert.ok(mapSlice.includes("font-medium text-[#0F3D3E]"), 'a live window at ease speaks the row\'s own deep ink');
 ok('the warm amber and the deep-ink ease are both pinned');

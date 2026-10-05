@@ -119,8 +119,8 @@ ok('the split is pure — a new map, the ledgers never touched');
 
 const floor = strip('../src/components/floor/FloorScreen.tsx');
 
-assert.ok(floor.includes("tableTicketDays, tableWeekSplit } from '../../lib/turn'"),
-  'the Floor imports the grown turn family');
+assert.ok(floor.includes("tableTicketDays, tableTicketsOnDay, tableWeekSplit } from '../../lib/turn'"),
+  'the Floor imports the grown turn family (5.259 added the evening rows)');
 assert.ok(!/\bfunction tableWeekSplit\b/.test(floor), 'no local copy of the split');
 ok('the Floor imports the lib rule — no local copy born');
 
