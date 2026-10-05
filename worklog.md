@@ -7669,3 +7669,35 @@ Work Log:
 
 Stage Summary:
 - Work committed and gated (battery 104/104, tsc ×2, build, the rows === count executed on the real ledger with the shipped lib function) but NOT on origin — the push ran and failed for lack of credentials, not for lack of trying. The honesty rule holds: no push claimed that did not run.
+---
+Task ID: 299 (15-min webDevReview round, trace 1a0fba3beb0e3c89-cron-agent-loop-202610060413)
+Agent: glm-5.3 (cron webDevReview round)
+Task: Post-5.259.0 round — push FIRST, QA walk, then the walk's finding. v5.260.0 "the close hears the voice".
+
+Work Log:
+- Orientation: worklog tail — 298 closed (92e7c3a + 01b0814 + 9354daf, v5.259.0), tree clean, 92 riding. THIS round = Task 299, version → v5.260.0. Push ATTEMPTED FIRST — failed honestly again (no token, 0 GH_* matches; addendum below). tsc EXIT=0 pre-claim. Battery baseline PASS=104 FAIL=0 (the 298 state) before any edit.
+- QA walk: inventory surveyed (tabs/batches/reorder — the 5.120–5.177 family intact), reports + EOD surveyed for the walk's finding. THE FINDING: the verdict family's journey ran written (293) → bill (295) → CRM (296) → every staff board — but the day's CLOSE never spoke it: the Z-report tallied the money, the bin, the floor, the drawer and said nothing about what the guests said of it all.
+- Feature v5.260.0, THE CLOSE HEARS THE VOICE: (1) buildZReportText grows THE GUESTS · VOICE, seated after THE FLOOR · ROUNDS and before the drawer — count + avg on the row, the tone word CENTERED as the print's own stamp, the bell's number ('Low ratings (2 or less)') last, gated on the 030 trigger's own threshold (≤2) having actually rung; (2) the voice rides lib/verdict's guestVoice — the family's FOURTH speaker, no local fork; (3) THE SILENCE LAWS: verified empty → 'Ratings: none - quiet' (the floor's zero-language); never-read → NOTHING (the waste law; opts.guests undefined keeps every old byte — unit195/231's pins hold untouched); (4) the read: order_feedback day-scoped on the SAME istDayBounds, fail-soft by contract (refusal dims the block, never the close-out; day switch resets); (5) THE SUMMARY'S SIXTH CARD 'Guest voice' (grid lg:grid-cols-6) — the avg in the tone's own ink via StatCard's toneMap (loved #2E7D32, good #8A5A00, listen up #B3261E), the low ratings in the red whisper.
+- Gates: tsc EXIT=0 ×2 (pre-claim + final); battery unit194–299 ALL PASS (105 suites, PASS=105 FAIL=0; unit299 born 9/9); build EXIT=0 (46 assets, servepoint-v5.260.0-r1 baked).
+- E2E, REAL-EXECUTION PROOF (the tenant UI wall stays the carried owner item — the 295/296/297/298 precedent): qa299-close-voice imports the SHIPPED builder, derives the voice day with the SHIPPED appDayKey (THE ROUND'S OWN FIND: the family's verdict crossed IST midnight — 18:30:37 UTC = 00:00:37 IST — so the day is read from the ledger, never guessed), reads orders/payments/feedback for that day, and executes the builder: the real bytes printed — 'THE GUESTS · VOICE / Ratings 1 · avg 5.0 / guests love it (centered)' — #131's 5-star verdict (296) in the close's own register; the law cross-checked against the ledger's own arithmetic (5.00 = 5); silence and absence both exercised word-true. Guest-side regression live on #131: track page healthy, console 0 errors. Screenshot archived (scripts/qa299-track.png).
+- Parked (carried): variant/add-on recipe costing (the BIG one — migration 040+ with owner words); 038 birthdays (owner-gated); drawer movements CSV (only if asked); CounterInbox bulk "Ok all" (risky); guest QR "room favourite" badges (owner decision); DS showcase links (owner OK pending); storage folder silting; phone-key normalization (OWNER-GATED); offer time-windows (schema, owner); micro-chunk dieting; README docs siblings sweep (next DAILY); GST billed-toggle (owner word); a feedback notification for POSITIVE ratings (needs DDL — the low-rating bell has rung since 030); the Floor drill's session-keyed full-history view (needs the RPC); the Z's guests block on the STOCK day-report view if the owner wants it there too (the Z speaks it; the screen's day rail already has the card). Deliberately designed out (do not re-park): the full 287–299 list stands (chat→bell pings; KDS bump-back; reader-register clock; rolling 7d; counter stragglers; money-book/news/rail/working-surface/platform/porch caps; the pager's silent moment; the menu's dead end; the window/ending-soon words reaching the cart; the ticket's way back; the word reaching menu/kitchen/paper/bill/CRM/floor; the drill reading the evening; the WARM re-anchor; the close hearing the voice — THIS round).
+- Owner action items (carried): (1) delete orphaned drill auth user drill.owner@recoverydrill.in at next pooler session; (2) QR Flow owner password — BLOCKING tenant QA: supply, rotate, or reset via pooler; (3) 038 DDL one-command unblock in owner's hands; (4) apply 039_track_payload_whole.sql (prepared, verified, one command); (5) GST filing basis confirmation (collected-only posture); (6) rotate retired-project keys if that Supabase project still exists.
+- Crons: 15-min webDevReview (job 430321) + DAILY deep pass (job 431587, 09:00 IST — README route-grammar refresh DONE 2026-10-05; docs siblings sweep next).
+
+Stage Summary:
+- 5.260.0 — the close hears the voice: the Z-report speaks the day's ratings in the ONE tone law's own words, the summary strip carries the verdict's ink, and the verdict family's journey now ends where the owner ends the day.
+- Commit + push: feat aadb2a4, chore(qa) = this round's second commit, chore(worklog) = this commit. Push: ATTEMPTED (first per the standing instruction, and again post-commit) — failed honestly, no token (addendum below).
+
+---
+Task ID: 299-PUSH-ADDENDUM (same round, post-commit)
+Agent: glm-5.3
+Task: Record the round's push outcome honestly.
+
+Work Log:
+- Push ATTEMPTED this round (FIRST, per the standing instruction, before its own work; attempted AGAIN post-commit before this addendum): failed — "fatal: could not read Username for 'https://github.com': No such device or address". NO GitHub token in the round environment (0 GH_* matches, no credential files, no gh CLI, no helper).
+- State: the ride grows — Tasks 267–298's pairs, the sweeper's ce4f858, THIS round's feat + qa all sit LOCAL; origin/main remains edc84af. Ninety-four commits ride at this addendum's writing (92 at orientation + this round's feat and qa); the worklog commit below makes ninety-five.
+- Remote config untouched: nothing to scrub.
+- Standing instruction stands: the next token-bearing round pushes the whole pile FIRST, before its own work.
+
+Stage Summary:
+- Work committed and gated (battery 105/105, tsc ×2, build, the SHIPPED builder executed on the REAL ledger with the real verdict bytes) but NOT on origin — the push ran and failed for lack of credentials, not for lack of trying. The honesty rule holds: no push claimed that did not run.
