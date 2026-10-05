@@ -311,27 +311,28 @@ function windowLeft(
   return new Date(session.expires_at).getTime() - Date.now();
 }
 
-/** Session countdown ribbon — the ONLY 1s-ticking component on the page. It
- *  interpolates locally and re-anchors to the server's `remaining_seconds` on
- *  every 30s re-verify tick (5.216.0 — the field the RPC always sent and the
- *  app always threw away). The ended state is i18n'd like every other state
+/** Session countdown ribbon — pure renderer since 5.250.0. The ONE 1s tick
+ *  lives on the PAGE now (see msLeft there): the ribbon renders whatever
+ *  msLeft it is handed, and the ordering machinery speaks the SAME number —
+ *  one window arithmetic, never two (the 5.218 cross-screen law, finally
+ *  literal: the ribbon used to be the only 1s component, and the ONLY thing
+ *  that knew the window had died while the buttons below kept ordering).
+ *  It still re-anchors to the server's `remaining_seconds` on every 30s
+ *  re-verify tick (5.216.0 — the field the RPC always sent and the app
+ *  always threw away). The ended state is i18n'd like every other state
  *  (the dead window is exactly when a guest is most confused — English-only
  *  words there were a hole in the three-language promise), and the rescan
  *  hint is audible at EVERY width — `hidden sm:inline` hid the recovery
  *  sentence on the phones the ribbon exists for. */
 function SessionRibbon({
   session,
-  serverRemaining,
+  msLeft,
 }: {
   session: TableSession;
-  serverRemaining?: { at: number; seconds: number } | null;
+  msLeft: number | null;
 }): React.ReactElement {
   const { t } = useGuestLang();
-  const [msLeft, setMsLeft] = useState(() => windowLeft(session, serverRemaining));
-  useEffect(() => {
-    const t2 = window.setInterval(() => setMsLeft(windowLeft(session, serverRemaining)), 1000);
-    return () => window.clearInterval(t2);
-  }, [session.expires_at, serverRemaining]);
+  if (msLeft === null) return null as unknown as React.ReactElement;
   const totalSec = Math.max(0, Math.floor(msLeft / 1000));
   const ended = totalSec === 0;
   const warm = totalSec < 180 && !ended;
@@ -397,7 +398,7 @@ function DishPhoto({ url, alt, shape }: { url: string; alt: string; shape: 'thum
   );
 }
 
-function Customizer({ item, onAdd, locked }: { item: GuestMenuItem; onAdd: (l: Omit<CartLine, 'key'>) => void; locked?: boolean }): React.ReactElement {
+function Customizer({ item, onAdd, locked, lockedLabel }: { item: GuestMenuItem; onAdd: (l: Omit<CartLine, 'key'>) => void; locked?: boolean; lockedLabel?: string }): React.ReactElement {
   const { t } = useGuestLang();
   const [variantId, setVariantId] = useState<string | null>(null);
   const [addonIds, setAddonIds] = useState<string[]>([]);
@@ -516,7 +517,7 @@ function Customizer({ item, onAdd, locked }: { item: GuestMenuItem; onAdd: (l: O
           className="flex h-11 flex-1 items-center justify-center gap-2 rounded-full text-[13.5px] font-semibold text-white transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#B88E2F] disabled:cursor-not-allowed disabled:opacity-45"
           style={{ background: brand.teal }}
         >
-          <Plus size={15} aria-hidden /> {locked ? t('orderingPaused') : t('addToOrder', { amt: money(unit * qty) })}
+          <Plus size={15} aria-hidden /> {locked ? (lockedLabel ?? t('orderingPaused')) : t('addToOrder', { amt: money(unit * qty) })}
         </button>
       </div>
     </div>
@@ -566,6 +567,15 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
      interpolates from it. A fail-soft tick (ok without a number) leaves this
      untouched — silence from the network is never read as zero. */
   const [serverAnchor, setServerAnchor] = useState<{ at: number; seconds: number } | null>(null);
+  /* 5.250.0 — the window's word reaches the cart. msLeft is the page's OWN
+     state now: ONE 1s interval derives it (below), the ribbon renders it,
+     and — the round's point — the ordering machinery (addLine, the
+     customizer's lock, the drawer's place button) speaks the SAME number.
+     Before this round the ribbon went grey at zero while every button below
+     kept taking orders, and the guest's first word came from the SERVER'S
+     rejection at checkout — a full cart journey into a rescan dead end.
+     The cart is kept (sessionStorage) — the note says so, honestly. */
+  const [msLeft, setMsLeft] = useState<number | null>(() => (sessionToken ? windowLeft(sessionToken, serverAnchor) : null));
   const [lines, setLines] = useState<CartLine[]>(() => {
     try {
       const raw = sessionStorage.getItem(CART_KEY(qrToken));
@@ -694,6 +704,19 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
     [qrToken],
   );
 
+  // 5.250.0 — the page's ONE 1s tick: windowLeft is the same single
+  // arithmetic the ribbon always used (one window arithmetic, never two),
+  // now derived at the page render boundary so the drawer and the grid
+  // re-derive every second too. A server anchor that says the window lives
+  // again (a drifted phone clock) re-arms EVERYTHING — buttons included —
+  // within one second; the word appears AND leaves.
+  useEffect(() => {
+    if (phase !== 'ready' || !sessionToken) return;
+    setMsLeft(windowLeft(sessionToken, serverAnchor));
+    const t1 = window.setInterval(() => setMsLeft(windowLeft(sessionToken, serverAnchor)), 1000);
+    return () => window.clearInterval(t1);
+  }, [phase, sessionToken, serverAnchor]);
+
   // Session re-verify (v5.24.0, migration 023) — the server, not this phone's
   // clock, decides whether the window is still open. A staff cut from the
   // floor locks the menu within one 30s tick; a network hiccup never locks a
@@ -714,9 +737,14 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
     return () => window.clearInterval(iv);
   }, [phase, sessionToken, lockGuest]);
 
+  // 5.250.0 — the ordering machinery speaks the window: a dead window accepts
+  // nothing, the same law the ribbon already rendered. The server's verdict
+  // at checkout stays byte-true as the hard stop — this is the courtesy that
+  // saves the cart journey, not a replacement of the server's word.
+  const windowEnded = msLeft !== null && msLeft <= 0;
   const addLine = useCallback(
     (l: Omit<CartLine, 'key'>) => {
-      if (phase !== 'ready') return; // locked windows accept nothing (v5.24.0)
+      if (phase !== 'ready' || windowEnded) return; // locked windows accept nothing (v5.24.0); dead windows neither (5.250.0)
       setLines((prev) => {
         const key = lineKey(l.item.id, l.variant?.id || null, l.addons.map((a) => a.id), l.notes);
         const idx = prev.findIndex((x) => x.key === key);
@@ -735,7 +763,7 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
         return next;
       });
     },
-    [phase],
+    [phase, windowEnded],
   );
 
   /* Café logo (migration 024): the owner-set URL rides the menu payload. A
@@ -905,7 +933,7 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
 
   return (
     <div className="flex min-h-screen flex-col bg-[#F6F5F2]">
-      {sessionToken && <SessionRibbon session={sessionToken} serverRemaining={serverAnchor} />}
+      {sessionToken && <SessionRibbon session={sessionToken} msLeft={msLeft} />}
 
       {/* brand hero */}
       <header className="px-4 pb-4 pt-6" style={{ background: `linear-gradient(160deg, ${brand.teal} 0%, #14514f 100%)` }}>
@@ -1175,7 +1203,7 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
                     </button>
                     {open && (
                       <div className="px-4 pb-4">
-                        <Customizer item={item} onAdd={addLine} locked={phase !== 'ready'} />
+                        <Customizer item={item} onAdd={addLine} locked={phase !== 'ready' || windowEnded} lockedLabel={windowEnded ? t('windowEndedCta') : undefined} />
                       </div>
                     )}
                   </div>
@@ -1407,17 +1435,29 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
                     {placeError}
                   </p>
                 )}
+                {/* 5.250.0 — the window's word INSIDE the drawer: the guest is
+                    looking here when the clock hits zero, so the word is
+                    spoken HERE, in the straggler amber (off-stage work
+                    waiting for the rescan — the ledger's waiting language,
+                    now the cart's too). role="status" so the appearance AND
+                    the recovery (a server anchor that re-arms the window)
+                    are both announced. */}
+                {windowEnded && (
+                  <p role="status" className="mt-3 rounded-xl border border-[#F0E4C8] border-l-4 border-l-[#B45309] bg-[#FBF6EA] px-3 py-2 text-[12.5px] font-medium text-[#8A5A00]">
+                    {t('windowEndedNote')}
+                  </p>
+                )}
                 <p className="mt-2 flex items-center gap-1.5 text-[11.5px] text-[#6B6B6B]">
                   <Wallet size={13} aria-hidden /> {t('payNote')}
                 </p>
                 <button
                   type="button"
                   onClick={() => void placeOrder()}
-                  disabled={placing}
+                  disabled={placing || windowEnded}
                   className="mt-3 flex h-12 w-full items-center justify-center gap-2 rounded-full text-[14px] font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#B88E2F]"
                   style={{ background: brand.teal }}
                 >
-                  {placing ? t('sending') : t('placeOrder', { amt: money(cartTotal) })}
+                  {placing ? t('sending') : windowEnded ? t('windowEndedCta') : t('placeOrder', { amt: money(cartTotal) })}
                 </button>
               </div>
             )}

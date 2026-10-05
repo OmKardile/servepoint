@@ -93,13 +93,26 @@ assert.ok(
 );
 ok('windowLeft: no anchor → the legacy expires_at − now path');
 
-// The ribbon's useState and its interval BOTH compute from windowLeft —
-// the anchor applies at birth and at every tick, never a second clock.
-const ribbonBody = guestPages.slice(guestPages.indexOf('function SessionRibbon'), guestPages.indexOf('function DishPhoto'));
+// 5.250.0 — the ONE 1s tick moved to the PAGE (the ribbon is a pure
+// renderer now). windowLeft's "never a second clock" law moved WITH it, in
+// its new shape: every msLeft computation site rides windowLeft — the
+// initializer (birth), the effect's immediate re-derive (a fresh anchor
+// lands in 0ms, not 1s), and the 1s interval — and NOTHING else computes
+// time. Same law, honest re-anchor (the unit241 lesson: the rider changed,
+// the law didn't).
+const ribbonBody = guestPages.slice(guestPages.indexOf('function SessionRibbon'), guestPages.indexOf('function Customizer('));
 assert.ok(ribbonBody.length > 400, 'ribbon slice resolved');
-assert.equal(ribbonBody.split('windowLeft(session, serverRemaining)').length - 1, 2,
-  'ribbon computes from windowLeft exactly twice (initial + tick)');
-ok('ribbon: windowLeft is the ONLY clock (initial state + 1s tick)');
+assert.ok(!ribbonBody.includes('windowLeft('), 'the ribbon computes NOTHING — it renders the msLeft it is handed');
+const pageBody = guestPages.slice(guestPages.indexOf('const [resolved, setResolved]'));
+assert.equal(pageBody.split('windowLeft(').length - 1, 3,
+  'windowLeft has exactly THREE sites on the page: initializer + immediate re-derive + interval');
+assert.ok(pageBody.includes('const [msLeft, setMsLeft] = useState<number | null>(() => (sessionToken ? windowLeft(sessionToken, serverAnchor) : null));'),
+  'the initializer computes from windowLeft at birth');
+assert.ok(pageBody.includes('setMsLeft(windowLeft(sessionToken, serverAnchor));'),
+  'a fresh anchor re-derives immediately (0ms, not 1s)');
+assert.ok(pageBody.includes('window.setInterval(() => setMsLeft(windowLeft(sessionToken, serverAnchor)), 1000);'),
+  'the interval is the page\u2019s only timer');
+ok('windowLeft is the ONLY clock (initializer + immediate re-derive + interval — 5.250.0\u2019s honest re-anchor)');
 
 /* ── 3. The tick writes the anchor — only a finite verdict does ── */
 
@@ -120,21 +133,30 @@ assert.ok(!guestPages.includes('setServerAnchor(r.remainingSeconds ?? null),'), 
 assert.ok(!guestPages.includes('setServerAnchor(null);'), 'no unconditional anchor reset in the tick path');
 ok('tick: fail-soft silence leaves the last anchor standing');
 
-// The anchor rides the render — the ribbon hears the server through props.
+// 5.250.0 — the anchor rides the TICK now: serverAnchor feeds the page's
+// windowLeft sites, msLeft carries the verdict to the ribbon AND the
+// ordering machinery. One thread, three listeners.
 assert.ok(
-  guestPages.includes('<SessionRibbon session={sessionToken} serverRemaining={serverAnchor} />'),
-  'the anchor threads to the ribbon',
+  guestPages.includes('const t1 = window.setInterval(() => setMsLeft(windowLeft(sessionToken, serverAnchor)), 1000);'),
+  'the anchor threads to the tick (the freshest verdict wins within one second)',
 );
-ok('ribbon receives serverRemaining={serverAnchor}');
+assert.ok(
+  guestPages.includes('{sessionToken && <SessionRibbon session={sessionToken} msLeft={msLeft} />}'),
+  'the verdict rides msLeft to the ribbon',
+);
+ok('the anchor threads: serverAnchor → windowLeft → msLeft → ribbon + buttons');
 
-/* ── 4. The ribbon stays the ONLY 1s-ticking component, cleanup intact ── */
+/* ── 4. The page stays the ONLY 1s-ticking surface, cleanup intact ── */
 
-assert.ok(guestPages.includes("}, [session.expires_at, serverRemaining]);"),
-  'the interval re-arms when the anchor moves (the freshest verdict wins)');
-const ribbonInterval = ribbonBody.match(/window\.setInterval/g) || [];
-assert.equal(ribbonInterval.length, 1, 'exactly one interval in the ribbon');
-assert.ok(ribbonBody.includes('window.clearInterval(t2)'), 'the ribbon interval cleans up');
-ok('ribbon: one 1s interval, cleanup intact, re-arms on a fresh anchor');
+// 5.250.0's honest re-anchor: the ONE 1s tick lives on the menu PAGE (the
+// ribbon renders its number). The "exactly one ticker" law is literal: one
+// 1s interval on the menu page, cleanup intact, re-arms on a fresh anchor.
+const menuBody = guestPages.slice(guestPages.indexOf('const [resolved, setResolved]'), guestPages.indexOf('3 · TRACK'));
+const menu1s = menuBody.match(/window\.setInterval\(\(\) => setMsLeft/g) || [];
+assert.equal(menu1s.length, 1, 'exactly ONE 1s interval on the menu page (the ONE-tick law)');
+assert.ok(menuBody.includes('return () => window.clearInterval(t1);'), 'the page tick cleans up');
+assert.ok(menuBody.includes('[phase, sessionToken, serverAnchor]'), 'the tick re-arms when the anchor moves (the freshest verdict wins)');
+ok('menu page: one 1s tick, cleanup intact, re-arms on a fresh anchor');
 
 const tickInterval = guestPages.match(/window\.setInterval\(\(\) => \{\s*void verifyTableSession/g) || [];
 assert.equal(tickInterval.length, 1, 'the re-verify tick is the only 30s interval');

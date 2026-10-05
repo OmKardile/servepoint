@@ -44,6 +44,11 @@ const EN: Dict = {
   ariaEnds: 'Ordering session ends in {t}',
   windowEnded: 'Window ended — ',
   windowEndedHint: 'scan the table QR to continue',
+  // 5.250.0 — the window's word reaches the cart: the drawer's button and its
+  // amber note speak the same cause the ribbon does (a dead clock is a
+  // different cause from a staff cut — different words, honest ones).
+  windowEndedCta: 'Window ended',
+  windowEndedNote: 'The ordering window has ended — your cart is kept. Rescan the table QR to order again.',
   // menu header
   tablesideMenu: 'Tableside menu',
   tableLine: 'Table {n} · {s} seats — scan to order, pay at the counter',
@@ -184,6 +189,8 @@ const HI: Dict = {
   ariaEnds: 'ऑर्डरिंग सेशन {t} में समाप्त',
   windowEnded: 'अवधि समाप्त — ',
   windowEndedHint: 'जारी रखने के लिए टेबल QR स्कैन करें',
+  windowEndedCta: 'अवधि समाप्त',
+  windowEndedNote: 'ऑर्डरिंग की अवधि समाप्त हो गई है — आपकी ट्रे सुरक्षित है। दोबारा ऑर्डर करने के लिए टेबल QR स्कैन करें।',
   tablesideMenu: 'टेबल मेन्यू',
   tableLine: 'टेबल {n} · {s} सीटें — स्कैन करके ऑर्डर करें, काउंटर पर भुगतान करें',
   backToCheckin: 'टेबल चेक-इन पर वापस',
@@ -318,6 +325,8 @@ const KN: Dict = {
   ariaEnds: 'ಆರ್ಡರ್ ಸೆಷನ್ {t} ನಲ್ಲಿ ಮುಕ್ತಾಯ',
   windowEnded: 'ಅವಧಿ ಮುಕ್ತಾಯ — ',
   windowEndedHint: 'ಮುಂದುವರಿಯಲು ಟೇಬಲ್ QR ಸ್ಕ್ಯಾನ್ ಮಾಡಿ',
+  windowEndedCta: 'ಅವಧಿ ಮುಕ್ತಾಯ',
+  windowEndedNote: 'ಆರ್ಡರಿಂಗ್ ಅವಧಿ ಮುಕ್ತಾಯವಾಗಿದೆ — ನಿಮ್ಮ ಬುಟ್ಟಿ ಉಳಿದಿದೆ. ಮತ್ತೆ ಆರ್ಡರ್ ಮಾಡಲು ಟೇಬಲ್ QR ಸ್ಕ್ಯಾನ್ ಮಾಡಿ.',
   tablesideMenu: 'ಟೇಬಲ್ ಮೆನು',
   tableLine: 'ಟೇಬಲ್ {n} · {s} ಆಸನಗಳು — ಸ್ಕ್ಯಾನ್ ಮಾಡಿ ಆರ್ಡರ್ ಮಾಡಿ, ಕೌಂಟರ್‌ನಲ್ಲಿ ಪಾವತಿಸಿ',
   backToCheckin: 'ಟೇಬಲ್ ಚೆಕ್-ಇನ್‌ಗೆ ಹಿಂತಿರುಗಿ',
