@@ -7,6 +7,7 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  CircleAlert,
   Clock,
   Coins,
   Copy,
@@ -45,6 +46,7 @@ import {
   type WasteMove,
 } from '../../lib/api';
 import { formatMoney, subscribePrefs } from '../../lib/prefs';
+import { guestVoice } from '../../lib/verdict';
 import {
   appTimezone,
   appTodayIso,
@@ -324,6 +326,14 @@ interface ZReportOpts {
   /** v5.83.0 — the close sees the floor: the day's rounds, computed from
    *  the SAME day orders the Z already counts (no extra read to trust). */
   floor?: { rounds: number; rupees: number; busiest: string | null; noShows: number | null; wentQuiet: number | null } | null;
+  /** v5.260.0 — the close hears the voice: the day's ratings through the ONE
+   *  tone law (lib/verdict's guestVoice — the family's fourth speaker after
+   *  the dashboard card, the bill row and the CRM drawer). Undefined = the
+   *  read never landed (the waste law — the block stays off; the Z never
+   *  claims a quiet day it didn't verify). count 0 speaks the floor's own
+   *  silence word; low counts the bell's own number (ratings the bell rang
+   *  for — 2 or below). */
+  guests?: { count: number; avg: number; word: string; low: number } | null;
 }
 
 /* v5.180.0 — the day's shifts: the Z's drawer block speaks EVERY shift the
@@ -614,6 +624,23 @@ export function buildZReportText(opts: ZReportOpts): string {
       out.push(two('No-shows', `${opts.floor.noShows} booking${opts.floor.noShows === 1 ? '' : 's'}`));
     if (opts.floor.wentQuiet && opts.floor.wentQuiet > 0)
       out.push(two('Went quiet', `${opts.floor.wentQuiet} promise${opts.floor.wentQuiet === 1 ? '' : 's'} still booked`));
+  }
+  if (opts.guests) {
+    /* v5.260.0 — the close hears the voice: the day's ratings through the
+       ONE tone law (guestVoice — the dashboard card's own thresholds and
+       words; the family's fourth speaker). The silence keeps the floor's
+       own zero-language ('none - quiet'); a voiced day speaks count + avg
+       on the row and the tone word CENTERED below — the print's own stamp.
+       The bell's number (2 or below) rides last, only when it rang. */
+    out.push(hr);
+    out.push('THE GUESTS · VOICE');
+    out.push(
+      opts.guests.count === 0
+        ? 'Ratings: none - quiet'
+        : two('Ratings', `${opts.guests.count} · avg ${opts.guests.avg.toFixed(1)}`),
+    );
+    if (opts.guests.word) out.push(center(opts.guests.word));
+    if (opts.guests.low > 0) out.push(two('Low ratings (2 or less)', String(opts.guests.low)));
   }
   if (opts.drawer) {
     out.push(hr);
@@ -1180,6 +1207,12 @@ const EodScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
   }, []);
   const [orders, setOrders] = useState<DayOrder[]>([]);
   const [payments, setPayments] = useState<DayPayment[]>([]);
+  /* v5.260.0 — the day's voice, in the load's own hand: null = the read never
+   * landed (the Z's waste law — the block stays off, the Z never claims a
+   * quiet day it didn't verify); [] = the read landed and the day held none.
+   * The rows carry only what the voice needs (rating) — the ONE tone law in
+   * lib/verdict does the talking. */
+  const [voiceRows, setVoiceRows] = useState<{ rating: number }[] | null>(null);
   const [cogsRows, setCogsRows] = useState<DayCogs[]>([]);
   const [sectionRows, setSectionRows] = useState<DaySectionRow[]>([]);
   /** The day's bin (v5.79.0): null = not read yet, [] = the shelf's honest
@@ -1221,9 +1254,10 @@ const EodScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
     if (!tenantId) return;
     setLoading(true);
     setError(null);
+    setVoiceRows(null); // a day switch never shows yesterday's voice while loading
     try {
       const { startIso, endIso } = istDayBounds(dateIso);
-      const [oRes, pRes, cRes] = await Promise.all([
+      const [oRes, pRes, cRes, vRes] = await Promise.all([
         supabase
           .from('orders')
           .select(
@@ -1245,9 +1279,23 @@ const EodScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
         fetchOrderCogs(tenantId).then((m) =>
           [...m.entries()].map(([order_id, cogs]) => ({ order_id, cogs })),
         ),
+        /* v5.260.0 — the day's voice rides the SAME load cycle and the SAME
+         * day bounds (istDayBounds — one day, one bounds, never a second
+         * window). Fail-soft by contract: the read landing is the BLOCK's
+         * business, never the screen's error — a voice that cannot be
+         * verified is a block that stays off (the waste law). */
+        supabase
+          .from('order_feedback')
+          .select('rating')
+          .eq('tenant_id', tenantId)
+          .gte('created_at', startIso)
+          .lt('created_at', endIso),
       ]);
       if (oRes.error) throw oRes.error;
       if (pRes.error) throw pRes.error;
+      /* the voice read answers for itself — a refusal here dims the block,
+       * never the close-out (the screen's try/catch is for the money reads) */
+      setVoiceRows(vRes.error ? null : ((vRes.data || []) as { rating: number }[]));
       // v5.83.0 — the table embed resolves table_id → table_number in the SAME
       // read (the fetchOrders boundary pattern); the floor strip names tables,
       // never raw uuids.
@@ -1624,6 +1672,24 @@ const EodScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
     };
   }, [orders]);
 
+  /* v5.260.0 — the day's voice, in the family's own arithmetic: guestVoice
+   * (lib/verdict) does the counting and the tone — no local fork of the ONE
+   * law. null stays null (the read never landed — no card, no block); an
+   * honest zero becomes count 0 so the summary card and the Z can speak
+   * the floor's own silence word. low is the bell's own number: the
+   * ratings the 030 trigger rang for (2 or below). */
+  const voice = useMemo(() => {
+    if (voiceRows === null) return null;
+    const v = guestVoice(voiceRows);
+    return {
+      count: voiceRows.length,
+      avg: v ? v.avg : 0,
+      word: v ? v.tone.word : '',
+      tone: v ? v.tone : null,
+      low: voiceRows.filter((r) => Number(r.rating) <= 2).length,
+    };
+  }, [voiceRows]);
+
   /* right-now strip (today) */
   const now = useMemo(() => {
     /* v5.230.0 — ONE SET, NO FORK (the 5.196 law, Close-out edition): the
@@ -1727,6 +1793,15 @@ const EodScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
         noShows: noShowDay,
         wentQuiet: quietDay,
       },
+      guests:
+        voice === null
+          ? undefined
+          : {
+              count: voice.count,
+              avg: voice.count > 0 ? Math.round(voice.avg * 10) / 10 : 0,
+              word: voice.word,
+              low: voice.low,
+            },
     };
   };
   const printReport = () => {
@@ -2078,15 +2153,15 @@ const EodScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
       ) : null}
 
       {loading && orders.length === 0 ? (
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
-          {[0, 1, 2, 3, 4].map((i) => (
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
+          {[0, 1, 2, 3, 4, 5].map((i) => (
             <div key={i} className="h-[86px] animate-pulse rounded-2xl border border-[#E3E7E0] bg-white" />
           ))}
         </div>
       ) : (
         <>
           {/* ── day summary ── */}
-          <section aria-label="Day summary" className="grid grid-cols-2 gap-3 md:grid-cols-5">
+          <section aria-label="Day summary" className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
             <StatCard
               label="Orders"
               value={String(agg.live.length)}
@@ -2128,6 +2203,38 @@ const EodScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
               }
             />
             <StatCard label="Avg ticket" value={formatMoney(agg.avg)} sub="gross ÷ orders" />
+            {voice && (
+              /* v5.260.0 — the close hears the voice: the summary's sixth card
+                 speaks the day's verdict through the ONE tone law — the
+                 value wears the tone's own ink (StatCard's toneMap carries
+                 the family's exact hexes: loved #2E7D32, good #8A5A00,
+                 listen up #B3261E), the sub the count and the word, and the
+                 bell's own number rides the whisper when it rang (2 or
+                 below — fn_notify_low_rating's line). Unread (null) renders
+                 no card — the close never claims a quiet day it didn't
+                 verify; an honest zero shows '—' with 'no ratings today'. */
+              <StatCard
+                label="Guest voice"
+                value={voice.count > 0 ? voice.avg.toFixed(1) : '—'}
+                tone={voice.count === 0 ? 'teal' : voice.tone!.color === '#2E7D32' ? 'green' : voice.tone!.color === '#8A5A00' ? 'gold' : 'red'}
+                sub={
+                  voice.count > 0
+                    ? `${voice.count} rating${voice.count === 1 ? '' : 's'} · ${voice.word}`
+                    : 'no ratings today'
+                }
+                whisper={
+                  voice.low > 0 ? (
+                    <span
+                      className="inline-flex items-center gap-1 text-[10.5px] font-bold text-[#B3261E]"
+                      title="Ratings of 2 stars or below — the notifications bell rang for each of these today"
+                    >
+                      <CircleAlert size={11} aria-hidden />
+                      {voice.low} rated 2★ or below — worth a call-back
+                    </span>
+                  ) : undefined
+                }
+              />
+            )}
           </section>
 
           {/* ── cost & margin: what the shelf burned vs what the cafe keeps ── */}
