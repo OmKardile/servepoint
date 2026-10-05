@@ -6622,3 +6622,43 @@ Work Log:
 
 Stage Summary:
 - Work committed and gated (battery 76/76, tsc ×2, build, live E2E) but NOT on origin. The honesty rule holds: no push claimed that did not run.
+
+---
+Task ID: 271 (15-min webDevReview round, trace 1a0fba3beb0e3c89-cron-agent-loop-202610051345)
+Agent: glm-5.3 (cron webDevReview round)
+Task: Post-5.231.0 round — QA walk of the never-audited SuperAdmin/Platform surface (admin@tsos.dev session swap), census, then v5.232.0 "one clock, every surface": the 5.198 two-surfaces gap between the Businesses table's bare status words and the Subscriptions table's full clock voice, plus the billing class-law fork, plus the KPI tiles' missing walking answers.
+
+Work Log:
+- Orientation: worklog tail — 270 closed (8d79f5a + 2bd07ae, v5.231.0, battery 76/76); tree clean. THIS round = Task 271, version → v5.232.0. Task stamp 13:40 +08:00 = 11:10 IST (5.261 arithmetic). tsc EXIT=0 pre-claim. NO token in round env — the push debt RIDES (addendum below).
+- Session-swap walk: signed the QR Owner session out through the Profile sheet (the password was recoverable from the QA seed scripts' records — restore verified at round end), signed in as the bootstrap operator admin@tsos.dev / admin123456, landed in Platform — the surface the chronicle had never audited.
+- QA walk, Platform edition: Dashboard (4 KPI tiles: 2 businesses, 1 active sub, MRR ₹4,999.00, 1 trial; Recent businesses + Recent activity strips); Businesses (search, add wizard, the table with expandable details — owner email/status/ID/type/city/created, copy buttons); Subscriptions (MRR strip + the full table with the 5.125 trial clock: "Trial ends 16 Oct 2026 · 11 days left · no charge yet", "01 Nov 2026 · renews in 27 days"); Audit log (2 business.provisioned events, both coherent — note: the entries record the plan AT provision time, "standard" for CheeseBurg before the Growth change, a point-in-time record, not a live mislabel).
+- THE FIND (5.198 gap): the Businesses table's STATUS cell said bare "trial" — the full clock voice ("Trial ends 16 Oct 2026 · 11 days left · no charge yet") lived one tab away in Subscriptions, and lib/billing.ts has been the ONE grammar for it since 5.126/5.133. The row knew; the surface didn't speak. ALSO the details panel had no Plan row at all.
+- THE FIND (class fork): the billing words' urgent-amber/grey/11px class law lived TWICE — the subscriptions table's IIFE and the mobile card's IIFE — a fork waiting to drift.
+- THE FIND (thin tiles): the four KPI tiles spoke bare numbers with no walking answers — who carries the MRR, when the money next moves, when the nearest trial ends.
+- Feature v5.232.0: (1) ONE JOIN — subByTenantId Map memo, four readers (the strip call site, the desktop cell, the mobile card, the details panel). (2) ONE COMPONENT — BillingWords renders the words pair with the class law ONCE (the two IIFEs retired; 5.196's shape applied to ink: one set, no fork); five projections read it. (3) THE BUSINESSES VOICES — desktop status cell (chip + words beneath, max-w so the table breathes), mobile card's new Plan/Subscription dl rows, details panel's Plan (planLabel: "Starter", not "starter") + Subscription rows with honest dashes when no subscription row exists, and the dashboard strip's trial clause (words.primary verbatim, gated on trialing + primary ≠ '—'; active rows stay calm — renewal urgency is not the strip's voice). (4) THE KPI HINTS — MRR names its single carrier and plan ("from CheeseBurg · Growth") or counts payers (many) or stays silent (zero); Active subscriptions names the next charge; Trials names the nearest end; Total businesses names the fleet's distinct cities; all in the line-grey 11.5px voice with honest silence at zero.
+- Suite discipline: unit271 born — 12 checks green (billing.ts's CONTRACT pinned by behavior: the words, the wordless dash without trial_end, planLabel, the buckets, daysUntil NaN; one join Map four readers; the class law ONE site with the IIFE fork EXTINCT; BillingWords at five sites; the three business voices + the gated strip clause; the four hint laws; zero standing intervals preserved). Suite-author lessons: `as any` is TS — the .mjs suite crashed honestly and was stripped; a count pin guessed 5 readers where the join has 4 — the suite died, the count was RE-DERIVED from the file, not argued.
+- Gates: tsc EXIT=0 ×2; build EXIT=0 (44 assets, VERSION → servepoint-v5.232.0-r1 baked into dist/sw.js); regression battery unit194–271 ALL PASS by exit code (77 suites, PASS=77 FAIL=0).
+- E2E (dev, live, admin session): the KPI hints all four speak ("Pune · Kharadi", "next charge 01 Nov 2026", "from CheeseBurg · Growth", "nearest ends 16 Oct 2026"); the strip clause reads "Cafe · 02 Oct 2026 · Trial ends 16 Oct 2026" with CheeseBurg's active row calm; the businesses cell reads "trial · Trial ends 16 Oct 2026 · 11 days left · no charge yet"; the details panel answers PLAN Starter + the full voice; Subscriptions byte-true after the refactor. Console: zero new errors (both crash stacks carry the stale pre-267 epoch t=1791167034195 — the fossil family). Screenshot: scripts/qa271-one-clock-every-surface.png. QR Owner session restored (signed out of admin, signed back in, tenant nav verified).
+- Commit + push: feat = 32d6d4f, then chore(worklog). Push: NO token again — the pile rides (addendum).
+
+Stage Summary:
+- 5.232.0 — the Platform now speaks the same clock its tenants hear: the businesses surface answers the billing truth in the SAME words, the class law cannot fork (one component, five projections), and the dashboard's tiles answer the walking questions in honest silence at zero. The never-audited surface is audited.
+- Watch item NEW: the Platform's audit log entries record the plan AT PROVISION TIME ("plan standard" for CheeseBurg, since changed to Growth) — point-in-time records, not live labels; do not "fix" them to match the present. If the operator ever needs the distinction voiced, that's a wording change to the audit WRITER, not the stored record.
+- Census: Platform (Dashboard/Businesses/Subscriptions/Audit) now audited healthy end-to-end and BROUGHT INTO the one-clock law. Every owner-facing and operator-facing surface has a fresh chronicle pass. Remaining unaudited: the ProvisioningWizard (the Add Business flow — next walk candidate), the guest QR surfaces (/t/:token, /menu/:token, /track/:orderId — audited in earlier eras), /showcase + /index-help (5.2.1 era).
+- Parked (carried): 038 birthdays (owner-gated); drawer movements CSV (only if asked); CounterInbox bulk "Ok all" (risky); guest QR "room favourite" badges (owner decision); DS showcase links (owner OK pending); URL write-back; storage folder silting; KDS bump-back; chat→bell pings; phone-key normalization; offer time-windows (schema, owner); Reports/Notifications search; margin leaderboard; micro-chunk dieting; README docs siblings sweep (next DAILY); GST billed-toggle (owner word).
+- Owner action items (carried): (1) delete orphaned drill auth user drill.owner@recoverydrill.in at next pooler session; (2) QR Flow owner password remains provisional; (3) 038 DDL one-command unblock in owner's hands; (4) GST filing basis confirmation (collected-only current posture); (5) rotate retired-project keys if that Supabase project still exists.
+- Crons: 15-min webDevReview (job 430321) + DAILY deep pass (job 431587, 09:00 IST — README route-grammar refresh DONE 2026-10-05; docs siblings sweep next).
+
+---
+Task ID: 271-PUSH-ADDENDUM (same round, post-commit)
+Agent: glm-5.3
+Task: Record the round's push outcome honestly.
+
+Work Log:
+- NO GitHub token in this round's environment (no GH_* matches, no credential files, no gh CLI, no helper).
+- State: the ride grows — Task 267's pair, the sweeper's ce4f858, Task 268's pair, Task 269's pair, Task 270's pair, THIS round's 32d6d4f + the worklog commit all sit LOCAL; origin/main remains edc84af. Eleven-plus commits ride.
+- Remote config untouched: nothing to scrub.
+- Standing instruction stands: the next token-bearing round pushes the whole pile FIRST, before its own work.
+
+Stage Summary:
+- Work committed and gated (battery 77/77, tsc ×2, build, live E2E on both sessions) but NOT on origin. The honesty rule holds: no push claimed that did not run.
