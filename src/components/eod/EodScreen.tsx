@@ -54,6 +54,7 @@ import {
   appTzTag,
 } from '../../lib/appday';
 import { daySpan, dayTime } from '../../lib/day';
+import { isOnRail } from '../kitchen/KitchenScreen';
 import { printHiddenFrame } from '../../lib/printFrame';
 import { downloadCsv } from '../../lib/csv';
 import { useDialogA11y } from '../../lib/useDialogA11y';
@@ -1195,6 +1196,13 @@ const EodScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
    * words saying they count different days. The census is one bounded count,
    * fail-soft: a hiccup silences the whisper, never the day's book. */
   const [olderUnpaid, setOlderUnpaid] = useState(0);
+  /* v5.230.0 — the stranded census (the Dashboard's own staleKitchen
+   * register, 5.89): rail-active tickets whose day is GONE — stuck on the
+   * board before today's book began. The closing checklist was blind to
+   * them: an owner read "0 tickets" and walked away while stranded work
+   * waited in Bills (the room that can still act). Fail-soft the
+   * olderUnpaid way: a failed read is silence, never an invented strand. */
+  const [staleKitchen, setStaleKitchen] = useState(0);
 
   /* ── cash drawer (020) ── */
   const [drawerActive, setDrawerActive] = useState<DrawerSession | null>(null);
@@ -1290,8 +1298,26 @@ const EodScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
         } catch {
           setOlderUnpaid(0);
         }
+        /* v5.230.0 — the stranded census: isOnRail's own three stages
+         * (pending/preparing/ready — the wire carries the set the rail
+         * answers to; `new` is the counter inbox's voice, `cancelled` is
+         * done), created before today's start. The Dashboard's
+         * staleKitchen counts the same population from its own read —
+         * two surfaces, one register (5.198). */
+        try {
+          const r = await supabase
+            .from('orders')
+            .select('id', { count: 'exact', head: true })
+            .eq('tenant_id', tenantId)
+            .lt('created_at', startIso)
+            .in('status', ['pending', 'preparing', 'ready']);
+          setStaleKitchen(r.error ? 0 : (r.count ?? 0));
+        } catch {
+          setStaleKitchen(0);
+        }
       } else {
         setOlderUnpaid(0);
+        setStaleKitchen(0);
       }
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Could not load the day.');
@@ -1595,7 +1621,15 @@ const EodScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
 
   /* right-now strip (today) */
   const now = useMemo(() => {
-    const inKitchen = orders.filter((o) => ['pending', 'preparing'].includes(o.status)).length;
+    /* v5.230.0 — ONE SET, NO FORK (the 5.196 law, Close-out edition): the
+     * tile counted only ['pending','preparing'] while the rail's own
+     * answer is isOnRail's THREE stages — a ticket waiting on the pass
+     * (ready) was invisible on the closing checklist: the owner closed
+     * thinking the board was clear while cooked food sat unserved. The
+     * Dashboard's kitchen card already read isOnRail (5.196's own fix);
+     * this tile now quotes the same register — two surfaces, one set,
+     * one number. */
+    const inKitchen = orders.filter((o) => isOnRail(String(o.status))).length;
     const latePrep = orders.filter((o) => {
       if (o.status !== 'preparing') return false;
       return Date.now() - new Date(o.created_at).getTime() >= LATE_PREP_MIN * 60000;
@@ -1879,14 +1913,38 @@ const EodScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
               <p className="text-[16px] font-extrabold leading-tight tabular-nums text-[#0F3D3E]">
                 {now.inKitchen} {now.inKitchen === 1 ? 'ticket' : 'tickets'}
               </p>
+              {/* v5.230.0 — the stranded whisper (the unpaid tile's own
+               * grammar — one whisper voice per strip): the board can be
+               * clear of TODAY's work while older tickets still wait off
+               * today's book. The Dashboard names them; the closing
+               * checklist names them too. */}
+              {staleKitchen > 0 && (
+                <p className="mt-0.5 flex items-center gap-1 text-[10.5px] font-semibold text-[#8A5A00]">
+                  <History size={11} aria-hidden />
+                  {staleKitchen} older stuck {staleKitchen === 1 ? 'ticket' : 'tickets'} off today's board — see Bills
+                </p>
+              )}
             </div>
-            {now.inKitchen > 0 && (
+            {/* v5.230.0 — the door follows the truth (the 5.89/5.185
+             * doctrine, closing-checklist edition): the Kitchen when the
+             * board holds today's work, Bills when only the ghosts remain
+             * — an "Open Kitchen — 0 tickets" door walks the owner to an
+             * empty board while the stranded tickets it counted wait in
+             * Bills' ghost view ('stuck' — the one population the census
+             * above and isGhostTicket both answer). */}
+            {now.inKitchen > 0 ? (
               <LiveDoorChip
                 label="Kitchen"
                 aria={`Open Kitchen — ${now.inKitchen} ${now.inKitchen === 1 ? 'ticket is' : 'tickets are'} on the board right now`}
                 onOpen={() => goSection('kitchen', ['Close-out', 'Kitchen'])}
               />
-            )}
+            ) : staleKitchen > 0 ? (
+              <LiveDoorChip
+                label="Bills"
+                aria={`Open Bills — ${staleKitchen} older ${staleKitchen === 1 ? 'ticket waits' : 'tickets wait'} off today's board`}
+                onOpen={() => goSection('bills', ['Close-out', 'Bills'], 'stuck')}
+              />
+            ) : null}
           </div>
           <div className="flex min-w-[150px] flex-1 items-center gap-3">
             <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#FFF4DB] text-[#8A5A00]">
