@@ -188,31 +188,36 @@ export async function fetchOpenOrders(tenantId: string): Promise<Order[]> {
 }
 
 /**
- * v5.243.0 — the news census answers to the whole book: a server HEAD-COUNT
- * of the stragglers — `new` tickets from BEFORE the app's today — wherever
- * they sit in the ledger, uncapped. The census (the Dashboard's "stuck off
- * today's inbox" whisper, the counter's own straggler band) used to ride two
- * differently-capped page reads (the Dashboard's 200, the counter's 100):
- * the day a `new` ticket slides past the newest page, both rooms quietly
- * undercount while the door they speak ("see Bills") lands on a room whose
- * whole-book base (5.242) CAN see them — the 5.240 disease in the news
- * register. The predicate is the client census's own verdict spoken
- * server-side — status = 'new' AND NOT the app-today — the disjunction
- * created_at < today's start OR created_at >= today's end (the future-dated
- * corrupt row is off-today the same way the client census says; the census
- * does not quietly forgive it). A count read: head:true, count:'exact',
- * no limit, no items — the number is bounded by business reality (news
- * gets Ok'd or killed). THROWS on error; the callers catch and dim to the
- * loaded page's own census (the 5.242 fail-soft law — never a silent zero).
+ * v5.244.0 — ONE engine for every off-today census: a server HEAD-COUNT of
+ * tickets whose status sits in `statuses` AND whose created_at is NOT the
+ * app's today, wherever they sit in the ledger — uncapped. v5.243.0 gave
+ * the NEWS register its whole-book word (fetchStaleNewCount); this round
+ * the same fossil surfaced in the RAIL register (the Dashboard's "stuck off
+ * today's board" whisper rode the same capped page read), so the read
+ * generalizes: the population is the argument — the news rooms pass
+ * ['new'], the board passes RAIL_STATUSES (the kitchen's own vocabulary —
+ * isOnRail's exact set, one predicate no fork). The verdict is the client
+ * census's own: NOT the app-today = created_at < today's start OR
+ * created_at >= today's end (offTodayBoundsIso's disjunction — byte-equal
+ * to isSameAppDayAs by construction; the future-dated corrupt row is
+ * off-today the same way the client says). A count read: head:true,
+ * count:'exact', no limit, no items — a census is bounded by business
+ * reality (news gets Ok'd or killed; the board's rail gets cooked).
+ * THROWS on error; the callers catch and dim to the loaded page's own
+ * census (the 5.242 fail-soft law — never a silent zero).
  */
-export async function fetchStaleNewCount(tenantId: string, nowMs?: number): Promise<number> {
+export async function fetchOffTodayCount(
+  tenantId: string,
+  statuses: readonly string[],
+  nowMs?: number,
+): Promise<number> {
   requireCloud();
   const { startIso, endIso } = offTodayBoundsIso(nowMs);
   const { count, error } = await supabase
     .from('orders')
     .select('id', { count: 'exact', head: true })
     .eq('tenant_id', tenantId)
-    .eq('status', 'new')
+    .in('status', [...statuses])
     .or(`created_at.lt.${startIso},created_at.gte.${endIso}`);
   if (error) throw error;
   return count ?? 0;

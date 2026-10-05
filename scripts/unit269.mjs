@@ -133,19 +133,22 @@ assert.ok(
 );
 ok('neighbour: unpaid whisper + unpaid door byte-identical');
 
-/* 9 — the Dashboard's register is untouched: staleKitchen's derivation
- * and the door law it already speaks keep their bytes (two surfaces, one
- * register — neither moved). */
+/* 9 — the Dashboard's register: staleKitchen's derivation keeps its
+ * bytes (two surfaces, one register — neither moved). Re-anchored
+ * honestly (5.244.0): the ghost door's aria now rides the whole-book
+ * word (staleKitchenN — the server rail census with the page census
+ * as the fail-soft fallback); the aria's GRAMMAR is byte-identical,
+ * only the rider's name moved (the unit241 lesson, again). */
 const dash = strip('../src/components/dashboard/DashboardScreen.tsx');
 assert.ok(
   dash.includes('const staleKitchen = staleOlder.filter((o) => isOnRail(String(o.status)));'),
   "the Dashboard's staleKitchen keeps its derivation"
 );
 assert.ok(
-  dash.includes("aria: `Open Bills — ${staleKitchen.length} older ${staleKitchen.length === 1 ? 'ticket waits' : 'tickets wait'} off today's board`,"),
-  "the Dashboard's ghost door keeps its aria"
+  dash.includes("aria: `Open Bills — ${staleKitchenN} older ${staleKitchenN === 1 ? 'ticket waits' : 'tickets wait'} off today's board`,"),
+  "the Dashboard's ghost door keeps its aria (on the whole-book rider)"
 );
-ok('Dashboard: staleKitchen derivation + ghost door byte-identical');
+ok('Dashboard: staleKitchen derivation byte-identical + ghost door grammar on the whole-book rider');
 
 /* 10 — no new timer: a census fetched beside the day's own load; the
  * screen's two standing intervals (the drawer poll + the day poll) are

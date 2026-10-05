@@ -110,10 +110,17 @@ function stageOf(status: string): StageKey | null {
  * dashboard's stuck count and its today's-board count, and Bills' ghost
  * chip, all read THIS — one set, no fork (the dashboard previously
  * counted only pending/preparing while its own oldest-wait clock ran
- * the three-state set: two answers to one question in one file). */
+ * the three-state set: two answers to one question in one file).
+ * v5.244.0 — the set grows a second MOUTH: RAIL_STATUSES is the same
+ * vocabulary as an array, so the server head-count (api.ts's
+ * fetchOffTodayCount — the board's whole-book word) speaks the exact
+ * statuses the predicate honours; isOnRail asks the array, and the two
+ * mouths can never fork (5.196's law, now reaching the DB's own ear). */
+export const RAIL_STATUSES = ['pending', 'preparing', 'ready'] as const;
+
 export function isOnRail(status: string): boolean {
   const s = String(status || '').toLowerCase();
-  return s === 'pending' || s === 'preparing' || s === 'ready';
+  return (RAIL_STATUSES as readonly string[]).includes(s);
 }
 
 /** v5.228.0 — the quiet line's memory. A quiet board is two different

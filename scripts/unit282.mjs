@@ -67,18 +67,22 @@ const inbox = strip('../src/components/food/CounterInbox.tsx');
 const versionTs = strip('../src/version.ts');
 const swJs = strip('../public/sw.js');
 
-/* 1 — the head-count: uncapped, the census's verdict, server-side. */
+/* 1 — the head-count: uncapped, the census's verdict, server-side.
+ * Re-anchored honestly (5.244.0): the read is ONE engine now —
+ * fetchOffTodayCount, the population as the argument; the news name
+ * fetchStaleNewCount is EXTINCT, its population spoken at the call site. */
 {
   const fn = api.slice(
-    api.indexOf('export async function fetchStaleNewCount'),
+    api.indexOf('export async function fetchOffTodayCount'),
     api.indexOf('v5.82.0 — one ticket by id'),
   );
   assert.ok(fn.includes(".select('id', { count: 'exact', head: true })"), 'a count read: head:true, exact');
-  assert.ok(fn.includes(".eq('status', 'new')"), "the population: status = 'new'");
+  assert.ok(fn.includes(".in('status', [...statuses])"), 'the population: the caller’s statuses, server-side');
   assert.ok(fn.includes('.or(`created_at.lt.${startIso},created_at.gte.${endIso}`)'), 'the off-today disjunction');
   assert.ok(!fn.includes('.limit('), 'uncapped — the whole book, no browsing window');
   assert.ok(fn.includes('if (error) throw error;'), 'THROWS on error — the caller owns the dimming');
-  ok('the server word: uncapped head-count, the census verdict, throws on error');
+  assert.equal((api.match(/function fetchStaleNewCount/g) || []).length, 0, 'the 5.243 name is extinct from the CODE — one engine (the doc may tell its lineage)');
+  ok('the server word: one engine, the population as the argument, uncapped, throws on error');
 }
 
 /* 2 — ONE word at any scale: the disjunction ≡ the client census. */
@@ -135,41 +139,52 @@ const swJs = strip('../public/sw.js');
   ok('the derivation: the explicit clock, the bounds contain their instant');
 }
 
-/* 5 — the Dashboard wiring: the whole-book word rides one load cycle. */
+/* 5 — the Dashboard wiring: the whole-book word rides one load cycle.
+ * Re-anchored honestly (5.244.0): the news population is spoken at the
+ * call site (['new']); the rail register rides the same engine with
+ * RAIL_STATUSES (pinned by unit283). */
 {
   assert.match(dash, /staleNewCount: number \| null;/, 'NeedsState carries the nullable count');
-  assert.match(dash, /fetchStaleNewCount\(tenantId\)\.catch\(\(\) => null\),/, 'the count rides the Promise.all, fail-soft');
-  assert.match(dash, /setNow\(\{ ready: true, orders, inventory, menu, reservations, tables, paidSums, sessions, staleNewCount \}\)/, 'the state lands whole');
+  assert.match(dash, /fetchOffTodayCount\(tenantId, \['new'\]\)\.catch\(\(\) => null\),/, 'the news count rides the Promise.all, its population spoken');
+  assert.match(dash, /setNow\(\{ ready: true, orders, inventory, menu, reservations, tables, paidSums, sessions, staleNewCount, staleRailCount \}\)/, 'the state lands whole');
   assert.match(dash, /const staleNewN = now\.staleNewCount \?\? staleNew\.length;/, 'the ?? dims to the page census, never a zero');
   const speaks = (dash.match(/staleNewN/g) || []).length;
   assert.ok(speaks >= 6, `the aria, hint, door and icon all speak staleNewN (${speaks} sites)`);
   ok('the Dashboard: one load cycle, the whole-book word, fail-soft dimming');
 }
 
-/* 6 — the counter wiring: same cycle, same dimming, both doors. */
+/* 6 — the counter wiring: same cycle, same dimming, both doors.
+ * Re-anchored honestly (5.244.0): the population rides the call. */
 {
-  assert.match(inbox, /fetchStaleNewCount\(tenantId\)\.catch\(\(\) => null\),/, 'the count rides load(), fail-soft');
+  assert.match(inbox, /fetchOffTodayCount\(tenantId, \['new'\]\)\.catch\(\(\) => null\),/, 'the count rides load(), its population spoken');
   assert.match(inbox, /setStaleCount\(cnt\);/, 'the state lands');
   assert.match(inbox, /const stragglerN = staleCount \?\? stragglers\.length;/, 'the band speaks the whole-book word');
   assert.equal((inbox.match(/StragglerLine count=\{stragglerN\}/g) || []).length, 2, 'both doors speak it');
   ok('the counter: one cycle, one word, two doors');
 }
 
-/* 7 — fail-soft honesty: the catch bytes in both rooms. */
+/* 7 — fail-soft honesty: the catch bytes in both rooms.
+ * Re-anchored honestly (5.244.0): the Dashboard fetches TWO counts now
+ * (the news register AND the rail register) — each with its own dimming
+ * catch. */
 {
-  assert.equal((dash.match(/fetchStaleNewCount\(tenantId\)\.catch\(\(\) => null\)/g) || []).length, 1, 'Dashboard: exactly one dimming catch');
-  assert.equal((inbox.match(/fetchStaleNewCount\(tenantId\)\.catch\(\(\) => null\)/g) || []).length, 1, 'CounterInbox: exactly one dimming catch');
+  assert.equal((dash.match(/fetchOffTodayCount\(tenantId, \['new'\]\)\.catch\(\(\) => null\)/g) || []).length, 1, 'Dashboard: the news register dims');
+  assert.equal((dash.match(/fetchOffTodayCount\(tenantId, RAIL_STATUSES\)\.catch\(\(\) => null\)/g) || []).length, 1, 'Dashboard: the rail register dims');
+  assert.equal((inbox.match(/fetchOffTodayCount\(tenantId, \['new'\]\)\.catch\(\(\) => null\)/g) || []).length, 1, 'CounterInbox: exactly one dimming catch');
   ok('fail-soft: a failed count dims to the page census, never a silent zero');
 }
 
-/* 8 — scope: the kitchen census rides its own path. */
+/* 8 — scope: the kitchen census rides its own path.
+ * Closed honestly (5.244.0): the rail register got its server word this
+ * round (the staleKitchenN wire — unit283 owns the new pins); the page
+ * census line itself is byte-unchanged, still the fail-soft fallback. */
 {
   assert.match(
     dash,
     /const staleKitchen = staleOlder\.filter\(\(o\) => isOnRail\(String\(o\.status\)\)\);/,
-    'the rail’s stuck population is untouched — named and parked, not smuggled',
+    'the page census keeps its bytes — the fallback under the server word',
   );
-  ok('scope: the kitchen census keeps its own path');
+  ok('scope: the rail page census intact as the fallback (the server word is unit283\'s)');
 }
 
 /* 9 — the band's voice: one text flow, the amber rule, the honest title. */

@@ -39,7 +39,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { fetchDashboard, fetchFeedbackStats, fetchInventory, fetchMenuItems, fetchOfferRedemptions, fetchOffers, fetchOpenPaymentSums, fetchOrders, fetchReservations, fetchStaleNewCount, fetchTableSessions, fetchTables, fetchTodayCostMargin, type DiningTable, type FeedbackStats, type InventoryItem, type OfferRedemptionRow, type Reservation, type TableSession, type TodayCostMargin } from '../../lib/api';
+import { fetchDashboard, fetchFeedbackStats, fetchInventory, fetchMenuItems, fetchOfferRedemptions, fetchOffers, fetchOffTodayCount, fetchOpenPaymentSums, fetchOrders, fetchReservations, fetchTableSessions, fetchTables, fetchTodayCostMargin, type DiningTable, type FeedbackStats, type InventoryItem, type OfferRedemptionRow, type Reservation, type TableSession, type TodayCostMargin } from '../../lib/api';
 import { liveWindows, youngestLiveMs, youngestLiveWindow } from '../../lib/tableSession';
 import { formatMoney } from '../../lib/prefs';
 /* v5.175.0 — the morning paper borrows the booking clock for its book (the
@@ -77,7 +77,7 @@ import { DoorChip } from '../shell/DoorChip';
    set (pending/preparing/ready), one definition shared with Bills' ghost
    chip. The old inline two-state array forked from the dashboard's own
    oldest-wait clock in the same file; the fork is closed. */
-import { isOnRail } from '../kitchen/KitchenScreen';
+import { isOnRail, RAIL_STATUSES } from '../kitchen/KitchenScreen';
 import type { DashboardData, MenuItem, Offer, Order } from '../../types';
 
 /**
@@ -1355,18 +1355,25 @@ interface NeedsState {
    *  ledger (uncapped). NULL = the count read failed — the whisper dims to
    *  the loaded page's own census (the 5.242 fail-soft law), never a lie. */
   staleNewCount: number | null;
+  /** v5.244.0 — the board's census joins the whole-book law: the server
+   *  head-count of on-rail tickets (isOnRail's exact set, spoken as
+   *  RAIL_STATUSES) from before the app's today, uncapped. NULL = the read
+   *  failed — the whisper dims to the loaded page's own census, never a
+   *  lie. The news register got its word in 5.243.0; the rail register's
+   *  was the same fossil on the same capped read. */
+  staleRailCount: number | null;
 }
 
 const NeedsNow: React.FC = () => {
   const { tenantId } = useTenant();
-  const [now, setNow] = useState<NeedsState>({ ready: false, orders: [], inventory: [], menu: [], reservations: [], tables: [], paidSums: new Map(), sessions: null, staleNewCount: null });
+  const [now, setNow] = useState<NeedsState>({ ready: false, orders: [], inventory: [], menu: [], reservations: [], tables: [], paidSums: new Map(), sessions: null, staleNewCount: null, staleRailCount: null });
 
   useEffect(() => {
     if (!tenantId) return;
     let alive = true;
     const load = async () => {
       try {
-        const [orders, inventory, menu, reservations, tables, staleNewCount] = await Promise.all([
+        const [orders, inventory, menu, reservations, tables, staleNewCount, staleRailCount] = await Promise.all([
           fetchOrders(tenantId, 200),
           fetchInventory(tenantId),
           fetchMenuItems(tenantId),
@@ -1375,8 +1382,11 @@ const NeedsNow: React.FC = () => {
           /* v5.243.0 — the news census's whole-book word rides the same load
              cycle as the page it dims to; the read is individually fail-soft
              (the 5.220 mirror rule — a failed count must not quiet the tiles
-             that already landed). */
-          fetchStaleNewCount(tenantId).catch(() => null),
+             that already landed). v5.244.0 — the board's census rides the
+             SAME engine (the population is the argument): ['new'] for the
+             inbox, RAIL_STATUSES for the kitchen. */
+          fetchOffTodayCount(tenantId, ['new']).catch(() => null),
+          fetchOffTodayCount(tenantId, RAIL_STATUSES).catch(() => null),
         ]);
         /* v5.65.0 — the ledger read, bounded to exactly the open ids (the
            5.63.0 helper; no ids → no call). A cancelled or settled ticket
@@ -1389,7 +1399,7 @@ const NeedsNow: React.FC = () => {
            session read must not quiet the tiles that already landed (the
            mirror's own rule), and the chip answers silence, never a zero. */
         const sessions = await fetchTableSessions(tenantId).catch(() => null);
-        if (alive) setNow({ ready: true, orders, inventory, menu, reservations, tables, paidSums, sessions, staleNewCount });
+        if (alive) setNow({ ready: true, orders, inventory, menu, reservations, tables, paidSums, sessions, staleNewCount, staleRailCount });
       } catch {
         /* the mirror is a courtesy — a first failed read simply stays quiet */
       }
@@ -1426,6 +1436,14 @@ const NeedsNow: React.FC = () => {
   const staleNewN = now.staleNewCount ?? staleNew.length;
   const inKitchen = liveToday.filter((o) => isOnRail(String(o.status)));
   const staleKitchen = staleOlder.filter((o) => isOnRail(String(o.status)));
+  /* 5.244.0 — the board's whisper joins the whole-book law: the spoken
+   * number is the server head-count of on-rail tickets from before the
+   * app's today (RAIL_STATUSES — isOnRail's exact set — over the SAME
+   * offTodayBoundsIso disjunction the news census speaks), uncapped. The
+   * page census dims in only when the read failed (the 5.242 fail-soft
+   * law: the loaded page's own truth, never a silent zero). One engine,
+   * two registers: ['new'] for the inbox, the rail's set for the board. */
+  const staleKitchenN = now.staleRailCount ?? staleKitchen.length;
   const latePrep = liveToday.filter(
     (o) => o.status === 'preparing' && nowMs - new Date(o.created_at).getTime() >= LATE_PREP_MIN * 60000
   );
@@ -1662,24 +1680,31 @@ const NeedsNow: React.FC = () => {
      when older tickets are stuck off the board (paid but never bumped, or
      parked mid-flight), the whisper names them — the board itself stays
      clean, the strip stays honest about the residue it hides. */
-  if (inKitchen.length > 0 || staleKitchen.length > 0)
+  if (inKitchen.length > 0 || staleKitchenN > 0)
     slots.push({
       key: 'kitchen',
       label: 'In the kitchen',
       value: inKitchen.length > 0 ? `${inKitchen.length} ${inKitchen.length === 1 ? 'ticket' : 'tickets'}` : '0 on the board',
       valueTone: inKitchen.length > 0 ? 'text-[#0F3D3E]' : 'text-[#5F6B63]',
       icon: <Flame size={18} aria-hidden />,
-      iconTone: inKitchen.length > 0 ? 'bg-[#EAF2F7] text-[#1D5D7E]' : 'bg-[#F6F5F2] text-[#5F6B63]',
+      /* 5.244.0 — the icon warms with the inbox tile's (5.243): amber while
+         stuck board tickets hold — one amber language for work waiting
+         off-stage, in both registers the needs band speaks. */
+      iconTone: inKitchen.length > 0
+        ? staleKitchenN > 0
+          ? 'bg-[#FBF3E4] text-[#8A5A16]'
+          : 'bg-[#EAF2F7] text-[#1D5D7E]'
+        : 'bg-[#F6F5F2] text-[#5F6B63]',
       aria: `${inKitchen.length} ${inKitchen.length === 1 ? 'ticket is' : 'tickets are'} on the board right now${
-        staleKitchen.length > 0
-          ? `; ${staleKitchen.length} older ${staleKitchen.length === 1 ? 'ticket is' : 'tickets are'} stuck off today's board — see Bills`
+        staleKitchenN > 0
+          ? `; ${staleKitchenN} older ${staleKitchenN === 1 ? 'ticket is' : 'tickets are'} stuck off today's board — see Bills`
           : ''
       }`,
       hint:
-        staleKitchen.length > 0
-          ? `${staleKitchen.length} older stuck ${staleKitchen.length === 1 ? 'ticket' : 'tickets'} off today's board — see Bills`
+        staleKitchenN > 0
+          ? `${staleKitchenN} older stuck ${staleKitchenN === 1 ? 'ticket' : 'tickets'} off today's board — see Bills`
           : undefined,
-      hintIcon: staleKitchen.length > 0 ? <History size={11} aria-hidden className="shrink-0" /> : undefined,
+      hintIcon: staleKitchenN > 0 ? <History size={11} aria-hidden className="shrink-0" /> : undefined,
       /* v5.185.0 — the door follows the truth (the 5.89.0 doctrine, kitchen
          edition: the inbox card got it, this card never did): the board when
          it holds today's work, Bills when only the ghosts remain — an
@@ -1700,7 +1725,7 @@ const NeedsNow: React.FC = () => {
             }
           : {
               label: 'Bills',
-              aria: `Open Bills — ${staleKitchen.length} older ${staleKitchen.length === 1 ? 'ticket waits' : 'tickets wait'} off today's board`,
+              aria: `Open Bills — ${staleKitchenN} older ${staleKitchenN === 1 ? 'ticket waits' : 'tickets wait'} off today's board`,
               onOpen: () => go('bills', ['Dashboard', 'Bills'], 'stuck'),
             },
     });

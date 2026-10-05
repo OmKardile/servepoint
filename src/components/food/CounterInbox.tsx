@@ -18,8 +18,8 @@ import type { Order } from '../../types';
 import { isQuietNow, subscribePrefs } from '../../lib/prefs';
 import {
   advanceOrder,
+  fetchOffTodayCount,
   fetchOrders,
-  fetchStaleNewCount,
   fetchTables,
   subscribeOrdersRealtime,
   type DiningTable,
@@ -296,8 +296,10 @@ export function CounterInbox(): React.ReactElement | null {
         fetchTables(tenantId),
         /* v5.243.0 — the whole-book word rides the SAME load cycle as the
            page it dims to; individually fail-soft so a failed count never
-           kills the tickets read (the 5.220 mirror rule). */
-        fetchStaleNewCount(tenantId).catch(() => null),
+           kills the tickets read (the 5.220 mirror rule). v5.244.0 — the
+           engine is ONE read now (the population is the argument): the
+           news register speaks ['new']. */
+        fetchOffTodayCount(tenantId, ['new']).catch(() => null),
       ]);
       setOrders(os);
       setTables(ts);
