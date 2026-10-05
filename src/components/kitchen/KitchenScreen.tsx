@@ -22,7 +22,7 @@ import {
   type RealtimeState,
 } from '../../lib/api';
 import { useTenant } from '../../lib/tenant';
-import { isSameLocalDay } from '../../lib/day';
+import { hhmm, isSameLocalDay } from '../../lib/day';
 import { isQuietNow, subscribePrefs } from '../../lib/prefs';
 import type { Order } from '../../types';
 
@@ -44,6 +44,12 @@ import type { Order } from '../../types';
  * qty chip flips to a check. A fired-fraction bar counts the ticket down
  * ("fired 1/2"), an ALL FIRED chip crowns a finished rail card, and the
  * red-tier timer (20m+) breathes — urgency you can see from the pass.
+ * v5.228.0: the quiet line remembers its last ticket — a quiet board is
+ * two different stories (the day passed through and the rail is empty
+ * again, or the day has not reached the kitchen yet), and the context
+ * line now says which: "last ticket HH:MM" when a ticket landed today,
+ * "nothing yet today" when the kitchen has seen nothing (lastRailTicketAt,
+ * the pure read beside isOnRail).
  */
 
 /* ───────────────────────────── board model ────────────────────────────── */
@@ -90,6 +96,36 @@ function stageOf(status: string): StageKey | null {
 export function isOnRail(status: string): boolean {
   const s = String(status || '').toLowerCase();
   return s === 'pending' || s === 'preparing' || s === 'ready';
+}
+
+/** v5.228.0 — the quiet line's memory. A quiet board is two different
+ *  stories: the day passed through and the rail is empty again, or the
+ *  day has not reached the kitchen yet. The last ticket that LANDED
+ *  answers which — the rail-active stages (isOnRail's own three) plus
+ *  the pass's `completed` column plus `cancelled` (a cancelled ticket
+ *  did land; the line's own cancelledToday clause already tells that
+ *  story, so the two clauses must never disagree — cancelledToday > 0
+ *  forces a stamp). The counter inbox's `new` never landed: the
+ *  Dashboard's NEEDS YOU NOW owns that voice. The caller passes the day
+ *  grammar (isSameLocalDay) — one day, one derivation, the same bounds
+ *  law the floor's week split obeys (5.226). Null when the kitchen has
+ *  seen nothing today; the line says so in its own words — silence is
+ *  still never a zero, and no new timer: a stamp, not a duration. */
+export function lastRailTicketAt(
+  orders: { created_at: string; status: string }[],
+  sameDay: (iso: string) => boolean
+): string | null {
+  const landed = orders.filter((o) => {
+    const s = String(o.status || '').toLowerCase();
+    return (
+      sameDay(o.created_at) &&
+      (isOnRail(s) || s === 'completed' || s === 'cancelled')
+    );
+  });
+  return landed.reduce<string | null>(
+    (acc, o) => (!acc || o.created_at > acc ? o.created_at : acc),
+    null
+  );
 }
 
 /** Elapsed since created_at, KDS style: 0:42 under an hour, then 1:04:09. */
@@ -633,6 +669,7 @@ export const KitchenScreen: React.FC = () => {
       overflow,
       oldestWait: oldest ? elapsed(oldest, nowMs) : null,
       cancelledToday: cancelled,
+      lastTicketAt: lastRailTicketAt(orders, isSameLocalDay),
     };
   }, [orders, nowMs]);
 
@@ -758,6 +795,9 @@ export const KitchenScreen: React.FC = () => {
         ) : (
           <>
             Quiet service — no active tickets
+            {board.lastTicketAt
+              ? ` · last ticket ${hhmm(board.lastTicketAt)}`
+              : ' · nothing yet today'}
             {board.cancelledToday > 0 ? ` · ${board.cancelledToday} cancelled today` : ''}
           </>
         )}
