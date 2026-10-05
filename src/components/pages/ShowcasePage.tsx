@@ -6,6 +6,7 @@ import {
   CircleCheck,
   LifeBuoy,
   MessageSquareText,
+  QrCode,
   Receipt,
   ShieldCheck,
   Zap,
@@ -57,6 +58,14 @@ const FEATURES: { icon: React.ElementType; title: string; body: string; tint: st
     title: 'Realtime everything',
     body: 'Postgres change streams push orders, items and payments to every open screen. The board refreshes itself — no pull-to-refresh, no stale rails.',
     tint: 'bg-[#B88E2F]',
+  },
+  {
+    /* v5.264.0 — the porch's tour learns the guest's way: the QR journey is
+     * a whole surface of the product, and the features grid never said so. */
+    icon: QrCode,
+    title: "The guest's table",
+    body: 'A QR code on the table opens the live menu — no app, no account. The session window guards the ordering, the cart rides the session, and the ticket page follows the order to a star rating that reaches the owner\'s close.',
+    tint: 'bg-[#C2571B]',
   },
 ];
 

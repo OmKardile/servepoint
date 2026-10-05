@@ -1,14 +1,19 @@
 import React, { useEffect, useState } from 'react';
 import {
   ArrowRight,
+  BellRing,
   ChevronDown,
   CircleHelp,
   KeyRound,
   LifeBuoy,
   MonitorSmartphone,
+  QrCode,
   ShieldCheck,
+  ShoppingBag,
+  Star,
   UserCog,
   Users,
+  Wallet,
 } from 'lucide-react';
 import brandMark from '../../assets/brand/mark.png';
 import { APP_VERSION } from '../../version';
@@ -35,6 +40,16 @@ const ROLES: { icon: React.ElementType; title: string; body: string }[] = [
     icon: MonitorSmartphone,
     title: 'Staff',
     body: 'Added by the owner from Settings → Staff accounts. Works the counter and the kitchen board — placing orders, advancing tickets, taking payments.', // 5.140.0 — the tab is "Staff accounts"; the porch said "Team", a tab that does not exist,
+  },
+  {
+    /* v5.264.0 — the fourth role: the guest's journey (QR → menu → ticket
+     * → feedback) has been a whole surface of the house since the table
+     * sessions shipped — the porch taught three roles and never said
+     * their name. The guest has NO account: the table's QR is the only
+     * door, the session window the only guard. */
+    icon: QrCode,
+    title: 'Guest',
+    body: 'No account, no download — the table\u2019s QR code is the only door. Scans it, orders from the live menu, watches the ticket\u2019s stepper with a ready chime, pays at the counter and leaves the stars.',
   },
 ];
 
@@ -65,6 +80,38 @@ const STEPS: { title: string; body: string }[] = [
   },
 ];
 
+/* v5.264.0 — the guest's journey in five beats: the porch never taught the
+ * QR flow (the whole surface the table sessions shipped). The beats carry
+ * the house's own words — the live window, the session cart, the ready
+ * chime, the honest bill, the day's voice. */
+const GUEST_FLOW: { icon: React.ElementType; title: string; body: string }[] = [
+  {
+    icon: QrCode,
+    title: 'Scan the table\'s QR',
+    body: 'The table\'s code opens the live menu — no download, no sign-up. The ordering window is the session: the ribbon counts it down.',
+  },
+  {
+    icon: ShoppingBag,
+    title: 'Order from the live menu',
+    body: 'Veg marks, photos and prices. The cart rides the session — step away and come back, your picks are still there.',
+  },
+  {
+    icon: BellRing,
+    title: 'Watch the ticket',
+    body: 'A stepper follows the order — Placed, In the kitchen, Ready, Served — with a chime when it\'s ready, and an "Order more" pill for the second round.',
+  },
+  {
+    icon: Wallet,
+    title: 'Pay at the counter',
+    body: 'The bill speaks the truth — DUE AT COUNTER until the money lands, then PAID — and the stepper\'s word agrees with it.',
+  },
+  {
+    icon: Star,
+    title: 'Leave the stars',
+    body: 'The rating reaches the day\'s voice — the close-out reads the tone: guests love it, good — keep going, or listen up.',
+  },
+];
+
 const FAQ: { q: string; a: string }[] = [
   {
     q: 'Why can\'t I create my own account?',
@@ -80,11 +127,20 @@ const FAQ: { q: string; a: string }[] = [
   },
   {
     q: 'Does the kitchen screen really update by itself?',
-    a: 'Yes. Orders and their items stream over a realtime connection the moment they change, and a 30-second safety poll backs it up if the stream ever drops — the chip in the header tells you which mode you\'re in.',
+    /* v5.264.0 — the answer grows the wake's truth (301/302): the poll is
+     * not the whole rhythm anymore — the boards wake the moment the staff
+     * looks back at a backgrounded tablet. The porch's word stays true. */
+    a: 'Yes. Orders and their items stream over a realtime connection the moment they change, a 30-second safety poll backs it up if the stream ever drops, and the boards wake the moment you look back at a backgrounded tablet — the chip in the header tells you which mode you\'re in.',
   },
   {
     q: 'I forgot my password. What now?',
     a: 'Your workspace owner can reset staff passwords from Settings → Staff accounts. If you are the owner, contact your ServePoint operator — they can issue you a fresh temporary sign-in.', // 5.140.0 — pointer healed,
+  },
+  {
+    /* v5.264.0 — the guests' door gets its FAQ: the question every owner
+     * asks when they hear "QR ordering". */
+    q: 'How do guests order from their phones?',
+    a: 'They scan the table\'s QR code — no app, no account. The menu page opens with a live ordering window, the cart rides the table\'s session, and the ticket page follows the order: a chime when it\'s ready, an "Order more" pill for the second round, and a star rating that reaches the day\'s close-out.',
   },
 ];
 
@@ -192,6 +248,36 @@ const IndexHelpPage: React.FC = () => {
               </li>
             ))}
           </ol>
+        </section>
+
+        {/* ── The guest's table ── */}
+        {/* v5.264.0 — the porch learns the guest's way: the QR flow taught in
+         * the porch's own card grammar, five beats, no jargon. */}
+        <section className="mt-12" aria-label="The guest's table">
+          <h2 className="text-[18px] font-bold text-[#1A1A1A]">The guest's table — no app, no account</h2>
+          <p className="mt-2 max-w-2xl text-[13.5px] leading-7 text-[#5B6B63]">
+            Dine-in guests don't sign in. A QR code on the table opens the menu page with a live
+            ordering window — the ribbon counts the session down, the cart rides the session, and
+            the ticket page follows the order until the bill is settled. When the window ends, the
+            floor's own word closes it.
+          </p>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+            {GUEST_FLOW.map((b, i) => {
+              const Icon = b.icon;
+              return (
+                <article key={b.title} className="rounded-2xl border border-[#E3E7E0] bg-white p-4">
+                  <div className="flex items-center gap-2">
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#0F3D3E] text-white">
+                      <Icon size={15} aria-hidden />
+                    </span>
+                    <span className="font-mono text-[12px] font-bold text-[#B88E2F]">{i + 1}</span>
+                  </div>
+                  <h3 className="mt-2.5 text-[13.5px] font-bold text-[#1A1A1A]">{b.title}</h3>
+                  <p className="mt-1 text-[12px] leading-5 text-[#5B6B63]">{b.body}</p>
+                </article>
+              );
+            })}
+          </div>
         </section>
 
         {/* ── Owner / operator notes ── */}
