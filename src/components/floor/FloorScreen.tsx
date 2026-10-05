@@ -931,7 +931,6 @@ function ItemLines({ items }: { items: OrderItem[] }): React.ReactElement {
         const subs: string[] = [];
         if (it.variant_name) subs.push(it.variant_name);
         for (const a of it.addons || []) subs.push(`+ ${a.name}`);
-        if (it.notes) subs.push(`\u2022 ${it.notes}`);
         return (
           <div key={it.id || `${it.name}-${i}`} className="border-b border-dashed border-[#E9EBE4] pb-2 last:border-0 last:pb-0">
             <p className="flex items-baseline justify-between gap-3 text-[13px]">
@@ -941,6 +940,13 @@ function ItemLines({ items }: { items: OrderItem[] }): React.ReactElement {
               <span className="font-bold tabular-nums text-[#1A1A1A]">{formatMoney(it.item_total)}</span>
             </p>
             {subs.length > 0 && <p className="mt-0.5 pl-3 text-[11.5px] leading-relaxed text-[#6B6B6B]">{subs.join(' \u00b7 ')}</p>}
+            {it.notes && (
+              /* v5.258.0 — the note leaves the grey subs join and wears the
+               * words-ink the kitchen board's own line has always spoken:
+               * ↳ italic #C2571B, byte-matched to the KDS — one ink for one
+               * guest's word, on every staff board that shows it. */
+              <p className="mt-0.5 pl-3 text-[11.5px] italic leading-relaxed text-[#C2571B]">&#8627; {it.notes}</p>
+            )}
           </div>
         );
       })}
@@ -1458,6 +1464,25 @@ function TableDrill({
                   <ItemLines items={items} />
                 ) : (
                   <p className="rounded-xl bg-[#FBFBF9] px-3 py-2 text-[12.5px] text-[#6B6B6B]">No item lines recorded on this order yet.</p>
+                )}
+                {order.notes && (
+                  /* v5.258.0 — the floor hears the word: 293's order-level note
+                   * rode the KDS, the counter inbox, the bill and the paper, but
+                   * the host/manager drilling into a busy table read only items
+                   * and totals — the ticket's own word was silent here. It speaks
+                   * now, seated after the items in the words-family order, wearing
+                   * the amber ink the KDS block wears (this board's item notes
+                   * speak #C2571B on the line above, so the rail matches — the
+                   * same rationale the kitchen board recorded in 5.255). Verbatim,
+                   * break-words, never cut — the bill's own law; the drill panel
+                   * has the room the KDS card lacks, so no clamp. Honest absence:
+                   * no word, no block. */
+                  <p
+                    className="mt-3 break-words rounded-lg border-l-[3px] border-l-[#C2571B] bg-[#FBF6EA] px-2.5 py-2 text-[12px] leading-relaxed text-[#6B4A0E]"
+                    title={order.notes}
+                  >
+                    {order.notes}
+                  </p>
                 )}
               </div>
 
