@@ -100,6 +100,17 @@ import {
   appTzTag,
   lastNDaysMs,
 } from '../../lib/appday';
+import {
+  shiftDayIso,
+  RANGE_LABEL,
+  rangeLabelOf,
+  priorRangeLabel,
+  priorWindow,
+  rangeWindow,
+  customDayKeys,
+  type CustomRange,
+  type RangeKey,
+} from '../../lib/reportWindow';
 import { useTenant } from '../../lib/tenant';
 import { useUi } from '../../store/session';
 import type { Order } from '../../types';
@@ -166,49 +177,6 @@ import type { Order } from '../../types';
  * be banked on money not collected. The window scans at most the most recent
  * 500 tickets (a cafe month) — stated honestly in the footer.
  */
-
-type RangeKey = 'today' | '7d' | '30d' | 'all';
-
-/* ── The reporting day (5.97.0) — the Settings word, kept. Windows, keys,
-   hour buckets and the zone tag resolve through src/lib/appday.ts
-   (Settings › Language & Region › Timezone); on every Indian device that
-   is Asia/Kolkata, so IST numbers here are unchanged to the paisa. ─────── */
-
-/** Calendar-string day shift, DST-safe (noon anchor, v5.83.0's argument). */
-function shiftDayIso(days: number): string {
-  const d = new Date(`${appTodayIso()}T12:00:00Z`);
-  d.setUTCDate(d.getUTCDate() + days);
-  return d.toISOString().slice(0, 10);
-}
-
-/* Windows keep the v5.19.0 semantics EXACTLY: "N days" = N calendar days
-   ENDING today (today inclusive) — only the midnight math is now DST-safe
-   through the lib instead of a +05:30 literal. 5.202.0: the shape itself
-   moved into appday's ONE builder (lastNDaysMs) and this delegates — the
-   movers' week (Menu medallion, rail chips, shelf pace) speaks the same
-   window now, so two surfaces quoting the week quote one number. */
-function rangeWindow(range: RangeKey): { startMs: number | null; endMs: number } {
-  if (range === 'all') return { startMs: null, endMs: appDayEndMs(appTodayIso()) };
-  const days = range === 'today' ? 1 : range === '7d' ? 7 : 30;
-  return lastNDaysMs(days);
-}
-
-/** The EQUAL-LENGTH window immediately before the current one (v5.19.0) —
- *  the honest baseline for the KPI delta chips. 'all' has no earlier
- *  boundary in the ledger, so it gets NO chips rather than a fake baseline. */
-function priorWindow(range: RangeKey): { startMs: number; endMs: number } | null {
-  if (range === 'all') return null;
-  const { startMs, endMs } = rangeWindow(range);
-  const days = range === 'today' ? 1 : range === '7d' ? 7 : 30;
-  const start = startMs ?? appDayStartMs(shiftDayIso(-(days - 1)));
-  return { startMs: appDayStartMs(shiftDayIso(-(2 * days - 1))), endMs: start };
-}
-
-/** Spoken/written name of the comparison baseline. */
-function priorRangeLabel(range: RangeKey): string | null {
-  if (range === 'all') return null;
-  return range === 'today' ? 'prior day' : range === '7d' ? 'prior 7 days' : 'prior 30 days';
-}
 
 /** The single money-view aggregation shared by the selected range AND its
  *  prior comparison window (v5.20.0 — one body, so the chips can never drift
@@ -1421,13 +1389,6 @@ function hourLabel(h: number): string {
   return h < 12 ? `${h}a` : `${h - 12}p`;
 }
 
-const RANGE_LABEL: Record<RangeKey, string> = {
-  today: 'Today',
-  '7d': 'Last 7 days',
-  '30d': 'Last 30 days',
-  all: 'All time',
-};
-
 /* ── CSV — shared lib/csv.ts (injection-safe escaping + UTF-8 BOM, since 5.8.0;
  *    byte-identical to the Bills export it replaces) */
 
@@ -1558,6 +1519,12 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
   const { tenantId, loading: tenantLoading, error: tenantError, tenant } = useTenant();
   const goSection = useUi((s) => s.goSection);
   const [range, setRange] = useState<RangeKey>('7d');
+  /* v5.236.0 — the custom range's own calendar: it arms pre-filled with the
+   *  last 7 days (the SAME window the 7d chip spoke), so Custom is never an
+   *  empty or invalid state — the owner adjusts from a truth they can see. */
+  const [customFrom, setCustomFrom] = useState(() => shiftDayIso(-6));
+  const [customTo, setCustomTo] = useState(() => shiftDayIso(0));
+  const customWindow = useMemo<CustomRange>(() => ({ from: customFrom, to: customTo }), [customFrom, customTo]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [cogsMap, setCogsMap] = useState<Map<string, number>>(new Map());
   const [unitCosts, setUnitCosts] = useState<Map<string, number>>(new Map());
@@ -1630,21 +1597,21 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
   }, [tenantId, load]);
 
   const inRange = useMemo(() => {
-    const { startMs, endMs } = rangeWindow(range);
+    const { startMs, endMs } = rangeWindow(range, customWindow);
     return orders.filter((o) => {
       const t = new Date(o.created_at).getTime();
       if (Number.isNaN(t)) return false;
       if (startMs !== null && (t < startMs || t >= endMs)) return false;
       return true;
     });
-  }, [orders, range]);
+  }, [orders, range, customWindow]);
 
   /* 5.64.0 — the ledger rides the range: one bounded read per window (or
      refresh), fail-soft like every other sidecar section. */
   useEffect(() => {
     if (!tenantId) return;
     let alive = true;
-    const { startMs, endMs } = rangeWindow(range);
+    const { startMs, endMs } = rangeWindow(range, customWindow);
     fetchPaymentsInRange(
       tenantId,
       startMs !== null ? new Date(startMs).toISOString() : null,
@@ -1659,7 +1626,7 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
     return () => {
       alive = false;
     };
-  }, [tenantId, range, refreshedAt]);
+  }, [tenantId, range, refreshedAt, customWindow]);
 
   /* 5.67.0 — the hop ledger rides the range: 007's trigger-written trail of
      every status hop, bounded to the window with a 6h tail (a ticket that
@@ -1667,7 +1634,7 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
   useEffect(() => {
     if (!tenantId) return;
     let alive = true;
-    const { startMs, endMs } = rangeWindow(range);
+    const { startMs, endMs } = rangeWindow(range, customWindow);
     fetchStatusHopsInRange(
       tenantId,
       startMs !== null ? new Date(startMs).toISOString() : null,
@@ -1682,14 +1649,14 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
     return () => {
       alive = false;
     };
-  }, [tenantId, range, refreshedAt]);
+  }, [tenantId, range, refreshedAt, customWindow]);
 
   const agg = useMemo(() => aggregateTickets(inRange, cogsMap), [inRange, cogsMap]);
 
   /** The equal-length window immediately before the selected one — the
    *  delta-chip baseline. `null` for All time (no earlier boundary). */
   const priorAgg = useMemo(() => {
-    const w = priorWindow(range);
+    const w = priorWindow(range, customWindow);
     if (!w) return null;
     const rows = orders.filter((o) => {
       const t = new Date(o.created_at).getTime();
@@ -1697,11 +1664,11 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
       return t >= w.startMs && t < w.endMs;
     });
     return aggregateTickets(rows, cogsMap);
-  }, [orders, range, cogsMap]);
+  }, [orders, range, cogsMap, customWindow]);
 
   /** Spread-able chip props for a headline KPI: `{ delta, deltaBaseline }`
    *  when a prior window exists, `{}` otherwise (All time → no chips). */
-  const priorLabel = priorRangeLabel(range);
+  const priorLabel = priorRangeLabel(range, customWindow);
   const deltaProps = (current: number, prior: number, fmt: (n: number) => string) =>
     priorAgg && priorLabel
       ? {
@@ -1901,7 +1868,7 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
     const revTotal = topItems.reduce((n, it) => n + it.revenue, 0) || 1;
     return {
       storeName: tenant?.name || 'ServePoint store',
-      rangeLabel: RANGE_LABEL[range],
+      rangeLabel: rangeLabelOf(range, customWindow),
       unitsVoice: 'paid tickets only',
       items: topItems.slice(0, 8).map((it) => ({
         name: it.name,
@@ -1936,14 +1903,14 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
   /* ── guest satisfaction (019) — range-scoped reads, fail-soft data ── */
 
   const fbInRange = useMemo(() => {
-    const { startMs, endMs } = rangeWindow(range);
+    const { startMs, endMs } = rangeWindow(range, customWindow);
     return feedback.filter((f) => {
       const t = new Date(f.created_at).getTime();
       if (Number.isNaN(t)) return false;
       if (startMs !== null && (t < startMs || t >= endMs)) return false;
       return true;
     });
-  }, [feedback, range]);
+  }, [feedback, range, customWindow]);
 
   const fbAgg = useMemo(() => {
     const stars = [0, 0, 0, 0, 0]; // index 0 = 1★ … 4 = 5★
@@ -1973,7 +1940,7 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
    * "+ more in the CSV" honest. */
   const ratingsShareOpts = useMemo<GuestVoiceOpts>(() => ({
     storeName: tenant?.name || 'ServePoint store',
-    rangeLabel: RANGE_LABEL[range],
+    rangeLabel: rangeLabelOf(range, customWindow),
     avg: fbAgg.avg,
     avgWord: fbAgg.avg !== null ? ratingWord(fbAgg.avg) : '',
     count: fbAgg.count,
@@ -2011,7 +1978,7 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
 
   const wasteAgg = useMemo(() => {
     const moves = waste || [];
-    const { startMs, endMs } = rangeWindow(range);
+    const { startMs, endMs } = rangeWindow(range, customWindow);
     const inWin = moves.filter((m) => {
       const t = new Date(m.created_at).getTime();
       if (Number.isNaN(t)) return false;
@@ -2072,7 +2039,7 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
       .sort((a, b) => b.rupees - a.rupees || b.count - a.count || a.name.localeCompare(b.name))
       .slice(0, 6);
     return { count: inWin.length, total, unvalued, reasons, items };
-  }, [waste, range]);
+  }, [waste, range, customWindow]);
 
   /* ── 5.71.0 — the offer's scorecard: every offer answers for itself ──
    * v5.211.0 — and the window keeps the rides whole: offerAgg now also
@@ -2087,7 +2054,7 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
    * one offer's words can disagree, and the share paper's byte-identity
    * watch (5.149) deserves a single source. */
   const offerAgg = useMemo(() => {
-    const { startMs, endMs } = rangeWindow(range);
+    const { startMs, endMs } = rangeWindow(range, customWindow);
     const inWin = redemptions.filter((r) => {
       const t = new Date(r.createdAt).getTime();
       if (Number.isNaN(t)) return false;
@@ -2139,7 +2106,7 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
     const totalDiscount = list.reduce((s, o) => s + o.discountSum, 0);
     const totalRevenue = list.reduce((s, o) => s + o.revenue, 0);
     return { list, totalUses, totalDiscount, totalRevenue, offerCount: offersList.length, ledger: redemptionsByOffer(inWin) };
-  }, [redemptions, offersList, range]);
+  }, [redemptions, offersList, range, customWindow]);
 
   /* v5.211.0 — which window ledgers stand open: a Set of offer ids, the
    * 5.206 door grammar verbatim (open many, compare freely; the chevron
@@ -2182,7 +2149,7 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
    * along with honest zeros, exactly as the screen shows them. */
   const offerScoreOpts = useMemo<OfferScoreOpts>(() => ({
     storeName: tenant?.name || 'ServePoint store',
-    rangeLabel: RANGE_LABEL[range],
+    rangeLabel: rangeLabelOf(range, customWindow),
     offers: offerAgg.list.map((o) => ({
       title: o.title,
       voice: o.voice,
@@ -2354,7 +2321,7 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
    * prose under three timed tickets. */
   const kitchenShareOpts = useMemo<KitchenSpeedOpts>(() => ({
     storeName: tenant?.name || 'ServePoint store',
-    rangeLabel: RANGE_LABEL[range],
+    rangeLabel: rangeLabelOf(range, customWindow),
     timed: kitchen.sample.length,
     avgMin: kitchen.avgMin,
     medianMin: kitchen.medianMin,
@@ -2396,7 +2363,7 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
   /* ── drawer honesty (020) — sealed shifts only, variance is STORED truth ── */
 
   const shiftsInRange = useMemo(() => {
-    const { startMs, endMs } = rangeWindow(range);
+    const { startMs, endMs } = rangeWindow(range, customWindow);
     return shifts.filter((s) => {
       if (!s.closed_at) return false; // the section speaks only about SEALED shifts
       const t = new Date(s.closed_at).getTime();
@@ -2404,7 +2371,7 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
       if (startMs !== null && (t < startMs || t >= endMs)) return false;
       return true;
     });
-  }, [shifts, range]);
+  }, [shifts, range, customWindow]);
 
   const shiftAgg = useMemo(() => {
     let net = 0;
@@ -2428,7 +2395,7 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
   };
   const drawerShareOpts = useMemo<DrawerOpts>(() => ({
     storeName: tenant?.name || 'ServePoint store',
-    rangeLabel: RANGE_LABEL[range],
+    rangeLabel: rangeLabelOf(range, customWindow),
     net: shiftAgg.net,
     netWord: varianceTone(shiftAgg.net).label,
     sealed: shiftAgg.count,
@@ -2477,13 +2444,18 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
       byDay.set(key, cur);
     }
     // The window: filled calendar days for 7d/30d (gaps read as slow days),
-    // today's single day, or — for All time — the most recent 30 days that
-    // actually hold tickets, said honestly in the caption. Days are stepped
-    // as calendar STRINGS through the lib (DST-safe — a 24h ms stride drifts
-    // across a zone's spring-forward).
+    // today's single day, the owner's own span for Custom (every day in the
+    // chosen range, gaps honest), or — for All time — the most recent 30
+    // days that actually hold tickets, said honestly in the caption. Days
+    // are stepped as calendar STRINGS through the lib (DST-safe — a 24h ms
+    // stride drifts across a zone's spring-forward).
     let dayMs: number[] = [];
     if (range === 'today') {
       dayMs = [appDayStartMs(appTodayIso())];
+    } else if (range === 'custom') {
+      /* Every day in the owner's own span, stepped as calendar STRINGS
+       * through the noon anchor (DST-safe — a 24h ms stride drifts). */
+      dayMs = customDayKeys(customWindow).map((k) => appDayStartMs(k));
     } else if (range === '7d' || range === '30d') {
       const days = range === '7d' ? 7 : 30;
       const dayKeys: string[] = [];
@@ -2513,7 +2485,7 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
         avg: cur.tickets > 0 ? cur.gross / cur.tickets : 0,
       };
     });
-  }, [inRange, range]);
+  }, [inRange, range, customWindow]);
 
   const bestDay = useMemo(() => {
     let best: { label: string; gross: number } | null = null;
@@ -2551,13 +2523,13 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
     );
     const windowLabel =
       daily.length === 0
-        ? RANGE_LABEL[range].toLowerCase()
+        ? rangeLabelOf(range, customWindow).toLowerCase()
         : daily.length === 1
           ? daily[0].label
           : `${daily[0].label} – ${daily[daily.length - 1].label}`;
     return {
       storeName: tenant?.name || 'ServePoint store',
-      rangeLabel: RANGE_LABEL[range],
+      rangeLabel: rangeLabelOf(range, customWindow),
       windowLabel,
       tz: appTimezone(),
       gross: agg.gross,
@@ -2666,7 +2638,7 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
     if (agg.paidCount === 0) return;
     const rows: (string | number)[][] = [
       ['Metric', 'Value'],
-      ['Range', RANGE_LABEL[range]],
+      ['Range', rangeLabelOf(range, customWindow)],
       ['Paid tickets', agg.paidCount],
       ['Paid net (INR)', agg.paidNet.toFixed(2)],
       ['Ingredient cost (INR)', agg.cogs.toFixed(2)],
@@ -2676,7 +2648,7 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
       ['Note', 'Recipes × current shelf cost — a restock reprices history; variants/add-ons not priced.'],
     ];
     downloadCsv(`servepoint-cost-margin-${appTodayIso()}.csv`, rows);
-  }, [agg, range]);
+  }, [agg, range, customWindow]);
 
   const exportTypeMix = useCallback(() => {
     if (typeMix.length === 0) return;
@@ -2748,7 +2720,7 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
         const cur = byDay.get(k)!;
         return { label: appFormatters().dayLabel.format(new Date(appDayStartMs(k))), avg: cur.sum / cur.n, n: cur.n };
       });
-  }, [fbInRange, range]);
+  }, [fbInRange, range, customWindow]);
 
   const fbDailyTotals = useMemo(() => {
     let ratings = 0;
@@ -2852,6 +2824,42 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
         </div>
       </div>
 
+      {/* v5.236.0 — the custom calendar: two date inputs revealed ONLY while
+          the Custom chip is armed (no dead chrome), pre-filled with the last
+          7 days so the first armed view speaks the window the 7d chip spoke.
+          House ink: the hairline border, the gold focus ring, the 11.5px
+          grey hint naming the window in the strip's own words. */}
+      {range === 'custom' && (
+        <div className="flex flex-wrap items-center gap-2 pb-4" role="group" aria-label="Custom date range">
+          <label className="flex items-center gap-1.5 text-[11.5px] font-semibold text-[#6B6B6B]">
+            From
+            <input
+              type="date"
+              value={customFrom}
+              max={appTodayIso()}
+              onChange={(e) => setCustomFrom(e.target.value || customFrom)}
+              aria-label="Custom range start date"
+              className="sp-input h-9 rounded-xl border border-[#E3E7E0] bg-white px-2.5 text-[12.5px] font-semibold text-[#1A1A1A] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#967221]"
+            />
+          </label>
+          <label className="flex items-center gap-1.5 text-[11.5px] font-semibold text-[#6B6B6B]">
+            To
+            <input
+              type="date"
+              value={customTo}
+              max={appTodayIso()}
+              onChange={(e) => setCustomTo(e.target.value || customTo)}
+              aria-label="Custom range end date"
+              className="sp-input h-9 rounded-xl border border-[#E3E7E0] bg-white px-2.5 text-[12.5px] font-semibold text-[#1A1A1A] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#967221]"
+            />
+          </label>
+          <span className="text-[11.5px] text-[#6B6B6B]" aria-live="polite">
+            Showing {rangeLabelOf(range, customWindow)}
+            {customFrom > customTo ? ' — the dates were swapped, the window read them the honest way' : ''}
+          </span>
+        </div>
+      )}
+
       {error && (
         <div
           role="alert"
@@ -2926,11 +2934,11 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
       {agg.placed > 0 && !loading && (
         <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Share this report">
           <span className="inline-flex h-[38px] items-center rounded-xl bg-[#FDF6E3] px-3 text-[10.5px] font-bold uppercase tracking-[0.08em] text-[#8A5A00]">
-            {RANGE_LABEL[range]}
+            {rangeLabelOf(range, customWindow)}
           </span>
           <button
             onClick={printRange}
-            aria-label={`Print the ${RANGE_LABEL[range]} report`}
+            aria-label={`Print the ${rangeLabelOf(range, customWindow)} report`}
             className="flex min-h-[38px] items-center gap-1.5 rounded-xl border border-[#E3E7E0] bg-white px-3.5 text-[12px] font-semibold text-[#0F3D3E] transition hover:border-[#0F3D3E]/40 hover:bg-[#F6F5F2] active:scale-[0.99]"
           >
             <Printer size={14} aria-hidden />
@@ -2939,7 +2947,7 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
           <button
             onClick={copyReport}
             aria-live="polite"
-            aria-label={`Copy the ${RANGE_LABEL[range]} report as text`}
+            aria-label={`Copy the ${rangeLabelOf(range, customWindow)} report as text`}
             className="flex min-h-[38px] items-center gap-1.5 rounded-xl border border-[#E3E7E0] bg-white px-3.5 text-[12px] font-semibold text-[#0F3D3E] transition hover:border-[#0F3D3E]/40 hover:bg-[#F6F5F2] active:scale-[0.99]"
           >
             {repCopyState === 'ok' ? (
@@ -2953,7 +2961,7 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
             href={`https://wa.me/?text=${encodeURIComponent(buildReportText(buildRepOpts()))}`}
             target="_blank"
             rel="noopener noreferrer"
-            aria-label={`Share the ${RANGE_LABEL[range]} report on WhatsApp`}
+            aria-label={`Share the ${rangeLabelOf(range, customWindow)} report on WhatsApp`}
             className="flex min-h-[38px] items-center gap-1.5 rounded-xl border border-[#E3E7E0] bg-white px-3.5 text-[12px] font-semibold text-[#0F3D3E] transition hover:border-[#0F3D3E]/40 hover:bg-[#F6F5F2] active:scale-[0.99]"
           >
             <MessageCircle size={14} aria-hidden />
@@ -2999,7 +3007,7 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
                   )}
                   <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#6B6B6B]">
                     <CalendarRange size={11} aria-hidden /> {appTzTag()} days ·{' '}
-                    {RANGE_LABEL[range].toLowerCase()}
+                    {rangeLabelOf(range, customWindow).toLowerCase()}
                   </span>
                 </div>
               </div>
@@ -3220,7 +3228,7 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
                     CSV
                   </button>
                   <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#6B6B6B]">
-                    <Clock size={11} aria-hidden /> {appTzTag()} hours · {RANGE_LABEL[range].toLowerCase()}
+                    <Clock size={11} aria-hidden /> {appTzTag()} hours · {rangeLabelOf(range, customWindow).toLowerCase()}
                   </span>
                 </div>
               </div>
@@ -4794,7 +4802,7 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
               </div>
               <p className="mb-4 text-[11.5px] text-[#969696]">
                 Star ratings guests leave on their own phones, from the order's track page —
-                served tickets only. {RANGE_LABEL[range].toLowerCase()}.
+                served tickets only. {rangeLabelOf(range, customWindow).toLowerCase()}.
               </p>
               {fbAgg.count === 0 ? (
                 <div className="flex flex-col items-center justify-center gap-2 py-8 text-center">
@@ -5046,7 +5054,7 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
               </div>
               <p className="mb-4 text-[11.5px] text-[#969696]">
                 Sealed shifts only — expected is the ledger's math, variance is stored, never
-                re-derived. {RANGE_LABEL[range].toLowerCase()}.
+                re-derived. {rangeLabelOf(range, customWindow).toLowerCase()}.
               </p>
               {shiftAgg.count === 0 ? (
                 <div className="flex flex-col items-center justify-center gap-2 py-8 text-center">

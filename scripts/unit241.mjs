@@ -90,6 +90,9 @@ const strip = (p) =>
 const apiCode = strip('../src/lib/api.ts');
 const moversCode = strip('../src/lib/movers.ts');
 const reportsCode = strip('../src/components/reports/ReportsScreen.tsx');
+/* v5.236.0 — the window family moved to its ONE home (lib/reportWindow);
+ * pin 8 re-anchors there — the contract is unchanged, the home is not. */
+const reportWindowCode = strip('../src/lib/reportWindow.ts');
 
 /* 6 — the fetch rides moverWindow with the exact [start, end) cap; the
  * private rolling math is extinct from live code. */
@@ -114,15 +117,17 @@ assert.ok(
 ok('movers.ts owns the week via lastNDaysMs — no second window math');
 
 /* 8 — Reports' rangeWindow delegates too; the private shift stays only in
- * priorWindow (scoped guard — the file still holds shiftDayIso). */
-const rwStart = reportsCode.indexOf('function rangeWindow(');
-const rwEnd = reportsCode.indexOf('function priorWindow(');
+ * priorWindow (scoped guard — the lib still holds shiftDayIso).
+ * v5.236.0: re-anchored to lib/reportWindow.ts — the window family's ONE
+ * home since the Custom range joined. */
+const rwStart = reportWindowCode.indexOf('function rangeWindow(');
+const rwEnd = reportWindowCode.indexOf('function priorWindow(');
 assert.ok(rwStart > -1 && rwEnd > rwStart, 'rangeWindow found before priorWindow');
-const rwBody = reportsCode.slice(rwStart, rwEnd);
+const rwBody = reportWindowCode.slice(rwStart, rwEnd);
 assert.ok(rwBody.includes('return lastNDaysMs(days);'), "rangeWindow delegates to the ONE builder");
 assert.ok(!rwBody.includes('shiftDayIso'), 'no private day-shift inside rangeWindow');
-assert.ok(reportsCode.includes('shiftDayIso(-(2 * days - 1))'), "priorWindow keeps its shift — untouched");
-ok('Reports rangeWindow: delegate + scoped guard (priorWindow untouched)');
+assert.ok(reportWindowCode.includes('shiftDayIso(-(2 * days - 1))'), "priorWindow keeps its shift — untouched");
+ok('rangeWindow: delegate + scoped guard (priorWindow untouched) — now in lib/reportWindow');
 
 /* 9 — the aggregation math did not move: rank by units with the family's
  * deterministic tie-breaks, pace the same ledger minus the cap. */
