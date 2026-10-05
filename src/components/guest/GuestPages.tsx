@@ -1705,6 +1705,33 @@ function FeedbackCard({
   );
 }
 
+/* ── the ticket's way back (v5.252.0) ────────────────────────────────────────
+ * After "Enjoy — pay at the counter" the second round — a café's most natural
+ * guest act — had no button: the ticket's only exits were copy-link and home
+ * (the QR check-in gate, the wrong destination for a seated guest). The
+ * session cache is sessionStorage (per-tab by design), so the pill only speaks
+ * where a session can actually be resumed: a fresh or reopened link shows
+ * nothing and keeps the two honest exits — the button never claims a session
+ * it cannot see. And routing to the menu promises nothing about the window:
+ * the menu's own bands speak every session state (live / warm / ended —
+ * 288/289/290's machinery) — the destination always tells its own truth, the
+ * kept cart rides along (the sessionStorage promise, 289's law).
+ */
+const GUEST_SESSION_PREFIX = /^sp\.guest\.session\.(.+)$/;
+
+function recoverGuestSessionToken(): string | null {
+  try {
+    for (let i = 0; i < sessionStorage.length; i++) {
+      const k = sessionStorage.key(i);
+      const m = k ? GUEST_SESSION_PREFIX.exec(k) : null;
+      if (m) return m[1];
+    }
+  } catch {
+    /* private mode — no session to recover, no pill */
+  }
+  return null;
+}
+
 export function GuestTrackPage({ orderId }: { orderId: string }): React.ReactElement {
   const { t } = useGuestLang();
   const uuidLike = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(orderId);
@@ -1715,6 +1742,9 @@ export function GuestTrackPage({ orderId }: { orderId: string }): React.ReactEle
   const [state, setState] = useState<'loading' | 'ready' | 'bad' | 'net'>('loading');
   const [muted, setMuted] = useState(() => localStorage.getItem('sp.guest.chime') === 'off');
   const [copied, setCopied] = useState(false);
+  /* v5.252.0 — read once at mount: sessionStorage is per-tab, no other tab can
+   * gain a key into this one while the ticket is on screen. */
+  const [moreToken] = useState(() => recoverGuestSessionToken());
   const prevStatus = useRef<string | null>(null);
 
   const tick = useCallback(async () => {
@@ -1920,7 +1950,7 @@ export function GuestTrackPage({ orderId }: { orderId: string }): React.ReactEle
                         {t(f.labelKey)}
                         {now && !servedNow && <span className="ml-2 inline-block h-2 w-2 animate-pulse rounded-full" style={{ background: brand.gold }} aria-hidden />}
                       </p>
-                      <p className="text-[12px] text-[#6B6B6B]">{now ? t(f.hintKey) : done ? t('done') : t('waiting')}</p>
+                      <p className="text-[12px] text-[#6B6B6B]">{now ? (servedNow && paid ? t('flowServedPaidHint') : t(f.hintKey)) : done ? t('done') : t('waiting')}</p>
                     </li>
                   );
                 })}
@@ -1997,7 +2027,23 @@ export function GuestTrackPage({ orderId }: { orderId: string }): React.ReactEle
             <p className="mt-4 flex items-center justify-center gap-1.5 text-[11.5px] text-[#6B6B6B]">
               <RefreshCw size={11} aria-hidden /> {t('autoUpdate')}
             </p>
-            <div className="mt-2 flex items-center justify-center gap-2 text-[11.5px] text-[#6B6B6B]">
+            <div className="mt-2 flex flex-wrap items-center justify-center gap-2 text-[11.5px] text-[#6B6B6B]">
+              {/* v5.252.0 — the forward action takes the first seat and the
+                  brand's voice (teal, the header's kin); the ghost pills stay
+                  for the passive words. A cancelled ticket keeps the two
+                  exits — a cut order's way back is the staff, not the menu. */}
+              {moreToken && (
+                <button
+                  type="button"
+                  onClick={() => window.location.assign(`/menu/${moreToken}`)}
+                  aria-label={t('orderMore')}
+                  title={t('orderMore')}
+                  className="inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 font-semibold text-white shadow-sm transition-[filter] hover:brightness-110 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F3D3E]"
+                  style={{ background: brand.teal }}
+                >
+                  <UtensilsCrossed size={12} aria-hidden /> {t('orderMore')}
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => {

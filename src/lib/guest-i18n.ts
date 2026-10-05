@@ -157,6 +157,9 @@ const EN: Dict = {
   copyLink: 'Copy tracking link',
   copied: 'Copied!',
   goHome: 'ServePoint home',
+  // v5.252.0 — the ticket's way back: the forward action and the paid word
+  orderMore: 'Order more',
+  flowServedPaidHint: 'Enjoy — the bill is settled',
   // feedback (019)
   fbTitle: 'How was everything?',
   fbSub: 'Tap the stars — it helps the cafe a lot.',
@@ -295,6 +298,9 @@ const HI: Dict = {
   copyLink: 'ट्रैकिंग लिंक कॉपी करें',
   copied: 'कॉपी हो गया!',
   goHome: 'ServePoint होम',
+  // v5.252.0 — the ticket's way back: the forward action and the paid word
+  orderMore: 'और ऑर्डर करें',
+  flowServedPaidHint: 'स्वाद लें — बिल चुक गया',
   // feedback (019)
   fbTitle: 'सब कैसा लगा?',
   fbSub: 'सितारे दबाएँ — इससे कैफ़े को बहुत मदद मिलती है।',
@@ -433,6 +439,9 @@ const KN: Dict = {
   copyLink: 'ಟ್ರ್ಯಾಕಿಂಗ್ ಲಿಂಕ್ ನಕಲಿಸಿ',
   copied: 'ನಕಲಾಗಿದೆ!',
   goHome: 'ServePoint ಮುಖಪುಟ',
+  // v5.252.0 — the ticket's way back: the forward action and the paid word
+  orderMore: 'ಮತ್ತಷ್ಟು ಆರ್ಡರ್ ಮಾಡಿ',
+  flowServedPaidHint: 'ಆನಂದಿಸಿ — ಬಿಲ್ ಪಾವತಿಸಲಾಗಿದೆ',
   // feedback (019)
   fbTitle: 'ಎಲ್ಲವೂ ಹೇಗಿತ್ತು?',
   fbSub: 'ನಕ್ಷತ್ರಗಳನ್ನು ಒತ್ತಿ — ಇದು ಕೆಫೆಗೆ ಬಹಳ ಸಹಾಯ ಮಾಡುತ್ತದೆ.',
