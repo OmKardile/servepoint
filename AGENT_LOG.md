@@ -41,3 +41,20 @@ QA result: PASSED — fresh loads zero page errors; primary flow Dashboard → B
 Commits: 6211785 — fix(security): scrub committed credentials (help.md JWTs + qa102.har untrack + *.har gitignore) · dc717eb — fix(eod): Z-report print joins the shared print engine (last blind removeChild retires)
 Push: CONFIRMED — 9e76d57..dc717eb main -> main (clean origin push, no token needed in URL).
 Tomorrow's suggestion: README route-grammar + feature-note refresh (the app is v5.144.0; README narrates a v2.8.0 world) — verify SECTION_SLUGS list in src/App.tsx as the source of truth; consider rotating the retired project's keys if it still exists anywhere.
+
+DAILY AGENT RUN — 2026-10-05 (IST; run window 09:06–09:35 +08 = 11:30–11:59 server)
+========================
+Gates before: tsc (bun run lint) PASS (EXIT=0) · tree clean at 0c57bf9 (= 5.225.0, the 15-min loop's Task 264) · no test suite exists (project policy: browser QA, no test code) · `bun run build` FORBIDDEN in this sandbox (skipped per run facts, not failed)
+Gates after:  tsc PASS · browser QA PASSED (route claims verified live) · screenshots archived
+Issues found:
+  1. DOCS DRIFT (the 2026-10-04 deferred item, claimed this run) — README.md narrated a v2.8.0-era world: `/:slug/pos` · `/:slug/kds` route patterns, a `/superadmin` console, `/coolkafe/*` operational examples, a `mega-tsos/` tree with `schema.sql`, "ADR 0001 through 0009", v2.7.x–v2.9.0 feature notes — while the app is the v5 line (one route `/`, sections as app state, SECTION_SLUGS grammar, 16 ADRs, 37 migrations, no schema.sql).
+  2. HYGIENE OBSERVATION (no action needed) — nine legacy component dirs (pos, kds, storefront, superadmin, orders, shifts, tables, native, offers) exist locally as EMPTY untracked husks; git tracks 19 live dirs, zero external importers of the husks. Left alone: git never saw them.
+Issues fixed:
+  1. README.md rewritten (158+/122−) with src/App.tsx as route truth: route table (/; /:screen + /:slug/:screen deep links; /close-out + /guests spoken aliases; honest 404; porch /showcase + /help; guest QR /t/:qr_token · /menu/:qr_token · /track/:orderId), the fourteen-screen table (rail label ↔ section id, Close-out=eod, Guests=customers), structure mirroring the 19 tracked dirs + 37 additive migrations + sw.js versioned precache, ADR links 0001→0016. Every claim file-checked; every route claim browser-verified before commit.
+Issues deferred:
+  - Sibling docs may carry the same v2-era drift (technical-documentation.md, business-documentation.md, docs/*_SPEC.md) — next daily passes should sweep them against the same SECTION_SLUGS truth.
+  - Carried from 2026-10-04: git history still contains the scrubbed JWTs + old pooler password (force-push banned; rotate if the repo ever leaves sandbox status).
+QA result: PASSED — route grammar E2E: / boots Dashboard (session persisted, sidebar labels match the README table byte-for-byte); /coolkafe/pos — the OLD README's own example — lands on the honest 404 register ("No such room in this house.", v5.141.0); /close-out deep-links straight into Close-out (v5.93.0 alias); /showcase + /help porches render; console fingerprints identical to the pre-session buffer (4× vite HMR FloorScreen + the pre-5.261-fix table_id crash, timestamps 08:43 IST = the Task 264 window) — zero NEW errors. Screenshots: scripts/qa-daily-readme-404-register.png, scripts/qa-daily-readme-closeout-deeplink.png.
+Commits: 992e3ec — docs(readme): route grammar refresh — App.tsx SECTION_SLUGS as source of truth
+Push: pending at log-write time — executed immediately after this entry (same run).
+Tomorrow's suggestion: sweep technical-documentation.md + docs/*_SPEC.md for the same v2-era route/feature drift; the 15-min loop's census candidates (Messages depth, band stuck-window whisper) remain owner-gated.
