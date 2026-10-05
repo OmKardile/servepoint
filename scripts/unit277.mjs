@@ -82,8 +82,10 @@ assert.ok(!/\bsetUTC(Date|Month)\b/.test(bills), 'no inline UTC calendar arithme
 ok('ONE derivation — no inline fork of the window grammar');
 
 /* ── 5. the memo rides the pair ── */
+/* v5.242.0 re-anchor: the memo's BASE grew the money book (loaded ∪ book —
+ * the whole-book census), the deps pair is byte-identical. */
 assert.ok(
-  bills.includes('}, [orders, statusFilter, dateFilter, search, customFrom, customTo]);'),
+  bills.includes('}, [book, statusFilter, dateFilter, search, customFrom, customTo]);'),
   'the filter memo\u2019s deps ride customFrom/customTo — no stale window',
 );
 ok('the filter memo rides the pair');

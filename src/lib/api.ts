@@ -155,6 +155,39 @@ export async function fetchOrders(tenantId: string, limit = 100): Promise<Order[
 }
 
 /**
+ * v5.242.0 — the money book: EVERY open ticket in the tenant, uncapped.
+ * fetchOrders' latest-100 window is a BROWSING window — but the money census
+ * (Bills' chip, the chase strip, Close-out's older-unpaid count) must count
+ * the WHOLE book: the day an unpaid ticket slides past the newest 100, a
+ * loaded-page census quietly undercounts while Close-out's head-count stays
+ * true — the same word, two numbers (the 5.240 disease in a new register).
+ * The predicate is the TRIO's unpaid spoken server-side — status ≠ cancelled,
+ * status ≠ paid (the legacy leg displayStatus already honours), payment_status
+ * ≠ completed — so the chip and the list can never disagree about what
+ * "unpaid" means, at any scale. Outstanding money is bounded by business
+ * reality (the chase gets paid), so the uncapped read stays honest AND cheap.
+ * Same shape as fetchOrders — attachItems bridges the lines, so merged rows
+ * feed the list, the detail pane, the search hay and the CSV unchanged.
+ */
+export async function fetchOpenOrders(tenantId: string): Promise<Order[]> {
+  requireCloud();
+  const { data, error } = await supabase
+    .from('orders')
+    .select('*, dining_tables(table_number)')
+    .eq('tenant_id', tenantId)
+    .neq('status', 'cancelled')
+    .neq('status', 'paid')
+    .neq('payment_status', 'completed')
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  const rows = (data || []).map((r: unknown) => {
+    const { dining_tables, ...rest } = r as OrderRow & { dining_tables?: { table_number: string } | null };
+    return { ...rest, table_label: dining_tables?.table_number ?? null } as OrderRow;
+  });
+  return attachItems(rows, tenantId);
+}
+
+/**
  * v5.82.0 — one ticket by id, for the floor's hold audit. When a held table's
  * active_order_id misses the board's latest-100 window, this targeted read
  * decides whether the hold is real (the ticket exists and is still live) or

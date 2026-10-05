@@ -1293,6 +1293,11 @@ const EodScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
             .eq('tenant_id', tenantId)
             .lt('created_at', startIso)
             .neq('status', 'cancelled')
+            /* v5.242.0 — the legacy leg: status 'paid' with a payment_status
+             * that never completed is the trio's PAID (displayStatus honours
+             * it), so the census must too — ONE unpaid word at any scale
+             * (the money book's server predicate speaks the same three). */
+            .neq('status', 'paid')
             .neq('payment_status', 'completed');
           setOlderUnpaid(r.error ? 0 : (r.count ?? 0));
         } catch {

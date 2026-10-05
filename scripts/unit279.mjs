@@ -164,7 +164,9 @@ ok('the honesty row — one text flow (the 5.237 law, held)');
 assert.ok(bills.includes("type DateFilter = 'today' | '7d' | 'custom' | 'all';"), 'the DateFilter union unchanged');
 assert.ok(bills.includes('useState<string>(() => shiftDayIso(-6))'), 'From arms 6 days back');
 assert.ok(bills.includes("useState<string>(() => appTodayIso())"), 'To arms today');
-assert.ok(bills.includes('}, [orders, statusFilter, dateFilter, search, customFrom, customTo]);'), 'the memo rides the pair');
+/* v5.242.0 re-anchor: the memo's BASE grew the money book (loaded ∪ book —
+ * the whole-book census), the deps pair is byte-identical. */
+assert.ok(bills.includes('}, [book, statusFilter, dateFilter, search, customFrom, customTo]);'), 'the memo rides the pair');
 assert.equal((bills.match(/max=\{appTodayIso\(\)\}/g) || []).length, 2, 'both custom inputs cap at today');
 assert.equal((bills.match(/sp-input h-9 rounded-xl border border-\[#E3E7E0\]/g) || []).length, 2, 'both custom inputs wear the house ink');
 assert.ok(bills.includes('`from ${rangeLabelOf(\'custom\', { from: customFrom, to: customTo })}`'), 'the custom miss sentence byte-true');

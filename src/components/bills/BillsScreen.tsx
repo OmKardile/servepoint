@@ -23,6 +23,7 @@ import {
   fetchOrderHistory,
   fetchOrderOfferTitle,
   fetchOrderPayment,
+  fetchOpenOrders,
   fetchOrderPayments,
   fetchOpenPaymentSums,
   fetchOrders,
@@ -100,8 +101,13 @@ const STATUS_DOT: Record<string, string> = {
  * served/pending). They are all "active" in the trio model until paid/cancelled.
  * With the 001 engine, a completed PAYMENT means "Paid" regardless of where
  * the order sits in the kitchen lifecycle (NOVA: the counter is the gate).
+ *
+ * v5.242.0 — exported (the isGhostTicket precedent): the money book's server
+ * predicate must speak THE SAME word at any scale, and unit281 pins the
+ * agreement over the full (status × payment_status) matrix. A pure function
+ * of the pair — no store, no clock, no component tree.
  */
-function displayStatus(o: Pick<Order, 'status' | 'payment_status'>): string {
+export function displayStatus(o: Pick<Order, 'status' | 'payment_status'>): string {
   const s = String(o.status || '').toLowerCase();
   if (s === 'cancelled') return 'cancelled';
   if (s === 'paid') return 'paid';
@@ -521,11 +527,40 @@ const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRet
     amount?: number;
   } | null>(null);
 
+  /* ── v5.242.0 — the money book: the WHOLE book's open tickets, uncapped
+   * (fetchOpenOrders), so the census chip, the chase strip and the list speak
+   * the DB's truth even after an unpaid ticket slides past the newest-100
+   * browsing window. null = the read failed (fail-soft: the room falls back
+   * to the loaded page's own count — what it can see, honestly scoped). */
+  const [moneyBook, setMoneyBook] = useState<Order[] | null>(null);
+
+  /* ── v5.242.0 — the whole book: loaded page ∪ money book, loaded wins
+   * collisions (its rows carry the in-session patches). The money book is a
+   * SUPERSET of the loaded page's unpaid rows by construction (the same
+   * trio, server-side, uncapped), so the merge only ever APPENDS rows the
+   * browsing window dropped — the list, the census chip, the chase strip
+   * and the CSV all read this one base. */
+  const book = useMemo(() => {
+    if (!moneyBook || moneyBook.length === 0) return orders;
+    const seen = new Set(orders.map((o) => o.id));
+    const past = moneyBook.filter((m) => !seen.has(m.id));
+    if (past.length === 0) return orders;
+    return [...orders, ...past];
+  }, [orders, moneyBook]);
+
+  /** v5.242.0 — how many open bills the money book holds that the browsing
+   * window dropped. Zero most days; when it grows, the census says so. */
+  const moneyOnlyCount = useMemo(() => {
+    if (!moneyBook) return 0;
+    const ids = new Set(orders.map((o) => o.id));
+    return moneyBook.filter((m) => !ids.has(m.id)).length;
+  }, [orders, moneyBook]);
+
   /** Mirror of the orders list for mutation callbacks (fresh totals). */
   const ordersRef = useRef<Order[]>([]);
   useEffect(() => {
-    ordersRef.current = orders;
-  }, [orders]);
+    ordersRef.current = book;
+  }, [book]);
 
   /** v5.44.0: a door that arrived with context consumes its hint ONCE —
    *  'unpaid' → land on the money still out (statusFilter 'active'), not
@@ -647,6 +682,22 @@ const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRet
       fetchOpenPaymentSums(tenantId, unpaidIds)
         .then((m) => setPaidSums(m))
         .catch(() => setPaidSums(new Map()));
+      /* v5.242.0 — the whole book rides the same load: the money book read
+         (uncapped, the trio's unpaid server-side) feeds the census, and its
+         own ledger-sum read replaces the loaded-page one so every balance —
+         including tickets past the browsing window — is split-aware. The
+         fallback stays the bounded sums above; a failed book read dims to
+         the loaded page's own count, never to a lie. */
+      fetchOpenOrders(tenantId)
+        .then((mb) => {
+          setMoneyBook(mb);
+          return fetchOpenPaymentSums(
+            tenantId,
+            mb.filter((o) => displayStatus(o) === 'active').map((o) => o.id),
+          );
+        })
+        .then((m) => setPaidSums(m))
+        .catch(() => setMoneyBook(null));
     } catch (err) {
       setOrdersError((err as Error)?.message || 'Failed to load orders from the cloud.');
     } finally {
@@ -704,7 +755,7 @@ const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRet
       }
       return true;
     });
-  }, [orders, statusFilter, dateFilter, search, customFrom, customTo]);
+  }, [book, statusFilter, dateFilter, search, customFrom, customTo]);
 
   /* NOVA "unpaid priority" (v5.3.1): money-outstanding bills float to the top
      of the list so the counter never loses sight of what's owed; within each
@@ -725,11 +776,12 @@ const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRet
     });
   }, [visible]);
 
-  /* Money outstanding across everything loaded (not filter-dependent) — the
-     "you still owe / are owed" signal for the counter. */
+  /* Money outstanding across the WHOLE book (v5.242.0 — not the loaded page,
+     not filter-dependent) — the "you still owe / are owed" signal for the
+     counter. */
   const unpaidCount = useMemo(
-    () => orders.filter((o) => displayStatus(o) === 'active').length,
-    [orders]
+    () => book.filter((o) => displayStatus(o) === 'active').length,
+    [book]
   );
 
   /* 5.92.0 — the count chip echoes the strip's whisper: how many of the
@@ -737,10 +789,10 @@ const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRet
      says "N older tickets — see Bills"). The door opens both ways. */
   const olderUnpaidCount = useMemo(
     () =>
-      orders.filter(
+      book.filter(
         (o) => displayStatus(o) === 'active' && !isSameAppDay(o.created_at)
       ).length,
-    [orders]
+    [book]
   );
 
   /* ── v5.151.0 — the chase set: every unpaid ticket, oldest first, with
@@ -748,7 +800,7 @@ const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRet
    * assembly feeds the strip's Copy + WhatsApp. */
   const chaseTickets = useMemo(
     () =>
-      orders
+      book
         .filter((o) => displayStatus(o) === 'active')
         .slice()
         .sort((a, b) => a.created_at.localeCompare(b.created_at))
@@ -768,7 +820,7 @@ const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRet
             note: notes.length > 0 ? notes.join(' · ') : null,
           };
         }),
-    [orders, paidSums]
+    [book, paidSums]
   );
   const chaseTotal = useMemo(() => chaseTickets.reduce((s, t) => s + t.open, 0), [chaseTickets]);
   /* ── v5.186.0 — the strip knows the age: the chase list runs oldest first,
@@ -981,6 +1033,25 @@ const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRet
               : o
           )
         );
+        /* v5.242.0 — the money book follows the ledger in-session: a settled
+           or cancelled ticket LEAVES the census (a kept book would count
+           money that just landed); a split part stays, its balance rides
+           paidSums. The census never waits for the next load to be true. */
+        setMoneyBook((prev) => {
+          if (!prev) return prev;
+          if (kind === 'cancel' || (kind === 'pay' && coveredNow)) {
+            return prev.filter((o) => o.id !== orderId);
+          }
+          return prev.map((o) =>
+            o.id === orderId
+              ? ({
+                  ...o,
+                  ...patch,
+                  payment_status: kind === 'pay' ? (coveredNow ? 'completed' : 'pending') : patch.payment_status,
+                } as Order)
+              : o
+          );
+        });
         if (kind === 'pay') {
           if (coveredNow) {
             setPaidThisSession((prev) => new Set(prev).add(orderId));
@@ -1014,6 +1085,11 @@ const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRet
         await advanceOrder(orderId, tenantId, toStatus);
         setOrders((prev) =>
           prev.map((o) => (o.id === orderId ? ({ ...o, status: toStatus } as Order) : o))
+        );
+        /* v5.242.0 — the kitchen lifecycle never settles money: the ticket
+           stays in the census, its row keeps pace with the board. */
+        setMoneyBook((prev) =>
+          prev ? prev.map((o) => (o.id === orderId ? ({ ...o, status: toStatus } as Order) : o)) : prev
         );
       } catch (err) {
         setActionError((err as Error)?.message || 'Failed to update the order.');
@@ -1190,14 +1266,31 @@ const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRet
             {unpaidCount > 0 && (
               <span
                 title={
-                  olderUnpaidCount > 0
+                  (olderUnpaidCount > 0
                     ? `${unpaidCount} awaiting payment — ${olderUnpaidCount} from an earlier day`
-                    : 'Bills awaiting payment in the loaded list'
+                    : 'Bills awaiting payment in the loaded list') +
+                  (moneyOnlyCount > 0
+                    ? ` — the whole book is counted (${moneyOnlyCount} past the loaded page)`
+                    : '')
                 }
                 className="inline-flex shrink-0 items-center gap-1 rounded-full bg-[#FFF4DB] px-2.5 py-1 text-[11px] font-extrabold tabular-nums text-[#8A5A00]"
               >
                 <Receipt size={11} aria-hidden />
-                {unpaidCount} unpaid{olderUnpaidCount > 0 ? ` · ${olderUnpaidCount} older` : ''}
+                {/* ONE text flex item (the icon is the other): the text flow
+                    keeps the real spaces "8 unpaid · 5 older" — the a11y-glue
+                    law never gets a fork; the amber rides a nested inline
+                    span, never a second flex item. */}
+                <span>
+                  {unpaidCount} unpaid
+                  {olderUnpaidCount > 0 && (
+                    <>
+                      {' · '}
+                      {/* v5.242.0 — the older segment wears its own ink: the
+                          chase amber family the book's service voices use. */}
+                      <span className="text-[#B45309]">{olderUnpaidCount} older</span>
+                    </>
+                  )}
+                </span>
               </span>
             )}
           </div>
@@ -1277,6 +1370,17 @@ const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRet
               WhatsApp
             </a>
           </div>
+        )}
+
+        {/* v5.242.0 — the census's own honesty row: when the money book holds
+            open bills the browsing window dropped, the room says so — the
+            chip counts the whole book, the strip carries them, the list below
+            is the loaded page. One text flow (the a11y-glue law), the span
+            ink the quiet voices wear. */}
+        {moneyBook && moneyOnlyCount > 0 && (
+          <p className="mt-2 text-[11.5px] leading-snug text-[#8A938C]">
+            {`The census reads the whole book — ${moneyOnlyCount} open ${moneyOnlyCount === 1 ? 'bill' : 'bills'} ${moneyOnlyCount === 1 ? 'sits' : 'sit'} past the loaded page below, counted in the chip and carried by the chase copy.`}
+          </p>
         )}
 
         <div className="mt-3 flex items-center gap-2">
