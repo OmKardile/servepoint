@@ -80,16 +80,28 @@ export function offerFit(
 
 /**
  * The fit's spoken sentence — ONE composer for every surface that
- * whispers a fit: "₹50.00 off applied" (the confirmation),
+ * whispers a fit: "₹27.00 off applied" (the confirmation),
  * "₹50.00 off over ₹300.00 applies" (the money on the table),
  * "Add ₹80.00 more for ₹50.00 off over ₹300.00" (the honest upsell).
  * The frame travels with the reducer so two surfaces can never say the
  * fit in two dialects — 5.211's own-words rule, now for the fit.
+ * v5.233.0 — the 'applies' state names the money it takes on THIS cart,
+ * but only when the rule doesn't already say it: a PERCENT offer's rule
+ * speaks only a rate ("10% off") — the ₹27.00 it takes on the guest's
+ * actual lines lived nowhere until the tap, so the bar whispered a rate
+ * while the total showed full price (5.262's law: a verdict beside a
+ * number that never meets it). A FLAT offer's rule already speaks the
+ * rupees — saying them twice is the review-step's "Trial (status: trial)"
+ * disease, the same words in one breath. So: percent gains the clause
+ * ("10% off applies · ₹27.00 off this order"), flat keeps its bytes.
+ * Zero take keeps the old bytes too (silence, never a fabricated ₹0.00).
  */
 export function offerFitVoice(fit: OfferFit): string {
   return fit.kind === 'applied'
     ? `${formatMoney(fit.take)} off applied`
     : fit.kind === 'applies'
-      ? `${fit.rule} applies`
+      ? fit.offer.discount_type === 'percent' && fit.take > 0
+        ? `${fit.rule} applies · ${formatMoney(fit.take)} off this order`
+        : `${fit.rule} applies`
       : `Add ${formatMoney(fit.missing)} more for ${fit.rule}`;
 }

@@ -323,7 +323,11 @@ export const ProvisioningWizard: React.FC<ProvisioningWizardProps> = ({
 
   const monthlyPrice = Number(form.monthlyPrice);
   const pricePreview = Number.isNaN(monthlyPrice) ? '—' : formatMoney(monthlyPrice);
-  const planLabel = form.plan === 'trial' ? 'Trial (status: trial)' : 'Standard (status: active)';
+  /* v5.233.0 — the review's plan word speaks the CHOICE once: the old
+   * "Trial (status: trial)" said the same thing twice in one breath. The
+   * option labels' own words ("Trial (14 days)" / "Standard (active)") are
+   * the review's words now — one voice, step 1 to step 3. */
+  const planLabel = form.plan === 'trial' ? 'Trial (14 days)' : 'Standard (active)';
 
   const copyButton = (key: string, text: string, label: string) => (
     <button
@@ -541,8 +545,16 @@ export const ProvisioningWizard: React.FC<ProvisioningWizardProps> = ({
                 {stepErrors.monthlyPrice ? (
                   <FieldError id="pw-price-error" message={stepErrors.monthlyPrice} />
                 ) : (
+                  /* v5.233.0 — the price preview speaks the PLAN's truth: a
+                   * trial charges nothing yet (the tenant strip's own
+                   * "no charge yet" grammar — 5.125's clock voice), so the
+                   * caption names the after-trial rate instead of claiming
+                   * a charge that never lands during the trial. Standard
+                   * keeps its charged-at bytes. */
                   <p id="pw-price-preview" className="mt-1 text-xs text-[#969696]">
-                    Charged at {pricePreview} / month
+                    {form.plan === 'trial'
+                      ? `No charge yet — ${pricePreview} / month after the trial ends`
+                      : `Charged at ${pricePreview} / month`}
                   </p>
                 )}
               </div>
