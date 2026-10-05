@@ -21,15 +21,21 @@ import assert from 'node:assert/strict';
 
 const { billsCsvRows } = await import('/src/components/bills/BillsScreen.tsx');
 const { chaseAge } = await import('/src/lib/day.ts');
+const { offTodayBoundsIso } = await import('/src/lib/appday.ts');
 
 let n = 0;
 const ok = (name) => console.log(`  ok ${++n} - ${name}`);
 
 /* ── fixtures — stamps built ON day keys, never hour offsets ── */
 const now = new Date();
-/* 'today' = the run's own local day at 09:00 — same-local-day for EVERY run
- * hour, so the chip-rule side of the age cell is deterministic. */
-const todayStamp = new Date(now); todayStamp.setHours(9, 0, 0, 0);
+/* 'today' = 09:00 of the APP's own day (the gate reads Asia/Kolkata, the
+ * runner's system clock is UTC — 5.219's midnight-hole lesson, second
+ * application: a fixture built on the SYSTEM day passes by coincidence and
+ * fails on a timer, exactly at 18:30Z when the IST date rolls. The 5.243
+ * seam (offTodayBoundsIso — the app-today CONTAINING now) makes the
+ * fixture same-app-day for EVERY run instant; +9h sits inside it by
+ * construction (Kolkata has no DST). */
+const todayStamp = new Date(new Date(offTodayBoundsIso(now.getTime()).startIso).getTime() + 9 * 36e5);
 /* 'older' = 3 local days back, same clock time — a different calendar day
  * by construction. */
 const olderStamp = new Date(now); olderStamp.setDate(olderStamp.getDate() - 3); olderStamp.setHours(9, 0, 0, 0);

@@ -72,7 +72,7 @@ const spCount = spNames.size;
 {
   assert.ok(!showcase.includes('applied from the CLI'),
     'the deployment-state wording is extinct — 038 sits in the tree unapplied');
-  assert.match(showcase, /k: '37', v: 'idempotent migrations — one command rebuilds the whole schema'/,
+  assert.match(showcase, /k: '38', v: 'idempotent migrations — one command rebuilds the whole schema'/,
     'the migration card names what the tree proves');
   assert.match(showcase, /k: '21', v: 'guarded RPCs — every cloud write passes a database-side guard'/,
     'the RPC card keeps its scope word');
