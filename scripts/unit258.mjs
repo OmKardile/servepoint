@@ -34,6 +34,7 @@ const strip = (p) =>
     .join('\n');
 
 const floor = strip('../src/components/floor/FloorScreen.tsx');
+const tsLib258 = strip('../src/lib/tableSession.ts');
 
 /* ── 1. ONE row grammar — the closure and its two call sites ── */
 
@@ -94,14 +95,21 @@ ok('no new timer — the 5.218 heartbeat drives the history too');
 
 /* ── 5. The card pill joins the warm grammar ── */
 
-const pillIdx = floor.indexOf('const youngest = liveWindowsOf(sessions, t.id, nowTick).reduce(');
-assert.ok(pillIdx > 0, 'the pill computes the table\'s youngest live window');
-const pillSlice = floor.slice(pillIdx, pillIdx + 1300);
+/* 5.220.0 evolution: the youngest-window reduce moved home to lib/tableSession
+   (youngestLiveMs — ONE arithmetic, shared with the Dashboard's QR slot); the
+   pill calls it on the table's own filtered windows. */
+const pillIdx = floor.indexOf('const youngest = youngestLiveMs(liveWindowsOf(sessions, t.id, nowTick), nowTick);');
+assert.ok(pillIdx > 0, 'the pill computes the table\'s youngest live window through the lib');
+const pillSlice = floor.slice(pillIdx, pillIdx + 1200);
 assert.ok(pillSlice.length > 300, 'pill slice resolved');
 
-assert.ok(pillSlice.includes('(m, s) => Math.min(m, new Date(s.expires_at).getTime() - nowTick)'),
+const ylmIdx = tsLib258.indexOf('export function youngestLiveMs');
+const ylmSlice = tsLib258.slice(ylmIdx, tsLib258.length);
+assert.ok(ylmSlice.includes('(m, s) => Math.min(m, new Date(s.expires_at).getTime() - nowMs)'),
   'the youngest window reads the SAME tick instant');
-assert.ok(pillSlice.includes('Infinity,'), 'the reduce seeds at Infinity — an empty set never lies');
+assert.ok(ylmSlice.includes('Infinity,'), 'the reduce seeds at Infinity — an empty set never lies');
+ok('the youngest-window arithmetic lives in the lib, reads the tick, seeds at Infinity');
+
 assert.ok(pillSlice.includes('const pillWarm = youngest < 180_000;'),
   'warm gates at the ribbon\'s three-minute line');
 ok('the youngest-window arithmetic reads the tick, gated at three minutes');

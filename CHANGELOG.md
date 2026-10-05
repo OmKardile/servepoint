@@ -3,6 +3,24 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.220.0] — 2026-10-05 — The QR channel reaches the dashboard: guests holding live menus are "needs you now" by definition, but the owner's first screen never knew. The session clock rule moved home to a lib (ONE liveness verdict for every surface) and the needs band grew a QR slot that speaks the state — never a stopwatch
+
+### Changed — the session clock lives in a lib now (`src/lib/tableSession.ts` born, `src/components/floor/FloorScreen.tsx`)
+
+`sessionState`, `SESSION_TONE`, `liveWindowsOf` and the live-vs-expired rule lived inside FloorScreen.tsx since v5.23.0 — a component file. The Dashboard needed the SAME verdict, and a copy would have been a second liveness rule (the one thing the house never allows). The body moved home: `lib/tableSession.ts` exports `sessionState` (optional `nowMs`, the 228 seam), `SESSION_TONE`, `liveWindows` (all tables), `liveWindowsOf` (per table) and `youngestLiveMs` (the warm grammar's arithmetic — `Infinity` seed so an empty set never reads warm; the live filter guarantees positive remainders, the display owns zero). The Floor imports the whole family and keeps no local copy; the card's warm pill composes per-table through the lib (`youngestLiveMs(liveWindowsOf(…), nowTick)`).
+
+### Changed — the QR slot in the needs band (`src/components/dashboard/DashboardScreen.tsx`)
+
+The Dashboard's 30s loop gains one individually fail-soft read (`fetchTableSessions(tenantId).catch(() => null)` — a failed session read never quiets the tiles that already landed). `null` renders NOTHING (silence, never a zero — 5.216's rule); an array speaks through a new slot in the "Needs you now" band, rendered only when windows are actually open — zero live is the band's own all-clear ("Nothing waits on you"), the honest voice for a quiet board. The slot: deep-ink value "N windows open" and a chip in the band's grammar; when the YOUNGEST live window is inside the three-minute line the slot turns the ribbon's warm amber (`#FBF3E4`/`#8A5A16`) and the hint names the STATE — "a menu window is inside its last three minutes" — never a countdown, because a 30s loop cannot own seconds and a frozen "ends in 2:41" is the exact lie 5.218.0 killed (the Floor drill owns the stopwatch). The aria names the count and the closing state in full words; the door opens the Floor (5.89's truth-following doctrine). Zero new timers — the slot rides the loop the Dashboard already runs.
+
+### Tests
+
+`scripts/unit259.mjs` born — 10 checks: the lib's behavior (verdicts by the clock, the `nowMs` seam proven with two clocks on one row, the four tone labels, liveWindows/liveWindowsOf on one predicate, the `Infinity` seed, the smallest-remainder rule, positives only); the Floor importing the lib with NO local copy and the pill composing per-table; the Dashboard's nullable read + `.catch(() => null)`, the zero-is-not-a-slot gate, the state-word hint with NO `formatWindowLeft` in the file, the warm bytes, the truth-following door; exactly ONE interval in the Dashboard file. unit256's chip anchor, unit257's helper pins and unit258's pill pins evolved to the lib home (code-level anchors, intents unchanged). Regression battery unit194–259 ALL PASS by exit code (65 suites); tsc EXIT=0 ×2; build EXIT=0 (44 assets, VERSION → servepoint-v5.220.0-r1).
+
+### E2E (dev, live, read-only — no cut confirmed)
+
+A fresh guest scan opened a window; the Dashboard's needs band grew the "QR MENUS · 1 window open" slot with the deep-ink value and the honest aria ("Open Floor — 1 live QR window to watch or cut"); the window aging into the band flipped the slot warm (amber chip + the three-minute hint). Console zero errors. Screenshot: `download/qa259-dashboard-qr-slot.png`.
+
 ## [5.219.0] — 2026-10-05 — The trail remembers its days: the drill's session trail showed the six most recent scans and a dead-end count ("+14 earlier scans on record") — the owner investigating a table's scan story could never actually SEE the earlier scans. One expansion now reveals the full history, grouped under its IST days; the card's "N open" pill joins the warm grammar; and the UTC-midnight battery failures exposed a real seam hole the day-word never had
 
 ### Changed — the dead-end count became a door (`src/components/floor/FloorScreen.tsx`)

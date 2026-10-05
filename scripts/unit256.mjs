@@ -41,6 +41,7 @@ const strip = (p) =>
     .join('\n');
 
 const floor = strip('../src/components/floor/FloorScreen.tsx');
+const tsLib256 = strip('../src/lib/tableSession.ts');
 
 /* ── 1. The composed free action ── */
 
@@ -60,9 +61,10 @@ assert.ok(ftBody.includes('liveWindowsOf(fresh ?? sessions, t.id)'), 'fresh rows
 ok('the session read is fresh, fail-soft to the cached rows');
 
 // The liveness rule is the drill's own — never a second definition.
-const lwIdx = floor.indexOf('function liveWindowsOf');
-const lwBody = floor.slice(lwIdx, floor.indexOf('function istHM('));
-assert.ok(lwBody.length > 100, 'liveWindowsOf slice resolved');
+// 5.220.0: the body moved home to lib/tableSession; the pin follows it.
+const lwIdx = tsLib256.indexOf('export function liveWindowsOf');
+const lwBody = tsLib256.slice(lwIdx, tsLib256.indexOf('/** Live windows across ALL tables', lwIdx));
+assert.ok(lwBody.length > 100, 'liveWindowsOf slice resolved (lib home)');
 assert.ok(lwBody.includes("s.table_id === tableId && sessionState(s, nowMs) === 'live'"),
   'liveWindowsOf filters on table_id + the clock-derived sessionState');
 ok('liveWindowsOf rides the drill sessionState — no second liveness rule');
@@ -116,7 +118,8 @@ ok('armed confirm: "Free + cut N?" visible + aria, both sites');
 
 // Code anchor: 5.219.0 grew the pill a warm branch, so the className became a
 // template — anchor on the youngest-window computation that heads the block.
-const chipIdx = floor.indexOf('const youngest = liveWindowsOf(sessions, t.id, nowTick).reduce(');
+// 5.220.0: the reduce moved home to the lib; the call site is the anchor.
+const chipIdx = floor.indexOf('const youngest = youngestLiveMs(liveWindowsOf(sessions, t.id, nowTick), nowTick);');
 assert.ok(chipIdx > 0, 'the card-face live chip exists');
 const chipBody = floor.slice(chipIdx, chipIdx + 1300);
 assert.ok(chipBody.includes('animate-pulse') && chipBody.includes('bg-[#E7C878]'), 'the gold pulse');

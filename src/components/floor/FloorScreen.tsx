@@ -79,6 +79,12 @@ import {
   formatWindowLeft,
 } from '../../lib/appday';
 import {
+  liveWindowsOf,
+  sessionState,
+  SESSION_TONE,
+  youngestLiveMs,
+} from '../../lib/tableSession';
+import {
   bookingSlotLabel,
   bookingDayKey,
   bookingTodayKey,
@@ -581,32 +587,10 @@ function TimeAgo({ iso }: { iso: string }): React.ReactElement {
 }
 
 /* ── Guest session trail (v5.23.0) — migration 002's ephemeral 10-minute
-   QR sessions, read honestly. The DB `status` column stays 'active' after
-   ordinary expiry (only revoke/consume paths write it back), so LIVE vs
-   EXPIRED is derived from the clock: expires_at vs now. ── */
-
-type SessionState = 'live' | 'expired' | 'consumed' | 'revoked';
-
-function sessionState(s: TableSession, nowMs: number = Date.now()): SessionState {
-  if (s.status === 'consumed') return 'consumed';
-  if (s.status === 'revoked') return 'revoked';
-  return new Date(s.expires_at).getTime() > nowMs ? 'live' : 'expired';
-}
-
-const SESSION_TONE: Record<SessionState, { dot: string; fg: string; label: string }> = {
-  live: { dot: '#0F3D3E', fg: '#0F3D3E', label: 'menu open' },
-  expired: { dot: '#969696', fg: '#6B6B6B', label: 'expired' },
-  consumed: { dot: '#2E7D32', fg: '#2E7D32', label: 'used' },
-  revoked: { dot: '#B3261E', fg: '#B3261E', label: 'cut' },
-};
-
-/** Live windows on ONE table (5.217.0) — the free action's disclosure count.
- *  Same clock-derived rule as sessionState; the free button names how many
- *  windows end with the seating, so the owner confirms with both effects in
- *  view, never a surprise cut. */
-function liveWindowsOf(rows: TableSession[], tableId: string, nowMs: number = Date.now()): TableSession[] {
-  return rows.filter((s) => s.table_id === tableId && sessionState(s, nowMs) === 'live');
-}
+   QR sessions, read honestly. The clock rule (live vs expired, the tone,
+   the per-table filter, the youngest window) lives in lib/tableSession
+   (v5.220.0) — ONE liveness verdict for every surface; the Floor imports it
+   like the Dashboard does. ── */
 
 /** "20:49" IST wall clock for a session window row. */
 function istHM(iso: string): string {
@@ -3201,10 +3185,7 @@ export function FloorScreen(): React.ReactElement {
                             board answers "how long?" without opening the
                             drill. One window state, three rooms. */}
                         {liveNow > 0 && (() => {
-                          const youngest = liveWindowsOf(sessions, t.id, nowTick).reduce(
-                            (m, s) => Math.min(m, new Date(s.expires_at).getTime() - nowTick),
-                            Infinity,
-                          );
+                          const youngest = youngestLiveMs(liveWindowsOf(sessions, t.id, nowTick), nowTick);
                           const pillWarm = youngest < 180_000;
                           return (
                             <span

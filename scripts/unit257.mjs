@@ -63,12 +63,16 @@ const floor = strip('../src/components/floor/FloorScreen.tsx');
 
 // sessionState and liveWindowsOf take the shared instant; defaults keep every
 // existing call site valid.
-assert.ok(floor.includes('function sessionState(s: TableSession, nowMs: number = Date.now()): SessionState'),
+const tsLib = strip('../src/lib/tableSession.ts');
+assert.ok(tsLib.includes('export function sessionState(s: TableSession, nowMs: number = Date.now()): SessionState'),
   'sessionState takes the optional nowMs (default Date.now())');
-assert.ok(floor.includes('function liveWindowsOf(rows: TableSession[], tableId: string, nowMs: number = Date.now())'),
+assert.ok(tsLib.includes('export function liveWindowsOf(rows: TableSession[], tableId: string, nowMs: number = Date.now())'),
   'liveWindowsOf takes the optional nowMs');
-assert.ok(floor.includes('sessionState(s, nowMs) === \'live\''), 'liveWindowsOf threads nowMs into sessionState');
-ok('sessionState/liveWindowsOf take the shared instant, defaults keep old call sites valid');
+assert.ok(tsLib.includes('sessionState(s, nowMs) === \'live\''), 'liveWindowsOf threads nowMs into sessionState');
+assert.ok(floor.includes("} from '../../lib/tableSession';"), 'the Floor imports the lib body — no second liveness rule');
+assert.ok(!floor.includes('function sessionState(') && !floor.includes('type SessionState'),
+  'the Floor keeps NO local copy of the clock rule');
+ok('sessionState/liveWindowsOf take the shared instant and live in the lib home');
 
 // The heartbeat: exactly ONE dynamic-cadence interval, gated on hasLiveWindow.
 const tickCount = floor.split('hasLiveWindow ? 1000 : 30000').length - 1;

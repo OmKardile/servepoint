@@ -16,6 +16,7 @@ import {
   PackageMinus,
   ReceiptText,
   ShoppingBag,
+  Smartphone,
   Split,
   Star,
   Tag,
@@ -38,7 +39,8 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { fetchDashboard, fetchFeedbackStats, fetchInventory, fetchMenuItems, fetchOfferRedemptions, fetchOffers, fetchOpenPaymentSums, fetchOrders, fetchReservations, fetchTables, fetchTodayCostMargin, type DiningTable, type FeedbackStats, type InventoryItem, type OfferRedemptionRow, type Reservation, type TodayCostMargin } from '../../lib/api';
+import { fetchDashboard, fetchFeedbackStats, fetchInventory, fetchMenuItems, fetchOfferRedemptions, fetchOffers, fetchOpenPaymentSums, fetchOrders, fetchReservations, fetchTableSessions, fetchTables, fetchTodayCostMargin, type DiningTable, type FeedbackStats, type InventoryItem, type OfferRedemptionRow, type Reservation, type TableSession, type TodayCostMargin } from '../../lib/api';
+import { liveWindows, youngestLiveMs } from '../../lib/tableSession';
 import { formatMoney } from '../../lib/prefs';
 /* v5.175.0 — the morning paper borrows the booking clock for its book (the
    database's word, lib/bookingday — the same lib the floor's book, the bell
@@ -1262,11 +1264,16 @@ interface NeedsState {
    *  bounded to the unpaid ids; an unpaid ticket's true outstanding is
    *  total − this. Empty map = nothing mid-split. */
   paidSums: Map<string, number>;
+  /** v5.220.0 — the QR channel's read. NULL = the read failed (the chip
+   *  stays silent — silence is never a zero); an ARRAY is the honest state,
+   *  zero live included: an empty board of windows is a fact the owner
+   *  still needs. Newest-first, bounded by the fetch's own limit. */
+  sessions: TableSession[] | null;
 }
 
 const NeedsNow: React.FC = () => {
   const { tenantId } = useTenant();
-  const [now, setNow] = useState<NeedsState>({ ready: false, orders: [], inventory: [], menu: [], reservations: [], tables: [], paidSums: new Map() });
+  const [now, setNow] = useState<NeedsState>({ ready: false, orders: [], inventory: [], menu: [], reservations: [], tables: [], paidSums: new Map(), sessions: null });
 
   useEffect(() => {
     if (!tenantId) return;
@@ -1287,7 +1294,11 @@ const NeedsNow: React.FC = () => {
           .filter((o) => o.status !== 'cancelled' && o.payment_status !== 'completed')
           .map((o) => o.id);
         const paidSums = await fetchOpenPaymentSums(tenantId, unpaidIds);
-        if (alive) setNow({ ready: true, orders, inventory, menu, reservations, tables, paidSums });
+        /* v5.220.0 — the QR channel's read, individually fail-soft: a failed
+           session read must not quiet the tiles that already landed (the
+           mirror's own rule), and the chip answers silence, never a zero. */
+        const sessions = await fetchTableSessions(tenantId).catch(() => null);
+        if (alive) setNow({ ready: true, orders, inventory, menu, reservations, tables, paidSums, sessions });
       } catch {
         /* the mirror is a courtesy — a first failed read simply stays quiet */
       }
@@ -1377,6 +1388,12 @@ const NeedsNow: React.FC = () => {
   }[] = [];
 
   const go = useUi.getState().goSection;
+  /* v5.220.0 — the QR channel's live state, read from the lib clock (ONE
+     liveness verdict — lib/tableSession). Zero live windows is NOT a slot:
+     the band's own all-clear ("Nothing waits on you") is the honest voice
+     for a quiet board; a failed read renders nothing at all. */
+  const liveQr = now.sessions ? liveWindows(now.sessions, nowMs) : [];
+  const qrWarm = liveQr.length > 0 && youngestLiveMs(liveQr, nowMs) < 180_000;
   /* 5.89.0 — the card speaks today's inbox count; when older `new` tickets
      are stuck off it (yesterday's ghosts the counter can no longer Ok), the
      amber whisper names them and points to Bills, the room that can still
@@ -1415,6 +1432,31 @@ const NeedsNow: React.FC = () => {
               aria: `Open Bills — ${staleNew.length} older ${staleNew.length === 1 ? 'ticket waits' : 'tickets wait'} off today's inbox`,
               onOpen: () => go('bills', ['Dashboard', 'Bills'], 'unpaid'),
             },
+    });
+  /* 5.220.0 — the QR channel reaches the needs band: guests are holding
+     live menus RIGHT NOW, and a window inside the three-minute line is
+     about to close. The hint names the STATE, never a stopwatch — this
+     band re-renders on the 30s loop, so a per-second countdown here would
+     be a frozen clock (the exact lie 5.218.0 killed); the Floor drill owns
+     the seconds. */
+  if (liveQr.length > 0)
+    slots.push({
+      key: 'qr',
+      label: 'QR menus',
+      value: `${liveQr.length} ${liveQr.length === 1 ? 'window' : 'windows'} open`,
+      valueTone: qrWarm ? 'text-[#8A5A16]' : 'text-[#0F3D3E]',
+      icon: <Smartphone size={18} aria-hidden />,
+      iconTone: qrWarm ? 'bg-[#FBF3E4] text-[#8A5A16]' : 'bg-[#EAF2F7] text-[#1D5D7E]',
+      aria: `${liveQr.length} live QR ${liveQr.length === 1 ? 'window is' : 'windows are'} open on the tables${
+        qrWarm ? '; the youngest is inside its last three minutes — it closes on its own' : ''
+      }; the Floor's drill watches every window`,
+      hint: qrWarm ? 'a menu window is inside its last three minutes' : undefined,
+      hintIcon: qrWarm ? <Clock size={11} aria-hidden className="shrink-0" /> : undefined,
+      door: {
+        label: 'Floor',
+        aria: `Open Floor — ${liveQr.length} live QR ${liveQr.length === 1 ? 'window' : 'windows'} to watch or cut`,
+        onOpen: () => go('floor', ['Dashboard', 'Floor']),
+      },
     });
   if (arrivals.length > 0)
     slots.push({
