@@ -7073,3 +7073,11 @@ Work Log:
 
 Stage Summary:
 - Work committed and gated (battery 88/88, tsc ×2, build, live E2E with the server read proven byte-true and the band/whisper reconciliation at 4 = 4 = 4) but NOT on origin — the push ran and failed for lack of credentials, not for lack of trying. The honesty rule holds: no push claimed that did not run.
+
+---
+Task ID: 282-PUSH-ADDENDUM-2 (housekeeping)
+Agent: glm-5.3
+Task: Keep the ride-count honest.
+
+Work Log:
+- The screenshot chore commit (e4f208c, the house convention — qa280/qa281 screenshots are tracked) landed AFTER the addendum was written, so the ride is THIRTY-NINE commits, not thirty-eight. Same failure mode (no credentials), same instruction standing.
