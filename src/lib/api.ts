@@ -1947,13 +1947,23 @@ export async function fetchOwnSubscription(): Promise<Subscription | null> {
   return fetchOwnSubscriptionStrict().catch(() => null);
 }
 
-export async function fetchAuditLogs(limit = 50): Promise<AuditLogEntry[]> {
+/* v5.246.0 — the operator's ledger reads WHOLE. The audit log is the
+ * platform's own record of record — the register the operator reads AFTER
+ * the fact, when "the latest 50" can silently hide exactly the event being
+ * asked about (the walking-window disease on the platform's own surface:
+ * the 5.284 board lesson, one register over). The silent cap born with the
+ * surface is retired: the read is UNCAPPED — an append-only ledger of small
+ * rows, fleet-bounded in practice (the money-book's 5.281 precedent — the
+ * register answers from the bounds it speaks) — and the Audit tab speaks
+ * its own census ("N events on record"), so the size being read is never a
+ * guess. The Dashboard's Recent activity keeps its slice: a client-side
+ * derivation of THIS read, not a second read shape. */
+export async function fetchAuditLogs(): Promise<AuditLogEntry[]> {
   requireCloud();
   const { data, error } = await supabase
     .from('platform_audit_logs')
     .select('*')
-    .order('timestamp', { ascending: false })
-    .limit(limit);
+    .order('timestamp', { ascending: false });
   if (error) throw error;
   return (data || []) as AuditLogEntry[];
 }

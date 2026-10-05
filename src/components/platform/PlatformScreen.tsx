@@ -23,6 +23,8 @@ import { formatBillingDate as formatDate } from '../../lib/billing';
 import { isSupabaseConfigured } from '../../lib/supabase';
 import { authService } from '../../lib/authService';
 import { formatMoney, timeAgo } from '../../lib/prefs';
+import { dayTime } from '../../lib/day';
+import { appTimezone } from '../../lib/appday';
 import { useSession } from '../../store/session';
 import type { AuditLogEntry, Subscription, Tenant } from '../../types';
 import { ProvisioningWizard } from './ProvisioningWizard';
@@ -334,6 +336,13 @@ const RecentBusinessRow: React.FC<{ tenant: Tenant; sub?: Subscription | null }>
   );
 };
 
+/* v5.246.0 — the time word speaks BOTH registers (the drawer-card grammar,
+ * 5.179): timeAgo answers "how fresh?" while dayTime(appTimezone()) stamps
+ * the record's absolute when ("2 Oct · 10:14") — a stored sentence
+ * re-rendered later re-derives its time-truth at the render boundary, so a
+ * row ages from "3 hours ago · 17:28" into "3 days ago · 2 Oct · 10:14"
+ * without ever reading like a lie. The stamp's class core is byte-equal in
+ * both rooms (this strip and the Audit tab's ledger rows). */
 const ActivityRow: React.FC<{ log: AuditLogEntry }> = ({ log }) => (
   <div className="flex items-start gap-3 py-3.5">
     <div className="min-w-0 flex-1">
@@ -343,6 +352,7 @@ const ActivityRow: React.FC<{ log: AuditLogEntry }> = ({ log }) => (
     <div className="shrink-0 text-right">
       <p className="text-xs font-medium text-[#6B6B6B]">{log.actor_email || 'System'}</p>
       <p className="mt-0.5 text-xs text-[#969696]">{timeAgo(log.timestamp)}</p>
+      <p className="mt-0.5 text-[11px] text-[#969696]">{dayTime(log.timestamp, appTimezone())}</p>
     </div>
   </div>
 );
@@ -371,7 +381,7 @@ export const PlatformScreen: React.FC = () => {
     const [tenantsRes, subsRes, logsRes] = await Promise.allSettled([
       fetchTenants(),
       fetchSubscriptions(),
-      fetchAuditLogs(50),
+      fetchAuditLogs(),
     ]);
     if (tenantsRes.status === 'fulfilled') setTenants(tenantsRes.value);
     else setTenantsError(errorMessage(tenantsRes.reason));
@@ -981,7 +991,18 @@ export const PlatformScreen: React.FC = () => {
 
   const renderAudit = () => (
     <div className="space-y-5">
-      <h2 className="text-lg font-semibold text-[#1A1A1A]">Audit log</h2>
+      {/* v5.246.0 — the ledger speaks its own census: "N events on record"
+       *  names the size the reader is reading (the 5.282 law — a register
+       *  answers from its own count). Silent while loading; the empty
+       *  state owns the zero. */}
+      <div>
+        <h2 className="text-lg font-semibold text-[#1A1A1A]">Audit log</h2>
+        {logs !== null && logs.length > 0 && (
+          <p className="mt-0.5 text-xs text-[#6B6B6B]">
+            {logs.length} {logs.length === 1 ? 'event' : 'events'} on record
+          </p>
+        )}
+      </div>
       {logsError ? (
         <ErrorCard title="Audit log could not be loaded" message={logsError} onRetry={() => void load()} />
       ) : logs === null ? (
@@ -1007,6 +1028,7 @@ export const PlatformScreen: React.FC = () => {
               <div className="shrink-0 text-right">
                 <p className="text-xs font-medium text-[#6B6B6B]">{log.actor_email || 'System'}</p>
                 <p className="mt-0.5 text-xs text-[#969696]">{timeAgo(log.timestamp)}</p>
+                <p className="mt-0.5 text-[11px] text-[#969696]">{dayTime(log.timestamp, appTimezone())}</p>
               </div>
             </div>
           ))}
