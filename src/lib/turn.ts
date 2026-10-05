@@ -190,23 +190,54 @@ export function computeTurnCensus(
    and not cancelled — a cancelled ticket never happened; a ticket with no
    table never held one), ONE day key with the trail (appDayKey — the ONE
    day grammar). A day that served nothing stays OUT of the map — silence,
-   never a zero; an unreadable instant is ledger noise, skipped. */
+   never a zero; an unreadable instant is ledger noise, skipped.
+
+   v5.259.0 — the rule leaves the function and becomes ITS OWN word: the
+   predicate below is the ONE ticket law, and tableTicketDays and
+   tableTicketsOnDay both ask it. A count and its rows can never disagree
+   because they ARE the same sentence — the extraction is the guarantee,
+   not a convention. */
+type TicketRow = {
+  table_id?: string | null;
+  status?: string | null;
+  created_at: string;
+};
+
+function isTableTicket(o: TicketRow, tableId: string): boolean {
+  if (o.table_id !== tableId || o.status === 'cancelled') return false;
+  return Number.isFinite(new Date(o.created_at).getTime());
+}
+
 export function tableTicketDays(
-  orders: {
-    table_id?: string | null;
-    status?: string | null;
-    created_at: string;
-  }[],
+  orders: TicketRow[],
   tableId: string,
 ): Map<string, number> {
   const days = new Map<string, number>();
   for (const o of orders) {
-    if (o.table_id !== tableId || o.status === 'cancelled') continue;
-    if (!Number.isFinite(new Date(o.created_at).getTime())) continue;
+    if (!isTableTicket(o, tableId)) continue;
     const key = appDayKey(o.created_at);
     days.set(key, (days.get(key) || 0) + 1);
   }
   return days;
+}
+
+/* v5.259.0 — the drill reads the evening. The day count told the trail HOW
+   MUCH work a day held; it never showed the work itself — the owner
+   drilling into a busy table read "3 tickets" and had to open Bills to
+   meet them. tableTicketsOnDay returns the rows for ONE day under the
+   SAME predicate the count rides (isTableTicket — the extraction above),
+   keyed by the day key the CALLER passes (appDayKey stays the ONE day
+   grammar; no second key is born here). Newest first — the evening reads
+   top-down, the latest round first. The caller renders honest absence:
+   an empty array is silence, never a zero list. */
+export function tableTicketsOnDay<T extends TicketRow>(
+  orders: T[],
+  tableId: string,
+  dayKey: string,
+): T[] {
+  return orders
+    .filter((o) => isTableTicket(o, tableId) && appDayKey(o.created_at) === dayKey)
+    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 }
 
 /* v5.226.0 — the rhythm names its tables: the week's seated rounds and menu

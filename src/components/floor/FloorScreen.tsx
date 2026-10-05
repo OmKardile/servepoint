@@ -18,6 +18,7 @@ import {
   Plus,
   Printer,
   QrCode,
+  ReceiptText,
   RefreshCw,
   Scissors,
   Search,
@@ -77,6 +78,7 @@ import {
   appTzTag,
   appWallToInstant,
   formatWindowLeft,
+  WARM_WINDOW_MS,
 } from '../../lib/appday';
 import {
   liveWindowsOf,
@@ -105,7 +107,7 @@ import { MarkHit } from '../shell/MarkHit';
 import { EmptyState } from '../shell/EmptyState';
 import { useCart } from '../../store/cart';
 import type { Order, OrderItem } from '../../types';
-import { seatSpanLabel, computeTurnCensus, namedBreachList, tableTicketDays, tableWeekSplit } from '../../lib/turn';
+import { seatSpanLabel, computeTurnCensus, namedBreachList, tableTicketDays, tableTicketsOnDay, tableWeekSplit } from '../../lib/turn';
 import type { TableTurnStats } from '../../lib/turn';
 
 /**
@@ -968,6 +970,7 @@ function TableDrill({
   sessions,
   now,
   ticketDays,
+  tonightTickets,
   candidates,
   cutArmId,
   cutBusyId,
@@ -1020,6 +1023,11 @@ function TableDrill({
    *  (the SAME ledger the rhythm reads; lib/turn keeps the ONE rule). A day
    *  that served nothing is absent — the heading stays silent, never a zero. */
   ticketDays: Map<string, number>;
+  /** v5.259.0 — the drilled table's ticket ROWS for today, the same ledger
+   *  and the SAME ONE ticket rule as ticketDays (the lib predicate is
+   *  shared — rows and counts are the same sentence). Newest first. An
+   *  empty array is silence — the block never renders a zero list. */
+  tonightTickets: Order[];
   candidates: DiningTable[];
   cutArmId: string | null;
   cutBusyId: string | null;
@@ -1152,7 +1160,11 @@ function TableDrill({
     const armed = cutArmId === s.id;
     const cutting = cutBusyId === s.id;
     const msLeft = st === 'live' ? new Date(s.expires_at).getTime() - now : 0;
-    const warm = st === 'live' && msLeft < 180_000;
+    /* 5.259.0 — the warm line re-anchors on the constant it always named:
+       the literal 180_000 was appday's WARM_WINDOW_MS spelled out by hand,
+       a second arithmetic the ribbon's own law (unit257 byte-truth) warns
+       against — one window, one arithmetic, never two. */
+    const warm = st === 'live' && msLeft < WARM_WINDOW_MS;
     return (
       <li
         key={s.id}
@@ -1584,6 +1596,64 @@ function TableDrill({
                 </>
               )}
             </p>
+          )}
+
+          {tonightTickets.length > 0 && (
+            /* v5.259.0 — the drill reads the evening. The trail's day heading
+               has counted a day's tickets since 5.222, but the work itself
+               lived behind Bills — the host drilling into a busy table read
+               "3 tickets" and had to leave the floor to meet them. The rows
+               speak now, from the SAME ledger and the SAME ONE ticket rule
+               (the lib predicate is shared — the block's rows and the
+               trail's "N tickets" are the same sentence). Honest absence:
+               nothing tonight, no block — silence, never a zero list. The
+               ink is the family's own: the number wears the deep ink, the
+               status word the quiet chip, the money the tabular right, and
+               the paid word the exact pills the live card's money box speaks
+               (PAID #EAF4EC/#2E7D32, due #FDF3E4/#8A5A16) — one voice, one
+               table's evening. The live ticket pulses the gold dot so the
+               current round answers "which one is us?" without a word. */
+            <div className="rounded-2xl border border-[#E3E7E0] bg-white p-4 shadow-sm">
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <p className="flex items-center gap-1.5 text-[14px] font-bold text-[#1A1A1A]">
+                  <ReceiptText size={14} className="text-[#0F3D3E]" aria-hidden /> Tonight at this table
+                </p>
+                <span className="rounded-full bg-[#F1F4F1] px-2.5 py-1 text-[10.5px] font-bold tabular-nums text-[#0F3D3E]">
+                  {tonightTickets.length} ticket{tonightTickets.length === 1 ? '' : 's'} ·{' '}
+                  {formatMoney(tonightTickets.reduce((s, o) => s + Number(o.total || 0), 0))}
+                </span>
+              </div>
+              <ul className="space-y-1.5">
+                {tonightTickets.map((o) => {
+                  const live = order && o.id === order.id;
+                  const paid = o.payment_status === 'completed';
+                  return (
+                    <li
+                      key={o.id}
+                      className="flex items-center gap-2.5 rounded-xl bg-[#FBFBF9] px-3 py-2"
+                      title={`Ticket #${o.order_number} · placed ${istHM(o.created_at)} · ${String(o.status)}${paid ? ' · the bill is settled' : ' · payment due'}${live ? ' · the table is living this ticket now' : ''}`}
+                    >
+                      {live && (
+                        <span className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-[#D97706]" aria-hidden />
+                      )}
+                      <span className="w-12 shrink-0 font-bold tabular-nums text-[#0F3D3E]">#{o.order_number}</span>
+                      <span className="w-11 shrink-0 font-mono text-[11px] tabular-nums text-[#6B6B6B]">{istHM(o.created_at)}</span>
+                      <span className="min-w-0 flex-1 truncate text-[11px] font-semibold uppercase tracking-wide text-[#969696]">
+                        {String(o.status)}
+                      </span>
+                      <span className="shrink-0 text-[12px] font-bold tabular-nums text-[#1A1A1A]">{formatMoney(Number(o.total))}</span>
+                      <span
+                        className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                          paid ? 'bg-[#EAF4EC] text-[#2E7D32]' : 'bg-[#FDF3E4] text-[#8A5A16]'
+                        }`}
+                      >
+                        {paid ? 'PAID' : 'DUE'}
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
           )}
 
           {/* guest session trail (v5.23.0) — who scanned, when it expires */}
@@ -2345,6 +2415,21 @@ export function FloorScreen(): React.ReactElement {
   const drillTicketDays = useMemo(
     () => (drillTable ? tableTicketDays(orders, drillTable.id) : new Map<string, number>()),
     [orders, drillTable],
+  );
+  /* v5.259.0 — the drill reads the evening: the table's ticket ROWS for
+     TODAY, from the SAME orders ledger and the SAME ONE ticket rule the
+     day counts ride (lib/turn — the predicate is shared, so the block's
+     rows and the trail's "N tickets" can never disagree). nowTick rides
+     the deps so a board left open past midnight re-derives the day key
+     within one heartbeat beat (the 5.218 law — the clock moves without a
+     fetch). Honest absence lives downstream: an empty array renders no
+     block, never a zero list. */
+  const drillTonightTickets = useMemo(
+    () =>
+      drillTable
+        ? tableTicketsOnDay(orders, drillTable.id, appDayKey(new Date(nowTick).toISOString()))
+        : [],
+    [orders, drillTable, nowTick],
   );
   /* v5.193.0 — the drill rides the same precedence: ticket in hand → the
      round's clock; no ticket → the book's flip stamp. promiseTick ages it. */
@@ -3411,7 +3496,7 @@ export function FloorScreen(): React.ReactElement {
                             drill. One window state, three rooms. */}
                         {liveNow > 0 && (() => {
                           const youngest = youngestLiveMs(liveWindowsOf(sessions, t.id, nowTick), nowTick);
-                          const pillWarm = youngest < 180_000;
+                          const pillWarm = youngest < WARM_WINDOW_MS;
                           return (
                             <span
                               className={`ml-1.5 flex items-center gap-1 rounded-full px-2 py-0.5 text-[10.5px] font-bold tabular-nums ${
@@ -3814,6 +3899,7 @@ export function FloorScreen(): React.ReactElement {
           sessions={sessionsByTable.get(drillTable.id) ?? []}
           now={nowTick}
           ticketDays={drillTicketDays}
+          tonightTickets={drillTonightTickets}
           candidates={drillCandidates}
           cutArmId={cutArmId}
           cutBusyId={cutBusyId}

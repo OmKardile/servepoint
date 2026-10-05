@@ -68,7 +68,7 @@ import { chaseAge } from '../../lib/day';
  * day in every room, never the browser's. v5.241.0 — the inbox whisper's
  * stale-new count rides the lib's ONE census (staleNewTickets), the same
  * home the counter's straggler band asks — one predicate, one number. */
-import { isSameAppDay, staleNewTickets } from '../../lib/appday';
+import { isSameAppDay, staleNewTickets, WARM_WINDOW_MS } from '../../lib/appday';
 import { useTenant } from '../../lib/tenant';
 import { useUi } from '../../store/session';
 import { DoorChip } from '../shell/DoorChip';
@@ -1529,7 +1529,10 @@ const NeedsNow: React.FC = () => {
      the band's own all-clear ("Nothing waits on you") is the honest voice
      for a quiet board; a failed read renders nothing at all. */
   const liveQr = now.sessions ? liveWindows(now.sessions, nowMs) : [];
-  const qrWarm = liveQr.length > 0 && youngestLiveMs(liveQr, nowMs) < 180_000;
+  /* 5.259.0 — the warm line re-anchors on the constant it always named
+     (appday's WARM_WINDOW_MS): the hand-spelled 180_000 was a second
+     arithmetic — one window, one arithmetic, never two (unit257). */
+  const qrWarm = liveQr.length > 0 && youngestLiveMs(liveQr, nowMs) < WARM_WINDOW_MS;
   /* 5.221.0 — the band already holds the tables, so the slots name WHERE:
      the QR value carries the distinct table numbers holding live windows
      (a failed tables read degrades to the old tableless words — never a
