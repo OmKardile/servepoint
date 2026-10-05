@@ -7218,3 +7218,16 @@ Stage Summary:
 - Parked (carried): variant/add-on recipe costing (the BIG one — migration 039 + the 015 engine, owner word advised); 038 birthdays (owner-gated — now ALSO pinned by unit286's wording law: the porch no longer claims it applied); drawer movements CSV (only if asked); CounterInbox bulk "Ok all" (risky); guest QR "room favourite" badges (owner decision); DS showcase links (owner OK pending); storage folder silting; phone-key normalization (OWNER-GATED); offer time-windows (schema, owner); micro-chunk dieting; README docs siblings sweep (next DAILY); GST billed-toggle (owner word). Deliberately designed out (do not re-park): chat→bell pings (031); KDS bump-back; the reader-register clock; the rolling 7d week (5.240); counter stragglers (280); money-book cap (281); news census cap (282); rail census cap (283); working-surface day-read caps (284); platform ledger cap (285); hand-kept porch census (THIS round — the battery counts the tree).
 - Owner action items (carried): (1) delete orphaned drill auth user drill.owner@recoverydrill.in at next pooler session; (2) QR Flow owner password — BLOCKING tenant QA: supply, rotate, or reset via pooler; (3) 038 DDL one-command unblock in owner's hands; (4) GST filing basis confirmation (collected-only posture); (5) rotate retired-project keys if that Supabase project still exists.
 - Crons: 15-min webDevReview (job 430321) + DAILY deep pass (job 431587, 09:00 IST — README route-grammar refresh DONE 2026-10-05; docs siblings sweep next).
+---
+Task ID: 286-PUSH-ADDENDUM (same round, post-commit)
+Agent: glm-5.3
+Task: Record the round's push outcome honestly.
+
+Work Log:
+- Push ATTEMPTED TWICE this round (the standing instruction honored — once FIRST per its terms, once post-commit): both failed — "fatal: could not read Username for 'https://github.com': No such device or address". NO GitHub token in the round environment (0 GH_* matches, no credential files, no gh CLI, no helper).
+- State: the ride grows — Tasks 267–285's pairs, the sweeper's ce4f858, THIS round's feat (17070c5) + worklog + qa-screenshot sit LOCAL; origin/main remains edc84af. Fifty-five commits ride (the worklog's fifty-two was the pre-addendum count — the same self-referencing honesty the 283 ADDENDUM-2 pattern owns).
+- Remote config untouched: nothing to scrub.
+- Standing instruction stands: the next token-bearing round pushes the whole pile FIRST, before its own work.
+
+Stage Summary:
+- Work committed and gated (battery 92/92 ×2, tsc ×2, build, live E2E with the porch census proven from the tree's truth) but NOT on origin — the push ran and failed for lack of credentials, not for lack of trying. The honesty rule holds: no push claimed that did not run.
