@@ -1,0 +1,125 @@
+- generic [ref=e20314] clickable [onclick]
+  - link "Skip to content" [ref=e20315]
+  - complementary "Primary navigation"
+    - status
+    - image "ServePoint logo"
+    - StaticText "ServePoint"
+    - navigation
+      - button "Dashboard" [ref=e20323]
+        - StaticText "Dashboard"
+      - button "Food & Drinks" [ref=e20324]
+        - StaticText "Food & Drinks"
+      - button "Kitchen" [ref=e20325]
+        - StaticText "Kitchen"
+      - button "Bills" [ref=e20326]
+        - StaticText "Bills"
+      - button "Close-out" [ref=e20327]
+        - StaticText "Close-out"
+      - button "Reports" [ref=e20328]
+        - StaticText "Reports"
+      - button "Inventory, stock healthy" [ref=e20329]
+        - StaticText "Inventory"
+      - button "Guests" [ref=e20330]
+        - StaticText "Guests"
+      - button "Floor" [ref=e20331]
+        - StaticText "Floor"
+      - button "Menu" [ref=e20332]
+        - StaticText "Menu"
+      - button "Settings" [ref=e20333]
+        - StaticText "Settings"
+    - paragraph
+      - StaticText "OTHERS"
+    - navigation
+      - button "Messages, no unread" [ref=e20334]
+        - StaticText "Messages"
+      - button "Notifications, 10 unread" [ref=e20335]
+        - StaticText "Notifications"
+      - button "Support" [ref=e20336]
+        - StaticText "Support"
+    - StaticText "Q"
+    - paragraph
+      - StaticText "QR Owner"
+    - paragraph
+      - StaticText "QR Flow Cafe"
+    - button "Open Profile" [ref=e20317]
+      - StaticText "Open Profile"
+    - paragraph
+      - StaticText "© 2026 ServePoint · smartPOS"
+  - banner
+    - button "Go back" [ref=e20318]
+    - navigation "Breadcrumb" [ref=e20319]
+      - list
+        - listitem [level=1]
+          - StaticText "Dashboard"
+        - listitem [level=1]
+          - StaticText "Sales Statistics"
+    - button "Notifications, 10 unread" [ref=e20320]
+      - StaticText "Unread notifications"
+    - button "Order history" [ref=e20321]
+  - status
+    - StaticText "Your "
+    - StaticText "Starter"
+    - StaticText " trial"
+    - StaticText "ends 16 Oct 2026"
+    - StaticText " — 11 days left"
+    - StaticText " · no charge yet."
+  - main "dashboard content" [ref=e20316]
+    - region "Dashboard" [ref=e20322]
+      - heading "Dashboard" [level=1, ref=e20337]
+      - region "Needs you now" [ref=e20338]
+        - paragraph
+          - StaticText "NEEDS YOU NOW"
+        - group "0 new tickets in the counter inbox, waiting for an Ok; 4 older tickets are stuck off today's inbox — see Bills"
+          - paragraph
+            - StaticText "NEW TICKETS"
+          - paragraph
+            - StaticText "0 waiting"
+          - StaticText "4 older tickets off today's inbox — see Bills"
+          - button "Open Bills — 4 older tickets wait off today's inbox" [ref=e20346]
+            - StaticText "Open Bills"
+        - group "0 tickets are on the board right now; 3 older tickets are stuck off today's board — see Bills"
+          - paragraph
+            - StaticText "IN THE KITCHEN"
+          - paragraph
+            - StaticText "0 on the board"
+          - StaticText "3 older stuck tickets off today's board — see Bills"
+          - button "Open Bills — 3 older tickets wait off today's board" [ref=e20347]
+            - StaticText "Open Bills"
+        - group "5 unpaid tickets, ₹1,801.80 still out; oldest #66 owes ₹693.00, 2d old"
+          - paragraph
+            - StaticText "UNPAID"
+          - paragraph
+            - StaticText "5 · ₹1,801.80"
+          - StaticText "oldest #66 owes ₹693.00, 2d old"
+          - button "Open Bills — 5 unpaid tickets, ₹1,801.80 still out" [ref=e20348]
+            - StaticText "Open Bills"
+      - heading "No sales yet today" [level=2, ref=e20339]
+      - paragraph
+        - StaticText "Once the first order of the day goes through, sales, revenue and customer stats will appear here automatically."
+      - region "The book — 1 promise went quiet today" [ref=e20340]
+        - StaticText "THE BOOK · "
+        - StaticText "TODAY"
+        - paragraph
+          - StaticText "1 promise went quiet"
+        - paragraph
+          - StaticText "8:05 am · E2E Kumar · party of 4 — the promised hour went by, still booked"
+        - button "Open the floor's book — 1 went quiet today" [ref=e20343]
+          - StaticText "Open the book"
+      - region "The week so far" [ref=e20341]
+        - StaticText "THE WEEK SO FAR"
+        - paragraph
+          - StaticText "₹8,112.30"
+        - paragraph
+          - StaticText "across 4 selling days"
+        - paragraph
+          - StaticText "best Fri · ₹5,046.30"
+        - button "Open Reports — the week so far reads ₹8,112.30" [ref=e20344]
+          - StaticText "Open Reports"
+      - region "Given away — ₹194.00 across 4 offer redemptions" [ref=e20342]
+        - StaticText "GIVEN AWAY"
+        - paragraph
+          - StaticText "₹194.00"
+        - paragraph
+          - StaticText "across 4 offer redemptions · 2 offers live"
+        - button "Open Guests — the offers ledger reads ₹194.00 given away across 4 redemptions" [ref=e20345]
+          - StaticText "Open offers"
