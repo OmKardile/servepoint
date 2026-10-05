@@ -160,6 +160,10 @@ const EN: Dict = {
   // v5.252.0 — the ticket's way back: the forward action and the paid word
   orderMore: 'Order more',
   flowServedPaidHint: 'Enjoy — the bill is settled',
+  // v5.253.0 — the loop closes: the menu remembers the guest's own ticket
+  lastTicketTitle: 'Your ticket #{n}',
+  lastTicketSub: 'Placed from this table — tap to follow it',
+  lastTicketAria: 'Follow your ticket #{n}',
   // feedback (019)
   fbTitle: 'How was everything?',
   fbSub: 'Tap the stars — it helps the cafe a lot.',
@@ -301,6 +305,10 @@ const HI: Dict = {
   // v5.252.0 — the ticket's way back: the forward action and the paid word
   orderMore: 'और ऑर्डर करें',
   flowServedPaidHint: 'स्वाद लें — बिल चुक गया',
+  // v5.253.0 — the loop closes: the menu remembers the guest's own ticket
+  lastTicketTitle: 'आपका टिकट #{n}',
+  lastTicketSub: 'इसी टेबल से लगा — देखने के लिए टैप करें',
+  lastTicketAria: 'अपना टिकट #{n} देखें',
   // feedback (019)
   fbTitle: 'सब कैसा लगा?',
   fbSub: 'सितारे दबाएँ — इससे कैफ़े को बहुत मदद मिलती है।',
@@ -442,6 +450,10 @@ const KN: Dict = {
   // v5.252.0 — the ticket's way back: the forward action and the paid word
   orderMore: 'ಮತ್ತಷ್ಟು ಆರ್ಡರ್ ಮಾಡಿ',
   flowServedPaidHint: 'ಆನಂದಿಸಿ — ಬಿಲ್ ಪಾವತಿಸಲಾಗಿದೆ',
+  // v5.253.0 — the loop closes: the menu remembers the guest's own ticket
+  lastTicketTitle: 'ನಿಮ್ಮ ಟಿಕೆಟ್ #{n}',
+  lastTicketSub: 'ಇದೇ ಟೇಬಲ್‌ನಿಂದ ಆರ್ಡರ್ — ನೋಡಲು ಟ್ಯಾಪ್ ಮಾಡಿ',
+  lastTicketAria: 'ನಿಮ್ಮ ಟಿಕೆಟ್ #{n} ನೋಡಿ',
   // feedback (019)
   fbTitle: 'ಎಲ್ಲವೂ ಹೇಗಿತ್ತು?',
   fbSub: 'ನಕ್ಷತ್ರಗಳನ್ನು ಒತ್ತಿ — ಇದು ಕೆಫೆಗೆ ಬಹಳ ಸಹಾಯ ಮಾಡುತ್ತದೆ.',

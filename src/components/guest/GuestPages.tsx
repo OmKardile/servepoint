@@ -4,6 +4,7 @@ import {
   Ban,
   Check,
   ChefHat,
+  ChevronRight,
   CircleAlert,
   CircleOff,
   Clock,
@@ -291,6 +292,27 @@ const lineUnit = (l: CartLine) =>
 
 const CART_KEY = (token: string) => `sp.guest.cart.${token}`;
 const OFFER_KEY = (token: string) => `sp.guest.offer.${token}`;
+/* v5.253.0 — the ticket's word reaches the menu: the loop 5.252.0 opened
+ * (ticket → "Order more" → menu) closes here. The menu page remembers the
+ * guest's latest ticket FROM THEIR OWN CHECKOUT (the id + number the server
+ * handed back at placeOrder — the guest's memory, not a status claim: the
+ * kitchen's live word lives on the ticket page, and the chip only points the
+ * way). Per-tab sessionStorage by the same law as 5.252.0's pill — a fresh
+ * or reopened link remembers nothing and claims nothing. */
+const LAST_ORDER_KEY = (token: string) => `sp.guest.lastOrder.${token}`;
+
+function readLastTicket(token: string): { id: string; n: number } | null {
+  try {
+    const raw = sessionStorage.getItem(LAST_ORDER_KEY(token));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { id?: unknown; n?: unknown };
+    if (!parsed || typeof parsed.id !== 'string' || typeof parsed.n !== 'number') return null;
+    return { id: parsed.id, n: parsed.n };
+  } catch {
+    /* private mode / corrupt cache — the menu claims no ticket */
+  }
+  return null;
+}
 
 /** The window's left-over, computed fresh each tick. The server's anchor WINS
  *  when present — 023's own discipline ("the server, not this phone's clock,
@@ -566,6 +588,9 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
   const [resolved, setResolved] = useState<{ tenantName: string; slug: string; tableNumber: string; capacity: number } | null>(null);
   const [menu, setMenu] = useState<PublicMenu | null>(null);
   const [sessionToken, setSessionToken] = useState<TableSession | null>(null);
+  /* v5.253.0 — the guest's latest ticket from THIS tab's own checkout, read
+   * once at mount (sessionStorage is per-tab; no other tab can gain a key). */
+  const [lastTicket] = useState(() => readLastTicket(qrToken));
   const [lockTone, setLockTone] = useState<'clock' | 'cut'>('clock');
   /* 5.216.0 — the ribbon's freshest SERVER verdict: { when it landed, seconds
      it said were left }. The 30s re-verify tick writes it; the 1s ribbon tick
@@ -918,11 +943,19 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
       }
       if (res.error === 'INVALID_TOKEN') {
         sessionStorage.removeItem(CART_KEY(qrToken));
+        sessionStorage.removeItem(LAST_ORDER_KEY(qrToken)); // the token died — the memory goes with it
         window.location.assign(`/t/${encodeURIComponent(qrToken)}`);
       }
       return;
     }
     sessionStorage.removeItem(CART_KEY(qrToken));
+    // v5.253.0 — the guest's own ticket becomes the menu's memory (the loop's
+    // other half: the ticket's "Order more" leads back here, the chip leads back).
+    try {
+      sessionStorage.setItem(LAST_ORDER_KEY(qrToken), JSON.stringify({ id: res.order.id, n: res.order.order_number }));
+    } catch {
+      /* private mode — no memory, no chip; the ticket page still found its way */
+    }
     window.location.assign(`/track/${res.order.id}`);
   };
 
@@ -1026,6 +1059,28 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
       </header>
 
       <main className="mx-auto w-full max-w-xl flex-1 px-4 pb-36 pt-4">
+        {/* v5.253.0 — the ticket's word reaches the menu: the guest's latest
+            ticket (from THIS tab's own checkout) rides a slim chip above the
+            category rail. The chip claims NOTHING about the kitchen — the
+            ticket page speaks the live state; this only points the way back
+            (5.252.0's loop, closed). No memory, no chip. */}
+        {phase === 'ready' && lastTicket && (
+          <button
+            type="button"
+            onClick={() => window.location.assign(`/track/${lastTicket.id}`)}
+            className="mb-4 flex w-full items-center gap-2.5 rounded-2xl border border-[#E3E7E0] bg-white px-4 py-3 text-left shadow-sm transition-colors hover:border-[#B88E2F] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#B88E2F]"
+            aria-label={t('lastTicketAria', { n: String(lastTicket.n) })}
+          >
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full" style={{ background: '#FBF3E4' }}>
+              <ReceiptText size={15} className="text-[#8A5A16]" aria-hidden />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-[13px] font-bold text-[#1A1A1A]">{t('lastTicketTitle', { n: lastTicket.n })}</span>
+              <span className="block text-[11.5px] text-[#6B6B6B]">{t('lastTicketSub')}</span>
+            </span>
+            <ChevronRight size={16} className="shrink-0 text-[#9A9A9A]" aria-hidden />
+          </button>
+        )}
         {/* sticky category rail — thumb-friendly jumps, scroll-spy highlight */}
         {phase === 'ready' && filtered.length > 0 && (
           <nav

@@ -103,11 +103,15 @@ const swJs = readFileSync('public/sw.js', 'utf8');
   ok('three languages carry both words');
 }
 
-/* 8 — the version law, the agreement shape. */
+/* 8 — the version law, the agreement shape. (v5.253.0's honest re-anchor:
+ * the literal pin moves every release — the law is the AGREEMENT, version.ts
+ * and sw.js carry the same word — so the check reads the live word like
+ * unit274/unit290 do: the rider moved, the law didn't.) */
 {
-  assert.ok(versionTs.includes("export const APP_VERSION = '5.252.0';"), 'APP_VERSION is 5.252.0');
-  assert.ok(swJs.includes('const VERSION = "servepoint-v5.252.0-r1";'), 'the SW cache name is servepoint-v5.252.0-r1 (old shells re-fetch)');
-  ok('the version law holds: 5.252.0 / servepoint-v5.252.0-r1');
+  const v = versionTs.match(/APP_VERSION = '([^']+)'/)?.[1] ?? '';
+  assert.ok(v.length > 0, 'APP_VERSION is present');
+  assert.ok(swJs.includes(`const VERSION = "servepoint-v${v}-r1";`), `the SW cache name is servepoint-v${v}-r1 (old shells re-fetch)`);
+  ok(`the version law holds: version.ts and sw.js agree on ${v}`);
 }
 
 console.log(`\nunit291 — ${n} checks, all green.`);
