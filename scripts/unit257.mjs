@@ -151,7 +151,11 @@ ok('the countdown is gated on the verdict — no "0:00 · menu open" frame');
 
 const guest = strip('../src/components/guest/GuestPages.tsx');
 
-assert.ok(guest.includes("import { formatWindowLeft } from '../../lib/appday';"),
+/* 5.248.0 honest re-anchor — the pin was the exact single-import line; the
+   ticket's clock made appTimezone an honest sibling on the same line. The
+   LAW's shape is unchanged: GuestPages imports the shared formatter from
+   the lib home (the unit241 lesson, ninth application). */
+assert.ok(/import \{[^}]*formatWindowLeft[^}]*\} from '..\/..\/lib\/appday';/.test(guest),
   'GuestPages imports the shared formatter');
 ok('the guest ribbon imports the lib grammar');
 

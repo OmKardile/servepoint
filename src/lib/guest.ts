@@ -383,6 +383,64 @@ export async function fetchPublicOrder(orderId: string): Promise<{
   };
 }
 
+/* ── the ticket's clock (5.248.0) ────────────────────────────────────────────
+ * The guest's one question is "how long has this been going?" — the RPC has
+ * handed the answer since 025 (created_at rides the payload; the summary
+ * type carried it), but the pager never spoke it. Two pure words, derived at
+ * the render boundary (the drawer-card law 5.179, the audit pair 5.246 — now
+ * in the guest's hand): every 10-second tick re-renders the pill, so the age
+ * is re-derived from the clock given, never stored.
+ *
+ *   · THE STAMP — the café's own wall clock, spoken in the reporting zone
+ *     the caller names (the drawer doctrine: a guest abroad reads the café's
+ *     clock, not their phone's). Today bare "14:17" (today needs no
+ *     introduction — the day grammar's first law), any older day the
+ *     calendar "5 Oct · 14:17" (en-IN short month, the ledger's voice; the
+ *     guest pager is a days-later artifact more often than a strip row, so
+ *     the calendar speaks even for yesterday — no borrowed English word
+ *     inside a Hindi/Kannada sentence), an unreadable stamp "—" — never a
+ *     fake time.
+ *
+ *   · THE AGE — "just now" under a minute, whole minutes to the hour, then
+ *     hours and minutes, and past a full day the day-granularity word (the
+ *     honest ceiling: a re-opened link is not "54 h ago"). A NEGATIVE age
+ *     (a future-dated corrupt row) is UNSPEAKABLE: null, the caller omits
+ *     the age word and the stamp alone speaks the stored fact — the census
+ *     does not forgive corruption (5.243's law), and the pager does not
+ *     invent a clock either.
+ */
+
+export function ticketPlacedStamp(placedIso: string, tz: string, nowMs: number = Date.now()): string {
+  const d = new Date(placedIso);
+  if (Number.isNaN(d.getTime())) return '—';
+  const dayKey = (ms: number): string =>
+    new Intl.DateTimeFormat('en-CA', { year: 'numeric', month: '2-digit', day: '2-digit', timeZone: tz }).format(ms);
+  const clock = new Intl.DateTimeFormat('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: tz }).format(d);
+  if (dayKey(d.getTime()) === dayKey(nowMs)) return clock;
+  const cal = new Intl.DateTimeFormat('en-IN', { day: 'numeric', month: 'short', timeZone: tz }).format(d);
+  return `${cal} · ${clock}`;
+}
+
+export type TicketAge =
+  | { kind: 'now' }
+  | { kind: 'min'; n: number }
+  | { kind: 'hours'; h: number; m: number }
+  | { kind: 'days'; d: number }
+  | null; // null — an unreadable or future-dated stamp: no age is speakable
+
+export function ticketAge(placedIso: string, nowMs: number = Date.now()): TicketAge {
+  const d = new Date(placedIso);
+  if (Number.isNaN(d.getTime())) return null;
+  const s = Math.floor((nowMs - d.getTime()) / 1000);
+  if (s < 0) return null;
+  if (s < 60) return { kind: 'now' };
+  const m = Math.floor(s / 60);
+  if (m < 60) return { kind: 'min', n: m };
+  const h = Math.floor(m / 60);
+  if (h < 24) return { kind: 'hours', h, m: m % 60 };
+  return { kind: 'days', d: Math.floor(h / 24) }; // day granularity is the honest ceiling — a re-opened link is not "54 h ago"
+}
+
 /* ── feedback (migration 019) ──────────────────────────────────────────────── */
 
 /**

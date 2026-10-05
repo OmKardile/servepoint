@@ -32,6 +32,8 @@ import {
   openTableSession,
   resolveTableQr,
   submitPublicFeedback,
+  ticketAge,
+  ticketPlacedStamp,
   verifyTableSession,
   type GuestAddon,
   type GuestMenuItem,
@@ -73,7 +75,7 @@ import { offerDiscount } from '../../store/cart';
    dialects). The bar's own total already includes the discount when one
    is applied — '₹40.00 off applied' explains why the number moved. */
 import { offerFit, offerFitVoice } from '../../lib/offerFit';
-import { formatWindowLeft } from '../../lib/appday';
+import { appTimezone, formatWindowLeft } from '../../lib/appday';
 
 /**
  * Guest QR surfaces (v5.3.0) — the customer side of the main flow.
@@ -1666,6 +1668,28 @@ export function GuestTrackPage({ orderId }: { orderId: string }): React.ReactEle
   const cancelled = order?.status === 'cancelled';
   const paid = order?.payment_status === 'completed';
 
+  /* 5.248.0 — the ticket's clock. The stamp speaks the café's wall clock in
+   * the reporting zone (appTimezone() named HERE, at the call site — the
+   * drawer doctrine: a guest abroad reads the café's clock, not their
+   * phone's); the age re-derives at every render, so each 10-second tick
+   * re-speaks it (the drawer-card law 5.179, the audit pair 5.246 — a
+   * stored sentence re-rendered re-derives its time-truth). A future-dated
+   * corrupt row ages to null and the pill speaks the stamp alone. */
+  const placedStamp = order ? ticketPlacedStamp(order.created_at, appTimezone()) : '';
+  const placedAge = order ? ticketAge(order.created_at) : null;
+  const placedAgeWord =
+    placedAge === null
+      ? ''
+      : placedAge.kind === 'now'
+        ? t('ageNow')
+        : placedAge.kind === 'min'
+          ? t('ageMin', { n: placedAge.n })
+          : placedAge.kind === 'days'
+            ? t('ageD', { d: placedAge.d })
+            : placedAge.m === 0
+              ? t('ageH', { h: placedAge.h })
+              : t('ageHm', { h: placedAge.h, m: placedAge.m });
+
   return (
     <div className="flex min-h-screen flex-col bg-[#F6F5F2]">
       <header className="px-4 pb-4 pt-5" style={{ background: `linear-gradient(160deg, ${brand.teal} 0%, #14514f 100%)` }}>
@@ -1698,6 +1722,18 @@ export function GuestTrackPage({ orderId }: { orderId: string }): React.ReactEle
               <p className="mt-1 text-[12.5px] text-white/75">
                 {order.table_number ? t('tableN', { n: order.table_number }) : t(OT_KEYS[order.order_type] || order.order_type)}
                 {order.customer_name ? ` · ${order.customer_name}` : ''}
+              </p>
+            )}
+            {order && (
+              <p
+                className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-white/10 px-2.5 py-1 text-[11px] font-semibold text-white/85"
+                title={t('autoUpdate')}
+              >
+                <Clock size={11} aria-hidden />
+                <span>
+                  {t('placedAt', { t: placedStamp })}
+                  {placedAgeWord ? ` · ${placedAgeWord}` : ''}
+                </span>
               </p>
             )}
           </div>
