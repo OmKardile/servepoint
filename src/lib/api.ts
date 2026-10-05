@@ -3336,3 +3336,39 @@ export async function fetchOrderFeedback(orderId: string): Promise<OrderVerdict 
     return null;
   }
 }
+
+/* ── v5.257.0 — the CRM hears the voice ──────────────────────────────────────
+ * ONE guest's verdict history for the CRM's detail drawer. The ledger knew
+ * WHO since 5.70.0 (the recover list names the callback), but the guest's
+ * own profile never spoke their words — an owner investigating a guest read
+ * their tickets, their redemptions, their usual… and not one rating they
+ * left. The join is the PHONE (the CRM's identity key since 5.5 — the book
+ * join's own law): order_feedback → orders!inner keyed on customer_phone.
+ * Newest first; a cap keeps the drawer bounded (a decade of visits still
+ * reads the freshest 20). Empty → [] — the CALLER stays silent (an unread
+ * ledger never becomes an invented verdict).
+ * ────────────────────────────────────────────────────────────────────────── */
+export async function fetchCustomerFeedback(tenantId: string, phone: string, limit = 20): Promise<FeedbackRow[]> {
+  requireCloud();
+  const { data, error } = await supabase
+    .from('order_feedback')
+    .select('rating, comment, created_at, orders!inner(order_number, customer_phone, customer_name)')
+    .eq('tenant_id', tenantId)
+    .eq('orders.customer_phone', phone)
+    .order('created_at', { ascending: false })
+    .limit(limit);
+  if (error) throw error;
+  return ((data || []) as {
+    rating: number;
+    comment: string | null;
+    created_at: string;
+    orders?: { order_number?: number; customer_name?: string | null } | null;
+  }[]).map((r) => ({
+    rating: r.rating,
+    comment: r.comment,
+    created_at: r.created_at,
+    order_number: r.orders?.order_number ?? 0,
+    customer_name: r.orders?.customer_name ?? null,
+    customer_phone: phone,
+  }));
+}

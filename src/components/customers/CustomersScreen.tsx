@@ -15,10 +15,12 @@ import {
   Pencil,
   Phone,
   Plus,
+  Quote,
   ReceiptText,
   RefreshCw,
   Repeat,
   Search,
+  Star,
   Sparkles,
   Tag,
   Trash2,
@@ -35,6 +37,7 @@ import {
   deleteOffer,
   fetchCustomerOrders,
   fetchCustomerStats,
+  fetchCustomerFeedback,
   fetchCustomers,
   fetchOfferRedemptions,
   fetchOffers,
@@ -48,6 +51,7 @@ import {
   type RealtimeState,
   type Reservation,
   type ReservationStatus,
+  type FeedbackRow,
 } from '../../lib/api';
 import { formatMoney } from '../../lib/prefs';
 import { offerBadgeLabel } from '../../lib/offerLabel';
@@ -57,6 +61,10 @@ import { appTodayIso, appFormatters, appTzTag, lastNDaysMs } from '../../lib/app
 import { bookingSlotLabel, bookingDayKey, bookingTodayKey, bookingTzIsForeign } from '../../lib/bookingday';
 import { useTenant } from '../../lib/tenant';
 import { computeUsual, isPaidTicket, USUAL_WINDOW } from '../../lib/usual';
+/* v5.257.0 — the drawer's verdict summary wears the family's ONE tone law
+ * (the dashboard's own thresholds and words — lib/verdict is the shared
+ * home since the bill's row learned it). */
+import { guestVoice } from '../../lib/verdict';
 import { useDialogA11y } from '../../lib/useDialogA11y';
 import { useCart } from '../../store/cart';
 import { useUi } from '../../store/session';
@@ -2179,11 +2187,17 @@ const GuestDetailDrawer: React.FC<{
 }> = ({ tenantId, customer, stats, voice, ledger, onClose }) => {
   const [orders, setOrders] = useState<Order[] | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  /* v5.257.0 — the guest's own words, read with the tickets (the PHONE is
+   * the join, the CRM's identity key). null = the read could not land —
+   * the block stays SILENT, an unread ledger never becomes an invented
+   * verdict (the GIVEN AWAY rule, applied to words). */
+  const [verdicts, setVerdicts] = useState<FeedbackRow[] | null>(null);
   /* v5.110.0 — the drawer holds the door (replaces the hand-rolled Escape listener). */
   const dlgRef = useDialogA11y<HTMLDivElement>(onClose, true);
 
   useEffect(() => {
     let alive = true;
+    setVerdicts(null); // honest absence until the read lands
     /* v5.74.0 — the fetch widened from 8 to USUAL_WINDOW (50): the recent
      * list still SHOWS the same TICKETS_SHOWN rows, but the usual now reads
      * a window wide enough that a habit cannot hide behind one accident. */
@@ -2193,6 +2207,15 @@ const GuestDetailDrawer: React.FC<{
       })
       .catch((e) => {
         if (alive) setErr(e instanceof Error ? e.message : 'Could not load tickets.');
+      });
+    /* v5.257.0 — their ratings ride the same open, fail-soft: a hiccup
+     * silences the block — it never spins, never errors, never invents. */
+    fetchCustomerFeedback(tenantId, customer.phone)
+      .then((v) => {
+        if (alive) setVerdicts(v);
+      })
+      .catch(() => {
+        if (alive) setVerdicts(null);
       });
     return () => {
       alive = false;
@@ -2462,6 +2485,65 @@ const GuestDetailDrawer: React.FC<{
             </p>
           )}
           {orders === null && !err && <div className="sp-skeleton mb-4 h-[92px] rounded-2xl" />}
+          {/* v5.257.0 — THEIR WORDS, the guest's verdict history: the ratings
+              and the words they left from their own phone, read with the
+              same open as the tickets (the PHONE join). The summary wears
+              the family's ONE tone law (guestVoice → the dashboard's
+              thresholds/words); every quote speaks the stored word VERBATIM,
+              break-words, never cut (the 294 law) — the reports family's
+              gold-quote styling, crossed to the guest it belongs to.
+              Unread or empty → silent (an invented verdict is a lie the
+              CRM can't undo). */}
+          {verdicts !== null && verdicts.length > 0 && (() => {
+            const gv = guestVoice(verdicts);
+            if (!gv) return null;
+            return (
+              <div className="mb-4 rounded-2xl border border-[#E9DFC8] bg-[#FBF9F1] px-4 py-3.5" aria-label={`Their words: ${gv.count} rating${gv.count === 1 ? '' : 's'}, average ${gv.avg.toFixed(1)} of 5`}>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-1.5">
+                    <Star size={13} className="text-[#B88E2F]" aria-hidden />
+                    <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#8A5A16]">Their words</p>
+                  </div>
+                  <span
+                    className="rounded-full px-2 py-0.5 text-[10px] font-extrabold"
+                    style={{ color: gv.tone.color, backgroundColor: gv.tone.bg }}
+                  >
+                    {gv.tone.word}
+                  </span>
+                </div>
+                <p className="mt-1.5 text-[15.5px] font-bold text-[#1A1A1A] tabular-nums">
+                  {gv.avg.toFixed(1)}
+                  <span className="text-[12px] font-semibold text-[#969696]"> / 5</span>
+                  <span className="ml-2 text-[11.5px] font-semibold text-[#6B6B6B]">
+                    {gv.count} {gv.count === 1 ? 'rating' : 'ratings'}
+                  </span>
+                </p>
+                {verdicts.some((v) => v.comment && v.comment.trim().length > 0) && (
+                  <ul className="mt-2.5 flex flex-col gap-2 border-t border-dashed border-[#E3D9BC] pt-2.5">
+                    {verdicts.map((v) =>
+                      v.comment && v.comment.trim().length > 0 ? (
+                        <li
+                          key={`${v.order_number}-${v.created_at}`}
+                          className="rounded-r-lg border-l-2 border-[#B88E2F] bg-[#FDFBF5] py-2 pl-3 pr-2.5"
+                        >
+                          <div className="flex items-start gap-1.5">
+                            <Quote size={11} aria-hidden className="mt-0.5 shrink-0 text-[#B88E2F]" />
+                            <p className="min-w-0 flex-1 break-words text-[12px] italic leading-snug text-[#1A1A1A]">
+                              “{v.comment.trim()}”
+                            </p>
+                            <span className="inline-flex shrink-0 items-center gap-1 text-[10.5px] font-bold tabular-nums text-[#8A5A00]">
+                              <Star size={10} aria-hidden className="fill-[#B88E2F] text-[#B88E2F]" />
+                              {v.rating} · #{v.order_number}
+                            </span>
+                          </div>
+                        </li>
+                      ) : null,
+                    )}
+                  </ul>
+                )}
+              </div>
+            );
+          })()}
           {/* v5.209.0 — GIVEN AWAY, the guest's side of the ledger: the
               5.208 phone bucket rendered at guest scale — the drawer
               grammar 5.206 taught on the offers tab, crossed to a guest

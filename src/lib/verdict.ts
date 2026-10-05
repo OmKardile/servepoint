@@ -18,3 +18,23 @@ export function verdictTone(rating: number): VerdictTone {
   if (rating >= 3.5) return { color: '#8A5A00', bg: '#8A5A0014', word: 'good — keep going' };
   return { color: '#B3261E', bg: '#B3261E14', word: 'listen up — guests are not happy' };
 }
+
+/* ── v5.257.0 — the guest's voice, summarized ───────────────────────────────
+ * The CRM drawer's ONE summary arithmetic: rows in (a guest's verdict
+ * history, newest first), count + average + the tone word out. THE SAME
+ * tone law as everything else in the family — a single verdict's tone and
+ * a season's average wear the same thresholds and words (the GuestLoveCard
+ * is the law's home; the bill's row and the CRM's drawer are its speakers).
+ * Empty rows or an unread ledger → null: the caller stays SILENT (an
+ * unread ledger never becomes an invented verdict — the drawer's own
+ * GIVEN AWAY rule, applied to words). Exported pure so the suite and the
+ * E2E execute the exact arithmetic the drawer speaks. */
+export function guestVoice(
+  rows: { rating: number }[] | null | undefined,
+): { count: number; avg: number; tone: VerdictTone } | null {
+  if (!rows || rows.length === 0) return null;
+  let sum = 0;
+  for (const r of rows) sum += Number(r.rating ?? 0);
+  const avg = sum / rows.length;
+  return { count: rows.length, avg, tone: verdictTone(avg) };
+}
