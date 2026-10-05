@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { AuthUserSession } from '../lib/authService';
+import { SECTION_SLUGS, sectionFromPath } from '../lib/sectionPath';
 
 /** Signed-in identity (hydrated by App from authService). */
 interface SessionState {
@@ -62,14 +63,34 @@ export const useUi = create<UiState>((set, get) => ({
   searchMeta: null,
   profileOpen: false,
   sectionHint: null,
-  goSection: (section, breadcrumb, hint) =>
+  goSection: (section, breadcrumb, hint) => {
     set({
       section,
       breadcrumb: breadcrumb || [section.charAt(0).toUpperCase() + section.slice(1)],
       search: '',
       // A door without a hint must not leak the previous door's context.
       sectionHint: hint ?? null,
-    }),
+    });
+    /* v5.235.0 — the address follows you: the navigation act claims the
+     * URL (replaceState — the address tells where you ARE; no history
+     * pile, no popstate choreography, the POS's Back keeps its
+     * device-level meaning), so a mid-shift refresh lands the operator
+     * where they were — the v5.32.0 deep-link reader restores the room
+     * on boot, and write + read share ONE path grammar
+     * (lib/sectionPath). The writer runs only when a room is CHOSEN —
+     * the boot's own address is never rewritten, because a plain boot
+     * calls no goSection at all: the bare root keeps its throne ("/")
+     * until a choice names a room. And a path that already names the
+     * running room keeps its own word (a spoken alias /close-out, a
+     * pinned-wall /cafe/bills — v5.93's law). goSection is an action,
+     * not an effect — React's StrictMode echo cannot double-write. */
+    if (typeof window !== 'undefined' && typeof history !== 'undefined') {
+      const path = window.location.pathname;
+      if (sectionFromPath(SECTION_SLUGS, path) !== section) {
+        history.replaceState(null, '', `/${section}`);
+      }
+    }
+  },
   consumeSectionHint: () => {
     const hint = get().sectionHint;
     if (hint !== null) set({ sectionHint: null });

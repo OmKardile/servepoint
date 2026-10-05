@@ -22,6 +22,7 @@ import { useChatUnread, sumChatUnread } from '../../store/chatUnread';
 import { useStockUnread } from '../../store/stockUnread';
 import { getPrefs, subscribePrefs } from '../../lib/prefs';
 import { useTenant } from '../../lib/tenant';
+import { APP_VERSION } from '../../version';
 import brandMark from '../../assets/brand/mark.png';
 
 const NAV: { id: Section; label: string; icon: React.ElementType }[] = [
@@ -263,7 +264,13 @@ export const Sidebar: React.FC = () => {
         </button>
       </div>
 
-      <p className="mt-3 hidden text-center text-[10px] text-white/40 md:block">© 2026 ServePoint · smartPOS</p>
+      {/* v5.235.0 — the build word: the rail answers "which build?" in the
+          footer's own whisper voice (the same APP_VERSION the service
+          worker bakes — one word, unit274 pins the agreement). */}
+      <p className="mt-3 hidden text-center text-[10px] text-white/40 md:block">
+        © 2026 ServePoint · smartPOS ·{' '}
+        <span title={`Build servepoint-v${APP_VERSION}-r1`}>v{APP_VERSION}</span>
+      </p>
     </aside>
   );
 };

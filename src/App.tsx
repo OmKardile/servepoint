@@ -5,6 +5,7 @@ import { normalizeRole } from './lib/rbac';
 import { useTenant } from './lib/tenant';
 import { useSession, useUi, type Section } from './store/session';
 import { SECTION_LABELS } from './components/shell/Sidebar';
+import { SECTION_SLUGS, sectionFromPath } from './lib/sectionPath';
 import { AuthScreen } from './components/auth/AuthScreen';
 import { AppShell } from './components/shell/AppShell';
 import { NoWorkspaceScreen } from './components/shell/NoWorkspaceScreen';
@@ -52,20 +53,14 @@ import IndexHelpPage from './components/pages/IndexHelpPage';
 import NotFoundPage from './components/pages/NotFoundPage';
 import brandLockup from './assets/brand/lockup-light.png';
 
-/* v5.93.0 — the sidebar's words are the URLs. Two rail names differ from
- * their section ids (the rail says "Close-out", the code says 'eod'; the rail
- * says "Guests", the code says 'customers') — and until now only the code's
- * word was deep-linkable: /close-out and /guests fell through to Dashboard
- * while /eod and /customers worked, words no human ever bookmarks. Staff
- * bookmark what the rail SAYS, so every spoken name resolves — alongside the
- * plain ids, which keep working untouched. */
-const SECTION_SLUGS: Readonly<Record<string, Section>> = Object.freeze(
-  Object.fromEntries([
-    ...(Object.keys(SECTION_LABELS) as Section[]).map((id) => [id, id]),
-    ['close-out', 'eod'],
-    ['guests', 'customers'],
-  ] as [string, Section][])
-);
+/* v5.93.0 — the sidebar's words are the URLs: every spoken rail name
+ * resolves as a deep link (/close-out → 'eod', /guests → 'customers')
+ * alongside the plain ids, which keep working untouched.
+ * v5.235.0 — the slug rules AND the segment→section derivation moved to
+ * lib/sectionPath.ts as ONE home: the 404 door, the boot deep-link and
+ * the URL write-back (which lives in goSection itself — the navigation
+ * act, immune to StrictMode's effect echo) all ask the same closure.
+ * One grammar, never a fork. */
 
 /**
  * v5.0.0 Production router (ADR-0013 role model / ADR-0014 rebuild):
@@ -106,15 +101,13 @@ const CafeApp: React.FC = () => {
    *  The path is read ONCE on mount (same philosophy as usePathname above);
    *  the slug segment stays decorative — the signed-in session already
    *  decides the workspace. Unknown/missing screen → Dashboard, unchanged.
-   *  In-app navigation keeps the URL where it is (pre-existing behavior:
-   *  sections are app state, not routes). */
+   *  v5.235.0 — the segment→section ask rides the ONE closure in
+   *  lib/sectionPath.ts, shared with the write-back below. */
   const deepLinkDone = React.useRef(false);
   useEffect(() => {
     if (deepLinkDone.current) return;
     deepLinkDone.current = true;
-    const parts = window.location.pathname.split('/').filter(Boolean);
-    const seg = parts.length >= 2 ? parts[1] : parts[0];
-    const target = seg ? SECTION_SLUGS[seg] : undefined;
+    const target = sectionFromPath(SECTION_SLUGS, window.location.pathname);
     if (target) {
       goSection(target, [SECTION_LABELS[target]]);
     }
@@ -122,7 +115,10 @@ const CafeApp: React.FC = () => {
 
   /* v5.32.0 — the tab strip tells the truth: the browser tab title follows
    *  the active screen ("Floor · ServePoint"), so multi-tab operators and
-   *  pinned wall displays read at a glance. */
+   *  pinned wall displays read at a glance. The title rides STATE (it must
+   *  also speak at a plain boot, where no navigation act runs); the ADDRESS
+   *  rides the CHOICE (goSection's own writer — v5.235.0). Two clocks, two
+   *  honest jobs. */
   useEffect(() => {
     document.title = `${SECTION_LABELS[section]} · ServePoint`;
   }, [section]);
@@ -250,11 +246,11 @@ const AppRoutes: React.FC = () => {
    *  their old path: anonymous visitors still get the login gate, and after
    *  sign-in the deep-link effect boots them into the bookmarked screen.
    *  CafeApp's internal "unknown slug → Dashboard" fallback stays as a second
-   *  safety net, but the door itself now answers. */
-  const dlParts = pathname.split('/').filter(Boolean);
-  const dlSeg = dlParts.length >= 2 ? dlParts[1] : dlParts[0];
+   *  safety net, but the door itself now answers.
+   *  v5.235.0 — the door's slug ask rides the ONE closure too: three readers
+   *  (the 404 door, the boot deep-link, the write-back), one grammar. */
   const knownDoor =
-    pathname === '/' || (dlSeg !== undefined && SECTION_SLUGS[dlSeg] !== undefined);
+    pathname === '/' || sectionFromPath(SECTION_SLUGS, pathname) !== undefined;
   if (!knownDoor) return <NotFoundPage path={pathname} />;
 
   if (!session) {
