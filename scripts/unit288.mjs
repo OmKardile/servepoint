@@ -58,8 +58,8 @@ const swJs = strip('../public/sw.js');
 
 /* 2 — the busy voice is shared. */
 {
-  assert.ok(pages.includes('function GuestErrorCard({ title, body, onRetry, busy = false }'),
-    'the card grows the busy prop');
+  assert.ok(pages.includes("function GuestErrorCard({ title, body, onRetry, busy = false, tone = 'error' }"),
+    'the card grows the busy prop'); /* re-anchored 5.268.0 — the rider grew the tone prop; the busy law stands */
   const cardIdx = pages.indexOf('function GuestErrorCard(');
   const cardSlice = pages.slice(cardIdx, pages.indexOf('/* ═', cardIdx));
   assert.ok(cardSlice.includes('disabled={busy}'), 'a busy retry cannot double-fire');

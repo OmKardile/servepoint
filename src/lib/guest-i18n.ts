@@ -43,6 +43,12 @@ const EN: Dict = {
   sessionFail: 'This table could not be opened right now. Ask our staff for help.',
   gateInvalidTitle: "This link didn't work",
   gateSessionTitle: "Table didn't open",
+  // the gate hears the blip (v5.268.0) — a Wi-Fi stumble at resolve-time used
+  // to wear the lying title ("This link didn't work") while its own body said
+  // "try again" with no door. The gate branches on the lib's NETWORK marker
+  // now; the card wears the amber register and the retry door.
+  gateNetTitle: "Couldn't reach the cafe",
+  gateNetBody: 'Check your connection and try again.',
   // session ribbon
   orderingWindow: 'Ordering window — ',
   endingSoon: 'Session ending soon — ',
@@ -205,6 +211,9 @@ const HI: Dict = {
   opening: '{cafe} पर आपका सेशन खोला जा रहा है…',
   sessionFail: 'टेबल अभी नहीं खुल सकी। कृपया अपने स्टाफ़ से मदद लें।',
   gateInvalidTitle: 'यह लिंक काम नहीं कर पाया',
+  // the gate hears the blip (v5.268.0)
+  gateNetTitle: 'कैफ़े तक संपर्क नहीं हो पाया',
+  gateNetBody: 'अपना कनेक्शन जाँचें और फिर कोशिश करें।',
   gateSessionTitle: 'टेबल नहीं खुली',
   orderingWindow: 'ऑर्डरिंग समय — ',
   endingSoon: 'सेशन जल्द समाप्त — ',
@@ -358,6 +367,9 @@ const KN: Dict = {
   opening: '{cafe} ನಲ್ಲಿ ನಿಮ್ಮ ಸೆಷನ್ ತೆರೆಯಲಾಗುತ್ತಿದೆ…',
   sessionFail: 'ಟೇಬಲ್ ಈಗ ತೆರೆಯಲಾಗಲಿಲ್ಲ. ದಯವಿಟ್ಟು ಸಿಬ್ಬಂದಿಯ ಸಹಾಯ ಪಡೆಯಿರಿ.',
   gateInvalidTitle: 'ಈ ಲಿಂಕ್ ಕೆಲಸ ಮಾಡಲಿಲ್ಲ',
+  // the gate hears the blip (v5.268.0)
+  gateNetTitle: 'ಕೆಫೆಗೆ ಸಂಪರ್ಕಿಸಲಾಗಲಿಲ್ಲ',
+  gateNetBody: 'ನಿಮ್ಮ ಸಂಪರ್ಕವನ್ನು ಪರಿಶೀಲಿಸಿ ಮತ್ತು ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.',
   gateSessionTitle: 'ಟೇಬಲ್ ತೆರೆಯಲಾಗಲಿಲ್ಲ',
   orderingWindow: 'ಆರ್ಡರ್ ಸಮಯ — ',
   endingSoon: 'ಸೆಷನ್ ಶೀಘ್ರ ಮುಕ್ತಾಯ — ',

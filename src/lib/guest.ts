@@ -228,7 +228,12 @@ export function openTableSession(input: {
       p_permanent_token: input.qrToken,
     });
     if (error) {
-      return { ok: false, message: 'Could not open this table. Scan the QR sticker again.' };
+      /* v5.268.0 — the wire-fail word stops blaming the sticker: a supabase
+       * error here is the WIRE (network blip or a momentary 5xx), not a bad
+       * QR — rescanning was never the move, retrying is. The session card
+       * this message lands in already wears the retry door (5.249's busy
+       * voice), so the word and the door finally agree. */
+      return { ok: false, message: 'Could not open this table right now — try again in a moment.' };
     }
     const res = data as { is_valid: boolean; session_token?: string; expires_at?: string; message?: string; expires_in_seconds?: number };
     if (!res?.is_valid || !res.session_token || !res.expires_at) {

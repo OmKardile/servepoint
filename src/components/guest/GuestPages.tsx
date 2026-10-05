@@ -181,13 +181,19 @@ function GuestFooter({
    so (the loader swaps for the refresh arrow, the button disables) — a guest
    who taps twice must never fire two chains, and a spinning arrow is the
    honest word for "the phone is trying". aria-busy names it to the reader. */
-function GuestErrorCard({ title, body, onRetry, busy = false }: { title: string; body: string; onRetry?: () => void; busy?: boolean }): React.ReactElement {
+function GuestErrorCard({ title, body, onRetry, busy = false, tone = 'error' }: { title: string; body: string; onRetry?: () => void; busy?: boolean; tone?: 'error' | 'net' }): React.ReactElement {
   const { t } = useGuestLang();
+  /* v5.268.0 — the amber register joins the guest cards: a wire stumble is
+   * not a broken link. The net tone wears the same amber family the net
+   * band speaks (the CloudOff ear, the #FBF6EA circle, the #8A5A00 ink) —
+   * one amber language for "the wire is down" across the guest surfaces;
+   * genuine bad links keep the red CircleAlert. */
+  const net = tone === 'net';
   return (
     <div className="mx-auto mt-10 max-w-md px-4">
       <div className="rounded-3xl border border-[#E3E7E0] bg-white p-6 text-center shadow-sm">
-        <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-[#FDF3F2]">
-          <CircleAlert size={26} className="text-[#B4483C]" aria-hidden />
+        <div className={`mx-auto flex h-14 w-14 items-center justify-center rounded-full ${net ? 'bg-[#FBF6EA]' : 'bg-[#FDF3F2]'}`}>
+          {net ? <CloudOff size={26} className="text-[#8A5A00]" aria-hidden /> : <CircleAlert size={26} className="text-[#B4483C]" aria-hidden />}
         </div>
         <h1 className="mt-4 font-serif text-[24px] italic text-[#0F3D3E]">{title}</h1>
         <p className="mt-2 text-[13.5px] leading-relaxed text-[#6B6B6B]">{body}</p>
@@ -277,7 +283,7 @@ function GuestNetBand(): React.ReactElement | null {
 
 export function GuestGatePage({ qrToken }: { qrToken: string }): React.ReactElement {
   const { t } = useGuestLang();
-  const [state, setState] = useState<'working' | 'invalid' | 'session'>('working');
+  const [state, setState] = useState<'working' | 'invalid' | 'session' | 'net'>('working');
   const [detail, setDetail] = useState(t('checking'));
   /* 5.249.0 — the gate's own busy word: the session-retry wears the card's
      shared busy voice (one card, one language). */
@@ -295,6 +301,18 @@ export function GuestGatePage({ qrToken }: { qrToken: string }): React.ReactElem
     }
     const resolved = await resolveTableQr(qrToken);
     if (!resolved.is_valid || !resolved.tenant || !resolved.table) {
+      /* v5.268.0 — the gate hears the blip: the lib marks wire failures with
+       * error: 'NETWORK' and an honest body word — but the gate never read
+       * the marker, so a Wi-Fi stumble wore the LYING title ("This link
+       * didn't work") and the dead end (the invalid card had no retry door,
+       * the exact disease 5.249.0 cured on the menu). The net state speaks
+       * the honest title, the amber register and THE DOOR. */
+      if (resolved.error === 'NETWORK') {
+        setState('net');
+        setDetail(resolved.message || t('gateNetBody'));
+        setBusy(false);
+        return;
+      }
       setState('invalid');
       setDetail(resolved.message || t('invalidCode'));
       setBusy(false);
@@ -332,6 +350,7 @@ export function GuestGatePage({ qrToken }: { qrToken: string }): React.ReactElem
           </div>
         )}
         {state === 'invalid' && <GuestErrorCard title={t('gateInvalidTitle')} body={detail} />}
+        {state === 'net' && <GuestErrorCard tone="net" title={t('gateNetTitle')} body={detail} busy={busy} onRetry={() => void run()} />}
         {state === 'session' && <GuestErrorCard title={t('gateSessionTitle')} body={detail} busy={busy} onRetry={() => void run()} />}
       </main>
       <GuestFooter />
