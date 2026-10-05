@@ -70,8 +70,8 @@ function partsIn(iso: string, tz: string): ZonedParts | null {
   for (const x of fmt.formatToParts(d)) p[x.type] = x.value;
   return { key: `${p.year}-${p.month}-${p.day}`, hh: p.hour, mm: p.minute };
 }
-function nowKeyIn(tz: string, offsetDays = 0): string {
-  return partsIn(new Date(Date.now() + offsetDays * 86400000).toISOString(), tz)!.key;
+function nowKeyIn(tz: string, offsetDays = 0, nowMs: number = Date.now()): string {
+  return partsIn(new Date(nowMs + offsetDays * 86400000).toISOString(), tz)!.key;
 }
 
 /** Local-day equality — the one test every "today" in the app uses. */
@@ -86,13 +86,20 @@ export function isSameLocalDay(iso: string): boolean {
   return isSameLocalDayAs(iso, Date.now());
 }
 
-/** True when the timestamp falls on yesterday's calendar day (local). */
-export function isYesterday(iso: string): boolean {
+/** True when the timestamp falls on yesterday's calendar day (local).
+ *  5.219.0 — the explicit-clock twin of the same question (isSameLocalDayAs's
+ *  rule, 228's own doctrine): suites own now, predicates stay deterministic.
+ *  The bare one-arg form delegates here — ONE arithmetic, two registers. */
+export function isYesterdayAs(iso: string, nowMs: number): boolean {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return false;
-  const y = new Date();
+  const y = new Date(nowMs);
   y.setDate(y.getDate() - 1);
   return d.toDateString() === y.toDateString();
+}
+
+export function isYesterday(iso: string): boolean {
+  return isYesterdayAs(iso, Date.now());
 }
 
 /** Bare local HH:MM — the clock the whole app already speaks. With `tz`,
@@ -110,13 +117,17 @@ export function hhmm(iso: string, tz?: string): string {
 
 /** The day word for a timestamp: '' today, 'Yesterday', or a short en-IN
  *  calendar date ("2 Oct") for anything older. With `tz`, all three judged
- *  in that zone. */
-export function dayLabel(iso: string, tz?: string): string {
+ *  in that zone. 5.219.0 — the optional `nowMs` is the suites' seam (5.202's
+ *  own rule, now kept everywhere): a day word judged against the REAL clock
+ *  while the fixture lives on a pinned one is a test that only passes by
+ *  coincidence — and UTC midnight collects the debt. Defaults keep every
+ *  existing call site on the live clock. */
+export function dayLabel(iso: string, tz?: string, nowMs: number = Date.now()): string {
   if (tz) {
     const p = partsIn(iso, tz);
     if (!p) return '';
-    if (p.key === nowKeyIn(tz)) return '';
-    if (p.key === nowKeyIn(tz, -1)) return 'Yesterday';
+    if (p.key === nowKeyIn(tz, 0, nowMs)) return '';
+    if (p.key === nowKeyIn(tz, -1, nowMs)) return 'Yesterday';
     let fmt = labelFmtCache.get(tz);
     if (!fmt) {
       fmt = new Intl.DateTimeFormat('en-IN', { day: 'numeric', month: 'short', timeZone: tz });
@@ -126,8 +137,8 @@ export function dayLabel(iso: string, tz?: string): string {
   }
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '';
-  if (isSameLocalDay(iso)) return '';
-  if (isYesterday(iso)) return 'Yesterday';
+  if (isSameLocalDayAs(iso, nowMs)) return '';
+  if (isYesterdayAs(iso, nowMs)) return 'Yesterday';
   return new Intl.DateTimeFormat('en-IN', { day: 'numeric', month: 'short' }).format(d);
 }
 
@@ -136,8 +147,8 @@ export function dayLabel(iso: string, tz?: string): string {
  *  only joins a calendar date — "Yesterday" keeps the plain space, the way
  *  the strip already says it. With `tz`, the whole grammar judges in that
  *  zone (the drawer card passes the reporting timezone). */
-export function dayTime(iso: string, tz?: string): string {
-  const label = dayLabel(iso, tz);
+export function dayTime(iso: string, tz?: string, nowMs: number = Date.now()): string {
+  const label = dayLabel(iso, tz, nowMs);
   if (!label) return hhmm(iso, tz);
   if (label === 'Yesterday') return `${label} ${hhmm(iso, tz)}`;
   return `${label} · ${hhmm(iso, tz)}`;

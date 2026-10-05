@@ -110,9 +110,12 @@ ok('the armed cut-all count re-anchors on the tick');
 
 /* ── 3. The trail rows — verdict and countdown are one arithmetic ── */
 
-const mapIdx = floor.indexOf('sessions.slice(0, 6).map((s) => {');
-const mapSlice = floor.slice(mapIdx, floor.indexOf('sessions.length > 6', mapIdx));
-assert.ok(mapSlice.length > 500 && mapSlice.length < 4200, 'trail map slice resolved (code anchors only)');
+/* 5.219.0 evolution: the row body moved into the sessionRow closure (ONE
+   row grammar for the recent rows AND the revealed history — never a fork).
+   The slice anchors are code-level, per the house lesson. */
+const mapIdx = floor.indexOf('const sessionRow = (s: TableSession) => {');
+const mapSlice = floor.slice(mapIdx, floor.indexOf('const olderScans = sessions.slice(6);', mapIdx));
+assert.ok(mapSlice.length > 500 && mapSlice.length < 4200, 'trail row closure slice resolved (code anchors only)');
 
 assert.ok(mapSlice.includes('const st = sessionState(s, now);'),
   'the row\'s verdict reads the drill\'s now');
@@ -122,7 +125,7 @@ ok('verdict and countdown read the same instant');
 
 assert.ok(mapSlice.includes('`ends in ${formatWindowLeft(msLeft)}`'),
   'the live row speaks "ends in m:ss"');
-assert.ok(mapSlice.includes("st === 'expired'\n                              ? expiryRel(s.expires_at)"),
+assert.ok(mapSlice.includes(": st === 'expired'\n              ? expiryRel(s.expires_at)"),
   'the expired branch keeps its ago-form');
 assert.ok(mapSlice.includes(': tone.label}'), 'consumed/revoked keep their own labels');
 ok('the live row says "ends in", the expired row keeps its ago-form');

@@ -1053,6 +1053,13 @@ function TableDrill({
   const [copied, setCopied] = useState<'link' | 'token' | null>(null);
   const [shown, setShown] = useState(false);
   const [bulkArm, setBulkArm] = useState(false);
+  /* 5.219.0 — the trail remembers its days: the drill showed the six most
+     recent scans and a dead-end count ("+14 earlier scans on record") — the
+     owner investigating a table's scan story could never actually see the
+     earlier scans. One expansion flag; the revealed rows group under their
+     IST days (appDayKey — the ONE day key), newest day first, riding the
+     5.218 heartbeat with no timer of their own. */
+  const [showAllScans, setShowAllScans] = useState(false);
   const [removeArmed, setRemoveArmed] = useState(false);
   /* v5.59.0 — the party moves: picker expansion + the one armed target.
      Same 3s disarm discipline as the bulk cut and the remove confirm. */
@@ -1145,6 +1152,94 @@ function TableDrill({
     onClose();
     useUi.getState().goSection('food', ['Food & Drinks']);
   }, [table, onClose]);
+
+  /* 5.219.0 — the trail remembers its days. ONE row grammar for both render
+     sites (5.211's own-words rule, applied to rows): the six most recent
+     scans and the revealed history speak the same voice — same verdict, same
+     countdown, same warm amber, same cut arm. The revealed rows group under
+     their IST day (appDayKey — the ONE day key), newest day first; the
+     grouping is derived per render so it rides the 5.218 heartbeat with no
+     timer of its own. */
+  const sessionRow = (s: TableSession) => {
+    const st = sessionState(s, now);
+    const tone = SESSION_TONE[st];
+    const armed = cutArmId === s.id;
+    const cutting = cutBusyId === s.id;
+    const msLeft = st === 'live' ? new Date(s.expires_at).getTime() - now : 0;
+    const warm = st === 'live' && msLeft < 180_000;
+    return (
+      <li
+        key={s.id}
+        className="flex items-center gap-2.5 rounded-xl bg-[#FBFBF9] px-3 py-2 transition-colors"
+        title={`Session ${s.id.slice(0, 8)} · ${tone.label}`}
+      >
+        <span
+          className={`h-2 w-2 shrink-0 rounded-full ${st === 'live' ? 'animate-pulse' : ''}`}
+          style={{ background: tone.dot }}
+          aria-hidden
+        />
+        <span className="w-[68px] shrink-0 text-[11px] font-bold" style={{ color: tone.fg }}>
+          {tone.label}
+        </span>
+        <span className="min-w-0 flex-1 truncate font-mono text-[11px] tabular-nums text-[#6B6B6B]">
+          {istHM(s.created_at)} → {istHM(s.expires_at)}
+        </span>
+        <span
+          className={`shrink-0 text-[10.5px] tabular-nums ${
+            st === 'live'
+              ? warm
+                ? 'font-semibold text-[#8A5A16]'
+                : 'font-medium text-[#0F3D3E]'
+              : 'text-[#969696]'
+          }`}
+        >
+          {st === 'live'
+            ? `ends in ${formatWindowLeft(msLeft)}`
+            : st === 'expired'
+              ? expiryRel(s.expires_at)
+              : tone.label}
+        </span>
+        {st === 'live' && (
+          <button
+            type="button"
+            onClick={() => (armed ? onCut(s.id) : onCutArm(s.id))}
+            disabled={cutting}
+            aria-label={
+              cutting
+                ? 'Ending session'
+                : armed
+                  ? `Confirm cut for the session opened ${istHM(s.created_at)}`
+                  : `Cut the session opened ${istHM(s.created_at)}`
+            }
+            className={`flex h-6 shrink-0 items-center gap-1 rounded-full px-2 text-[10.5px] font-bold transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[#B3261E] ${
+              armed
+                ? 'bg-[#B3261E] text-white shadow-sm'
+                : 'text-[#969696] hover:bg-[#FDF3F2] hover:text-[#B3261E]'
+            }`}
+          >
+            {cutting ? (
+              <Loader2 size={11} className="animate-spin" aria-hidden />
+            ) : (
+              <Scissors size={11} aria-hidden />
+            )}
+            {armed ? 'Cut?' : ''}
+          </button>
+        )}
+      </li>
+    );
+  };
+
+  /* The history beyond the six-row glance: grouped by IST day, newest day
+     first — a Map keyed by the day keeps the read's own newest-first order
+     (the first time a day-key appears IS the day's newest-first position). */
+  const olderScans = sessions.slice(6);
+  const olderDayGroups: Array<[string, TableSession[]]> = [];
+  for (const s of olderScans) {
+    const day = istDateKey(s.created_at);
+    const group = olderDayGroups.find(([k]) => k === day);
+    if (group) group[1].push(s);
+    else olderDayGroups.push([day, [s]]);
+  }
 
   return (
     <div ref={dlgRef} className="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label={`Table ${table.table_number}`}>
@@ -1545,86 +1640,40 @@ function TableDrill({
             ) : (
               <>
                 <ul className="mt-2 space-y-1.5">
-                  {sessions.slice(0, 6).map((s) => {
-                    const st = sessionState(s, now);
-                    const tone = SESSION_TONE[st];
-                    const armed = cutArmId === s.id;
-                    const cutting = cutBusyId === s.id;
-                    /* 5.218.0 — verdict and countdown read the SAME instant:
-                       the row flips to expired on the very tick its window
-                       dies, never a frame of "0:00 · menu open". Under three
-                       minutes the countdown speaks the ribbon's warm amber —
-                       the owner sees the window dying before the guest's
-                       menu locks. */
-                    const msLeft = st === 'live' ? new Date(s.expires_at).getTime() - now : 0;
-                    const warm = st === 'live' && msLeft < 180_000;
-                    return (
-                      <li
-                        key={s.id}
-                        className="flex items-center gap-2.5 rounded-xl bg-[#FBFBF9] px-3 py-2 transition-colors"
-                        title={`Session ${s.id.slice(0, 8)} · ${tone.label}`}
-                      >
-                        <span
-                          className={`h-2 w-2 shrink-0 rounded-full ${st === 'live' ? 'animate-pulse' : ''}`}
-                          style={{ background: tone.dot }}
-                          aria-hidden
-                        />
-                        <span className="w-[68px] shrink-0 text-[11px] font-bold" style={{ color: tone.fg }}>
-                          {tone.label}
-                        </span>
-                        <span className="min-w-0 flex-1 truncate font-mono text-[11px] tabular-nums text-[#6B6B6B]">
-                          {istHM(s.created_at)} → {istHM(s.expires_at)}
-                        </span>
-                        <span
-                          className={`shrink-0 text-[10.5px] tabular-nums ${
-                            st === 'live'
-                              ? warm
-                                ? 'font-semibold text-[#8A5A16]'
-                                : 'font-medium text-[#0F3D3E]'
-                              : 'text-[#969696]'
-                          }`}
-                        >
-                          {st === 'live'
-                            ? `ends in ${formatWindowLeft(msLeft)}`
-                            : st === 'expired'
-                              ? expiryRel(s.expires_at)
-                              : tone.label}
-                        </span>
-                        {st === 'live' && (
-                          <button
-                            type="button"
-                            onClick={() => (armed ? onCut(s.id) : onCutArm(s.id))}
-                            disabled={cutting}
-                            aria-label={
-                              cutting
-                                ? 'Ending session'
-                                : armed
-                                  ? `Confirm cut for the session opened ${istHM(s.created_at)}`
-                                  : `Cut the session opened ${istHM(s.created_at)}`
-                            }
-                            className={`flex h-6 shrink-0 items-center gap-1 rounded-full px-2 text-[10.5px] font-bold transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[#B3261E] ${
-                              armed
-                                ? 'bg-[#B3261E] text-white shadow-sm'
-                                : 'text-[#969696] hover:bg-[#FDF3F2] hover:text-[#B3261E]'
-                            }`}
-                          >
-                            {cutting ? (
-                              <Loader2 size={11} className="animate-spin" aria-hidden />
-                            ) : (
-                              <Scissors size={11} aria-hidden />
-                            )}
-                            {armed ? 'Cut?' : ''}
-                          </button>
-                        )}
-                      </li>
-                    );
-                  })}
+                  {sessions.slice(0, 6).map(sessionRow)}
                 </ul>
-                {sessions.length > 6 && (
-                  <p className="mt-2 text-[11px] text-[#969696]">
-                    +{sessions.length - 6} earlier scans on record
-                  </p>
-                )}
+                {olderScans.length > 0 &&
+                  (showAllScans ? (
+                    <div className="mt-3 space-y-3">
+                      {olderDayGroups.map(([day, rows]) => (
+                        <div key={day}>
+                          <p className="text-[10.5px] font-bold uppercase tracking-wide text-[#969696]">
+                            {istDayPretty(day)} · {rows.length} scan{rows.length === 1 ? '' : 's'}
+                          </p>
+                          <ul className="mt-1.5 space-y-1.5">
+                            {rows.map(sessionRow)}
+                          </ul>
+                        </div>
+                      ))}
+                      <button
+                        type="button"
+                        onClick={() => setShowAllScans(false)}
+                        className="text-[11px] font-semibold text-[#0F3D3E] hover:underline"
+                        aria-label="Show the six most recent scans only"
+                      >
+                        Show recent only
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setShowAllScans(true)}
+                      className="mt-2 block text-left text-[11px] font-semibold text-[#0F3D3E] hover:underline"
+                      aria-label={`Show ${olderScans.length} earlier scans on this table`}
+                    >
+                      +{olderScans.length} earlier scans on record — tap to show
+                    </button>
+                  ))}
                 <p className="mt-2 border-t border-[#E3E7E0] pt-2 text-[10.5px] leading-relaxed text-[#969696]">
                   Each row is one scan of this table's QR — a fresh 10-minute menu session every time.
                   The clock, not the stored status, decides live vs expired. <span className="font-semibold text-[#B3261E]">Cut</span> ends the
@@ -3144,16 +3193,34 @@ export function FloorScreen(): React.ReactElement {
                         {/* 5.217.0 — the card face speaks the LIVE windows in
                             the drill's own tone (deep-ink pill, gold pulse):
                             the owner sees the open menus BEFORE the free
-                            confirm names how many the seating takes with it. */}
-                        {liveNow > 0 && (
-                          <span
-                            className="ml-1.5 flex items-center gap-1 rounded-full bg-[#0F3D3E] px-2 py-0.5 text-[10.5px] font-bold tabular-nums text-white"
-                            title={`${liveNow} live QR window${liveNow === 1 ? '' : 's'} on this table — freeing the table ends ${liveNow === 1 ? 'it' : 'them'}`}
-                          >
-                            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#E7C878]" aria-hidden />
-                            {liveNow} open
-                          </span>
-                        )}
+                            confirm names how many the seating takes with it.
+                            5.219.0 — the pill joins the warm grammar: when
+                            every live window on the table is inside the
+                            three-minute line, the pill speaks the ribbon's
+                            amber and the title names the countdown — the
+                            board answers "how long?" without opening the
+                            drill. One window state, three rooms. */}
+                        {liveNow > 0 && (() => {
+                          const youngest = liveWindowsOf(sessions, t.id, nowTick).reduce(
+                            (m, s) => Math.min(m, new Date(s.expires_at).getTime() - nowTick),
+                            Infinity,
+                          );
+                          const pillWarm = youngest < 180_000;
+                          return (
+                            <span
+                              className={`ml-1.5 flex items-center gap-1 rounded-full px-2 py-0.5 text-[10.5px] font-bold tabular-nums ${
+                                pillWarm ? 'bg-[#FBF3E4] text-[#8A5A16]' : 'bg-[#0F3D3E] text-white'
+                              }`}
+                              title={`${liveNow} live QR window${liveNow === 1 ? '' : 's'} on this table${pillWarm ? ` — ends in ${formatWindowLeft(youngest)}` : ''} — freeing the table ends ${liveNow === 1 ? 'it' : 'them'}`}
+                            >
+                              <span
+                                className={`h-1.5 w-1.5 animate-pulse rounded-full ${pillWarm ? 'bg-[#D97706]' : 'bg-[#E7C878]'}`}
+                                aria-hidden
+                              />
+                              {liveNow} open
+                            </span>
+                          );
+                        })()}
                         {isLive && activeOrder && !seat?.camping && (
                           <span className="ml-auto flex items-center gap-1 tabular-nums" title="Since the order was placed">
                             <Clock size={11} aria-hidden /> <TimeAgo iso={activeOrder.created_at} />

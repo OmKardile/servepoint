@@ -80,7 +80,7 @@ ok('ONE sentence shape: aria date clause === card words');
 const y = new Date(NOW);
 y.setDate(y.getDate() - 1);
 y.setHours(12, 0, 0, 0);
-assert.match(dayTime(y.toISOString()), /^Yesterday \d{2}:\d{2}$/,
+assert.match(dayTime(y.toISOString(), undefined, NOW), /^Yesterday \d{2}:\d{2}$/,
   'the hover title speaks the exact day-clock (Yesterday HH:MM)');
 ok('title register: dayTime gives the exact stamp');
 

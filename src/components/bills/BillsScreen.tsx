@@ -339,7 +339,11 @@ export function billsCsvRows(
     /* v5.189.0 — the age cell: the row chip's own rule (5.151), ONE rule,
        two surfaces. chaseAge is THE register (day.ts). */
     const isActive = displayStatus(o) === 'active';
-    const ageCell = isActive && !isSameLocalDay(o.created_at) ? chaseAge(o.created_at, nowMs) : '';
+    /* 5.219.0 — the gate obeys the INJECTED clock (228's own rule): a real-
+       clock gate beside an injected chaseAge is two clocks in one cell, and
+       at a day boundary they disagreed — an aged cell could say 'today'. */
+    const ageCell =
+      isActive && !isSameLocalDayAs(o.created_at, nowMs) ? chaseAge(o.created_at, nowMs) : '';
     /* v5.189.0 — the open cell: the chase's own math (max(0, total − paid));
        paid reads '0.00' — the debt closed; cancelled reads silence. */
     const openCell = isActive

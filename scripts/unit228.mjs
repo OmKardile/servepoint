@@ -158,8 +158,8 @@ const HEADER = ['Order #', 'Placed at', 'Status', 'Age', 'Payment', 'Method', 'T
  *     strip's own order: an age-descending read of the age column equals the
  *     oldest-first chase order on the fixture. */
 {
-  const d1 = new Date(now); d1.setDate(d1.getDate() - 1); d1.setHours(9, 0, 0, 0);
-  const d5 = new Date(now); d5.setDate(d5.getDate() - 5); d5.setHours(9, 0, 0, 0);
+  const d1 = new Date(now); d1.setDate(d1.getDate() - 2); d1.setHours(9, 0, 0, 0);
+  const d5 = new Date(now); d5.setDate(d5.getDate() - 6); d5.setHours(9, 0, 0, 0);
   const list = [
     order('young', 96, { created_at: iso(d1), order_number: 96 }),
     order('oldest', 66, { created_at: iso(d5), order_number: 66 }),

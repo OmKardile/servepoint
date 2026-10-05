@@ -114,10 +114,11 @@ ok('armed confirm: "Free + cut N?" visible + aria, both sites');
 
 /* ── 4. The card face speaks the live windows first ── */
 
-// Code anchor: the deep-ink pill className is unique to the live chip.
-const chipIdx = floor.indexOf('rounded-full bg-[#0F3D3E] px-2 py-0.5');
+// Code anchor: 5.219.0 grew the pill a warm branch, so the className became a
+// template — anchor on the youngest-window computation that heads the block.
+const chipIdx = floor.indexOf('const youngest = liveWindowsOf(sessions, t.id, nowTick).reduce(');
 assert.ok(chipIdx > 0, 'the card-face live chip exists');
-const chipBody = floor.slice(chipIdx, chipIdx + 600);
+const chipBody = floor.slice(chipIdx, chipIdx + 1300);
 assert.ok(chipBody.includes('animate-pulse') && chipBody.includes('bg-[#E7C878]'), 'the gold pulse');
 assert.ok(chipBody.includes('tabular-nums'), 'the count aligns like its own table');
 assert.ok(chipBody.includes('freeing the table ends'), 'the title names the free consequence');

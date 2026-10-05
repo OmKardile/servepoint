@@ -3,6 +3,28 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.219.0] — 2026-10-05 — The trail remembers its days: the drill's session trail showed the six most recent scans and a dead-end count ("+14 earlier scans on record") — the owner investigating a table's scan story could never actually SEE the earlier scans. One expansion now reveals the full history, grouped under its IST days; the card's "N open" pill joins the warm grammar; and the UTC-midnight battery failures exposed a real seam hole the day-word never had
+
+### Changed — the dead-end count became a door (`src/components/floor/FloorScreen.tsx`)
+
+The "+N earlier scans on record" text is now a button with an honest aria (`Show N earlier scans on this table`); tapping it reveals every earlier scan grouped under its IST day — `appDayKey`, the ONE day key, `istDayPretty` for the heading, newest day first, each group speaking its scan count with the agreed plural. A "Show recent only" collapse returns the six-row glance. The grouping derives per render — it rides the 5.218 heartbeat with no timer of its own. The row body moved into ONE `sessionRow` closure: the recent glance and the revealed history are the same code (5.211's own-words rule, applied to rows) — same verdict, same countdown, same warm amber, same cut arm, never a fork.
+
+### Changed — the card pill joins the warm grammar
+
+The card's "N open" pill now computes the table's YOUNGEST live window (reduce to `Infinity`, reading the 5.218 tick): when every live window on the table is inside the three-minute line, the pill speaks the ribbon's warm amber (`#FBF3E4`/`#8A5A16`, amber pulse `#D97706`) and the title names the countdown — "1 live QR window on this table — ends in 2:41 — freeing the table ends it". The board answers "how long?" without opening the drill. At ease, the deep-ink pill and gold pulse are byte-identical with 5.217.
+
+### Fixed — the day word owns its clock (`src/lib/day.ts`, `src/components/bills/BillsScreen.tsx`)
+
+The regression battery FAILED at UTC midnight on a clean tree (unit228, unit229 — green twenty minutes earlier): `dayLabel`/`dayTime` judged "today/yesterday" against the REAL clock while their suites' fixtures lived on pinned ones — a test that passes by coincidence is a bug on a timer. The 5.202 seam (`nowMs`) is now threaded everywhere: `isYesterdayAs` born (the explicit-clock twin of `isSameLocalDayAs`, which delegates as the bare form), `nowKeyIn` takes the clock, `dayLabel`/`dayTime` accept an optional `nowMs` (defaults keep every existing call site on the live clock). And the CSV's age cell had TWO clocks in one cell — a real-clock `isSameLocalDay` gate beside an injected `chaseAge` could disagree at a day boundary (an aged cell saying 'today', `parseInt` → NaN); the gate now obeys the injection (`isSameLocalDayAs(o.created_at, nowMs)`). unit224's pinned 24h-bin `chaseAge` contract untouched.
+
+### Tests
+
+`scripts/unit258.mjs` born — 12 checks: ONE row grammar (both render sites call `sessionRow`, the inline map body retired, the closure reads the heartbeat); the expansion door with honest aria + collapse; day grouping on `istDateKey` with `istDayPretty` headings and the agreed plural; NO new timer in the file (exactly the four pre-existing intervals); the youngest-window arithmetic (tick-read, `Infinity` seed, the 180_000 gate, the amber bytes, the countdown in the title gated on warm, 5.217's consequence clause intact); the row grammar surviving the closure move; and the day-word seam (isYesterdayAs born, the bare form delegating, `nowKeyIn`/`dayLabel`/`dayTime` threading, the local branch on ONE now, the CSV cell's single clock). unit256's chip anchor evolved to the warm-pill template (code-level, per the house lesson); unit257's row-slice anchors evolved to the closure; unit228's fixture band widened out of the midnight boundary hole (the −1d fixture crossed at 00:00 UTC — now −2d/−6d at 09:00, stable at every run hour); unit229 threads its pinned NOW into `dayTime`. Regression battery unit194–258 ALL PASS by exit code (64 suites); tsc EXIT=0 ×2; build EXIT=0 (43 assets, VERSION → servepoint-v5.219.0-r1).
+
+### E2E (dev, live, read-only — no cut confirmed)
+
+A fresh guest scan opened a window; the Floor's drill verified the expansion ("+14 earlier scans on record — tap to show" → day groups with counts → collapse), the live row's countdown still ticking, and — the window having aged into the band — the card's warm pill with the countdown in its title and the trail row's amber voice. Console zero errors. Screenshot: `download/qa258-trail-remembers-its-days.png`.
+
 ## [5.218.0] — 2026-10-05 — The drill's clock runs: the Floor's session trail was a frozen clock — a live window said "4m left" at render time and the row kept saying "menu open" after the window died, because nothing re-rendered it; the same frozen instant fed the cut-all count and the cards' "N open" pill. One heartbeat now owns the drill
 
 ### Changed — one captured `now`, every consumer (`src/components/floor/FloorScreen.tsx`)
