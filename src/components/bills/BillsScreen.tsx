@@ -35,6 +35,11 @@ import { preloadPrintImage } from '../../lib/printFrame';
 import { formatMoney, getPrefs } from '../../lib/prefs';
 import { downloadCsv } from '../../lib/csv';
 import { appTodayIso, appFormatters, appTzTag } from '../../lib/appday';
+/* v5.238.0 — the chase borrows the window grammar's ONE home (5.236): the
+ * custom pair's bounds and its spoken span come from lib/reportWindow —
+ * orderedCustom inside, the same swap and the same fallback Reports asks.
+ * No inline calendar math in this file, ever. */
+import { rangeWindow, rangeLabelOf, shiftDayIso } from '../../lib/reportWindow';
 import { useTenant } from '../../lib/tenant';
 import { useSession, useUi } from '../../store/session';
 /* v5.196.0 — the ghost chip asks the BOARD's own question: isOnRail is THE
@@ -66,7 +71,7 @@ import type { Order } from '../../types';
  */
 
 type StatusFilter = 'all' | 'active' | 'paid' | 'cancelled' | 'stuck';
-type DateFilter = 'today' | '7d' | 'all';
+type DateFilter = 'today' | '7d' | 'custom' | 'all';
 type MethodKey = 'cash' | 'card' | 'upi';
 
 interface OrderPatch {
@@ -469,6 +474,14 @@ const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRet
 
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [dateFilter, setDateFilter] = useState<DateFilter>('all');
+  /* v5.238.0 — Custom joins the chase (the 5.236 law reaching Bills): the
+   * pair arms pre-filled with the last 7 days (7 calendar days ending
+   * today, today inclusive), so Custom is never an empty or invalid
+   * state; the owner adjusts from a truth they can see. The cleared
+   * filters chip leaves the pair armed — re-selecting Custom shows the
+   * owner's own words, not a reset. */
+  const [customFrom, setCustomFrom] = useState<string>(() => shiftDayIso(-6));
+  const [customTo, setCustomTo] = useState<string>(() => appTodayIso());
   /* v5.116.0 — the bills search is ONE state with two doors: the header's
    * shell box and the pane's own bottom box both read and write the same
    * useUi.search, so they move together no matter which you type in. The
@@ -658,6 +671,19 @@ const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRet
       } else if (statusFilter !== 'all' && displayStatus(o) !== statusFilter) return false;
       if (dateFilter === 'today' && !isSameLocalDay(o.created_at)) return false;
       if (dateFilter === '7d' && new Date(o.created_at).getTime() < weekAgo) return false;
+      if (dateFilter === 'custom') {
+        /* v5.238.0 — the owner's own calendar, through THE window builder:
+         * a reversed pair is swapped by orderedCustom (inside), a
+         * malformed pair falls back to the last 7 days (belt and braces —
+         * the inputs arm pre-filled and can never empty). The bounds are
+         * the app-day clock's (IST) — the same clock the Close-out's day
+         * and Reports' windows speak, so "2 Oct" means the same day in
+         * every room. The null guard is structural: every custom path
+         * resolves a real start. */
+        const { startMs, endMs } = rangeWindow('custom', { from: customFrom, to: customTo });
+        const t = new Date(o.created_at).getTime();
+        if (startMs !== null && (t < startMs || t > endMs)) return false;
+      }
       if (q) {
         /* WYSIWYG hay (5.26.0): search matches what the card actually prints —
            the visible subline ("Table T2 · 2 guests", "Takeaway · Meera") — not
@@ -669,7 +695,7 @@ const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRet
       }
       return true;
     });
-  }, [orders, statusFilter, dateFilter, search]);
+  }, [orders, statusFilter, dateFilter, search, customFrom, customTo]);
 
   /* NOVA "unpaid priority" (v5.3.1): money-outstanding bills float to the top
      of the list so the counter never loses sight of what's owed; within each
@@ -1039,10 +1065,21 @@ const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRet
           : statusFilter === 'stuck'
             ? 'stuck'
             : '';
-  const windowPhrase = dateFilter === 'today' ? 'from today' : dateFilter === '7d' ? 'in the last 7 days' : '';
+  const windowPhrase =
+    dateFilter === 'today'
+      ? 'from today'
+      : dateFilter === '7d'
+        ? 'in the last 7 days'
+        : dateFilter === 'custom'
+          ? /* 5.238.0 — the span speaks the DATES the owner chose, never
+             * the bare chip word "Custom" standing in for dates nobody
+             * can verify (the 5.236 law reaching the chase's miss). */
+            `from ${rangeLabelOf('custom', { from: customFrom, to: customTo })}`
+          : '';
+  const customSpan = rangeLabelOf('custom', { from: customFrom, to: customTo });
   const filterLabels = [
     statusFilter !== 'all' ? statusFilter.charAt(0).toUpperCase() + statusFilter.slice(1) : '',
-    dateFilter === 'today' ? 'Today' : dateFilter === '7d' ? 'Last 7 days' : '',
+    dateFilter === 'today' ? 'Today' : dateFilter === '7d' ? 'Last 7 days' : dateFilter === 'custom' ? `Custom (${customSpan})` : '',
   ].filter(Boolean);
 
   const missTitle = missQ
@@ -1251,6 +1288,7 @@ const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRet
             >
               <option value="today">Today</option>
               <option value="7d">Last 7 days</option>
+              <option value="custom">Custom</option>
               <option value="all">All time</option>
             </select>
             <ChevronDown
@@ -1274,6 +1312,45 @@ const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRet
             </button>
           ) : null}
         </div>
+
+        {/* v5.238.0 — the chase's calendar row, revealed only while Custom
+         * stands (the 5.236 pattern reaching Bills): both inputs max at
+         * today (the future has no ledger), wearing the house date-box ink
+         * (sp-input, gold focus ring #967221) — one ink for every date box
+         * in the app. The hint speaks the span live and, when the pair was
+         * typed reversed, says so — the window reads it the honest way
+         * (orderedCustom, inside rangeWindow); the owner is never left
+         * guessing which end became which. */}
+        {dateFilter === 'custom' ? (
+          <div className="flex flex-wrap items-center gap-2 pt-2" role="group" aria-label="Custom chase range">
+            <label className="flex items-center gap-1.5 text-[11.5px] font-semibold text-[#6B6B6B]">
+              From
+              <input
+                type="date"
+                value={customFrom}
+                max={appTodayIso()}
+                onChange={(e) => setCustomFrom(e.target.value || customFrom)}
+                aria-label="Custom chase start date"
+                className="sp-input h-9 rounded-xl border border-[#E3E7E0] bg-white px-2.5 text-[12.5px] font-semibold text-[#1A1A1A] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#967221]"
+              />
+            </label>
+            <label className="flex items-center gap-1.5 text-[11.5px] font-semibold text-[#6B6B6B]">
+              To
+              <input
+                type="date"
+                value={customTo}
+                max={appTodayIso()}
+                onChange={(e) => setCustomTo(e.target.value || customTo)}
+                aria-label="Custom chase end date"
+                className="sp-input h-9 rounded-xl border border-[#E3E7E0] bg-white px-2.5 text-[12.5px] font-semibold text-[#1A1A1A] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#967221]"
+              />
+            </label>
+            <span className="text-[11.5px] font-semibold text-[#8A938C]">
+              Showing {customSpan}
+              {customFrom > customTo ? ' — the dates were swapped, the chase read them the honest way' : ''}
+            </span>
+          </div>
+        ) : null}
 
         {ordersError && orders.length > 0 && (
           <div

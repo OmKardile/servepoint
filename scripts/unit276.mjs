@@ -112,8 +112,12 @@ assert.equal(priorSpaces.length, 2, 'both FloorScreen "· prior" spans carry the
 ok('the a11y name joins its sentence (both Floor prior rows)');
 
 /* ── 11. the version law: one word, two homes ── */
-assert.ok(versionSrc.includes("APP_VERSION = '5.237.0'"), 'version.ts speaks 5.237.0');
-assert.ok(swSrc.includes('const VERSION = "servepoint-v5.237.0-r1";'), 'the service worker bakes the same round');
-ok('the version law — 5.237.0 in version.ts and sw.js');
+/* 5.238.0 re-anchor: the law is the AGREEMENT (sw bakes whatever word
+ * version.ts speaks — unit274's shape), not a frozen number; a frozen
+ * pin goes stale on every honest bump. */
+const { APP_VERSION } = await import('/src/version.ts');
+assert.ok(APP_VERSION.length > 0, 'version.ts speaks a word');
+assert.ok(swSrc.includes(`servepoint-v${APP_VERSION}-r1`), 'the service worker bakes the same round');
+ok(`the version law — version.ts and sw.js agree on ${APP_VERSION}`);
 
 console.log(`\nunit276: ${n} checks green — the pager answers to a date`);
