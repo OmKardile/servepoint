@@ -6583,3 +6583,42 @@ Work Log:
 
 Stage Summary:
 - Work committed and gated (battery 75/75, tsc ×2, build, live E2E) but NOT on origin. The honesty rule holds: no push claimed that did not run.
+
+---
+Task ID: 270 (15-min webDevReview round, trace 1a0fba3beb0e3c89-cron-agent-loop-202610051325)
+Agent: glm-5.3 (cron webDevReview round)
+Task: Post-5.230.0 round — QA walk of the not-yet-audited surfaces (Settings, Support, Inventory, Messages, Menu, Dashboard re-walk), census, then v5.231.0 "the trending card tells the whole truth": a REAL mislabel bug (the trending tag never asked the menu) plus the card's money blindness, found by the walk.
+
+Work Log:
+- Orientation: worklog tail — 269 closed by the parallel loop (ab22cf1 + a60268b, v5.230.0, battery 75/75); tree clean. THIS round = Task 270, version → v5.231.0. Task stamp 13:25 +08:00 = 10:55 IST (5.261 arithmetic). tsc EXIT=0 pre-claim. NO token in round env (no GH_*, no credential files, no gh CLI) — the push debt RIDES (addendum below).
+- QA walk, breadth edition: Settings — Checkout settings (payment-history toggle + clear + the three counter methods), Floor & service (the house turn line's four choices + the longest-seat chip, both well-voiced), Security (password change + the cloud-gated 2FA), Staff accounts (the owner row + create staff), Plan & billing status strip coherent ("11 days left · no charge yet"); Support — operator contact, docs pointer, the two public product links, report-an-issue all render; Inventory — the shelf's answer, stock value ₹18,219.00, low/out tiles at zero, per-ingredient diary voices; Messages — 1 on the line, both rooms' histories render, the composer armed; Menu — movers ranks (No.1 Flat White 25 sold), the "1 keeps under 25%" margin badge, catalog CSV + WhatsApp share + copy-as-text, add-on library; Dashboard re-walk — Needs-you-now coherent (0 new / 0 on board / 8 unpaid ₹2,631.30, both whisper doors armed), the margin tile honestly reading 0 paid today with "+₹142.00 burned on unpaid" (3 Flat Whites + 1 muffin's cost — reconciles), Guest love 4.3/5.
+- Console census: only accumulated vite HMR chatter + the two crash stacks BOTH carrying the stale pre-267 cluster epoch (t=1791167034195 — sibling of 269's t=1791167618792; both ≈ 02:23 UTC, hours before this session). Zero fresh errors. The fossil stays a fossil.
+- THE FIND (bug): the Dashboard's Trending Dishes tagged every dish `tag: v.veg === false ? 'Signature' : 'Food'` — a guess from is_veg that never asked the menu what shelf the dish sits on: a Flat White (Coffee) wore "Food", a Blueberry Muffin (Bakery) wore "Food" — the tag beside the name was a lie in two ways at once. The menu_items fetch didn't even carry category_id.
+- THE FIND (thin read): the same card counted plates and stayed silent on money — the order_items read carried name/qty/order_id but not item_total, so "how much the plates carried" lived nowhere on the tile.
+- Feature v5.231.0: (1) the wire — menu_items select gains category_id; categories (id, name) rides as categoryNameById; order_items gains item_total. (2) THE TAG LAW, one closure both slice sites read (the 5.196 shape, applied to words not stages): category first, the old guess only as the fail-soft for a dish whose menu row is gone — the inline fork is EXTINCT (asserted). (3) The money — both maps accumulate rev fail-soft (Number() || 0, never NaN); each row speaks the money in the line's grey tabular voice beneath the bold plates (title: "₹X carried by N plates", singular/plural); the week footer names the top four's take ("· ₹X on the top four shown") when non-zero and keeps its old bytes at zero — the two-state ternary so the claim never double-speaks.
+- Suite discipline: unit270 born — 16 checks green (the wire pins; the fail-soft category seed ×2; the rev accumulator ×2; count+rev seeded together ×2; the tag law declared once and called ×2 with the inline fork EXTINCT; the types carry revenue; the money stack's grammar at a SINGLE site; the plates' bold + the gold pill byte-preserved; the footer's two-state law; the screen's ONE standing interval stands — a sum, not a clock).
+- Gates: tsc EXIT=0 ×2; build EXIT=0 (44 assets, VERSION → servepoint-v5.231.0-r1 baked into dist/sw.js); regression battery unit194–270 ALL PASS by exit code (76 suites, PASS=76 FAIL=0 — battery270.sh born, same exit-code law).
+- E2E (dev, live): the trending card's whole truth — TODAY: "Flat White · Coffee · 3 · ₹660.00" and "Blueberry Muffin · Bakery · 1 · ₹180.00" (line-base money, the same pre-discount item-base grammar Close-out's section mix already speaks); LAST 7 DAYS: Flat White ₹8,140.00 / Muffin ₹360.00 / Veg Sandwich ₹260.00 with the footer "Past 7 days · 38 plates across 3 dishes · ₹8,760.00 on the top four shown" — the footer reconciles EXACTLY (38 = 35+2+1; 8,760.00 = 8,140+360+260). Screenshot: scripts/qa270-trending-whole-truth.png. Console: zero new errors (fossil family only).
+- Commit + push: feat (api.ts + types.ts + DashboardScreen + sw.js + CHANGELOG + unit270 + battery270 + screenshot) = 8d79f5a, then chore(worklog). Push: NO token again — the pile rides (addendum).
+
+Stage Summary:
+- 5.231.0 — the trending card now tells the whole truth in both registers: the tag beside the name speaks the dish's own shelf-word (Coffee, Bakery, Food) through ONE law both windows read, and the money the plates carried finally has a voice — grey, tabular, fail-soft, honest in its title. Third fork killed by the one-set law (5.196 the Dashboard's stages; 5.230 the Close-out's; 5.231 the trending words) — future tag/label reads must derive from the record, never guess from a neighbor field.
+- Watch item carried (sharpened): line-base money (order_items.item_total, pre-discount pre-GST) and ticket gross are TWO honest registers — Close-out already reconciles them out loud (item base − offer = ex-GST + GST = gross); the trending rows speak the line-base register, and that is the house grammar, not a discrepancy to chase.
+- Census: Settings, Support, Inventory, Messages, Menu audited healthy end-to-end this round; Reports/Close-out/Notifications/Guests healthy in 269; Kitchen healthy in 267/268. The deep-walk backlog is now EMPTY — every owner-facing surface has a fresh pass. Next round: either an owner word from the board's gated candidates, or a DAILY-style docs sweep, or hunt the SuperAdmin/Platform surface (admin@tsos.dev lands there; never audited in the chronicle).
+- Parked (carried): 038 birthdays (owner-gated); drawer movements CSV (only if asked); CounterInbox bulk "Ok all" (risky); guest QR "room favourite" badges (owner decision); DS showcase links (owner OK pending); URL write-back; storage folder silting; KDS bump-back; chat→bell pings; phone-key normalization; offer time-windows (schema, owner); Reports/Notifications search; margin leaderboard (the trending money read takes some pressure off this — the cost side stays the owner's word); micro-chunk dieting; README docs siblings sweep (next DAILY); GST billed-toggle (owner word).
+- Owner action items (carried): (1) delete orphaned drill auth user drill.owner@recoverydrill.in at next pooler session; (2) QR Flow owner password remains provisional; (3) 038 DDL one-command unblock in owner's hands; (4) GST filing basis confirmation (collected-only current posture); (5) rotate retired-project keys if that Supabase project still exists.
+- Crons: 15-min webDevReview (job 430321) + DAILY deep pass (job 431587, 09:00 IST — README route-grammar refresh DONE 2026-10-05; docs siblings sweep next).
+
+---
+Task ID: 270-PUSH-ADDENDUM (same round, post-commit)
+Agent: glm-5.3
+Task: Record the round's push outcome honestly.
+
+Work Log:
+- NO GitHub token in this round's environment (0 GH_* env matches, no credential files, no gh CLI, no helper).
+- State: the ride grows again — Task 267's pair, the sweeper's ce4f858, Task 268's pair, Task 269's pair, THIS round's 8d79f5a + the worklog commit all sit LOCAL; origin/main remains edc84af. Nine-plus commits ride.
+- Remote config untouched: nothing to scrub.
+- Standing instruction stands: the next token-bearing round pushes the whole pile FIRST, before its own work.
+
+Stage Summary:
+- Work committed and gated (battery 76/76, tsc ×2, build, live E2E) but NOT on origin. The honesty rule holds: no push claimed that did not run.
