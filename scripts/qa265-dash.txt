@@ -1,0 +1,116 @@
+- generic [ref=e20024] clickable [onclick]
+  - link "Skip to content" [ref=e20025]
+  - complementary "Primary navigation"
+    - status
+    - image "ServePoint logo"
+    - StaticText "ServePoint"
+    - navigation
+      - button "Dashboard" [ref=e20033]
+        - StaticText "Dashboard"
+      - button "Food & Drinks" [ref=e20034]
+        - StaticText "Food & Drinks"
+      - button "Kitchen" [ref=e20035]
+        - StaticText "Kitchen"
+      - button "Bills" [ref=e20036]
+        - StaticText "Bills"
+      - button "Close-out" [ref=e20037]
+        - StaticText "Close-out"
+      - button "Reports" [ref=e20038]
+        - StaticText "Reports"
+      - button "Inventory, stock healthy" [ref=e20039]
+        - StaticText "Inventory"
+      - button "Guests" [ref=e20040]
+        - StaticText "Guests"
+      - button "Floor" [ref=e20041]
+        - StaticText "Floor"
+      - button "Menu" [ref=e20042]
+        - StaticText "Menu"
+      - button "Settings" [ref=e20043]
+        - StaticText "Settings"
+    - paragraph
+      - StaticText "OTHERS"
+    - navigation
+      - button "Messages, no unread" [ref=e20044]
+        - StaticText "Messages"
+      - button "Notifications, 10 unread" [ref=e20045]
+        - StaticText "Notifications"
+      - button "Support" [ref=e20046]
+        - StaticText "Support"
+    - StaticText "Q"
+    - paragraph
+      - StaticText "QR Owner"
+    - paragraph
+      - StaticText "QR Flow Cafe"
+    - button "Open Profile" [ref=e20027]
+      - StaticText "Open Profile"
+    - paragraph
+      - StaticText "© 2026 ServePoint · smartPOS"
+  - banner
+    - button "Go back" [ref=e20028]
+    - navigation "Breadcrumb" [ref=e20029]
+      - list
+        - listitem [level=1]
+          - StaticText "Dashboard"
+        - listitem [level=1]
+          - StaticText "Sales Statistics"
+    - button "Notifications, 10 unread" [ref=e20030]
+      - StaticText "Unread notifications"
+    - button "Order history" [ref=e20031]
+  - status
+    - StaticText "Your "
+    - StaticText "Starter"
+    - StaticText " trial"
+    - StaticText "ends 16 Oct 2026"
+    - StaticText " — 11 days left"
+    - StaticText " · no charge yet."
+  - main "dashboard content" [ref=e20026]
+    - region "Dashboard" [ref=e20032]
+      - heading "Dashboard" [level=1, ref=e20047]
+      - region "Needs you now" [ref=e20048]
+        - paragraph
+          - StaticText "NEEDS YOU NOW"
+        - group "0 new tickets in the counter inbox, waiting for an Ok; 4 older tickets are stuck off today's inbox — see Bills"
+          - paragraph
+            - StaticText "NEW TICKETS"
+          - paragraph
+            - StaticText "0 waiting"
+          - StaticText "4 older tickets off today's inbox — see Bills"
+          - button "Open Bills — 4 older tickets wait off today's inbox" [ref=e20054]
+            - StaticText "Open Bills"
+        - group "0 tickets are on the board right now; 3 older tickets are stuck off today's board — see Bills"
+          - paragraph
+            - StaticText "IN THE KITCHEN"
+          - paragraph
+            - StaticText "0 on the board"
+          - StaticText "3 older stuck tickets off today's board — see Bills"
+          - button "Open Bills — 3 older tickets wait off today's board" [ref=e20055]
+            - StaticText "Open Bills"
+        - group "5 unpaid tickets, ₹1,801.80 still out; oldest #66 owes ₹693.00, 2d old"
+          - paragraph
+            - StaticText "UNPAID"
+          - paragraph
+            - StaticText "5 · ₹1,801.80"
+          - StaticText "oldest #66 owes ₹693.00, 2d old"
+          - button "Open Bills — 5 unpaid tickets, ₹1,801.80 still out" [ref=e20056]
+            - StaticText "Open Bills"
+      - heading "No sales yet today" [level=2, ref=e20049]
+      - paragraph
+        - StaticText "Once the first order of the day goes through, sales, revenue and customer stats will appear here automatically."
+      - region "The week so far" [ref=e20050]
+        - StaticText "THE WEEK SO FAR"
+        - paragraph
+          - StaticText "₹8,112.30"
+        - paragraph
+          - StaticText "across 4 selling days"
+        - paragraph
+          - StaticText "best Fri · ₹5,046.30"
+        - button "Open Reports — the week so far reads ₹8,112.30" [ref=e20052]
+          - StaticText "Open Reports"
+      - region "Given away — ₹194.00 across 4 offer redemptions" [ref=e20051]
+        - StaticText "GIVEN AWAY"
+        - paragraph
+          - StaticText "₹194.00"
+        - paragraph
+          - StaticText "across 4 offer redemptions · 2 offers live"
+        - button "Open Guests — the offers ledger reads ₹194.00 given away across 4 redemptions" [ref=e20053]
+          - StaticText "Open offers"

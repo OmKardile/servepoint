@@ -1,0 +1,234 @@
+- generic [ref=e20255] clickable [onclick]
+  - link "Skip to content" [ref=e20256]
+  - complementary "Primary navigation"
+    - status
+    - image "ServePoint logo"
+    - StaticText "ServePoint"
+    - navigation
+      - button "Dashboard" [ref=e20263]
+        - StaticText "Dashboard"
+      - button "Food & Drinks" [ref=e20264]
+        - StaticText "Food & Drinks"
+      - button "Kitchen" [ref=e20265]
+        - StaticText "Kitchen"
+      - button "Bills" [ref=e20266]
+        - StaticText "Bills"
+      - button "Close-out" [ref=e20267]
+        - StaticText "Close-out"
+      - button "Reports" [ref=e20268]
+        - StaticText "Reports"
+      - button "Inventory, stock healthy" [ref=e20269]
+        - StaticText "Inventory"
+      - button "Guests" [ref=e20270]
+        - StaticText "Guests"
+      - button "Floor" [ref=e20271]
+        - StaticText "Floor"
+      - button "Menu" [ref=e20272]
+        - StaticText "Menu"
+      - button "Settings" [ref=e20273]
+        - StaticText "Settings"
+    - paragraph
+      - StaticText "OTHERS"
+    - navigation
+      - button "Messages, no unread" [ref=e20274]
+        - StaticText "Messages"
+      - button "Notifications, 10 unread" [ref=e20275]
+        - StaticText "Notifications"
+      - button "Support" [ref=e20276]
+        - StaticText "Support"
+    - StaticText "Q"
+    - paragraph
+      - StaticText "QR Owner"
+    - paragraph
+      - StaticText "QR Flow Cafe"
+    - button "Open Profile" [ref=e20258]
+      - StaticText "Open Profile"
+    - paragraph
+      - StaticText "© 2026 ServePoint · smartPOS"
+  - banner
+    - button "Go back" [disabled, ref=e20259]
+    - navigation "Breadcrumb" [ref=e20260]
+      - list
+        - listitem [level=1]
+          - StaticText "Floor"
+    - button "Notifications, 10 unread" [ref=e20261]
+      - StaticText "Unread notifications"
+    - button "Order history" [ref=e20262]
+    - searchbox "Search current screen — Search tables or sections…" [ref=e20277]
+  - status
+    - StaticText "Your "
+    - StaticText "Starter"
+    - StaticText " trial"
+    - StaticText "ends 16 Oct 2026"
+    - StaticText " — 11 days left"
+    - StaticText " · no charge yet."
+  - main "floor content" [ref=e20257]
+    - generic
+      - heading "Floor" [level=1, ref=e20278]
+      - paragraph
+        - StaticText "QR Flow Cafe · 6/6 seats busy"
+        - generic
+          - StaticText "· longest seat 58h 32m"
+        - StaticText " · tables hold themselves when orders land"
+      - status
+        - StaticText "Live"
+      - button "Take a booking" [ref=e20279]
+      - button "Print QR stickers for every table" [ref=e20280]
+        - StaticText "Print stickers"
+      - button "Refresh floor" [ref=e20281]
+      - button "Add table" [ref=e20282]
+      - button "AVAILABLE 0" [ref=e20283]
+        - StaticText "AVAILABLE"
+        - paragraph
+          - StaticText "0"
+      - button "OCCUPIED 2" [ref=e20284]
+        - StaticText "OCCUPIED"
+        - paragraph
+          - StaticText "2"
+      - button "RESERVED 0" [ref=e20285]
+        - StaticText "RESERVED"
+        - paragraph
+          - StaticText "0"
+      - button "BILLING 0" [ref=e20286]
+        - StaticText "BILLING"
+        - paragraph
+          - StaticText "0"
+      - region "The book" [ref=e20287]
+        - heading "The book" [level=2, ref=e20291]
+        - paragraph
+          - StaticText "Reservations · every phone promise and what became of it · "
+          - generic
+            - StaticText "1 went quiet today"
+        - button "Take a booking" [ref=e20292]
+        - heading "TODAY · MON 5 OCT 1 1 went quiet" [level=3, ref=e20293]
+          - StaticText "TODAY · MON 5 OCT"
+          - StaticText "1"
+          - generic
+            - StaticText "1 went quiet"
+        - StaticText "8:05 am"
+        - generic
+          - StaticText "×4"
+        - StaticText "T2"
+        - StaticText "E2E Kumar"
+        - StaticText "BOOKED · WENT QUIET"
+        - button "Seat E2E Kumar" [ref=e20294]
+          - StaticText "Seat"
+        - button "Seat E2E Kumar and start their ticket at their table" [ref=e20295]
+          - StaticText "Seat & order"
+        - button "Mark E2E Kumar no-show" [ref=e20296]
+          - StaticText "No-show"
+        - button "Cancel the booking for E2E Kumar" [ref=e20297]
+          - StaticText "Cancel"
+        - button "Show past week (12)" [ref=e20298]
+      - region "Floor rhythm" [ref=e20288]
+        - heading "Floor rhythm" [level=2, ref=e20299]
+        - StaticText "IST"
+        - StaticText " hours · last 7 days"
+        - group "Rhythm comparison mode"
+          - button "This 7d" [ref=e20304]
+          - button "vs prior wk" [ref=e20305]
+        - paragraph
+          - StaticText "Table tickets seated per hour of day — when the floor actually fills. Peak hour: 8p (6 tickets)"
+        - paragraph
+          - StaticText "SEATED ROUNDS · 7D"
+        - paragraph
+          - StaticText "20"
+        - paragraph
+          - StaticText "PEAK HOUR"
+        - paragraph
+          - StaticText "8p · 6 tickets"
+        - paragraph
+          - StaticText "BUSIEST DAY"
+        - paragraph
+          - StaticText "2 Oct · 12"
+        - paragraph
+          - StaticText "MENU WINDOWS · 7D"
+        - paragraph
+          - StaticText "60"
+        - paragraph
+          - StaticText "HELD TIME · 7D"
+        - paragraph
+          - StaticText "2m median"
+        - paragraph
+          - StaticText "none past the 90-min line"
+        - paragraph
+          - StaticText "Counts every non-cancelled ticket that holds a table, by its IST hour — the same ledger Reports reads. Walk-in counter tickets don't hold a table, so they stay out of the rhythm. A round is a ticket, not a headcount. Rides the floor's refresh."
+        - StaticText "BY TABLE · THIS 7D"
+        - generic
+          - StaticText "T1"
+          - StaticText "11"
+          - StaticText " round"
+          - StaticText "s"
+          - StaticText "· "
+          - StaticText "25"
+          - StaticText " window"
+          - StaticText "s"
+        - generic
+          - StaticText "T2"
+          - StaticText "9"
+          - StaticText " round"
+          - StaticText "s"
+          - StaticText "· "
+          - StaticText "35"
+          - StaticText " window"
+          - StaticText "s"
+      - region "Main Floor" [ref=e20289]
+        - heading "Main Floor1" [level=2, ref=e20300]
+          - StaticText "Main Floor1"
+        - button "Open details for table T1" [ref=e20301]
+          - StaticText "T1"
+          - StaticText "4"
+          - StaticText " seats"
+          - generic
+            - StaticText "25 scans"
+          - StaticText "Occupied"
+          - status "Table T1 has been seated 41h 0m per the book — past the 90-minute turn line. Check on them."
+            - StaticText "sat 41h 0m"
+            - StaticText " — camping"
+          - code
+            - StaticText "/t/2e65bd6858a063cf41614b1b1519b385"
+          - button "Copy guest link for table T1" [ref=e20306]
+            - StaticText "Link"
+          - button "Copy raw QR token for table T1" [ref=e20307]
+          - button "Ask for the bill" [ref=e20308]
+          - button "Free table T1" [ref=e20309]
+            - StaticText "Free"
+      - region "Patio" [ref=e20290]
+        - heading "Patio1" [level=2, ref=e20302]
+          - StaticText "Patio1"
+        - button "Open details for table T2" [ref=e20303]
+          - StaticText "T2"
+          - StaticText "2"
+          - StaticText " seats"
+          - generic
+            - StaticText "35 scans"
+          - StaticText "Occupied"
+          - StaticText "#"
+          - StaticText "96"
+          - StaticText " · "
+          - StaticText "Guest"
+          - StaticText "₹231.00"
+          - StaticText "new"
+          - StaticText " · placed"
+          - StaticText "58h 32m"
+          - StaticText "ago"
+          - status "Table T2 has been seated 58h 32m — past the 90-minute turn line. Check on them."
+            - StaticText "sat "
+            - StaticText "58h 32m"
+            - StaticText " — camping"
+          - generic "E2E Kumar · party of 4 · promised 8:05 am — the promised hour went by, still booked. From the floor's book — booked rows only."
+            - StaticText "8:05 am"
+            - StaticText "· "
+            - StaticText "E2E Kumar"
+            - StaticText "· "
+            - StaticText "4"
+            - StaticText "p"
+            - StaticText "· went quiet"
+          - code
+            - StaticText "/t/c3b0361948f50463c80e4f7e702e2a1c"
+          - button "Copy guest link for table T2" [ref=e20310]
+            - StaticText "Link"
+          - button "Copy raw QR token for table T2" [ref=e20311]
+          - button "Ask for the bill" [ref=e20312]
+          - button "Free table T2" [ref=e20313]
+            - StaticText "Free"
