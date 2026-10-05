@@ -6740,3 +6740,40 @@ Work Log:
 
 Stage Summary:
 - Work committed and gated (battery 79/79, tsc ×2, build, live E2E) but NOT on origin — the push ran and failed for lack of credentials, not for lack of trying. The honesty rule holds: no push claimed that did not run.
+
+---
+Task ID: 274 (15-min webDevReview round, trace 1a0fba3beb0e3c89-cron-agent-loop-202610051445)
+Agent: glm-5.3 (cron webDevReview round)
+Task: Post-5.234.0 round — QA walk of the POS revenue path (Food & Drinks → cart → drawer), then the oldest parked UX debt: URL write-back, plus the shell's version voice. v5.235.0 "the address follows you".
+
+Work Log:
+- Orientation: worklog tail — 273 closed (3159fe4 + e5daab7, v5.234.0, battery 79/79); tree clean. THIS round = Task 274, version → v5.235.0. Task stamp 14:40 +08:00. tsc EXIT=0 pre-claim. NO token in round env — the push debt RIDES (addendum below).
+- QA walk, revenue-path edition (live, QR Owner session): Food & Drinks — the movers shortlist with the shelf-pace voices ("~232 more on the shelf — ~9 weeks at this pace"), categories with counts; the add buttons speak the week's sales + price in their aria; the cart bar "1 item · ₹220.00 · Review order" with the 5.233 offer voice riding it ("10% off applies · ₹22.00 off this order" — correct math, the regression holds on the POS flow too); the drawer — order types (Dine-in with the live seated tables T1/T2), guest fields, kitchen note, offer picker, Subtotal/GST/Total math coherent; the 5.252 cart persistence intact. No new bugs on the revenue path.
+- Feature v5.235.0 "the address follows you" (the parked URL write-back, oldest UX debt): since 5.32.0 the app READS deep links but never WROTE them — in-app navigation kept the URL stale and a mid-shift refresh threw the operator back to Dashboard. (1) THE WRITER — goSection itself claims the address (history.replaceState, canonical `/${section}`): the navigation act, not an effect, so StrictMode's double-invoke cannot echo it. (2) THE HONEST SKIPS — structural, not stateful: a plain boot calls no goSection at all (the bare root keeps its throne until a choice names a room); a path that already names the running room keeps its word (the /close-out alias, the /cafe/bills two-segment pinned-wall form — v5.93's law); no history pile, no popstate handler (the POS's Back keeps its device-level meaning). (3) ONE GRAMMAR — the slug rules AND the derivation moved to lib/sectionPath.ts (SECTION_IDS drift-guarded against the Section union by the suite; SECTION_SLUGS = ids + aliases; sectionFromPath the pure closure) with THREE readers (the 404 door, the boot deep-link, the write-back) — the inline forks extinct. (4) TWO CLOCKS — the tab title rides STATE (it must speak at a plain boot), the address rides the CHOICE. (5) THE VERSION VOICE — src/version.ts's APP_VERSION speaks in the sidebar footer ("© 2026 ServePoint · smartPOS · v5.235.0") while the same word is baked in public/sw.js; unit274 pins the two files' agreement so a forgotten bump fails the gate.
+- MID-ROUND CATCH (E2E, the round's lesson): the first design put the writer in the shell's title effect behind an armed-ref "first run" skip — StrictMode's mount→cleanup→mount echo fired the effect twice, the second run wrote /dashboard at a plain boot, and the live E2E caught the root purity broken. The design moved to the action (immune by construction) and the honest skips became structural (no goSection at boot; already-named skip) instead of run-count state. Second catch: the suite's absence pins (pushState/popstate) self-matched the suite's own prose — re-anchored to call shapes (5.272 again). Third: the walk caught a transient "sectionFromPath is not defined" console fossil — the HMR state while the lib's wrong '../../store' import was briefly live; tsc caught it, the fix landed, and a FRESH session shows zero errors.
+- Suite discipline: unit274 born — 20 checks green (the grammar by behavior ×7 on synthetic slugs + the shipped SECTION_SLUGS; the ONE-derivation law with the inline forks EXTINCT and exactly two readers in App + the writer in the store; replaceState-only with pushState/popstate ABSENT in both files; the title-state/address-choice division; the SECTION_IDS drift guard over all 14 union members; the version one-word law + the sidebar's single render).
+- Gates: tsc EXIT=0 ×2; build EXIT=0 (44 assets, VERSION → servepoint-v5.235.0-r1 baked); regression battery unit194–274 ALL PASS by exit code (80 suites, PASS=80 FAIL=0).
+- E2E (dev, live): boot at "/" stays "/" (StrictMode-proof); Bills → /bills, Floor → /floor; a RELOAD at /floor boots straight into Floor (title + heading + address agree — the restore works); /close-out boots Close-out and KEEPS its alias word; navigating from there writes canonical /bills; /xyzzy-not-a-room still gets the honest 404; the rail speaks "© 2026 ServePoint · smartPOS · v5.235.0". Console: fresh session clean (vite connect + devtools only). Screenshot: scripts/qa274-address-follows-you.png.
+- Commit + push: feat = 279dad7, then chore(worklog). Push: ATTEMPTED and failed honestly — no token (same "could not read Username") — the pile rides (addendum below).
+
+Stage Summary:
+- 5.235.0 — the address follows you: every navigation claims its URL, a refresh restores the room, the root and the spoken aliases keep their word, one path grammar feeds three readers, and the rail names its build. The oldest parked UX debt is paid.
+- Watch item NEW: the write-back changes cross-session behavior on shared devices — after sign-out the URL stays on the last room, and the next sign-in boots there (same-workspace staff; RLS gates the data; arguably good for shift change, but the operator should know the address persists). The version voice adds a support surface: "which build?" is now answered by the rail itself.
+- Census: the POS revenue path re-audited healthy end-to-end; the write-back verified against root/alias/two-segment/unknown paths and the 404 door. Parked list shrinks: URL write-back DELIVERED this round; the search family completed in 273.
+- Parked (carried): variant/add-on recipe costing (the BIG one — migration + the 015 deduction engine, owner word advised); 038 birthdays (owner-gated); drawer movements CSV (only if asked); CounterInbox bulk "Ok all" (risky); guest QR "room favourite" badges (owner decision); DS showcase links (owner OK pending); storage folder silting; KDS bump-back; chat→bell pings; phone-key normalization; offer time-windows (schema, owner); micro-chunk dieting; README docs siblings sweep (next DAILY); GST billed-toggle (owner word).
+- Owner action items (carried): (1) delete orphaned drill auth user drill.owner@recoverydrill.in at next pooler session; (2) QR Flow owner password remains provisional; (3) 038 DDL one-command unblock in owner's hands; (4) GST filing basis confirmation (collected-only current posture); (5) rotate retired-project keys if that Supabase project still exists.
+- Crons: 15-min webDevReview (job 430321) + DAILY deep pass (job 431587, 09:00 IST — README route-grammar refresh DONE 2026-10-05; docs siblings sweep next).
+
+---
+Task ID: 274-PUSH-ADDENDUM (same round, post-commit)
+Agent: glm-5.3
+Task: Record the round's push outcome honestly.
+
+Work Log:
+- Push ATTEMPTED this round (the standing instruction was honored): `git push origin main` ran and failed — "fatal: could not read Username for 'https://github.com'". NO GitHub token in the round environment (0 GH_* matches, no credential files, no gh CLI, no helper).
+- State: the ride grows — Tasks 267–273's pairs, the sweeper's ce4f858, THIS round's 279dad7 + the worklog commit all sit LOCAL; origin/main remains edc84af. Seventeen-plus commits ride.
+- Remote config untouched: nothing to scrub.
+- Standing instruction stands: the next token-bearing round pushes the whole pile FIRST, before its own work.
+
+Stage Summary:
+- Work committed and gated (battery 80/80, tsc ×2, build, live E2E across root/alias/restore/404 paths) but NOT on origin — the push ran and failed for lack of credentials, not for lack of trying. The honesty rule holds: no push claimed that did not run.
