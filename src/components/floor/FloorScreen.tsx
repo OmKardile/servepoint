@@ -90,6 +90,13 @@ import {
   bookingTodayKey,
   bookingDayStartMs,
   bookingTzIsForeign,
+  /* 5.221.0 — the promise verdicts moved home to the booking clock's lib
+     (5.211: a rule two screens need is a lib's rule, never a copy). The
+     Floor keeps its words, loses its local bodies. */
+  isLivePromise,
+  isQuietPromise,
+  minsUntil,
+  PROMISE_DUE_SOON_MIN,
 } from '../../lib/bookingday';
 import { useUi } from '../../store/session';
 import { MarkHit } from '../shell/MarkHit';
@@ -479,29 +486,11 @@ const istSlotLabel = bookingSlotLabel;
    (or broken) themselves — they don't either. An unread book (null) is
    silence, never an invented calm. ── */
 
-/** A promise that still advertises: `booked`, TODAY in the booking clock, slot not yet gone. */
-function isLivePromise(r: Reservation, nowMs: number, todayKey: string): boolean {
-  if (r.status !== 'booked') return false;
-  if (bookingDayKey(r.slot_at) !== todayKey) return false;
-  return new Date(r.slot_at).getTime() >= nowMs;
-}
-
-/** v5.86.0 — a promise that WENT QUIET: still `booked`, still today in the
- *  booking clock, but the promised hour has passed without anyone sitting
- *  them down. The board does not call it a no-show — a party can be ten
- *  minutes late, and
- *  the verdict is the host's, not the clock's. It just refuses to pretend
- *  the hour is still ahead. */
-function isQuietPromise(r: Reservation, nowMs: number, todayKey: string): boolean {
-  if (r.status !== 'booked') return false;
-  if (bookingDayKey(r.slot_at) !== todayKey) return false;
-  return new Date(r.slot_at).getTime() < nowMs;
-}
-
-/** Minutes until the slot, rounded up (a slot 30s away is still 1 min). */
-function minsUntil(iso: string, nowMs: number): number {
-  return Math.max(0, Math.ceil((new Date(iso).getTime() - nowMs) / 60000));
-}
+/* 5.221.0 — isLivePromise / isQuietPromise / minsUntil live in
+   lib/bookingday now (ONE book verdict — the Dashboard's arrivals slot
+   speaks it too); PROMISE_DUE_SOON_MIN is the amber line's own name, so
+   the bare forty-five literals this file carried retire into one named
+   constant the suite can pin. */
 
 /** The card/panel promise chip: gold while the hour is comfortable, amber
  *  once the party is due within 45 minutes, grey when the hour has gone by
@@ -1375,7 +1364,7 @@ function TableDrill({
                   const nowMs = Date.now();
                   const future = new Date(r.slot_at).getTime() >= nowMs;
                   const mins = minsUntil(r.slot_at, nowMs);
-                  const dueSoon = future && mins <= 45;
+                  const dueSoon = future && mins <= PROMISE_DUE_SOON_MIN;
                   const quiet = !future;
                   return (
                     <li
@@ -2171,7 +2160,7 @@ export function FloorScreen(): React.ReactElement {
     }
     for (const [id, r] of nextFuture) {
       const mins = minsUntil(r.slot_at, nowMs);
-      map.set(id, { r, mins, dueSoon: mins <= 45, quiet: false });
+      map.set(id, { r, mins, dueSoon: mins <= PROMISE_DUE_SOON_MIN, quiet: false });
     }
     for (const [id, r] of lastQuiet) {
       if (!map.has(id)) map.set(id, { r, mins: 0, dueSoon: false, quiet: true });
@@ -2688,7 +2677,7 @@ export function FloorScreen(): React.ReactElement {
                               'The promised hour went by — the party is still booked. Seat them or mark the no-show; the clock does not convict.',
                           };
                         const mins = minsUntil(r.slot_at, rowNowMs);
-                        if (mins <= 45)
+                        if (mins <= PROMISE_DUE_SOON_MIN)
                           return {
                             bg: '#FDF3E4',
                             fg: '#8A5A16',

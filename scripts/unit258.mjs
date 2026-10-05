@@ -105,9 +105,16 @@ assert.ok(pillSlice.length > 300, 'pill slice resolved');
 
 const ylmIdx = tsLib258.indexOf('export function youngestLiveMs');
 const ylmSlice = tsLib258.slice(ylmIdx, tsLib258.length);
-assert.ok(ylmSlice.includes('(m, s) => Math.min(m, new Date(s.expires_at).getTime() - nowMs)'),
-  'the youngest window reads the SAME tick instant');
-assert.ok(ylmSlice.includes('Infinity,'), 'the reduce seeds at Infinity — an empty set never lies');
+/* 5.221.0 — youngestLiveMs composes youngestLiveWindow (the argmin got a
+   name so the Dashboard's warm hint can speak it); the INTENT pins stand:
+   the remainder still reads the GIVEN tick instant, the empty set still
+   lands at Infinity — the seed moved into the ternary, the honesty is
+   byte-for-byte the same rule. */
+assert.ok(ylmSlice.includes('youngest ? new Date(youngest.expires_at).getTime() - nowMs : Infinity'),
+  'the youngest window reads the SAME tick instant (the nowMs seam rides the composed body)');
+assert.ok(ylmSlice.includes(': Infinity;'), 'an empty set lands at Infinity — it never reads warm');
+assert.ok(ylmSlice.includes('youngestLiveWindow(rows, nowMs)'),
+  'the ms composes the named argmin — no second minimum arithmetic');
 ok('the youngest-window arithmetic lives in the lib, reads the tick, seeds at Infinity');
 
 assert.ok(pillSlice.includes('const pillWarm = youngest < 180_000;'),

@@ -47,10 +47,23 @@ export function liveWindowsOf(rows: TableSession[], tableId: string, nowMs: numb
  *  Seeds at Infinity so an EMPTY set never lies (Infinity is never inside
  *  the three-minute line); the live filter guarantees every remainder is
  *  positive, so the result is either Infinity or honest remaining time —
- *  the display clamp (formatWindowLeft) owns zero. */
+ *  the display clamp (formatWindowLeft) owns zero.
+ *
+ *  5.221.0 — the minimum itself is ONE rule with two names: the WINDOW is
+ *  the row (the Dashboard's warm hint names the table the dying window
+ *  holds), and the MS composes the window (5.211 — the arithmetic lives
+ *  once; the second name is a read, never a second reduce). The Infinity
+ *  seed keeps its post: an empty set yields null / Infinity and never
+ *  reads warm. */
+export function youngestLiveWindow(rows: TableSession[], nowMs: number = Date.now()): TableSession | null {
+  let youngest: TableSession | null = null;
+  for (const s of liveWindows(rows, nowMs)) {
+    if (!youngest || new Date(s.expires_at).getTime() < new Date(youngest.expires_at).getTime()) youngest = s;
+  }
+  return youngest;
+}
+
 export function youngestLiveMs(rows: TableSession[], nowMs: number = Date.now()): number {
-  return liveWindows(rows, nowMs).reduce(
-    (m, s) => Math.min(m, new Date(s.expires_at).getTime() - nowMs),
-    Infinity,
-  );
+  const youngest = youngestLiveWindow(rows, nowMs);
+  return youngest ? new Date(youngest.expires_at).getTime() - nowMs : Infinity;
 }

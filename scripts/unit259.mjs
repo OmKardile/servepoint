@@ -107,9 +107,13 @@ ok('the read lands nullable, fail-soft, through the ONE lib');
 
 assert.ok(dash.includes('if (liveQr.length > 0)'), 'zero live windows is NOT a slot — the all-clear owns a quiet board');
 assert.ok(!dash.includes('formatWindowLeft'), 'the Dashboard speaks NO stopwatch — a 30s loop cannot own seconds');
-assert.ok(dash.includes("qrWarm ? 'a menu window is inside its last three minutes' : undefined"),
+/* 5.221.0 — the hint still names the STATE, and now names the dying
+   window's own table (the band holds the tables, so WHERE is free). */
+assert.ok(dash.includes('a menu window is inside its last three minutes'),
   'the warm hint names the STATE');
-assert.ok(dash.includes("qrWarm ? '; the youngest is inside its last three minutes — it closes on its own' : ''"),
+assert.ok(dash.includes("youngestQrTable ? ` on ${youngestQrTable}` : ''"),
+  'the warm hint names the dying window\'s own table');
+assert.ok(dash.includes('the youngest is inside its last three minutes'),
   'the aria names the closing state in full words');
 assert.ok(dash.includes("qrWarm ? 'bg-[#FBF3E4] text-[#8A5A16]' : 'bg-[#EAF2F7] text-[#1D5D7E]'"),
   'warm speaks the ribbon\'s amber on the slot\'s chip');

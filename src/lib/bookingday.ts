@@ -104,3 +104,48 @@ export function bookingDayTag(iso: string): string {
 export function bookingTzIsForeign(): boolean {
   return appTimezone() !== BOOKING_TZ;
 }
+
+/* ── The ONE promise verdict (5.221.0) — lifted home from FloorScreen ──────
+ *  The book's advertising rule (who speaks, who went quiet) lived inside
+ *  FloorScreen.tsx since v5.84.0; the Dashboard's arrivals slot needed the
+ *  SAME verdict for its own rows, and a copy would have been a second book
+ *  rule — the one thing the house never allows (5.211: the body moves home
+ *  to the clock it already owns, every surface imports it). The verdicts
+ *  judge on the clocks they are GIVEN (nowMs + todayKey — 228's seam), so
+ *  a suite can prove the words on pinned time.
+ *
+ *  The row is judged structurally (status + slot_at is ALL the verdict
+ *  reads), so this lib stays dependency-free and fixtures stay plain. ── */
+
+/** A promise-shaped row — structurally Reservation (lib/api), nothing more. */
+export type PromiseRow = { status: string; slot_at: string };
+
+/** The book's amber line: a promise due inside this many minutes advertises
+ *  with the PromiseChip's amber (the host should start watching the door). */
+export const PROMISE_DUE_SOON_MIN = 45;
+
+/** A promise that still advertises: `booked`, TODAY in the booking clock,
+ *  slot not yet gone. A seated, no-show or cancelled row never speaks, and
+ *  yesterday's promises have already kept (or broken) themselves — they
+ *  don't either. */
+export function isLivePromise(r: PromiseRow, nowMs: number, todayKey: string): boolean {
+  if (r.status !== 'booked') return false;
+  if (bookingDayKey(r.slot_at) !== todayKey) return false;
+  return new Date(r.slot_at).getTime() >= nowMs;
+}
+
+/** v5.86.0 — a promise that WENT QUIET: still `booked`, still today in the
+ *  booking clock, but the promised hour has passed without anyone sitting
+ *  them down. The book does not call it a no-show — a party can be ten
+ *  minutes late, and the verdict is the host's, not the clock's. It just
+ *  refuses to pretend the hour is still ahead. */
+export function isQuietPromise(r: PromiseRow, nowMs: number, todayKey: string): boolean {
+  if (r.status !== 'booked') return false;
+  if (bookingDayKey(r.slot_at) !== todayKey) return false;
+  return new Date(r.slot_at).getTime() < nowMs;
+}
+
+/** Minutes until the slot, rounded up (a slot 30s away is still 1 min). */
+export function minsUntil(iso: string, nowMs: number): number {
+  return Math.max(0, Math.ceil((new Date(iso).getTime() - nowMs) / 60000));
+}

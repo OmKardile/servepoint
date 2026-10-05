@@ -40,7 +40,7 @@ import {
   YAxis,
 } from 'recharts';
 import { fetchDashboard, fetchFeedbackStats, fetchInventory, fetchMenuItems, fetchOfferRedemptions, fetchOffers, fetchOpenPaymentSums, fetchOrders, fetchReservations, fetchTableSessions, fetchTables, fetchTodayCostMargin, type DiningTable, type FeedbackStats, type InventoryItem, type OfferRedemptionRow, type Reservation, type TableSession, type TodayCostMargin } from '../../lib/api';
-import { liveWindows, youngestLiveMs } from '../../lib/tableSession';
+import { liveWindows, youngestLiveMs, youngestLiveWindow } from '../../lib/tableSession';
 import { formatMoney } from '../../lib/prefs';
 /* v5.175.0 — the morning paper borrows the booking clock for its book (the
    database's word, lib/bookingday — the same lib the floor's book, the bell
@@ -48,7 +48,19 @@ import { formatMoney } from '../../lib/prefs';
    a second clock of its own: the replay key is the tile's own bucket key
    (api's week rows), so the day the paper names is the day the landing
    opens — one derivation, carried with the rupees. */
-import { bookingDayKey, bookingSlotLabel, bookingTodayKey, bookingTzIsForeign } from '../../lib/bookingday';
+/* 5.221.0 — the arrivals slot speaks the BOOK's own verdict (lifted home to
+   lib/bookingday): isLivePromise/isQuietPromise are the Floor chip's law,
+   minsUntil its clock, PROMISE_DUE_SOON_MIN the amber line's name. */
+import {
+  bookingDayKey,
+  bookingSlotLabel,
+  bookingTodayKey,
+  bookingTzIsForeign,
+  isLivePromise,
+  isQuietPromise,
+  minsUntil,
+  PROMISE_DUE_SOON_MIN,
+} from '../../lib/bookingday';
 import { CHART_TOOLTIP_LABEL, CHART_TOOLTIP_STYLE } from '../../lib/chartvoice';
 import { chaseAge, isSameLocalDay } from '../../lib/day';
 import { useTenant } from '../../lib/tenant';
@@ -1364,12 +1376,29 @@ const NeedsNow: React.FC = () => {
   /* v5.61.0 — the front door joins the mirror: booked parties whose slot has
      arrived or is imminent (the next 90 minutes; an hour of grace covers a
      party running late without letting week-old ghosts pollute the count),
-     and tables parked at 'billing' — the bill is asked for but not settled. */
-  const arrivals = now.reservations.filter((r) => {
+     and tables parked at 'billing' — the bill is asked for but not settled.
+     5.221.0 — the rows inside that scope are judged by the BOOK's own
+     verdict now (lib/bookingday — ONE promise rule, the Floor chip's law,
+     today-gated so yesterday's promises stay silent): a row whose hour
+     still stands is DUE; one the hour passed on has WENT QUIET — the band
+     stops pretending a late party's hour is still ahead. Inside the book's
+     45-minute amber line the slot speaks the chip's own amber; quiet-only
+     scope speaks the book's convict-free grey. The hint names the next
+     party — or, when only debt remains, the most recent quiet row (the
+     book's own voice rule). */
+  const arrivalsScope = now.reservations.filter((r) => {
     if (r.status !== 'booked') return false;
     const slot = new Date(r.slot_at).getTime();
     return slot >= nowMs - 60 * 60000 && slot <= nowMs + 90 * 60000;
   });
+  const arrivalsTodayKey = bookingTodayKey();
+  const dueArrivals = arrivalsScope
+    .filter((r) => isLivePromise(r, nowMs, arrivalsTodayKey))
+    .sort((a, b) => new Date(a.slot_at).getTime() - new Date(b.slot_at).getTime());
+  const quietArrivals = arrivalsScope
+    .filter((r) => isQuietPromise(r, nowMs, arrivalsTodayKey))
+    .sort((a, b) => new Date(b.slot_at).getTime() - new Date(a.slot_at).getTime());
+  const arrivalsSoon = dueArrivals.some((r) => minsUntil(r.slot_at, nowMs) <= PROMISE_DUE_SOON_MIN);
   const billingTables = now.tables.filter((t) => t.status === 'billing');
 
   const slots: {
@@ -1394,6 +1423,18 @@ const NeedsNow: React.FC = () => {
      for a quiet board; a failed read renders nothing at all. */
   const liveQr = now.sessions ? liveWindows(now.sessions, nowMs) : [];
   const qrWarm = liveQr.length > 0 && youngestLiveMs(liveQr, nowMs) < 180_000;
+  /* 5.221.0 — the band already holds the tables, so the slot names WHERE:
+     the value carries the distinct table numbers holding live windows
+     (a failed tables read degrades to the old tableless words — never a
+     fabricated name), and the warm hint names the dying window's own
+     table (the argmin lives in the lib — youngestLiveWindow). */
+  const qrTableNameById = new Map(now.tables.map((t) => [t.id, t.table_number]));
+  const qrTableNames = [
+    ...new Set(liveQr.map((s) => qrTableNameById.get(s.table_id)).filter((n): n is string => !!n)),
+  ];
+  const qrNames = qrTableNames.length > 0 ? qrTableNames.join(' · ') : null;
+  const youngestQr = youngestLiveWindow(liveQr, nowMs);
+  const youngestQrTable = youngestQr ? qrTableNameById.get(youngestQr.table_id) ?? null : null;
   /* 5.89.0 — the card speaks today's inbox count; when older `new` tickets
      are stuck off it (yesterday's ghosts the counter can no longer Ok), the
      amber whisper names them and points to Bills, the room that can still
@@ -1443,14 +1484,18 @@ const NeedsNow: React.FC = () => {
     slots.push({
       key: 'qr',
       label: 'QR menus',
-      value: `${liveQr.length} ${liveQr.length === 1 ? 'window' : 'windows'} open`,
+      value: `${liveQr.length} ${liveQr.length === 1 ? 'window' : 'windows'} open${qrNames ? ` · ${qrNames}` : ''}`,
       valueTone: qrWarm ? 'text-[#8A5A16]' : 'text-[#0F3D3E]',
       icon: <Smartphone size={18} aria-hidden />,
       iconTone: qrWarm ? 'bg-[#FBF3E4] text-[#8A5A16]' : 'bg-[#EAF2F7] text-[#1D5D7E]',
-      aria: `${liveQr.length} live QR ${liveQr.length === 1 ? 'window is' : 'windows are'} open on the tables${
-        qrWarm ? '; the youngest is inside its last three minutes — it closes on its own' : ''
+      aria: `${liveQr.length} live QR ${liveQr.length === 1 ? 'window is' : 'windows are'} open on ${qrNames ?? 'the tables'}${
+        qrWarm
+          ? `; the youngest is inside its last three minutes${youngestQrTable ? ` on ${youngestQrTable}` : ''} — it closes on its own`
+          : ''
       }; the Floor's drill watches every window`,
-      hint: qrWarm ? 'a menu window is inside its last three minutes' : undefined,
+      hint: qrWarm
+        ? `a menu window is inside its last three minutes${youngestQrTable ? ` on ${youngestQrTable}` : ''}`
+        : undefined,
       hintIcon: qrWarm ? <Clock size={11} aria-hidden className="shrink-0" /> : undefined,
       door: {
         label: 'Floor',
@@ -1458,21 +1503,55 @@ const NeedsNow: React.FC = () => {
         onOpen: () => go('floor', ['Dashboard', 'Floor']),
       },
     });
-  if (arrivals.length > 0)
+  if (dueArrivals.length > 0 || quietArrivals.length > 0) {
+    const quietOnly = dueArrivals.length === 0;
+    const nextDue = dueArrivals[0];
+    const arrivalsValue =
+      dueArrivals.length > 0 && quietArrivals.length > 0
+        ? `${dueArrivals.length} ${dueArrivals.length === 1 ? 'party' : 'parties'} due · ${quietArrivals.length} went quiet`
+        : dueArrivals.length > 0
+          ? `${dueArrivals.length} ${dueArrivals.length === 1 ? 'party' : 'parties'} due`
+          : `${quietArrivals.length} ${quietArrivals.length === 1 ? 'promise' : 'promises'} went quiet`;
     slots.push({
       key: 'arrivals',
       label: 'Arriving now',
-      value: `${arrivals.length} ${arrivals.length === 1 ? 'party' : 'parties'} due`,
-      valueTone: 'text-[#0F3D3E]',
+      value: arrivalsValue,
+      valueTone: arrivalsSoon ? 'text-[#8A5A16]' : quietOnly ? 'text-[#5F6B63]' : 'text-[#0F3D3E]',
       icon: <CalendarClock size={18} aria-hidden />,
-      iconTone: 'bg-[#EAF2F7] text-[#1D5D7E]',
-      aria: `${arrivals.length} booked ${arrivals.length === 1 ? 'party is' : 'parties are'} due at the door; Seat & order walks them straight to the counter`,
+      iconTone: arrivalsSoon
+        ? 'bg-[#FDF3E4] text-[#8A5A16]'
+        : quietOnly
+          ? 'bg-[#F1F4F1] text-[#6B6B6B]'
+          : 'bg-[#EAF2F7] text-[#1D5D7E]',
+      aria: `${
+        dueArrivals.length > 0
+          ? `${dueArrivals.length} booked ${dueArrivals.length === 1 ? 'party is' : 'parties are'} due at the door`
+          : ''
+      }${
+        quietArrivals.length > 0
+          ? `${dueArrivals.length > 0 ? '; ' : ''}${quietArrivals.length} booked ${
+              quietArrivals.length === 1 ? 'party went' : 'parties went'
+            } quiet — the promised hour passed, still booked`
+          : ''
+      }${arrivalsSoon ? "; the next is inside the book's 45-minute line" : ''}; Seat & order walks them straight to the counter`,
+      hint:
+        dueArrivals.length > 0
+          ? `next ${nextDue.guest_name} · ${nextDue.party_size}p · promised ${bookingSlotLabel(nextDue.slot_at)}`
+          : `${quietArrivals[0].guest_name} · ${quietArrivals[0].party_size}p — the promised hour went by, still booked`,
+      hintIcon: arrivalsSoon ? (
+        <Clock size={11} aria-hidden className="shrink-0" />
+      ) : quietOnly ? (
+        <History size={11} aria-hidden className="shrink-0" />
+      ) : undefined,
       door: {
         label: 'Floor',
-        aria: `Open Floor — ${arrivals.length} booked ${arrivals.length === 1 ? 'party is' : 'parties are'} due at the door`,
+        aria: `Open Floor — ${dueArrivals.length + quietArrivals.length} booked ${
+          dueArrivals.length + quietArrivals.length === 1 ? 'party is' : 'parties are'
+        } in the book's arrival window`,
         onOpen: () => go('floor', ['Dashboard', 'Floor']),
       },
     });
+  }
   /* 5.89.0 — the kitchen card mirrors the board's day: today's count, and
      when older tickets are stuck off the board (paid but never bumped, or
      parked mid-flight), the whisper names them — the board itself stays
@@ -1631,7 +1710,11 @@ const NeedsNow: React.FC = () => {
           </p>
           <div className="grid grid-cols-2 gap-x-6 gap-y-4 lg:grid-cols-3">
             {slots.map((s) => (
-              <div key={s.key} className="flex min-w-0 items-center gap-3">
+              /* 5.221.0 — the slot's aria finally reaches the DOM: each slot
+                 computes a full-words description (count + state + where),
+                 and until now only the door carried its words — the band's
+                 screen reader heard the door but not the slot itself. */
+              <div key={s.key} role="group" aria-label={s.aria} className="flex min-w-0 items-center gap-3">
                 <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${s.iconTone}`}>
                   {s.icon}
                 </span>

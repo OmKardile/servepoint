@@ -3,6 +3,24 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.221.0] — 2026-10-05 — The band hears the whole book: the Dashboard's arrivals slot counted a party whose promised hour passed an hour ago as "due" — a SECOND book verdict spoken beside the Floor chip's own law — and the QR slot named a count but never a place, even though the band already holds the tables. The book's promise verdicts moved home to the booking clock's lib; the arrivals slot now splits DUE from WENT QUIET by that ONE rule; and both slots name their WHERE
+
+### Changed — the promise verdicts live in the booking clock's lib now (`src/lib/bookingday.ts`, `src/components/floor/FloorScreen.tsx`)
+
+`isLivePromise`, `isQuietPromise` and `minsUntil` lived inside FloorScreen.tsx since v5.84.0; the Dashboard's arrivals slot needed the SAME verdict, and a copy would have been a second book rule (5.211 — the body moves home to the clock it already owns). The lib exports the verdicts judging on the clocks they are GIVEN (`nowMs` + `todayKey` — the 228 seam) and reading the row structurally (`status` + `slot_at`), so the lib stays dependency-free and fixtures stay plain. `PROMISE_DUE_SOON_MIN` names the amber line the Floor carried three bare `45` literals of — the constant is the line's own name now, pinnable by the suite. The Floor imports the family and keeps no local copy; its words are byte-identical.
+
+### Changed — the arrivals slot speaks the book's verdict (`src/components/dashboard/DashboardScreen.tsx`)
+
+Within the band's own anti-ghost scope (an hour behind, ninety ahead — v5.61's window stands), each row is now judged by the lib: a row whose hour still stands is DUE (deep ink; the chip's own amber `#FDF3E4`/`#8A5A16` once inside the 45-minute line, aria naming the book's line), one the hour passed on has WENT QUIET — the band stops pretending a late party's hour is still ahead. Quiet-only scope speaks the book's convict-free grey (`#F1F4F1`/`#6B6B6B`) — "went quiet", never a no-show conviction. The hint names the next party in the book's own words — "next Kumar · 4p · promised 7:30 pm" — or, when only debt remains, the most recent quiet row (the book's own voice rule). The midnight gate follows the book: yesterday's promises don't speak. The door stays on the Floor. Zero new timers.
+
+### Changed — the QR slot names WHERE
+
+The band already reads `dining_tables`, so the slot's value carries the distinct table numbers holding live windows ("1 window open · T1") and the warm hint names the dying window's own table ("a menu window is inside its last three minutes on T4") through `youngestLiveWindow` — the argmin lifted into `lib/tableSession.ts` so `youngestLiveMs` composes it (ONE minimum arithmetic, two names; the `Infinity` seed keeps its post). A failed tables read degrades to the old tableless words — never a fabricated name.
+
+### Tests
+
+`scripts/unit260.mjs` born — 14 checks: the lib verdicts (booked-only, today-gated, two clocks on ONE row, the named 45 line, `minsUntil`'s ceil+clamp); `youngestLiveWindow`'s argmin + null-on-empty and the composed `youngestLiveMs`; the Floor importing the family with NO local copy and zero bare 45s; the Dashboard's scope + lib-verdict split + amber/grey tones + the book's hint words + the quiet most-recent sort; the QR naming (map from the held read, value/aria/hint bytes, degrade-to-tableless); exactly ONE interval, no `formatWindowLeft`, no re-declared constant. unit259's hint pins and unit258's `youngestLiveMs` pins evolved to the new homes (code-level anchors, intents unchanged — the argmin's composition kept every behavioral promise). Regression battery unit194–260 ALL PASS by exit code (66 suites); tsc EXIT=0 ×2; build EXIT=0 (VERSION → servepoint-v5.221.0-r1).
+
 ## [5.220.0] — 2026-10-05 — The QR channel reaches the dashboard: guests holding live menus are "needs you now" by definition, but the owner's first screen never knew. The session clock rule moved home to a lib (ONE liveness verdict for every surface) and the needs band grew a QR slot that speaks the state — never a stopwatch
 
 ### Changed — the session clock lives in a lib now (`src/lib/tableSession.ts` born, `src/components/floor/FloorScreen.tsx`)
