@@ -551,10 +551,17 @@ function istDayHeading(dateKey: string): string {
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
 function LiveChip({ state }: { state: RealtimeState }): React.ReactElement {
-  const map: Record<RealtimeState, { label: string; color: string }> = {
+  const map: Record<RealtimeState, { label: string; color: string; hint?: string }> = {
     live: { label: 'Live', color: '#2E7D32' },
     connecting: { label: 'Connecting…', color: '#8A5A16' },
-    offline: { label: 'Polling 30s', color: '#6B6B6B' },
+    /* v5.262.0 — the offline chip's word completes: the poll is not the
+     * whole rhythm anymore — the board also wakes the moment the host
+     * looks back (the wake's word travels with the surfaces). */
+    offline: {
+      label: 'Polling 30s',
+      color: '#6B6B6B',
+      hint: 'Realtime unavailable — refreshing every 30 seconds, and the moment you look back',
+    },
   };
   const m = map[state];
   return (
@@ -562,6 +569,7 @@ function LiveChip({ state }: { state: RealtimeState }): React.ReactElement {
       className="flex h-9 items-center gap-1.5 rounded-full border border-[#E3E7E0] bg-white px-3 text-[11.5px] font-semibold"
       style={{ color: m.color }}
       role="status"
+      title={m.hint}
     >
       <span className={`h-2 w-2 rounded-full ${state === 'live' ? 'animate-pulse' : ''}`} style={{ background: m.color }} aria-hidden />
       {m.label}
@@ -2032,11 +2040,24 @@ export function FloorScreen(): React.ReactElement {
     const unsub = subscribeTablesRealtime(tenantId, ping, setRtState);
     const unsubBook = subscribeReservationsRealtime(tenantId, ping, setRtState);
     const poll = window.setInterval(() => void reload(), 30000);
+    /* v5.262.0 — the wake: the board wakes when the staff does. The
+     * floor's tablet sleeps between seatings; mobile browsers throttle
+     * background timers (the 30s poll clamps or pauses) and the realtime
+     * sockets can die silently — the host who comes back could read a
+     * stale board while the room moved on. The wake rides the ONE path
+     * (reload — the same road the realtime pings and the poll ride; no
+     * second fetch path exists) the moment they look. */
+    const wake = () => {
+      if (document.visibilityState !== 'visible') return;
+      void reload();
+    };
+    document.addEventListener('visibilitychange', wake);
     return () => {
       window.clearInterval(poll);
       if (pingRef.current) window.clearTimeout(pingRef.current);
       unsub();
       unsubBook();
+      document.removeEventListener('visibilitychange', wake);
     };
   }, [tenantId, reload]);
 

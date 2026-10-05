@@ -330,9 +330,23 @@ export function CounterInbox(): React.ReactElement | null {
     if (!tenantId) return;
     const unsubscribe = subscribeOrdersRealtime(tenantId, () => void load(), setRt);
     const poll = window.setInterval(() => void load(), 30_000);
+    /* v5.262.0 — the wake: the board wakes when the staff does. The
+     * counter's tablet sleeps between guests; mobile browsers throttle
+     * background timers (the 30s poll clamps or pauses) and the realtime
+     * socket can die silently — the cashier who comes back could read a
+     * stale queue. The wake rides the ONE path (load — the same road the
+     * realtime ping and the poll ride; no second fetch path exists) the
+     * moment they look. The kitchen carries the network's wake too; the
+     * counter's recovery rides its poll and its badge's own word. */
+    const wake = () => {
+      if (document.visibilityState !== 'visible') return;
+      void load();
+    };
+    document.addEventListener('visibilitychange', wake);
     return () => {
       unsubscribe();
       window.clearInterval(poll);
+      document.removeEventListener('visibilitychange', wake);
     };
   }, [tenantId, load]);
 
@@ -512,7 +526,7 @@ export function CounterInbox(): React.ReactElement | null {
         </button>
         <span
           className="flex shrink-0 items-center gap-1.5 text-[11px] font-bold"
-          title={rt === 'live' ? 'Realtime connected' : rt === 'connecting' ? 'Connecting…' : 'Realtime offline — polling'}
+          title={rt === 'live' ? 'Realtime connected' : rt === 'connecting' ? 'Connecting…' : 'Realtime offline — polling, and the moment you look back'}
         >
           {rt === 'offline' ? (
             <WifiOff size={12} className="text-[#969696]" aria-hidden />

@@ -495,6 +495,17 @@ export const KitchenScreen: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [rtState, setRtState] = useState<RealtimeState>('connecting');
+  /* v5.262.0 — the caught-up whisper: the wake's receipt. When the board
+   * refetches because the staff looked (or the network returned), the
+   * header raises a quiet chip naming the moment — the cook SEES the
+   * catch-up instead of trusting a silent swap. Cleared after 4s; keyed
+   * by the instant so a second wake re-rises it. */
+  const [caughtUpAt, setCaughtUpAt] = useState<number | null>(null);
+  useEffect(() => {
+    if (caughtUpAt === null) return;
+    const t = window.setTimeout(() => setCaughtUpAt(null), 4000);
+    return () => window.clearTimeout(t);
+  }, [caughtUpAt]);
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [soundOn, setSoundOn] = useState(() => {
     try {
@@ -576,10 +587,30 @@ export const KitchenScreen: React.FC = () => {
     if (!tenantId) return;
     const unsubscribe = subscribeOrdersRealtime(tenantId, scheduleRefetch, setRtState);
     const poll = window.setInterval(() => void refetch(), 30_000);
+    /* v5.262.0 — the wake: the board wakes when the staff does. The
+     * kitchen tablet sleeps between tickets; mobile browsers throttle
+     * background timers (the 30s poll clamps to 1/min or pauses) and the
+     * realtime socket can die silently under pressure — the cook who
+     * comes back to a rush could stare at a rail up to 30s stale. The
+     * wake rides the ONE path (refetch — the same road the realtime ping
+     * and the 30s poll ride; no second fetch path exists): visibility
+     * (the moment they look) and online (the network's return — a missed
+     * ticket is a missed dish). The chime's set-diff reads prev once per
+     * orders change, so a catch-up that lands tickets rings exactly once,
+     * on return — the one-busy law by the same mechanism as the guest
+     * pager's wake (5.261). */
+    const wake = () => {
+      if (document.visibilityState !== 'visible') return;
+      void refetch().then(() => setCaughtUpAt(Date.now()));
+    };
+    document.addEventListener('visibilitychange', wake);
+    window.addEventListener('online', wake);
     return () => {
       unsubscribe();
       window.clearInterval(poll);
       if (pingRef.current) window.clearTimeout(pingRef.current);
+      document.removeEventListener('visibilitychange', wake);
+      window.removeEventListener('online', wake);
     };
   }, [tenantId, scheduleRefetch, refetch]);
 
@@ -789,6 +820,23 @@ export const KitchenScreen: React.FC = () => {
             <CalendarDays size={13} aria-hidden />
             Today · {appFormatters().dayLabel.format(new Date(nowMs))}
           </span>
+          {/* v5.262.0 — the caught-up whisper: the wake's receipt, risen in
+           * the chip row the day chip made (spFadeIn, the house's own
+           * rise; the reduced-motion gate in index.css holds it still).
+           * Keyed by the instant so a second wake re-rises, not swaps;
+           * the clock is the house's own hhmm (slips and shift clocks).
+           * Gone after 4s — a receipt, not a resident. */}
+          {caughtUpAt !== null && (
+            <span
+              key={caughtUpAt}
+              className="flex h-8 items-center gap-1.5 rounded-full border border-[#E3E7E0] bg-white px-2.5 text-[12px] font-semibold text-[#5B6B63]"
+              title="The board just caught up — the read rode the same path the realtime stream and the 30s poll ride"
+              style={{ animation: 'spFadeIn 0.35s ease' }}
+            >
+              <Check size={13} aria-hidden />
+              Caught up · {appFormatters().hhmm.format(new Date(caughtUpAt))}
+            </span>
+          )}
           <span
             className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11.5px] font-semibold ${rtChip.cls}`}
             title={
@@ -796,7 +844,7 @@ export const KitchenScreen: React.FC = () => {
                 ? 'Realtime stream connected — orders appear instantly'
                 : rtState === 'connecting'
                   ? 'Establishing the realtime stream'
-                  : 'Realtime unavailable — refreshing every 30 seconds'
+                  : 'Realtime unavailable — refreshing every 30 seconds, and the moment you look back'
             }
           >
             <span className="relative flex h-1.5 w-1.5">
