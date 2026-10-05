@@ -103,7 +103,9 @@ const swJs = strip('../public/sw.js');
     guestLib.includes("if (error) return { ok: true, reason: 'network' }; // fail-soft: retry on the next tick"),
     'the heartbeat\u2019s fail-soft stays byte-true (a network hiccup never locks a paying guest)',
   );
-  assert.ok(pages.includes('}, 30000);'), 'the 30s re-verify keeps its cadence');
+  // 5.261.0's honest re-anchor: the verify is named now (the wake rides it
+  // too) — the rider moved, the 30s cadence law stands.
+  assert.ok(pages.includes('window.setInterval(verify, 30000);'), 'the 30s re-verify keeps its cadence');
   ok('the re-arm path rides the server anchor; the survival laws untouched');
 }
 

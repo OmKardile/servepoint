@@ -785,7 +785,7 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
   useEffect(() => {
     if (phase !== 'ready' || !sessionToken) return;
     const token = sessionToken.session_token;
-    const iv = window.setInterval(() => {
+    const verify = () => {
       void verifyTableSession(token).then((r) => {
         // the server's own remaining-seconds (5.216.0) — only a verdict with a
         // finite number re-anchors the ribbon; a fail-soft ok keeps the last one
@@ -794,8 +794,22 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
         }
         if (!r.ok) lockGuest(r.reason || 'unknown');
       });
-    }, 30000);
-    return () => window.clearInterval(iv);
+    };
+    const iv = window.setInterval(verify, 30000);
+    /* v5.261.0 — the window's word wakes when the guest does: a throttled
+     * background tab could hold armed buttons in front of a returning guest
+     * while the floor already cut the session. Visibility wakes the verify —
+     * the anchor re-lands and the page's own 1s tick re-derives the band
+     * within one beat (the server's word at checkout stays the hard stop). */
+    const wake = () => {
+      if (document.visibilityState !== 'visible') return;
+      verify();
+    };
+    document.addEventListener('visibilitychange', wake);
+    return () => {
+      window.clearInterval(iv);
+      document.removeEventListener('visibilitychange', wake);
+    };
   }, [phase, sessionToken, lockGuest]);
 
   // 5.250.0 — the ordering machinery speaks the window: a dead window accepts
@@ -1949,15 +1963,41 @@ export function GuestTrackPage({ orderId }: { orderId: string }): React.ReactEle
       return;
     }
     let alive = true;
+    /* v5.261.0 — one tick at a time: the loop's tick and a wake tick share
+     * this gate, so the chime's prev guard is read exactly once per status
+     * change (a wake and a loop tick racing would ring twice). */
+    let busy = false;
+    const runTick = (): Promise<void> => {
+      if (!alive || busy) return Promise.resolve();
+      busy = true;
+      return tick().finally(() => {
+        busy = false;
+      });
+    };
     const loop = () => {
       if (!alive) return;
-      void tick().finally(() => {
+      void runTick().finally(() => {
         if (alive) window.setTimeout(loop, 10000);
       });
     };
     loop();
+    /* v5.261.0 — the pager wakes when the guest does: a background tab's
+     * timers are throttled (clamped to 1/min, or paused outright), so the
+     * guest who locks their phone while waiting returns to a stale stepper —
+     * the kitchen's "ready" unseen, the chime late. Visibility and network
+     * each wake the pager: an immediate tick the moment the page is seen
+     * again (or the network returns). The wake rides the SAME tick — a call
+     * that landed while away rings exactly once, on return. */
+    const wake = () => {
+      if (document.visibilityState !== 'visible') return;
+      void runTick();
+    };
+    document.addEventListener('visibilitychange', wake);
+    window.addEventListener('online', wake);
     return () => {
       alive = false;
+      document.removeEventListener('visibilitychange', wake);
+      window.removeEventListener('online', wake);
     };
   }, [tick, uuidLike]);
 
@@ -2120,7 +2160,14 @@ export function GuestTrackPage({ orderId }: { orderId: string }): React.ReactEle
                         {t(f.labelKey)}
                         {now && !servedNow && <span className="ml-2 inline-block h-2 w-2 animate-pulse rounded-full" style={{ background: brand.gold }} aria-hidden />}
                       </p>
-                      <p className="text-[12px] text-[#6B6B6B]">{now ? (servedNow && paid ? t('flowServedPaidHint') : t(f.hintKey)) : done ? t('done') : t('waiting')}</p>
+                      {/* v5.261.0 — the change is SEEN, not just read: the hint
+                          remounts on every status change (key), so a wake
+                          tick's catch-up rises instead of swapping. */}
+                      <p
+                        key={order.status}
+                        className="text-[12px] text-[#6B6B6B]"
+                        style={{ animation: 'spFadeIn 240ms ease-out both' }}
+                      >{now ? (servedNow && paid ? t('flowServedPaidHint') : t(f.hintKey)) : done ? t('done') : t('waiting')}</p>
                     </li>
                   );
                 })}

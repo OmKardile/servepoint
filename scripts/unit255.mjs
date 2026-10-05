@@ -158,9 +158,12 @@ assert.ok(menuBody.includes('return () => window.clearInterval(t1);'), 'the page
 assert.ok(menuBody.includes('[phase, sessionToken, serverAnchor]'), 'the tick re-arms when the anchor moves (the freshest verdict wins)');
 ok('menu page: one 1s tick, cleanup intact, re-arms on a fresh anchor');
 
-const tickInterval = guestPages.match(/window\.setInterval\(\(\) => \{\s*void verifyTableSession/g) || [];
-assert.equal(tickInterval.length, 1, 'the re-verify tick is the only 30s interval');
-assert.ok(guestPages.includes('}, 30000);'), 'the tick stays at 30s');
+// 5.261.0's honest re-anchor: the inline arrow became the named `verify`
+// (the wake rides it too) — the rider moved, the law stands: ONE verify,
+// ONE 30s interval calling it, the wake adds a beat but no interval.
+const verifyDef = guestPages.match(/const verify = \(\) => \{\s*void verifyTableSession/g) || [];
+assert.equal(verifyDef.length, 1, 'the re-verify is one named verify riding the shipped lib call');
+assert.ok(guestPages.includes('window.setInterval(verify, 30000);'), 'the verify tick stays at 30s');
 ok('re-verify tick: still one 30s interval');
 
 /* ── 5. The ended state speaks the guest's language — all three dicts ── */
