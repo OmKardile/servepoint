@@ -39,7 +39,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { fetchDashboard, fetchFeedbackStats, fetchInventory, fetchMenuItems, fetchOfferRedemptions, fetchOffers, fetchOpenPaymentSums, fetchOrders, fetchReservations, fetchTableSessions, fetchTables, fetchTodayCostMargin, type DiningTable, type FeedbackStats, type InventoryItem, type OfferRedemptionRow, type Reservation, type TableSession, type TodayCostMargin } from '../../lib/api';
+import { fetchDashboard, fetchFeedbackStats, fetchInventory, fetchMenuItems, fetchOfferRedemptions, fetchOffers, fetchOpenPaymentSums, fetchOrders, fetchReservations, fetchStaleNewCount, fetchTableSessions, fetchTables, fetchTodayCostMargin, type DiningTable, type FeedbackStats, type InventoryItem, type OfferRedemptionRow, type Reservation, type TableSession, type TodayCostMargin } from '../../lib/api';
 import { liveWindows, youngestLiveMs, youngestLiveWindow } from '../../lib/tableSession';
 import { formatMoney } from '../../lib/prefs';
 /* v5.175.0 — the morning paper borrows the booking clock for its book (the
@@ -1350,23 +1350,33 @@ interface NeedsState {
    *  zero live included: an empty board of windows is a fact the owner
    *  still needs. Newest-first, bounded by the fetch's own limit. */
   sessions: TableSession[] | null;
+  /** v5.243.0 — the straggler census's whole-book word: the server head-count
+   *  of `new` tickets from before the app's today, wherever they sit in the
+   *  ledger (uncapped). NULL = the count read failed — the whisper dims to
+   *  the loaded page's own census (the 5.242 fail-soft law), never a lie. */
+  staleNewCount: number | null;
 }
 
 const NeedsNow: React.FC = () => {
   const { tenantId } = useTenant();
-  const [now, setNow] = useState<NeedsState>({ ready: false, orders: [], inventory: [], menu: [], reservations: [], tables: [], paidSums: new Map(), sessions: null });
+  const [now, setNow] = useState<NeedsState>({ ready: false, orders: [], inventory: [], menu: [], reservations: [], tables: [], paidSums: new Map(), sessions: null, staleNewCount: null });
 
   useEffect(() => {
     if (!tenantId) return;
     let alive = true;
     const load = async () => {
       try {
-        const [orders, inventory, menu, reservations, tables] = await Promise.all([
+        const [orders, inventory, menu, reservations, tables, staleNewCount] = await Promise.all([
           fetchOrders(tenantId, 200),
           fetchInventory(tenantId),
           fetchMenuItems(tenantId),
           fetchReservations(tenantId, 100),
           fetchTables(tenantId),
+          /* v5.243.0 — the news census's whole-book word rides the same load
+             cycle as the page it dims to; the read is individually fail-soft
+             (the 5.220 mirror rule — a failed count must not quiet the tiles
+             that already landed). */
+          fetchStaleNewCount(tenantId).catch(() => null),
         ]);
         /* v5.65.0 — the ledger read, bounded to exactly the open ids (the
            5.63.0 helper; no ids → no call). A cancelled or settled ticket
@@ -1379,7 +1389,7 @@ const NeedsNow: React.FC = () => {
            session read must not quiet the tiles that already landed (the
            mirror's own rule), and the chip answers silence, never a zero. */
         const sessions = await fetchTableSessions(tenantId).catch(() => null);
-        if (alive) setNow({ ready: true, orders, inventory, menu, reservations, tables, paidSums, sessions });
+        if (alive) setNow({ ready: true, orders, inventory, menu, reservations, tables, paidSums, sessions, staleNewCount });
       } catch {
         /* the mirror is a courtesy — a first failed read simply stays quiet */
       }
@@ -1406,8 +1416,14 @@ const NeedsNow: React.FC = () => {
   /* 5.241.0 — the whisper's number is the ONE census now (the counter's
    * straggler band asks the same home): status 'new' excludes 'cancelled'
    * by construction, so the lib's all-orders read is the same population
-   * the old inline filter drew. */
+   * the old inline filter drew. 5.243.0 — the spoken number is the
+   * WHOLE BOOK's word: the server head-count of off-today `new` tickets,
+   * uncapped — the day one slides past the 200-row page, the whisper
+   * still counts it. The page census dims in only when the count read
+   * failed (the 5.242 fail-soft law: the loaded page's own truth, never
+   * a silent zero). */
   const staleNew = staleNewTickets(now.orders);
+  const staleNewN = now.staleNewCount ?? staleNew.length;
   const inKitchen = liveToday.filter((o) => isOnRail(String(o.status)));
   const staleKitchen = staleOlder.filter((o) => isOnRail(String(o.status)));
   const latePrep = liveToday.filter(
@@ -1515,7 +1531,7 @@ const NeedsNow: React.FC = () => {
      amber whisper names them and points to Bills, the room that can still
      act. The door follows the truth: the counter when it holds work, Bills
      when only the ghosts remain. */
-  if (newTickets.length > 0 || staleNew.length > 0)
+  if (newTickets.length > 0 || staleNewN > 0)
     slots.push({
       key: 'new',
       label: 'New tickets',
@@ -1525,17 +1541,24 @@ const NeedsNow: React.FC = () => {
           : '0 waiting',
       valueTone: newTickets.length > 0 ? 'text-[#0F3D3E]' : 'text-[#5F6B63]',
       icon: <Inbox size={18} aria-hidden />,
-      iconTone: newTickets.length > 0 ? 'bg-[#EAF2F7] text-[#1D5D7E]' : 'bg-[#F6F5F2] text-[#5F6B63]',
+      /* 5.243.0 — the icon warms to the amber family while stragglers hold
+         (the house grammar: amber = work waiting off-stage), even when
+         today's queue is live and the tile would otherwise read calm blue. */
+      iconTone: newTickets.length > 0
+        ? staleNewN > 0
+          ? 'bg-[#FBF3E4] text-[#8A5A16]'
+          : 'bg-[#EAF2F7] text-[#1D5D7E]'
+        : 'bg-[#F6F5F2] text-[#5F6B63]',
       aria: `${newTickets.length} new ${newTickets.length === 1 ? 'ticket' : 'tickets'} in the counter inbox, waiting for an Ok${
-        staleNew.length > 0
-          ? `; ${staleNew.length} older ${staleNew.length === 1 ? 'ticket is' : 'tickets are'} stuck off today's inbox — see Bills`
+        staleNewN > 0
+          ? `; ${staleNewN} older ${staleNewN === 1 ? 'ticket is' : 'tickets are'} stuck off today's inbox — see Bills`
           : ''
       }`,
       hint:
-        staleNew.length > 0
-          ? `${staleNew.length} older ${staleNew.length === 1 ? 'ticket' : 'tickets'} off today's inbox — see Bills`
+        staleNewN > 0
+          ? `${staleNewN} older ${staleNewN === 1 ? 'ticket' : 'tickets'} off today's inbox — see Bills`
           : undefined,
-      hintIcon: staleNew.length > 0 ? <History size={11} aria-hidden className="shrink-0" /> : undefined,
+      hintIcon: staleNewN > 0 ? <History size={11} aria-hidden className="shrink-0" /> : undefined,
       door:
         newTickets.length > 0
           ? {
@@ -1545,7 +1568,7 @@ const NeedsNow: React.FC = () => {
             }
           : {
               label: 'Bills',
-              aria: `Open Bills — ${staleNew.length} older ${staleNew.length === 1 ? 'ticket waits' : 'tickets wait'} off today's inbox`,
+              aria: `Open Bills — ${staleNewN} older ${staleNewN === 1 ? 'ticket waits' : 'tickets wait'} off today's inbox`,
               onOpen: () => go('bills', ['Dashboard', 'Bills'], 'unpaid'),
             },
     });

@@ -183,6 +183,25 @@ export function isSameAppDayAs(iso: string, nowMs: number, tz: string = appTimez
   return appDayKey(iso, tz) === appDayKey(new Date(nowMs).toISOString(), tz);
 }
 
+/* v5.243.0 — the news census's SERVER word. The straggler census
+ * (staleNewTickets) rode two differently-capped page reads (the Dashboard's
+ * 200, the counter's 100): the day a `new` ticket slides past the newest
+ * page, both whispers quietly undercount — the 5.240 disease in the news
+ * register (the watch item 281 named). The fix speaks the census where the
+ * rows live: "off today" is computable server-side as the disjunction
+ * created_at < startIso OR created_at >= endIso, where [startIso, endIso)
+ * are the bounds of the app-today CONTAINING `nowMs`. Byte-equal to the
+ * client's isSameAppDayAs by construction — same day iff the instant sits
+ * inside [start, end) — so the whole-book head-count and the page census
+ * can never disagree about what "off today" means, at any scale. The
+ * explicit clock (228's doctrine): suites own now, the bare form delegates. */
+export function offTodayBoundsIso(
+  nowMs: number = Date.now(),
+  tz: string = appTimezone(),
+): { startIso: string; endIso: string } {
+  return appDayBoundsIso(appTodayIso(tz, new Date(nowMs)), tz);
+}
+
 export function isSameAppDay(iso: string, tz: string = appTimezone()): boolean {
   return isSameAppDayAs(iso, Date.now(), tz);
 }

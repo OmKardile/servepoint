@@ -133,16 +133,19 @@ ok('null / undefined / empty → silence, never a throw');
   ok('ONE census, two readers; the inline fossil is extinct');
 }
 
-/* 5 — the guard's second eye + the honest caught-up fork. */
+/* 5 — the guard's second eye + the honest caught-up fork.
+ * Re-anchored honestly (5.243.0): the guard/fork/door shape is the law —
+ * the number it rides is now the whole-book word `stragglerN`
+ * (staleCount ?? stragglers.length), not the bare page census. */
 {
   assert.match(
     inbox,
-    /tickets\.length === 0 && stragglers\.length === 0 && !error\) return null/,
+    /tickets\.length === 0 && stragglerN === 0 && !error\) return null/,
     'the band vanishes only when nothing waits AND nothing holds',
   );
-  const caughtUpGuard = (inbox.match(/tickets\.length === 0 && stragglers\.length === 0 \?/g) || []).length;
+  const caughtUpGuard = (inbox.match(/tickets\.length === 0 && stragglerN === 0 \?/g) || []).length;
   assert.equal(caughtUpGuard, 1, 'the caught-up claim lives behind the straggler fork');
-  assert.match(inbox, /StragglerLine count=\{stragglers\.length\}/, 'the quiet body speaks the stragglers');
+  assert.match(inbox, /StragglerLine count=\{stragglerN\}/, 'the quiet body speaks the stragglers');
   ok('the guard grew a second eye; the caught-up lie is forked out');
 }
 
@@ -154,10 +157,12 @@ ok('null / undefined / empty → silence, never a throw');
   ok('stragglers: names + door only; the action paths stay on today cards');
 }
 
-/* 7 — the rail's straggler footer: today's news and the stuck in one band. */
+/* 7 — the rail's straggler footer: today's news and the stuck in one band.
+ * Re-anchored honestly (5.243.0): the footer gate and both doors speak the
+ * whole-book number (stragglerN). */
 {
-  assert.match(inbox, /tickets\.length > 0 && stragglers\.length > 0/, 'the footer gate');
-  const footers = (inbox.match(/StragglerLine count=\{stragglers\.length\}/g) || []).length;
+  assert.match(inbox, /tickets\.length > 0 && stragglerN > 0/, 'the footer gate');
+  const footers = (inbox.match(/StragglerLine count=\{stragglerN\}/g) || []).length;
   assert.equal(footers, 2, 'one line component, two doors (empty body + rail footer)');
   ok('the rail footer rides the same ONE line');
 }

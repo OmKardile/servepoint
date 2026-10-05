@@ -1,5 +1,5 @@
 import { supabase, isSupabaseConfigured } from './supabase';
-import { appTodayIso, appDayKey, appDayBoundsIso, appHour, lastNDaysMs, lastNDayKeys } from './appday';
+import { appTodayIso, appDayKey, appDayBoundsIso, appHour, lastNDaysMs, lastNDayKeys, offTodayBoundsIso } from './appday';
 import { moverWindow } from './movers';
 import type {
   AppNotification,
@@ -185,6 +185,37 @@ export async function fetchOpenOrders(tenantId: string): Promise<Order[]> {
     return { ...rest, table_label: dining_tables?.table_number ?? null } as OrderRow;
   });
   return attachItems(rows, tenantId);
+}
+
+/**
+ * v5.243.0 — the news census answers to the whole book: a server HEAD-COUNT
+ * of the stragglers — `new` tickets from BEFORE the app's today — wherever
+ * they sit in the ledger, uncapped. The census (the Dashboard's "stuck off
+ * today's inbox" whisper, the counter's own straggler band) used to ride two
+ * differently-capped page reads (the Dashboard's 200, the counter's 100):
+ * the day a `new` ticket slides past the newest page, both rooms quietly
+ * undercount while the door they speak ("see Bills") lands on a room whose
+ * whole-book base (5.242) CAN see them — the 5.240 disease in the news
+ * register. The predicate is the client census's own verdict spoken
+ * server-side — status = 'new' AND NOT the app-today — the disjunction
+ * created_at < today's start OR created_at >= today's end (the future-dated
+ * corrupt row is off-today the same way the client census says; the census
+ * does not quietly forgive it). A count read: head:true, count:'exact',
+ * no limit, no items — the number is bounded by business reality (news
+ * gets Ok'd or killed). THROWS on error; the callers catch and dim to the
+ * loaded page's own census (the 5.242 fail-soft law — never a silent zero).
+ */
+export async function fetchStaleNewCount(tenantId: string, nowMs?: number): Promise<number> {
+  requireCloud();
+  const { startIso, endIso } = offTodayBoundsIso(nowMs);
+  const { count, error } = await supabase
+    .from('orders')
+    .select('id', { count: 'exact', head: true })
+    .eq('tenant_id', tenantId)
+    .eq('status', 'new')
+    .or(`created_at.lt.${startIso},created_at.gte.${endIso}`);
+  if (error) throw error;
+  return count ?? 0;
 }
 
 /**

@@ -19,6 +19,7 @@ import { isQuietNow, subscribePrefs } from '../../lib/prefs';
 import {
   advanceOrder,
   fetchOrders,
+  fetchStaleNewCount,
   fetchTables,
   subscribeOrdersRealtime,
   type DiningTable,
@@ -48,15 +49,23 @@ import { isSameAppDay, staleNewTickets } from '../../lib/appday';
  * tickets. ONE text flow in the amber family the book's quiet voices wear
  * (the a11y-glue law: the sentence is one span, the door is its own button
  * — no newline-glued names), and the ONLY action is the door: the Ok and
- * Decline paths stay on today's cards alone, where the ledger's eye is. */
+ * Decline paths stay on today's cards alone, where the ledger's eye is.
+ * 5.243.0 — the band wears the chase's amber left rule (#B45309, the same
+ * ink 5.242 gave the census chip's older segment): one amber language for
+ * "work waiting off-stage" across the money book and the news register,
+ * and the count itself carries the extrabold beat — the eye lands on the
+ * number first, the words carry the truth. */
 const StragglerLine: React.FC<{ count: number }> = ({ count }) => {
   const goBills = () => useUi.getState().goSection('bills', ['Food & Drinks', 'Bills'], 'unpaid');
   return (
-    <p className="flex flex-wrap items-center gap-x-1.5 gap-y-1 rounded-xl border border-[#F0E4C8] bg-[#FBF6EA] px-3 py-2 text-[12px] font-medium text-[#8A5A00]">
+    <p
+      title={`${count} older ${count === 1 ? 'ticket' : 'tickets'} from before today — counted from the whole ledger, not the loaded page`}
+      className="flex flex-wrap items-center gap-x-1.5 gap-y-1 rounded-xl border border-[#F0E4C8] border-l-4 border-l-[#B45309] bg-[#FBF6EA] px-3 py-2 text-[12px] font-medium text-[#8A5A00]"
+    >
       <History size={13} aria-hidden />
       <span>
-        {count} older {count === 1 ? 'ticket is' : 'tickets are'} stuck off today's inbox — new tickets wait here on their own
-        day.
+        <b className="font-extrabold">{count}</b> older {count === 1 ? 'ticket is' : 'tickets are'} stuck off today's
+        inbox — new tickets wait here on their own day.
       </span>
       <button
         type="button"
@@ -243,6 +252,11 @@ export function CounterInbox(): React.ReactElement | null {
   const { tenantId } = useTenant();
   const [orders, setOrders] = useState<Order[]>([]);
   const [tables, setTables] = useState<DiningTable[]>([]);
+  /* v5.243.0 — the straggler census's whole-book word: the server head-count
+   * of off-today `new` tickets (uncapped). NULL = the count read failed —
+   * the band dims to the loaded page's own census (the 5.242 law), never
+   * a lie and never a silent zero. */
+  const [staleCount, setStaleCount] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -277,9 +291,17 @@ export function CounterInbox(): React.ReactElement | null {
     if (!tenantId) return;
     setError(null);
     try {
-      const [os, ts] = await Promise.all([fetchOrders(tenantId, 100), fetchTables(tenantId)]);
+      const [os, ts, cnt] = await Promise.all([
+        fetchOrders(tenantId, 100),
+        fetchTables(tenantId),
+        /* v5.243.0 — the whole-book word rides the SAME load cycle as the
+           page it dims to; individually fail-soft so a failed count never
+           kills the tickets read (the 5.220 mirror rule). */
+        fetchStaleNewCount(tenantId).catch(() => null),
+      ]);
       setOrders(os);
       setTables(ts);
+      setStaleCount(cnt);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not load incoming tickets');
     } finally {
@@ -325,6 +347,12 @@ export function CounterInbox(): React.ReactElement | null {
    * and Decline would kill money from a room that can't see the ledger —
    * so the band only names them and doors to Bills (the chase's home). */
   const stragglers = useMemo(() => staleNewTickets(orders), [orders]);
+  /* 5.243.0 — the band speaks the WHOLE BOOK's word: the server head-count
+   * when it landed, the page census only when the count read failed (the
+   * fail-soft dimming — the loaded page's own truth, never a silent zero).
+   * The door stays honest by construction: Bills' whole-book base (5.242)
+   * can see every ticket this number counts. */
+  const stragglerN = staleCount ?? stragglers.length;
 
   const tableLabelFor = useCallback(
     (id: string | null | undefined): string | null => {
@@ -394,7 +422,7 @@ export function CounterInbox(): React.ReactElement | null {
    * that knowledge now; vanishing would be the old silence). A muted bell
    * rides the same rule: the next ticket re-opens the band (silently), and
    * the chip is waiting there with its honest word. */
-  if (!loading && tickets.length === 0 && stragglers.length === 0 && !error) return null;
+  if (!loading && tickets.length === 0 && stragglerN === 0 && !error) return null;
 
   return (
     <section
@@ -501,7 +529,7 @@ export function CounterInbox(): React.ReactElement | null {
                 <div key={i} className="h-44 w-[300px] shrink-0 animate-pulse rounded-2xl bg-[#F0F2EF]" />
               ))}
             </div>
-          ) : tickets.length === 0 && stragglers.length === 0 ? (
+          ) : tickets.length === 0 && stragglerN === 0 ? (
             <p className="py-4 text-center text-[12.5px] text-[#6B6B6B]">
               No tickets awaiting the counter — all caught up.
             </p>
@@ -509,7 +537,7 @@ export function CounterInbox(): React.ReactElement | null {
             /* 5.241.0 — the quiet-but-not-caught-up state: the caught-up
              * claim would LIE with stragglers holding, so they own the
              * empty body instead. */
-            <StragglerLine count={stragglers.length} />
+            <StragglerLine count={stragglerN} />
           ) : (
             <div className="flex gap-3 overflow-x-auto pb-1.5 [scrollbar-width:thin]">
               {tickets.map((t) => (
@@ -532,9 +560,9 @@ export function CounterInbox(): React.ReactElement | null {
           {/* 5.241.0 — the rail's straggler footer: today's news and the
            * older stuck tickets in one band, the same ONE-census line the
            * empty body speaks. */}
-          {!loading && tickets.length > 0 && stragglers.length > 0 && (
+          {!loading && tickets.length > 0 && stragglerN > 0 && (
             <div className="mt-3">
-              <StragglerLine count={stragglers.length} />
+              <StragglerLine count={stragglerN} />
             </div>
           )}
         </div>
