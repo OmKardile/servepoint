@@ -3016,6 +3016,8 @@ export function FloorScreen(): React.ReactElement {
                           <span className={delta >= 0 ? 'text-[#2E7D32]' : 'text-[#B4483C]'}>
                             {delta >= 0 ? '+' : '-'}{Math.abs(delta)} vs prior 7d
                             {pct !== null && Number.isFinite(pct) ? ` (${delta >= 0 ? '+' : '-'}${Math.abs(pct)}%)` : ''}
+                            {/* v5.237.0 — the space rides in the JSX, not the margin: the name reads "…vs prior 7d · prior 12", never "…7d· prior". */}
+                            {' '}
                             <span className="ml-1 font-normal text-[#969696]">· prior {rhythm.prevTotal}</span>
                           </span>
                         );
@@ -3062,6 +3064,8 @@ export function FloorScreen(): React.ReactElement {
                           <span className={delta >= 0 ? 'text-[#2E7D32]' : 'text-[#B4483C]'}>
                             {delta >= 0 ? '+' : '-'}{Math.abs(delta)} vs prior 7d
                             {Number.isFinite(pct) ? ` (${delta >= 0 ? '+' : '-'}${Math.abs(pct)}%)` : ''}
+                            {/* v5.237.0 — the space rides in the JSX, not the margin: the name reads "…vs prior 7d · prior 12", never "…7d· prior". */}
+                            {' '}
                             <span className="ml-1 font-normal text-[#969696]">· prior {windowCensus.prev}</span>
                           </span>
                         );

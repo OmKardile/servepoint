@@ -1797,7 +1797,7 @@ const EodScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
 
       {/* ── day stepper ── */}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-1.5">
+        <div className="flex flex-wrap items-center gap-1.5">
           <button
             onClick={() => setDateIso((d) => shiftDay(d, -1))}
             aria-label="Previous day"
@@ -1830,6 +1830,28 @@ const EodScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
               Today
             </button>
           ) : null}
+          {/* v5.237.0 — the day jump: the stepper walked one day per click,
+              so an owner reconciling last month paid a click and a load per
+              day. The input writes through THE one setDateIso — the same
+              path the arrows and Today already ask — so the load effect's
+              (tenantId, dateIso) stays the only engine; the big label and
+              the input read the SAME dateIso, one clock by construction.
+              max=today is the ceiling the Next arrow already honors; an
+              empty day answers with the ledger's honest MoonStar voice.
+              The ink is the Reports calendar row's own (5.236) — one house
+              ink for every date box. Wraps under the arrows on narrow
+              screens instead of overflowing them. */}
+          <label className="flex items-center gap-1.5 pl-1 text-[11.5px] font-semibold text-[#6B6B6B]">
+            Jump to
+            <input
+              type="date"
+              value={dateIso}
+              max={istTodayIso()}
+              onChange={(e) => { const v = e.target.value; if (v) setDateIso(v); }}
+              aria-label="Jump straight to a day's book"
+              className="sp-input h-9 rounded-xl border border-[#E3E7E0] bg-white px-2.5 text-[12.5px] font-semibold text-[#1A1A1A] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#967221]"
+            />
+          </label>
         </div>
 
         <div className="flex items-center gap-2">
@@ -2304,9 +2326,15 @@ const EodScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
           {sectionMix.rows.length > 0 && (
             <section aria-label="Section mix" className="rounded-2xl border border-[#E3E7E0] bg-white p-4">
               <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                {/* v5.237.0 — the a11y name joins its sentence: a newline
+                    between JSX text and a span glues the accessible name
+                    ("SECTION MIX· what sold"), while the Ledger sibling
+                    (same screen, inline space + ml-1) speaks with a space.
+                    One dialect now: inline space + ml-1 — visual bytes
+                    near-identical, the name whole. */}
                 <h2 className="text-[13px] font-extrabold uppercase tracking-[0.06em] text-[#0F3D3E]">
-                  Section mix
-                  <span className="ml-1.5 font-bold normal-case text-[#8A938C]">· what sold, by menu section</span>
+                  Section mix{' '}
+                  <span className="ml-1 font-bold normal-case text-[#8A938C]">· what sold, by menu section</span>
                 </h2>
                 <span className="text-[10.5px] font-semibold text-[#8A938C]">ex-GST · live tickets</span>
               </div>
