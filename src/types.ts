@@ -227,15 +227,17 @@ export interface DashboardData {
     total: number;
   }[];
   /* v5.113.0 — plates across the same seven live days, same row shape as
-   * trendingDishes so the card renders either with one grammar. */
-  weeklyTrending: { name: string; tag: string; orders: number; image_url?: string | null }[];
+   * trendingDishes so the card renders either with one grammar.
+   * v5.231.0 — revenue rides beside orders: the money the plates carried,
+   * from the same wide order_items read (fail-soft, null lines add zero). */
+  weeklyTrending: { name: string; tag: string; orders: number; revenue: number; image_url?: string | null }[];
   totalRevenue: number;
   totalOrders: number;
   ordersTrendPct: number;
   newCustomers: number;
   customersTrendPct: number;
   team: { name: string; role: string; since: string | null }[];
-  trendingDishes: { name: string; tag: string; orders: number; image_url?: string | null }[];
+  trendingDishes: { name: string; tag: string; orders: number; revenue: number; image_url?: string | null }[];
 }
 
 /* ── Customers & Offers (migration 016 CRM) ─────────────────────────────── */

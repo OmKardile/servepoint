@@ -1093,10 +1093,23 @@ export async function fetchDashboard(tenantId: string): Promise<DashboardData> {
     .select('id, email, role, created_at')
     .eq('tenant_id', tenantId);
 
+  /* v5.231.0 — the meta join carries the dish's own shelf-word now:
+   * category_id rides on the items fetch and categories rides beside it as
+   * the id→name map the trending tag reads. The old tag guessed from
+   * is_veg ('Signature' : 'Food') — a Flat White wore "Food" and a muffin
+   * wore "Food"; the tag beside the name never asked the menu what shelf
+   * the dish sits on. */
   const { data: items } = await supabase
     .from('menu_items')
-    .select('id, name, is_veg, image_url')
+    .select('id, name, is_veg, image_url, category_id')
     .eq('tenant_id', tenantId);
+  const { data: dashCategories } = await supabase
+    .from('categories')
+    .select('id, name')
+    .eq('tenant_id', tenantId);
+  const categoryNameById = new Map<string, string>(
+    ((dashCategories || []) as { id: string; name: string }[]).map((c) => [c.id, c.name])
+  );
 
   /* 5.205.0 — the today/yesterday slices speak the reporting day's key
    * (appDayKey), the same word the week buckets and Close-out's day fetch
@@ -1230,25 +1243,48 @@ export async function fetchDashboard(tenantId: string): Promise<DashboardData> {
   const todayLiveIds = new Set(
     todays.filter((r) => String(r.status) !== 'cancelled').map((r) => r.id)
   );
+  /* v5.231.0 — item_total rides: the card counts plates, and the money the
+   * plates carried lived nowhere on it — the tile answered "how many" and
+   * stayed silent on "how much". Fail-soft at the accumulator: a null or
+   * malformed line total adds zero, never NaN. */
   const { data: todayItems } = await supabase
     .from('order_items')
-    .select('name, qty, order_id')
+    .select('name, qty, order_id, item_total')
     .eq('tenant_id', tenantId);
-  const dishCounts = new Map<string, { count: number; veg?: boolean | null; image?: string | null }>();
+  const dishCounts = new Map<
+    string,
+    { count: number; rev: number; veg?: boolean | null; category?: string | null; image?: string | null }
+  >();
   (todayItems || []).forEach((it: any) => {
     if (!todayLiveIds.has(it.order_id)) return;
     const meta = (items || []).find((m: any) => m.name === it.name);
-    const prev = dishCounts.get(it.name) || { count: 0, veg: meta?.is_veg, image: meta?.image_url };
+    const prev =
+      dishCounts.get(it.name) || {
+        count: 0,
+        rev: 0,
+        veg: meta?.is_veg,
+        category: meta?.category_id != null ? categoryNameById.get(meta.category_id) ?? null : null,
+        image: meta?.image_url,
+      };
     prev.count += Number(it.qty) || 1;
+    prev.rev += Number(it.item_total) || 0;
     dishCounts.set(it.name, prev);
   });
+  /* v5.231.0 — the tag law, ONE law both slice sites read (the 5.196 shape:
+   * one set, no fork): the dish's own category when the shelf still knows
+   * it, the old is_veg guess only as the fail-soft for a dish whose menu
+   * row is gone. Declared once here; the week slice below calls the same
+   * closure — two lists, one grammar, byte-for-byte the same law. */
+  const trendingTag = (v: { veg?: boolean | null; category?: string | null }): string =>
+    v.category ?? (v.veg === false ? 'Signature' : 'Food');
   const trending = [...dishCounts.entries()]
     .sort((a, b) => b[1].count - a[1].count)
     .slice(0, 4)
     .map(([name, v]) => ({
       name,
-      tag: v.veg === false ? 'Signature' : 'Food',
+      tag: trendingTag(v),
       orders: v.count,
+      revenue: v.rev,
       image_url: v.image,
     }));
 
@@ -1257,14 +1293,21 @@ export async function fetchDashboard(tenantId: string): Promise<DashboardData> {
    * card renders either list with one grammar. */
   const weekDishCounts = new Map<
     string,
-    { count: number; veg?: boolean | null; image?: string | null }
+    { count: number; rev: number; veg?: boolean | null; category?: string | null; image?: string | null }
   >();
   (todayItems || []).forEach((it: any) => {
     if (!weekLiveIds.has(it.order_id)) return;
     const meta = (items || []).find((m: any) => m.name === it.name);
     const prev =
-      weekDishCounts.get(it.name) || { count: 0, veg: meta?.is_veg, image: meta?.image_url };
+      weekDishCounts.get(it.name) || {
+        count: 0,
+        rev: 0,
+        veg: meta?.is_veg,
+        category: meta?.category_id != null ? categoryNameById.get(meta.category_id) ?? null : null,
+        image: meta?.image_url,
+      };
     prev.count += Number(it.qty) || 1;
+    prev.rev += Number(it.item_total) || 0;
     weekDishCounts.set(it.name, prev);
   });
   const weeklyTrending = [...weekDishCounts.entries()]
@@ -1272,8 +1315,9 @@ export async function fetchDashboard(tenantId: string): Promise<DashboardData> {
     .slice(0, 4)
     .map(([name, v]) => ({
       name,
-      tag: v.veg === false ? 'Signature' : 'Food',
+      tag: trendingTag(v),
       orders: v.count,
+      revenue: v.rev,
       image_url: v.image,
     }));
 

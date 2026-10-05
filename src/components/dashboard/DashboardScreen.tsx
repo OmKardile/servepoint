@@ -655,6 +655,10 @@ const TrendingDishesCard: React.FC<{ data: DashboardData }> = ({ data }) => {
       ? 'No dish sales recorded in the past 7 days.'
       : 'No dish sales recorded yet today.';
   const weekPlates = data.weeklyTrending.reduce((s, d) => s + d.orders, 0);
+  /* v5.231.0 — the week footer's money: what the plates shown carried, the
+   * same fail-soft grammar the rows speak. Zero stays silent — the footer
+   * keeps its old bytes when the top four carried nothing. */
+  const weekRevenue = data.weeklyTrending.reduce((s, d) => s + (Number(d.revenue) || 0), 0);
   return (
     <section className="sp-card p-5" aria-label="Trending Dishes">
       <CardHead title="Trending Dishes" selectId="dishes-range" range={range} onRange={setRange} />
@@ -680,9 +684,22 @@ const TrendingDishesCard: React.FC<{ data: DashboardData }> = ({ data }) => {
                     {dish.tag}
                   </span>
                 </div>
-                <span className="text-[14px] font-bold text-[#1A1A1A]">
-                  {dish.orders.toLocaleString('en-IN')}
-                </span>
+                {/* v5.231.0 — the money beside the plates: the tile counted
+                    how many and stayed silent on how much. The plates keep
+                    their bold; the ₹ speaks the line's grey voice beneath,
+                    tabular so the column adds up by eye. Fail-soft: null
+                    revenue renders as ₹0.00, never NaN. */}
+                <div className="shrink-0 text-right">
+                  <span className="block text-[14px] font-bold text-[#1A1A1A]">
+                    {dish.orders.toLocaleString('en-IN')}
+                  </span>
+                  <span
+                    className="mt-[2px] block text-[11.5px] font-medium tabular-nums text-[#969696]"
+                    title={`₹${(Number(dish.revenue) || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} carried by ${dish.orders} ${dish.orders === 1 ? 'plate' : 'plates'}`}
+                  >
+                    ₹{(Number(dish.revenue) || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>
+                </div>
               </li>
             ))
           )}
@@ -694,7 +711,18 @@ const TrendingDishesCard: React.FC<{ data: DashboardData }> = ({ data }) => {
               {weekPlates.toLocaleString('en-IN')}
             </span>{' '}
             plates across {data.weeklyTrending.length}{' '}
-            {data.weeklyTrending.length === 1 ? 'dish' : 'dishes'} · top four shown
+            {data.weeklyTrending.length === 1 ? 'dish' : 'dishes'}
+            {weekRevenue > 0 ? (
+              <>
+                {' · '}
+                <span className="font-semibold tabular-nums text-[#1A1A1A]">
+                  ₹{weekRevenue.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>{' '}
+                on the top four shown
+              </>
+            ) : (
+              ' · top four shown'
+            )}
           </p>
         )}
       </>
