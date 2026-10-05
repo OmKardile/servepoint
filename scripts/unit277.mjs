@@ -27,10 +27,10 @@
  * - Both inputs max at today (the future has no ledger) and wear the
  *   house date-box ink (sp-input, gold focus ring #967221) — one ink
  *   for every date box in the app.
- * - The fixed keys stay byte-true: Today still asks isSameLocalDay,
- *   Last 7 days still asks its rolling weekAgo (their clock fossil is
- *   a classified watch item, entangled with the 5.203 ghost law — not
- *   this round's reach).
+ * - The fixed keys ride the ONE home too (5.240.0): Today and Last 7
+ *   days ask rangeWindow now — the same door the custom bounds ask;
+ *   the rolling weekAgo fossil is extinct and "Last 7 days" speaks its
+ *   dates (rangeSpanOf). The 5.238-era fossil note is history paid.
  *
  * Asserted: the union gained 'custom'; the pair's armed defaults
  * (shiftDayIso(-6) / appTodayIso()); the predicate asking rangeWindow
@@ -65,13 +65,16 @@ assert.ok(bills.includes("useState<string>(() => appTodayIso())"), 'To arms toda
 ok('the pair arms pre-filled with the last 7 days');
 
 /* ── 3. the predicate asks THE window builder ── */
+/* 5.240.0 re-anchor: the whole chase asks ONE builder now — the custom
+ * pair, Today and the 7-day week all ride rangeWindow; 'all' keeps its
+ * no-bounds silence before the ask. */
 assert.ok(
-  bills.includes("rangeWindow('custom', { from: customFrom, to: customTo })"),
-  'the bounds come from rangeWindow — orderedCustom inside',
+  bills.includes('rangeWindow(dateFilter, { from: customFrom, to: customTo })'),
+  'the bounds come from rangeWindow — every bounded key, orderedCustom inside',
 );
-const customBranch = bills.slice(bills.indexOf("if (dateFilter === 'custom') {"), bills.indexOf("if (q) {"));
-assert.ok(customBranch.includes('startMs !== null && (t < startMs || t > endMs)'), 'the structural null guard stands');
-assert.ok(!customBranch.includes('setUTCDate') && !customBranch.includes('appDayStartMs('), 'no inline calendar math in the branch');
+const windowBlock = bills.slice(bills.indexOf("if (dateFilter !== 'all') {"), bills.indexOf('if (q) {'));
+assert.ok(windowBlock.includes('startMs !== null && (t < startMs || t > endMs)'), 'the structural null guard stands');
+assert.ok(!windowBlock.includes('setUTCDate') && !windowBlock.includes('appDayStartMs('), 'no inline calendar math in the block');
 ok('the predicate asks THE window builder, guarded');
 
 /* ── 4. ONE derivation: the file never grows a second calendar ── */
@@ -112,15 +115,15 @@ assert.ok(bills.includes('Showing {customSpan}'), 'the hint speaks the span live
 assert.ok(bills.includes("the dates were swapped, the chase read them the honest way"), 'the reversed pair says so');
 ok('the labels speak the DATES the owner chose');
 
-/* ── 9. the fixed keys' clock — 5.239.0 moved Today to the app's clock ── */
-/* 5.239.0 re-anchor: the "fixed keys byte-true" law was about not touching
- * them while Custom joined (5.238); the next round's ONE-clock law moved
- * Today's predicate to isSameAppDay (the cafe's day — the same "today"
- * the custom bounds and the Close-out speak). The rolling weekAgo keeps
- * its bytes. */
-assert.ok(bills.includes("if (dateFilter === 'today' && !isSameAppDay(o.created_at)) return false;"), 'Today asks the app-day clock');
-assert.ok(bills.includes("if (dateFilter === '7d' && new Date(o.created_at).getTime() < weekAgo) return false;"), 'Last 7 days keeps its rolling week');
-ok('the fixed keys — Today on the app clock, the rolling week byte-true');
+/* ── 9. the fixed keys' clock — 5.239 moved Today to the app's clock;
+ *       5.240.0 moved the WEEK through the ONE door ── */
+/* 5.240.0 re-anchor: the rolling weekAgo — the fossil this suite was
+ * pinning as "kept" — is extinct; the whole bounded predicate asks
+ * rangeWindow (lastNDaysMs's calendar bounds), the same door the custom
+ * bounds ask. The fossil note above is history paid. */
+assert.ok(bills.includes('rangeWindow(dateFilter, { from: customFrom, to: customTo })'), 'the whole chase asks ONE window builder');
+assert.ok(!bills.includes('weekAgo'), 'the rolling week is extinct — the calendar week answers');
+ok('the fixed keys — today and the week both through the ONE door');
 
 /* ── 10. the lib behavior the borrower rides (the contract, re-proven) ── */
 assert.deepEqual(orderedCustom({ from: '2026-10-05', to: '2026-10-02' }), ['2026-10-02', '2026-10-05'], 'the swap holds');

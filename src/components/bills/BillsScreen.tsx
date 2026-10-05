@@ -38,8 +38,10 @@ import { appTodayIso, appFormatters, appTzTag, isSameAppDay, isSameAppDayAs } fr
 /* v5.238.0 — the chase borrows the window grammar's ONE home (5.236): the
  * custom pair's bounds and its spoken span come from lib/reportWindow —
  * orderedCustom inside, the same swap and the same fallback Reports asks.
- * No inline calendar math in this file, ever. */
-import { rangeWindow, rangeLabelOf, shiftDayIso } from '../../lib/reportWindow';
+ * No inline calendar math in this file, ever.
+ * v5.240.0 — the home now answers for EVERY date key (the fixed week
+ * included) and speaks the fixed window's own dates (rangeSpanOf). */
+import { rangeWindow, rangeLabelOf, rangeSpanOf, shiftDayIso } from '../../lib/reportWindow';
 import { useTenant } from '../../lib/tenant';
 import { useSession, useUi } from '../../store/session';
 /* v5.196.0 — the ghost chip asks the BOARD's own question: isOnRail is THE
@@ -659,7 +661,6 @@ const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRet
   /* ── Filtering (status + date + search) ── */
   const visible = useMemo(() => {
     const q = search.trim().toLowerCase().replace(/^#/, '');
-    const weekAgo = Date.now() - 7 * 24 * 3600 * 1000;
     return orders.filter((o) => {
       /* 5.203.0 — 'stuck' is its own view, not a trio value: a ghost is
        * paid OR unpaid (the dashboard's mixed ghost set), so the predicate
@@ -669,18 +670,26 @@ const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRet
       if (statusFilter === 'stuck') {
         if (!isGhostTicket(o, Date.now())) return false;
       } else if (statusFilter !== 'all' && displayStatus(o) !== statusFilter) return false;
-      if (dateFilter === 'today' && !isSameAppDay(o.created_at)) return false;
-      if (dateFilter === '7d' && new Date(o.created_at).getTime() < weekAgo) return false;
-      if (dateFilter === 'custom') {
-        /* v5.238.0 — the owner's own calendar, through THE window builder:
-         * a reversed pair is swapped by orderedCustom (inside), a
-         * malformed pair falls back to the last 7 days (belt and braces —
-         * the inputs arm pre-filled and can never empty). The bounds are
-         * the app-day clock's (IST) — the same clock the Close-out's day
-         * and Reports' windows speak, so "2 Oct" means the same day in
-         * every room. The null guard is structural: every custom path
-         * resolves a real start. */
-        const { startMs, endMs } = rangeWindow('custom', { from: customFrom, to: customTo });
+      /* v5.240.0 — the whole chase asks ONE window builder: Today, the
+       * 7-day week, the owner's custom pair — every bounded key rides
+       * lib/reportWindow's rangeWindow, the home the Close-out, Reports
+       * and the movers' week already ask. The rolling week-long second
+       * clock — the file's last (its fossil carried since the 5.238
+       * walk, classified in 5.239's round) — is EXTINCT: "Last 7 days"
+       * now means the same 7 calendar days ending today, today inclusive,
+       * that Reports' KPIs and the armed Custom row mean — midnight to
+       * midnight on the app-day clock, not a stride back from the
+       * moment. The today key rides the same builder: lastNDaysMs(1)'s
+       * bounds ARE the app-day clock 5.239 taught this filter
+       * (isSameAppDay's verdict, through the ONE door). The customs laws
+       * hold inside the lib — a reversed pair is swapped by
+       * orderedCustom, a malformed pair falls back to the last 7 days
+       * (the inputs arm pre-filled and can never empty). The null guard
+       * is structural: every bounded path resolves a real start; 'all'
+       * keeps its no-bounds silence before this ask — the ledger's whole
+       * truth has no window to consult. */
+      if (dateFilter !== 'all') {
+        const { startMs, endMs } = rangeWindow(dateFilter, { from: customFrom, to: customTo });
         const t = new Date(o.created_at).getTime();
         if (startMs !== null && (t < startMs || t > endMs)) return false;
       }
@@ -1065,11 +1074,22 @@ const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRet
           : statusFilter === 'stuck'
             ? 'stuck'
             : '';
+  /* v5.240.0 — the fixed week speaks its dates: the span the 7d window
+   * actually holds, through THE span builder on THE pair the window builds
+   * (shiftDayIso(-6)…today — the same pair the Custom row arms pre-filled,
+   * so the fixed key and the owner's own default Custom say the same
+   * window in the same words). The 5.238 label law reaching the fixed
+   * keys — never a bare chip word standing in for dates nobody can
+   * verify; the rolling-vs-calendar fossil was exactly that lie. */
+  const weekSpan = rangeSpanOf('7d');
   const windowPhrase =
     dateFilter === 'today'
       ? 'from today'
       : dateFilter === '7d'
-        ? 'in the last 7 days'
+        ? /* 5.240.0 — the dates the window holds, not the chip word (the
+           * 5.238 law, the fixed-key edition): the miss sentence and the
+           * hint row say the same span the predicate enforces. */
+          `from ${weekSpan}`
         : dateFilter === 'custom'
           ? /* 5.238.0 — the span speaks the DATES the owner chose, never
              * the bare chip word "Custom" standing in for dates nobody
@@ -1079,7 +1099,13 @@ const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRet
   const customSpan = rangeLabelOf('custom', { from: customFrom, to: customTo });
   const filterLabels = [
     statusFilter !== 'all' ? statusFilter.charAt(0).toUpperCase() + statusFilter.slice(1) : '',
-    dateFilter === 'today' ? 'Today' : dateFilter === '7d' ? 'Last 7 days' : dateFilter === 'custom' ? `Custom (${customSpan})` : '',
+    dateFilter === 'today'
+      ? 'Today'
+      : dateFilter === '7d'
+        ? /* 5.240.0 — the chip word carries its dates (the Custom pattern,
+           * fixed-key edition): "Last 7 days (29 Sept – 5 Oct)". */
+        `Last 7 days (${weekSpan})`
+        : dateFilter === 'custom' ? `Custom (${customSpan})` : '',
   ].filter(Boolean);
 
   const missTitle = missQ
@@ -1350,6 +1376,19 @@ const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRet
               {customFrom > customTo ? ' — the dates were swapped, the chase read them the honest way' : ''}
             </span>
           </div>
+        ) : null}
+
+        {dateFilter === '7d' ? (
+          /* v5.240.0 — the fixed week earns the same honesty row the
+           * Custom pair earned (5.238): while the window stands, the row
+           * says WHICH dates it holds — the span phrase, in the span
+           * voice's own ink (#8A938C) — plus the window's shape, so the
+           * owner learns the week is the calendar's (midnight to midnight,
+           * today included), not 168 hours back from the moment. ONE text
+           * flow — the a11y-glue law (5.237) never gets a fork to glue. */
+          <p className="pt-2 text-[11.5px] font-semibold text-[#8A938C]">
+            Showing {weekSpan} · the last 7 calendar days, today included — midnight to midnight, not 168 hours back
+          </p>
         ) : null}
 
         {ordersError && orders.length > 0 && (

@@ -22,6 +22,7 @@
 import {
   appDayEndMs,
   appDayStartMs,
+  appTimezone,
   appTodayIso,
   appFormatters,
   lastNDaysMs,
@@ -144,9 +145,30 @@ export function rangeLabelOf(range: RangeKey, custom?: CustomRange): string {
 
 /** Calendar-string day shift from today, DST-safe (noon anchor, v5.83.0's
  *  argument). The prior-window builder and the screen's custom-input
- *  defaults (last 7 days pre-fill) both ask it. */
-export function shiftDayIso(days: number): string {
-  const d = new Date(`${appTodayIso()}T12:00:00Z`);
+ *  defaults (last 7 days pre-fill) both ask it.
+ *
+ *  v5.240.0 — the shift takes the suites' seam (228's doctrine): an
+ *  optional `now` flows through so rangeSpanOf's proof is deterministic
+ *  in any runner. The bare form stays byte-true — every existing caller
+ *  keeps its words. */
+export function shiftDayIso(days: number, now: Date = new Date()): string {
+  const d = new Date(`${appTodayIso(appTimezone(), now)}T12:00:00Z`);
   d.setUTCDate(d.getUTCDate() + days);
   return d.toISOString().slice(0, 10);
+}
+
+/** v5.240.0 — the bounded fixed window's own dates, spoken as THE span
+ *  phrase ("29 Sept – 5 Oct"; a single day says just its date). The
+ *  5.236/5.238 label law reaching the FIXED keys: a window a word alone
+ *  cannot verify (the rolling-vs-calendar fossil the chase just paid —
+ *  "Last 7 days" meant two different windows in two rooms) speaks the
+ *  dates it actually holds. ONE derivation, no fork: the pair is the
+ *  window lastNDaysMs builds, as calendar strings through the same noon
+ *  anchor (shiftDayIso(-(days-1)) — the exact arithmetic, the same
+ *  builder the Custom row arms pre-filled); the phrase is THE span
+ *  builder (rangeLabelOf's house formatter). Reports' fixed captions
+ *  keep their chip words — not this round's reach. */
+export function rangeSpanOf(range: 'today' | '7d' | '30d', now: Date = new Date()): string {
+  const days = range === 'today' ? 1 : range === '7d' ? 7 : 30;
+  return rangeLabelOf('custom', { from: shiftDayIso(-(days - 1), now), to: appTodayIso(appTimezone(), now) });
 }

@@ -188,9 +188,15 @@ assert.ok(depRides >= 11, `every window memo rides customWindow, found ${depRide
 ok(`dep discipline: ${depRides} memos/effects ride customWindow — no stale window`);
 
 /* 20 — the label body never calls itself (the mid-round recursion
- *     fossil, caught at typecheck and pinned extinct). */
+ *     fossil, caught at typecheck and pinned extinct).
+ * 5.240.0 re-anchor: the pin narrows to rangeLabelOf's OWN body —
+ * the fixed words come from the map, the span from the dates, and no
+ * label builder re-enters itself. Sibling COMPOSITION is the house
+ * law, not recursion: rangeSpanOf (5.240) reads the span builder on
+ * the fixed window's pair — one arithmetic, many names. */
 assert.ok(libSrc.includes('return RANGE_LABEL[range];'));
-assert.equal(libSrc.includes('return rangeLabelOf('), false);
-ok('no self-recursion: the fixed words come from the map, the span from the dates');
+const labelBody = libSrc.slice(libSrc.indexOf('export function rangeLabelOf'), libSrc.indexOf('export function shiftDayIso'));
+assert.equal(labelBody.includes('return rangeLabelOf('), false);
+ok('no self-recursion: the label body never calls itself — siblings compose it');
 
 console.log(`\nunit275 — ${n} checks green`);

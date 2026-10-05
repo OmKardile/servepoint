@@ -17,17 +17,20 @@
  * - The local twins stay in lib/day for the reader-register voices
  *   (chat day dividers, last-seen labels) — those label the READER's
  *   day, and the browser's clock is the honest one there.
- * - The rolling 7d week keeps its bytes (its fossil is a separate,
- *   still-classified watch item).
+ * - The rolling 7d week kept its bytes THEN (its fossil was a separate,
+ *   still-classified watch item) — 5.240.0 paid it: the whole Bills
+ *   bounded predicate asks rangeWindow now, so the filter's direct
+ *   isSameAppDay call became the builder's bounds (lastNDaysMs(1) IS
+ *   the app-day clock). Bills speaks five direct sites + the door.
  *
  * Asserted: the twin BY BEHAVIOR — the UTC-evening case where the local
  * and app clocks disagree (20:30Z is "today" locally but 02:00 tomorrow
  * in IST: local says true, app says false — the whole point of the
  * round, provable in any runner); the mid-day case where both agree;
  * the bare form delegating; ONE clock in the five rooms (zero
- * isSameLocalDay imports left, twelve app-clock sites); the injection
+ * isSameLocalDay imports left, the app-clock sites); the injection
  * preserved; the lib twins alive for the reader register; and the
- * version law (version.ts and sw.js agree on 5.239.0).
+ * version law (version.ts and sw.js agree — the agreement shape).
  * Run: bunx vite-node scripts/unit278.mjs
  */
 import assert from 'node:assert/strict';
@@ -79,14 +82,19 @@ for (const [name, src] of [['Bills', bills], ['Dashboard', dash], ['CounterInbox
 }
 ok('the five rooms ask ONE clock — zero isSameLocalDay left in the ticket rooms');
 
-/* ── 6. the twelve sites ── */
+/* ── 6. the app-clock sites ── */
+/* 5.240.0 re-anchor: Bills' filter site moved through the ONE window
+ * builder (rangeWindow → lastNDaysMs — the bounds ARE the app-day
+ * clock), so the direct isSameAppDay calls in Bills are the five
+ * display voices (ghost, CSV gate, census, row chip, detail) + the
+ * import line's names; the six-site count was the pre-5.240 shape. */
 const billsSites = (bills.match(/isSameAppDay(As)?\(/g) || []).length;
-assert.equal(billsSites, 6, `Bills: six app-clock sites (ghost, CSV gate, filter, census, row chip, detail) — found ${billsSites}`);
+assert.equal(billsSites, 5, `Bills: five direct app-clock sites (ghost, CSV gate, census, row chip, detail) — the filter rides the window door — found ${billsSites}`);
 assert.equal((dash.match(/isSameAppDay\(/g) || []).length, 2, 'Dashboard: liveToday + staleOlder');
 assert.equal((inbox.match(/isSameAppDay\(/g) || []).length, 1, 'CounterInbox: the new queue');
 const kitchenCalls = (kitchen.match(/isSameAppDay\(o\.created_at\)/g) || []).length;
 assert.equal(kitchenCalls, 2, `Kitchen: todays + cancelledToday call it — found ${kitchenCalls}`);
-ok('twelve sites across five rooms, all on the app clock');
+ok('five direct sites across the rooms, all on the app clock — Bills’ filter through the door');
 
 /* ── 7. the injection survives ── */
 assert.ok(kitchen.includes('lastTicketAt: lastRailTicketAt(orders, isSameAppDay),'), 'the quiet line still TAKES the day grammar — the caller just passes the app-clock one');
@@ -98,8 +106,12 @@ assert.ok(dayLib.includes('the ticket rooms no longer ask this'), 'the scope not
 ok('the local twins stay for the reader-register voices');
 
 /* ── 9. the version law: one word, two homes ── */
-assert.ok(versionSrc.includes("APP_VERSION = '5.239.0'"), 'version.ts speaks 5.239.0');
-assert.ok(swSrc.includes('const VERSION = "servepoint-v5.239.0-r1";'), 'the service worker bakes the same round');
-ok('the version law — 5.239.0 in version.ts and sw.js');
+/* 5.240.0 re-anchor: the law is the AGREEMENT (sw bakes whatever word
+ * version.ts speaks — unit274's shape, the unit241 lesson), not a
+ * frozen number; a frozen pin goes stale on every honest bump. */
+const { APP_VERSION: v278 } = await import('/src/version.ts');
+assert.ok(v278.length > 0, 'version.ts speaks a word');
+assert.ok(swSrc.includes(`servepoint-v${v278}-r1`), 'the service worker bakes the same round');
+ok(`the version law — version.ts and sw.js agree on ${v278}`);
 
 console.log(`\nunit278: ${n} checks green — one today in every room`);
