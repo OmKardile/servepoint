@@ -146,7 +146,7 @@ const swJs = strip('../public/sw.js');
 {
   assert.match(dash, /staleNewCount: number \| null;/, 'NeedsState carries the nullable count');
   assert.match(dash, /fetchOffTodayCount\(tenantId, \['new'\]\)\.catch\(\(\) => null\),/, 'the news count rides the Promise.all, its population spoken');
-  assert.match(dash, /setNow\(\{ ready: true, orders, inventory, menu, reservations, tables, paidSums, sessions, staleNewCount, staleRailCount \}\)/, 'the state lands whole');
+  assert.match(dash, /setNow\(\{ ready: true, orders, inventory, menu, reservations, tables, paidSums, sessions, staleNewCount, staleRailCount, loadedAt: Date\.now\(\) \}\)/, 'the state lands whole');
   assert.match(dash, /const staleNewN = now\.staleNewCount \?\? staleNew\.length;/, 'the ?? dims to the page census, never a zero');
   const speaks = (dash.match(/staleNewN/g) || []).length;
   assert.ok(speaks >= 6, `the aria, hint, door and icon all speak staleNewN (${speaks} sites)`);

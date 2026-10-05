@@ -520,9 +520,21 @@ const NotificationsContent: React.FC<{ onTenantRetry: () => void }> = ({ onTenan
       'list' // own channel — the header badge rides 'badge'; shared names throw after subscribe
     );
     const poll = window.setInterval(() => void load(), 30_000);
+    /* v5.263.0 — the wake: the bell board wakes when the staff does. The
+     * 30s poll clamps or pauses in a background tab and the realtime
+     * socket can die silently — the teammate who comes back could read a
+     * stale board. The wake rides the ONE path (load — the same road the
+     * ping and the poll ride; no second fetch path exists) the moment
+     * they look, guarded on visible, cleaned up on unmount. */
+    const wake = () => {
+      if (document.visibilityState !== 'visible') return;
+      void load();
+    };
+    document.addEventListener('visibilitychange', wake);
     return () => {
       unsub();
       window.clearInterval(poll);
+      document.removeEventListener('visibilitychange', wake);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tenant.tenantId]);
@@ -672,8 +684,8 @@ const NotificationsContent: React.FC<{ onTenantRetry: () => void }> = ({ onTenan
         <div className="flex items-center gap-3">
           <h1 className="sp-screen-title">Notifications</h1>
           <span
-            title={rt === 'live' ? 'Realtime connected' : 'Polling every 30s'}
-            aria-label={rt === 'live' ? 'Realtime connected' : 'Polling every 30 seconds'}
+            title={rt === 'live' ? 'Realtime connected' : 'Polling every 30s, and the moment you look back'}
+            aria-label={rt === 'live' ? 'Realtime connected' : 'Polling every 30 seconds, and the moment you look back'}
             className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold ${
               rt === 'live' ? 'bg-[#E8F3E9] text-[#2E7D32]' : 'bg-[#F6F5F2] text-[#6B6B6B]'
             }`}

@@ -614,9 +614,21 @@ const InventoryInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
     if (!tenantId) return;
     const unsub = subscribeInventoryRealtime(tenantId, () => void load(), setRt);
     const poll = window.setInterval(() => void load(), 30_000);
+    /* v5.263.0 — the wake: the stock board wakes when the staff does. The
+     * 30s poll clamps or pauses in a background tab and the realtime
+     * socket can die silently — the teammate who comes back could read
+     * yesterday's counts. The wake rides the ONE path (load — the same
+     * road the ping and the poll ride; no second fetch path exists) the
+     * moment they look, guarded on visible, cleaned up on unmount. */
+    const wake = () => {
+      if (document.visibilityState !== 'visible') return;
+      void load();
+    };
+    document.addEventListener('visibilitychange', wake);
     return () => {
       unsub();
       window.clearInterval(poll);
+      document.removeEventListener('visibilitychange', wake);
     };
   }, [tenantId, load]);
 
@@ -894,7 +906,7 @@ const InventoryInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
                 ? 'Realtime connected'
                 : rt === 'connecting'
                   ? 'Connecting…'
-                  : 'Realtime offline — polling'
+                  : 'Realtime offline — polling, and the moment you look back'
             }
           >
             {rt === 'offline' ? (

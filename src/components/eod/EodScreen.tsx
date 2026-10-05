@@ -1488,6 +1488,24 @@ const EodScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
     return () => clearInterval(t);
   }, [isToday, load]);
 
+  /* v5.263.0 — the wake: the close-out wakes when the owner does. The 20s
+   * heartbeats clamp or pause in a background tab — the owner who comes
+   * back could read stale numbers (or a stale drawer state: a drawer
+   * opened or closed while away). The wake rides the page's own TWO paths
+   * (load — the day's numbers; loadDrawer — the drawer's state, whose
+   * EXISTENCE is itself a fact that can change while away; no second
+   * fetch path exists) the moment they look, guarded on visible, cleaned
+   * up on unmount. */
+  useEffect(() => {
+    const wake = () => {
+      if (document.visibilityState !== 'visible') return;
+      void load();
+      void loadDrawer();
+    };
+    document.addEventListener('visibilitychange', wake);
+    return () => document.removeEventListener('visibilitychange', wake);
+  }, [load, loadDrawer]);
+
   /* ── aggregates ── */
   const agg = useMemo(() => {
     const live = orders.filter((o) => o.status !== 'cancelled');

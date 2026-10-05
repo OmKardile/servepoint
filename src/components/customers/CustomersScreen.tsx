@@ -841,10 +841,22 @@ const GuestsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry })
     const unsub = subscribeCrmRealtime(tenantId, () => void load(), setRt);
     const poll = window.setInterval(() => void load(), 30_000);
     const tick = window.setInterval(() => setBookTick((t) => t + 1), 30_000);
+    /* v5.263.0 — the wake: the guest book wakes when the staff does. The
+     * 30s poll clamps or pauses in a background tab and the realtime
+     * socket can die silently — the host who comes back could read a
+     * stale book. The wake rides the ONE path (load — the same road the
+     * ping and the poll ride; no second fetch path exists) the moment
+     * they look, guarded on visible, cleaned up on unmount. */
+    const wake = () => {
+      if (document.visibilityState !== 'visible') return;
+      void load();
+    };
+    document.addEventListener('visibilitychange', wake);
     return () => {
       unsub();
       window.clearInterval(poll);
       window.clearInterval(tick);
+      document.removeEventListener('visibilitychange', wake);
     };
   }, [tenantId, load]);
 
@@ -1097,7 +1109,7 @@ const GuestsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry })
         </div>
         <div className="flex items-center gap-2">
           <span
-            title={rt === 'live' ? 'Realtime connected' : 'Polling every 30s'}
+            title={rt === 'live' ? 'Realtime connected' : 'Polling every 30s, and the moment you look back'}
             className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold ${
               rt === 'live' ? 'bg-[#E8F3E9] text-[#2E7D32]' : 'bg-[#F6F5F2] text-[#6B6B6B]'
             }`}

@@ -531,28 +531,42 @@ const MessagesContent: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetr
     void loadThread();
   }, [loadThread]);
 
+  /* v5.263.0 — the room's ONE refresh: the three reads (list, thread,
+   * people) always travel together — the realtime ping, the 30s poll and
+   * the wake all ride this one named road, so no second fetch path can
+   * exist (the law is structural now, not per-call-site). */
+  const refreshAll = useCallback(() => {
+    void loadList();
+    void loadThread();
+    void loadPeople();
+  }, [loadList, loadThread, loadPeople]);
+
   /* realtime + poll fallback (the Task 79 pattern: silent refetches).
    * v5.46.0 — the presence strip rides the same ping (035 published
    * staff_presence: a teammate's first open or heartbeat flips their dot
    * live) plus the 30s poll tick, which is also what decays a stopped
-   * heartbeat to honest gray without any socket at all. */
+   * heartbeat to honest gray without any socket at all.
+   * v5.263.0 — the wake: the chat wakes when the staff does. The 30s poll
+   * clamps or pauses in a background tab and the realtime socket can die
+   * silently — the teammate who comes back could read a stale thread. The
+   * wake rides refreshAll (the same road, guarded on visible, cleaned up
+   * on unmount) — a message that landed while away is there the moment
+   * they look. */
   useEffect(() => {
     if (!tenant.tenantId) return;
-    const unsub = subscribeMessagesRealtime(tenant.tenantId, () => {
-      void loadList();
-      void loadThread();
-      void loadPeople();
-    }, setRt);
-    const poll = window.setInterval(() => {
-      void loadList();
-      void loadThread();
-      void loadPeople();
-    }, 30_000);
+    const unsub = subscribeMessagesRealtime(tenant.tenantId, refreshAll, setRt);
+    const poll = window.setInterval(refreshAll, 30_000);
+    const wake = () => {
+      if (document.visibilityState !== 'visible') return;
+      refreshAll();
+    };
+    document.addEventListener('visibilitychange', wake);
     return () => {
       unsub();
       window.clearInterval(poll);
+      document.removeEventListener('visibilitychange', wake);
     };
-  }, [tenant.tenantId, loadList, loadThread, loadPeople]);
+  }, [tenant.tenantId, refreshAll]);
 
   /* room switch (v5.112.0): the new room lands at its bottom, pill-free —
    * never inherit the previous room's scroll stance or unread count. */
@@ -744,8 +758,8 @@ const MessagesContent: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetr
         <div className="flex items-center gap-3">
           <h1 className="sp-screen-title">Messages</h1>
           <span
-            title={rt === 'live' ? 'Realtime connected' : 'Polling every 30s'}
-            aria-label={rt === 'live' ? 'Realtime connected' : 'Polling every 30 seconds'}
+            title={rt === 'live' ? 'Realtime connected' : 'Polling every 30s, and the moment you look back'}
+            aria-label={rt === 'live' ? 'Realtime connected' : 'Polling every 30 seconds, and the moment you look back'}
             className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold ${
               rt === 'live' ? 'bg-[#E8F3E9] text-[#2E7D32]' : 'bg-[#F6F5F2] text-[#6B6B6B]'
             }`}

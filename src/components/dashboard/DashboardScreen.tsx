@@ -68,7 +68,7 @@ import { chaseAge } from '../../lib/day';
  * day in every room, never the browser's. v5.241.0 — the inbox whisper's
  * stale-new count rides the lib's ONE census (staleNewTickets), the same
  * home the counter's straggler band asks — one predicate, one number. */
-import { isSameAppDay, staleNewTickets, WARM_WINDOW_MS } from '../../lib/appday';
+import { appFormatters, isSameAppDay, staleNewTickets, WARM_WINDOW_MS } from '../../lib/appday';
 import { useTenant } from '../../lib/tenant';
 import { useUi } from '../../store/session';
 import { DoorChip } from '../shell/DoorChip';
@@ -1362,11 +1362,18 @@ interface NeedsState {
    *  lie. The news register got its word in 5.243.0; the rail register's
    *  was the same fossil on the same capped read. */
   staleRailCount: number | null;
+  /** v5.263.0 — the freshness stamp: the instant THIS strip's numbers
+   *  landed (the read's own receipt). NULL until the first read lands —
+   *  the stamp never claims a read that did not run. The strip's whole
+   *  truth ("nothing waits on you" included) is a claim whose age the
+   *  owner can now SEE — and the wake (the moment they look back) moves
+   *  the stamp, so the catch-up is read, not trusted. */
+  loadedAt: number | null;
 }
 
 const NeedsNow: React.FC = () => {
   const { tenantId } = useTenant();
-  const [now, setNow] = useState<NeedsState>({ ready: false, orders: [], inventory: [], menu: [], reservations: [], tables: [], paidSums: new Map(), sessions: null, staleNewCount: null, staleRailCount: null });
+  const [now, setNow] = useState<NeedsState>({ ready: false, orders: [], inventory: [], menu: [], reservations: [], tables: [], paidSums: new Map(), sessions: null, staleNewCount: null, staleRailCount: null, loadedAt: null });
 
   useEffect(() => {
     if (!tenantId) return;
@@ -1399,16 +1406,29 @@ const NeedsNow: React.FC = () => {
            session read must not quiet the tiles that already landed (the
            mirror's own rule), and the chip answers silence, never a zero. */
         const sessions = await fetchTableSessions(tenantId).catch(() => null);
-        if (alive) setNow({ ready: true, orders, inventory, menu, reservations, tables, paidSums, sessions, staleNewCount, staleRailCount });
+        if (alive) setNow({ ready: true, orders, inventory, menu, reservations, tables, paidSums, sessions, staleNewCount, staleRailCount, loadedAt: Date.now() });
       } catch {
         /* the mirror is a courtesy — a first failed read simply stays quiet */
       }
     };
     void load();
     const t = window.setInterval(() => void load(), NOW_REFRESH_MS);
+    /* v5.263.0 — the wake: the paper wakes when the owner does. The 30s
+     * mirror clamps or pauses in a background tab — the owner who comes
+     * back could read stale numbers (or a stale all-clear). The wake
+     * rides the ONE path (load — the same road the interval rides; no
+     * second fetch path exists) the moment they look, guarded on
+     * visible, cleaned up on unmount; the stamp moves, so the catch-up
+     * is seen. */
+    const wake = () => {
+      if (document.visibilityState !== 'visible') return;
+      void load();
+    };
+    document.addEventListener('visibilitychange', wake);
     return () => {
       alive = false;
       window.clearInterval(t);
+      document.removeEventListener('visibilitychange', wake);
     };
   }, [tenantId]);
 
@@ -1839,9 +1859,19 @@ const NeedsNow: React.FC = () => {
     >
       {slots.length > 0 ? (
         <>
-          <p className="mb-3 text-[10.5px] font-bold uppercase tracking-[0.08em] text-[#8A938C]">
-            Needs you now
-          </p>
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <p className="text-[10.5px] font-bold uppercase tracking-[0.08em] text-[#8A938C]">
+              Needs you now
+            </p>
+            {now.loadedAt !== null && (
+              <span
+                className="shrink-0 text-[10.5px] font-semibold tabular-nums text-[#8A938C]"
+                title="The moment this strip's numbers landed — every read says when it read"
+              >
+                as of {appFormatters().hhmm.format(new Date(now.loadedAt))}
+              </span>
+            )}
+          </div>
           <div className="grid grid-cols-2 gap-x-6 gap-y-4 lg:grid-cols-3">
             {slots.map((s) => (
               /* 5.221.0 — the slot's aria finally reaches the DOM: each slot
@@ -1878,6 +1908,14 @@ const NeedsNow: React.FC = () => {
               Nothing waits on you — the floor is yours.
             </p>
           </div>
+          {now.loadedAt !== null && (
+            <span
+              className="ml-auto shrink-0 text-[10.5px] font-semibold tabular-nums text-[#8A938C]"
+              title="The moment this strip's numbers landed — every read says when it read"
+            >
+              as of {appFormatters().hhmm.format(new Date(now.loadedAt))}
+            </span>
+          )}
         </div>
       )}
     </section>

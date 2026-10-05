@@ -91,7 +91,7 @@ const swJs = strip('../public/sw.js');
 {
   assert.match(dash, /staleRailCount: number \| null;/, 'NeedsState carries the nullable rail count');
   assert.match(dash, /fetchOffTodayCount\(tenantId, RAIL_STATUSES\)\.catch\(\(\) => null\),/, 'the rail census rides the Promise.all, fail-soft');
-  assert.match(dash, /setNow\(\{ ready: true, orders, inventory, menu, reservations, tables, paidSums, sessions, staleNewCount, staleRailCount \}\)/, 'the state lands whole');
+  assert.match(dash, /setNow\(\{ ready: true, orders, inventory, menu, reservations, tables, paidSums, sessions, staleNewCount, staleRailCount, loadedAt: Date\.now\(\) \}\)/, 'the state lands whole');
   assert.match(dash, /const staleKitchenN = now\.staleRailCount \?\? staleKitchen\.length;/, 'the ?? dims to the page census');
   const speaks = (dash.match(/staleKitchenN/g) || []).length;
   assert.ok(speaks >= 6, `the aria, hint, door and icon all speak staleKitchenN (${speaks} sites)`);
