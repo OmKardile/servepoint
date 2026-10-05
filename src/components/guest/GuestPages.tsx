@@ -208,6 +208,71 @@ function GuestErrorCard({ title, body, onRetry, busy = false }: { title: string;
   );
 }
 
+/* ══════════════ the guest hears the blip (v5.267.0) ══════════════
+ * The showcase promises the house is "ready when the Wi-Fi blips" — and
+ * the wake family (5.261) makes the data true: visibility and network
+ * each refetch the moment the page is seen again. But the blip ITSELF
+ * was silent: the guest on flaky café Wi-Fi kept reading a page that
+ * looked alive while nothing moved — the stepper frozen, the ribbon
+ * ticking on client arithmetic, no word anywhere. The staff shell has
+ * spoken its offline banner since 5.134 (PwaLayer's episode grammar);
+ * the guest — the one person on the house's flakiest network — heard
+ * nothing. THE BAND: the same episode grammar (a wasOffline ref, the
+ * 2.6s recovery whisper, each episode announced once), the guest's own
+ * words in the three guest languages, the amber family the house speaks
+ * when something's off, spFadeIn 0.35s (the reduced-motion gate holds
+ * it), role="status" so the ears hear it too. THE BAND MOVES NO DATA:
+ * its listeners speak words only — the pages' own wakes (the track's
+ * tick, the menu's verify) keep their fetch jobs; the band never
+ * fetches (asserted in unit306). */
+function GuestNetBand(): React.ReactElement | null {
+  const { t } = useGuestLang();
+  const [online, setOnline] = useState(() => navigator.onLine);
+  const [justBack, setJustBack] = useState(false);
+  const wasOffline = useRef(false);
+  useEffect(() => {
+    const up = () => {
+      setOnline(true);
+      if (wasOffline.current) {
+        wasOffline.current = false;
+        setJustBack(true);
+      }
+    };
+    const down = () => {
+      setOnline(false);
+      wasOffline.current = true;
+    };
+    window.addEventListener('online', up);
+    window.addEventListener('offline', down);
+    return () => {
+      window.removeEventListener('online', up);
+      window.removeEventListener('offline', down);
+    };
+  }, []);
+  useEffect(() => {
+    if (!justBack) return;
+    const t2 = window.setTimeout(() => setJustBack(false), 2600);
+    return () => window.clearTimeout(t2);
+  }, [justBack]);
+  if (online && !justBack) return null;
+  const offline = !online;
+  return (
+    <div
+      role="status"
+      title={t('netBandTitle')}
+      style={{ animation: 'spFadeIn 0.35s ease' }}
+      className={`mb-3 flex items-center gap-2 rounded-xl border px-3 py-2 text-[12.5px] font-medium ${
+        offline
+          ? 'border-[#F0E4C8] border-l-4 border-l-[#B45309] bg-[#FBF6EA] text-[#8A5A00]'
+          : 'border-[#E3E7E0] bg-white text-[#5B6B63]'
+      }`}
+    >
+      {offline ? <CloudOff size={13} aria-hidden /> : <Check size={13} aria-hidden />}
+      <span>{offline ? t('netOffline') : t('netBack')}</span>
+    </div>
+  );
+}
+
 /* ════════════════════════════ 1 · GATE ════════════════════════════ */
 
 export function GuestGatePage({ qrToken }: { qrToken: string }): React.ReactElement {
@@ -1105,6 +1170,7 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
       </header>
 
       <main className="mx-auto w-full max-w-xl flex-1 px-4 pb-36 pt-4">
+        <GuestNetBand />
         {/* v5.253.0 — the ticket's word reaches the menu: the guest's latest
             ticket (from THIS tab's own checkout) rides a slim chip above the
             category rail. The chip claims NOTHING about the kitchen — the
@@ -2123,6 +2189,7 @@ export function GuestTrackPage({ orderId }: { orderId: string }): React.ReactEle
       </header>
 
       <main className="mx-auto w-full max-w-xl flex-1 px-4 pb-10 pt-5">
+        <GuestNetBand />
         {state === 'loading' && <p className="mt-10 text-center text-[13.5px] text-[#6B6B6B]">{t('finding')}</p>}
         {state === 'net' && !order && <GuestErrorCard title={t('netTitle')} body={t('netBody')} />}
 

@@ -27,6 +27,12 @@ const EN: Dict = {
   // shell
   poweredBy: 'Powered by ServePoint — smartPOS',
   tryAgain: 'Try again',
+  // the guest hears the blip (v5.267.0) — the net band on the menu and the
+  // ticket: the wake refetches when the network returns; the WORD says so
+  // while it's away. The amber family the house speaks when something's off.
+  netOffline: 'Your connection dropped — this page catches up on its own the moment it returns.',
+  netBack: 'Back online — caught up.',
+  netBandTitle: 'The page refetches by itself when your connection returns — nothing to tap.',
   langAria: 'Language',
   serviceLine: 'ServePoint table service',
   // gate
@@ -187,6 +193,10 @@ const EN: Dict = {
 const HI: Dict = {
   poweredBy: 'ServePoint — smartPOS द्वारा संचालित',
   tryAgain: 'फिर कोशिश करें',
+  // the guest hears the blip (v5.267.0)
+  netOffline: 'आपका कनेक्शन टूट गया है — कनेक्शन लौटते ही यह पेज अपने आप अपडेट हो जाएगा।',
+  netBack: 'कनेक्शन वापस आ गया — अपडेट हो गया।',
+  netBandTitle: 'आपका कनेक्शन लौटने पर पेज अपने आप अपडेट हो जाता है — कुछ दबाने की ज़रूरत नहीं।',
   langAria: 'भाषा',
   serviceLine: 'ServePoint टेबल सेवा',
   checking: 'यह टेबल जाँची जा रही है…',
@@ -336,6 +346,10 @@ const HI: Dict = {
 const KN: Dict = {
   poweredBy: 'ServePoint — smartPOS ನಿಂದ ನಡೆಸಲ್ಪಡುತ್ತಿದೆ',
   tryAgain: 'ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ',
+  // the guest hears the blip (v5.267.0)
+  netOffline: 'ನಿಮ್ಮ ಸಂಪರ್ಕ ಕಡಿತಗೊಂಡಿದೆ — ಸಂಪರ್ಕ ಮರಳಿದ ತಕ್ಷಣ ಈ ಪುಟ ಸ್ವತಃ ಅಪ್‌ಡೇಟ್ ಆಗುತ್ತದೆ.',
+  netBack: 'ಸಂಪರ್ಕ ಮರಳಿದೆ — ಅಪ್‌ಡೇಟ್ ಆಗಿದೆ.',
+  netBandTitle: 'ಸಂಪರ್ಕ ಮರಳಿದಾಗ ಪುಟವು ಸ್ವತಃ ಅಪ್‌ಡೇಟ್ ಆಗುತ್ತದೆ — ಏನನ್ನೂ ಒತ್ತಬೇಕಿಲ್ಲ.',
   langAria: 'ಭಾಷೆ',
   serviceLine: 'ServePoint ಟೇಬಲ್ ಸೇವೆ',
   checking: 'ಈ ಟೇಬಲ್ ಪರಿಶೀಲಿಸಲಾಗುತ್ತಿದೆ…',

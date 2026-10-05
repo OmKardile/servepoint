@@ -25,6 +25,15 @@ import brandMark from '../../assets/brand/mark.png';
  * recovery, then silence again — the banner spoke the fall, the whisper
  * speaks the landing; silence stays the healthy voice.
  *
+ * v5.267.0 — the guest surfaces leave this layer's voices: the guest is
+ * the one person the house cannot assume a language for, and this layer
+ * speaks English only. The guest module now carries its OWN blip voices
+ * (GuestNetBand — the amber band and the recovery whisper, in the three
+ * guest languages, riding the same episode grammar), so on /t, /menu and
+ * /track both of this layer's voices hold their silence and the guest's
+ * own word speaks instead — one voice per blip. The staff sentence stays
+ * for staff and public surfaces; the old guest text branch is gone.
+ *
  * v5.144.0 — the update toast joins the house register ("The house has
  * grown.", serif-italic teal over white, honest sub-line, gold Refresh,
  * quiet Later) — and with the sw.js self-skip finally removed the toast
@@ -162,7 +171,7 @@ export function PwaLayer() {
     setInstallEvent(null);
   };
 
-  const showOffline = !online && !bannerGone;
+  const showOffline = !online && !bannerGone && mode !== 'guest';
   const showInstall =
     mode === 'staff' && !standalone && !installed && !cooledDown && Boolean(installEvent);
 
@@ -235,11 +244,7 @@ export function PwaLayer() {
               <span className="relative inline-flex h-2 w-2 rounded-full bg-[#F59E0B]" />
             </span>
             <span className="whitespace-nowrap text-[11px] font-medium tracking-wide text-[#F6F5F2] sm:text-xs">
-              {mode === 'guest' ? (
-                <>Offline — the menu may be stale. Place your order when you&rsquo;re back online.</>
-              ) : (
-                <>Offline — ServePoint shows the last synced data. Place new orders when the connection returns.</>
-              )}
+              Offline — ServePoint shows the last synced data. Place new orders when the connection returns.
             </span>
             <button
               onClick={() => setBannerGone(true)}
@@ -261,7 +266,7 @@ export function PwaLayer() {
           own bright-on-dark accent register (#4CAF6D against #1A1A1A, the
           softened sibling of the banner's #F59E0B). role="status" so the
           recovery is announced like the fall was. */}
-      {online && justBack && (
+      {online && justBack && mode !== 'guest' && (
         <div
           role="status"
           className="fixed inset-x-0 top-0 z-[90] flex justify-center px-3 pt-2 sm:pt-3"
