@@ -322,7 +322,7 @@ interface ZReportOpts {
   offers?: { rupees: number; tickets: number } | null;
   /** v5.83.0 — the close sees the floor: the day's rounds, computed from
    *  the SAME day orders the Z already counts (no extra read to trust). */
-  floor?: { rounds: number; rupees: number; busiest: string | null; noShows: number | null } | null;
+  floor?: { rounds: number; rupees: number; busiest: string | null; noShows: number | null; wentQuiet: number | null } | null;
 }
 
 /* v5.180.0 — the day's shifts: the Z's drawer block speaks EVERY shift the
@@ -468,6 +468,7 @@ function printZReport(opts: ZReportOpts): void {
     }
     ${opts.floor.busiest ? row('Busiest table', opts.floor.busiest) : ''}
     ${opts.floor.noShows && opts.floor.noShows > 0 ? row('No-shows', `${opts.floor.noShows} booking${opts.floor.noShows === 1 ? '' : 's'}`) : ''}
+    ${opts.floor.wentQuiet && opts.floor.wentQuiet > 0 ? row('Went quiet', `${opts.floor.wentQuiet} promise${opts.floor.wentQuiet === 1 ? '' : 's'} still booked`) : ''}
   </div>`
     : '';
   const html = `<!doctype html><html><head><meta charset="utf-8"><title>Z-report ${opts.dateIso}</title></head>
@@ -610,6 +611,8 @@ export function buildZReportText(opts: ZReportOpts): string {
     if (opts.floor.busiest) out.push(two('Busiest table', opts.floor.busiest));
     if (opts.floor.noShows && opts.floor.noShows > 0)
       out.push(two('No-shows', `${opts.floor.noShows} booking${opts.floor.noShows === 1 ? '' : 's'}`));
+    if (opts.floor.wentQuiet && opts.floor.wentQuiet > 0)
+      out.push(two('Went quiet', `${opts.floor.wentQuiet} promise${opts.floor.wentQuiet === 1 ? '' : 's'} still booked`));
   }
   if (opts.drawer) {
     out.push(hr);
@@ -1540,6 +1543,25 @@ const EodScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
     return reservations.filter((r) => r.status === 'no_show' && r.slot_at >= startIso && r.slot_at < endIso).length;
   }, [reservations, dateIso]);
 
+  /* ── the floor (v5.224.0): the day's quiet debt — booked promises whose
+   *  hour passed and were never resolved (still 'booked' in the ledger;
+   *  the no-show row counts what the book RECORDED, this counts what the
+   *  book never answered). The SAME istDayBounds as the no-show read —
+   *  one day grammar in this surface. Silent when the book never loaded
+   *  or the debt is zero — never a guessed zero. */
+  const quietDay = useMemo(() => {
+    if (!reservations) return null;
+    const { startIso, endIso } = istDayBounds(dateIso);
+    const nowMs = Date.now();
+    return reservations.filter(
+      (r) =>
+        r.status === 'booked' &&
+        r.slot_at >= startIso &&
+        r.slot_at < endIso &&
+        new Date(r.slot_at).getTime() < nowMs,
+    ).length;
+  }, [reservations, dateIso]);
+
   /* ── the floor (v5.83.0): the day's rounds — the close sees the floor ──
    *  A round is a non-cancelled ticket that HELD a table (table_id set) —
    *  the same ledger rule the floor rhythm chart reads. Walk-in counter
@@ -1664,6 +1686,7 @@ const EodScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
         rupees: floorDay.rupees,
         busiest: floorDay.busiest,
         noShows: noShowDay,
+        wentQuiet: quietDay,
       },
     };
   };
@@ -2155,6 +2178,18 @@ const EodScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
                     table tickets only — walk-in counter rounds never held a table
                   </span>
                 </>
+              )}
+              {/* v5.224.0 — the book's unanswered hour, in BOTH branches: a
+                  zero-rounds day can still carry quiet debt (the host never
+                  resolved the promise). The convict-free grey — the book's
+                  own words, the no-show whisper's neighbour. */}
+              {quietDay !== null && quietDay > 0 && (
+                <span
+                  className="text-[10.5px] font-semibold text-[#6B6B6B]"
+                  title="Booked promises whose hour passed on this day and were never resolved — still booked; the clock does not convict."
+                >
+                  {quietDay} {quietDay === 1 ? 'promise' : 'promises'} went quiet
+                </span>
               )}
             </div>
           </section>

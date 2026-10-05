@@ -3,6 +3,19 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.224.0] — 2026-10-05 — The Z-report answers the book: the close-out's floor strip counted what the book RECORDED (no-shows, v5.83) but never what the book never ANSWERED — a booked promise whose hour passed and was never resolved left no trace in the Z while the book, the band and the drill all spoke it. The Z's floor block now carries the quiet debt: the strip whisper speaks in BOTH branches (a zero-rounds day can still carry book debt), the print-HTML and Copy/WhatsApp builders both print "Went quiet · N promise(s) still booked" — the same convict-free words, drawn by the same day bounds as the no-show read, silent when the debt is zero
+
+### Added — the Z's quiet-debt row (`src/components/eod/EodScreen.tsx`)
+
+- `quietDay` — booked promises whose slot fell on the EOD's day (the SAME istDayBounds the no-show read uses — one day grammar in this surface) and whose hour has passed (the book's own quiet boundary), still 'booked' in the ledger. Null when the book never loaded — silence, not a guessed zero; zero prints nothing in every builder.
+- The floor strip's whisper speaks in BOTH branches — beside "The floor sat quiet" on a zero-rounds day (today is exactly that day: no rounds, one quiet promise) and beside the no-show whisper on a served day — in the book's convict-free grey (#6B6B6B) with the "the clock does not convict" title.
+- The print-HTML Z and the Copy/WhatsApp text Z both gain the "Went quiet" row (`N promise(s) still booked`), guarded on > 0 — the recorded miss and the unanswered hour now sit side by side in the day's report.
+
+### Tests
+
+- unit263 born — 5 checks green (the quiet read's predicate + null guard + shared day bounds; the type + threading; both builders' rows with their >0 guards; the whisper's both-branch placement + grey + title; the no-show neighbour byte-identical).
+- Regression battery unit194–263 ALL PASS by exit code (69 suites); tsc EXIT=0 ×2; build EXIT=0 (44 assets, VERSION → servepoint-v5.224.0-r1).
+
 ## [5.223.0] — 2026-10-05 — The book's count keeps its own verdicts, and the rhythm counts the looks: the book header's "N still expected today" was a status-count that went stale between fetches while its row badges flipped on the promise clock — a went-quiet party stayed 'booked' and the header kept saying "still expected" (a second verdict, live; 261's band caught the same disease mid-flip). The header now splits expected (hour not passed) from quiet (it has) at render beside the row badges' own clock, the quiet debt speaking its own words in the book's grey; and the Floor rhythm gains a fifth tile, "Menu windows · 7d" — the look count from the session ledger already in hand, inside the SAME bounds the seated-rounds census draws, with the all-lookers case named in the empty state
 
 ### Fixed — the book header's count follows the book's own verdicts (`src/components/floor/FloorScreen.tsx`)
