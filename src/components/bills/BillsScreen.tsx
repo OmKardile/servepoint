@@ -15,6 +15,7 @@ import {
   Search,
   SlidersHorizontal,
   Split,
+  StickyNote,
   X,
 } from 'lucide-react';
 import { chaseAge, dayTime } from '../../lib/day';
@@ -886,6 +887,7 @@ const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRet
       orderType: String(selected.order_type || ''),
       tableLabel: selected.table_label,
       customerName: selected.customer_name,
+      orderNote: selected.notes, // v5.255.0 — the word on paper (print / copy / WhatsApp share all speak it)
       createdAt: selected.created_at,
       items: (selected.items || []).map((it) => ({
         name: it.name,
@@ -1935,6 +1937,21 @@ const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRet
                   </p>
                 )}
               </div>
+
+              {/* v5.255.0 — the word on the counter's screen: the order-level
+                  note the ticket has spoken since 5.254, now where the counter
+                  reads the bill too. The ticket's own amber family (the
+                  straggler ink), gated on a non-blank word. */}
+              {selected.notes && selected.notes.trim().length > 0 && (
+                <div className="mt-3 rounded-xl border border-[#F0E4C8] border-l-4 border-l-[#B45309] bg-[#FBF6EA] px-3 py-2.5">
+                  <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-[#8A5A00]">
+                    <StickyNote size={11} aria-hidden /> Kitchen note
+                  </p>
+                  <p className="mt-1 break-words text-[12.5px] leading-relaxed text-[#6B4A0E]">
+                    {selected.notes}
+                  </p>
+                </div>
+              )}
 
               {/* Kitchen lifecycle — the engine's legal next step, if any */}
               {(() => {

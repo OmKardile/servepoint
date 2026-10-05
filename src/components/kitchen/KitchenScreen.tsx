@@ -410,7 +410,16 @@ const KdsCard: React.FC<{
       )}
 
       {order.notes && (
-        <p className="mt-2 truncate rounded-lg bg-[#F6F5F2] px-2 py-1 text-[11.5px] text-[#5B6B63]" title={order.notes}>
+        /* v5.255.0 — the word the kitchen must hear, never cut: `truncate`
+         * became `line-clamp-3 break-words` (a truncated allergy word is a
+         * wrong allergy word — the full word rides the title), and the block
+         * wears the amber words-family the guest ticket has spoken since
+         * 5.254, with this board's own #C2571B as the left rail (the same
+         * colour every item-level note wears on the line above). */
+        <p
+          className="mt-2 line-clamp-3 break-words rounded-lg border-l-[3px] border-l-[#C2571B] bg-[#FBF6EA] px-2 py-1.5 text-[11.5px] leading-relaxed text-[#6B4A0E]"
+          title={order.notes}
+        >
           {order.notes}
         </p>
       )}

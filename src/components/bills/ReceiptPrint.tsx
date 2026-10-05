@@ -55,6 +55,11 @@ export interface ReceiptOpts {
    *  placeholder. A dead URL hides its own tile at print time (onerror), and
    *  the caller preloads the image so a cold remote never prints a hole. */
   logoUrl?: string | null;
+  /** v5.255.0 — the word on paper: the order-level note the guest (or the
+   *  counter) wrote at checkout, spoken verbatim between the items and the
+   *  totals. Absent/blank → byte-identical to the pre-5.255 receipt: the
+   *  same law the split-payment block has kept since 5.63. */
+  orderNote?: string | null;
   /** Task 90 — the legal identity block. Every field is optional and only
    *  prints when present; with ALL absent the receipt is byte-identical to
    *  the pre-5.51 header. GSTIN present → the document becomes a TAX
@@ -132,6 +137,15 @@ export function buildReceiptHtml(opts: ReceiptOpts): string {
         )
       : '';
 
+  /* v5.255.0 — the word on paper. The note is prose, not a figure: its own
+   * dashed-framed block between the items and the totals, the full word
+   * (a cut allergy word is a wrong allergy word), escaped like every
+   * other stored string. Blank/absent → '' (the byte-identity law). */
+  const orderNote =
+    opts.orderNote && opts.orderNote.trim() !== ''
+      ? `<div style="margin-top:8px;border:1px dashed #000;padding:5px 8px;"><div style="font-weight:800;letter-spacing:1px;">KITCHEN NOTE</div><div style="margin-top:2px;overflow-wrap:anywhere;">${esc(opts.orderNote.trim())}</div></div>`
+      : '';
+
   const split = (opts.splitPayments || []).filter((p) => p.amount > 0);
   const paymentBlock = opts.isPaid
     ? split.length > 1
@@ -195,6 +209,7 @@ export function buildReceiptHtml(opts: ReceiptOpts): string {
   <div style="border-top:1px dashed #000;border-bottom:1px dashed #000;padding:4px 0;">
     ${itemRows || '<div style="padding:3px 0;color:#444;">No item lines recorded.</div>'}
   </div>
+  ${orderNote}
   <div style="border-bottom:1px dashed #000;padding:6px 0;">
     ${row('Subtotal', formatMoney(opts.subtotal))}
     ${discountRow}
@@ -249,6 +264,27 @@ export function buildReceiptText(opts: ReceiptOpts): string {
   const sgst = Math.round((opts.tax - cgst) * 100) / 100;
   const discount = Number(opts.discount ?? 0);
 
+  /* v5.255.0 — the share voice wraps the note like the chase list wraps its
+   * prose (BillsScreen's law): word-wrapped at the 32-column frame, indented
+   * two spaces like every item sub-line, never hard-cut mid-word. */
+  const wrapNote = (s: string): string[] => {
+    const words = s.split(/\s+/).filter(Boolean);
+    const lines: string[] = [];
+    let cur = '';
+    for (const w of words) {
+      const candidate = cur ? `${cur} ${w}` : w;
+      if (candidate.length > W && cur) {
+        lines.push(cur);
+        cur = w;
+      } else {
+        cur = candidate;
+      }
+    }
+    if (cur) lines.push(cur);
+    return lines.map((l) => `  ${l}`);
+  };
+  const noteText = opts.orderNote && opts.orderNote.trim() !== '' ? opts.orderNote.trim() : '';
+
   const out: string[] = [];
   out.push(center(opts.storeName.toUpperCase()));
   const legal = opts.legalName && opts.legalName.trim() !== '' && opts.legalName.trim() !== opts.storeName ? opts.legalName.trim() : '';
@@ -279,6 +315,11 @@ export function buildReceiptText(opts: ReceiptOpts): string {
       if (it.notes) subs.push(`- ${it.notes}`);
       for (const s of subs) out.push(`  ${s}`);
     }
+  }
+  if (noteText) {
+    out.push(hr);
+    out.push('KITCHEN NOTE');
+    for (const l of wrapNote(noteText)) out.push(l);
   }
   out.push(hr);
   out.push(two('Subtotal', formatMoney(opts.subtotal)));
