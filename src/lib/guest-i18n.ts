@@ -164,6 +164,10 @@ const EN: Dict = {
   lastTicketTitle: 'Your ticket #{n}',
   lastTicketSub: 'Placed from this table — tap to follow it',
   lastTicketAria: 'Follow your ticket #{n}',
+  // v5.254.0 — the kitchen's ears: the order-level note, offered and spoken back
+  drawerNoteLabel: 'Anything we should know? (optional)',
+  drawerNotePh: 'Allergies, spice level, timing…',
+  trackNoteLabel: 'Your note to the kitchen',
   // feedback (019)
   fbTitle: 'How was everything?',
   fbSub: 'Tap the stars — it helps the cafe a lot.',
@@ -309,6 +313,10 @@ const HI: Dict = {
   lastTicketTitle: 'आपका टिकट #{n}',
   lastTicketSub: 'इसी टेबल से लगा — देखने के लिए टैप करें',
   lastTicketAria: 'अपना टिकट #{n} देखें',
+  // v5.254.0 — the kitchen's ears: the order-level note, offered and spoken back
+  drawerNoteLabel: 'हमें कुछ बताना है? (वैकल्पिक)',
+  drawerNotePh: 'एलर्जी, तीखापन, समय…',
+  trackNoteLabel: 'रसोई के लिए आपकी टिप्पणी',
   // feedback (019)
   fbTitle: 'सब कैसा लगा?',
   fbSub: 'सितारे दबाएँ — इससे कैफ़े को बहुत मदद मिलती है।',
@@ -454,6 +462,10 @@ const KN: Dict = {
   lastTicketTitle: 'ನಿಮ್ಮ ಟಿಕೆಟ್ #{n}',
   lastTicketSub: 'ಇದೇ ಟೇಬಲ್‌ನಿಂದ ಆರ್ಡರ್ — ನೋಡಲು ಟ್ಯಾಪ್ ಮಾಡಿ',
   lastTicketAria: 'ನಿಮ್ಮ ಟಿಕೆಟ್ #{n} ನೋಡಿ',
+  // v5.254.0 — the kitchen's ears: the order-level note, offered and spoken back
+  drawerNoteLabel: 'ಏನಾದರೂ ಹೇಳಬೇಕೆ? (ಐಚ್ಛಿಕ)',
+  drawerNotePh: 'ಅಲರ್ಜಿ, ಖಾರ, ಸಮಯ…',
+  trackNoteLabel: 'ಅಡುಗೆಮನೆಗೆ ನಿಮ್ಮ ಟಿಪ್ಪಣಿ',
   // feedback (019)
   fbTitle: 'ಎಲ್ಲವೂ ಹೇಗಿತ್ತು?',
   fbSub: 'ನಕ್ಷತ್ರಗಳನ್ನು ಒತ್ತಿ — ಇದು ಕೆಫೆಗೆ ಬಹಳ ಸಹಾಯ ಮಾಡುತ್ತದೆ.',

@@ -78,8 +78,10 @@ const swJs = readFileSync('public/sw.js', 'utf8');
   const navIdx = page.indexOf("window.location.assign(`/track/${res.order.id}`);");
   assert.ok(writeIdx > 0 && navIdx > writeIdx, 'the memory is written BEFORE the navigation to the ticket');
   const wipeIdx = page.indexOf("sessionStorage.removeItem(LAST_ORDER_KEY(qrToken)); // the token died — the memory goes with it");
-  const cartWipeIdx = page.indexOf("sessionStorage.removeItem(CART_KEY(qrToken));\n        sessionStorage.removeItem(LAST_ORDER_KEY(qrToken))");
-  assert.ok(wipeIdx > 0 && cartWipeIdx > 0, 'INVALID_TOKEN wipes the memory beside the cart');
+  // v5.254.0's honest re-anchor: the block now wipes cart + note + memory together
+  // (the rider moved, the law didn't — a dead token's whole session goes).
+  const cartWipeIdx = page.indexOf("sessionStorage.removeItem(CART_KEY(qrToken));\n        sessionStorage.removeItem(ORDER_NOTE_KEY(qrToken)); // the note goes with the cart\n        sessionStorage.removeItem(LAST_ORDER_KEY(qrToken))");
+  assert.ok(wipeIdx > 0 && cartWipeIdx > 0, 'INVALID_TOKEN wipes the memory beside the cart (and the note)');
   ok('the write rides the checkout; a dead token takes its memory with it');
 }
 

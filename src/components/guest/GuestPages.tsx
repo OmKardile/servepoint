@@ -20,6 +20,7 @@ import {
   Search,
   ShoppingBag,
   Star,
+  StickyNote,
   UtensilsCrossed,
   Volume2,
   VolumeX,
@@ -292,6 +293,25 @@ const lineUnit = (l: CartLine) =>
 
 const CART_KEY = (token: string) => `sp.guest.cart.${token}`;
 const OFFER_KEY = (token: string) => `sp.guest.offer.${token}`;
+/* v5.254.0 — the kitchen's ears: an optional order-level note rides the whole
+ * order (the server has taken p_notes since the first menu round — the drawer
+ * just never offered the field, and the ticket never spoke the word back).
+ * The note persists per-tab beside the cart (a reload keeps it with the food),
+ * rides to the server at checkout, and clears when the cart does — the next
+ * order writes its own word. The ticket displays it verbatim: the guest's own
+ * word, never rewritten. */
+const ORDER_NOTE_KEY = (token: string) => `sp.guest.orderNote.${token}`;
+const ORDER_NOTE_MAX = 280; // the feedback card's cap — one number, one language
+
+function readOrderNote(token: string): string {
+  try {
+    const raw = sessionStorage.getItem(ORDER_NOTE_KEY(token));
+    return typeof raw === 'string' ? raw : '';
+  } catch {
+    /* private mode — the field just starts empty */
+  }
+  return '';
+}
 /* v5.253.0 — the ticket's word reaches the menu: the loop 5.252.0 opened
  * (ticket → "Order more" → menu) closes here. The menu page remembers the
  * guest's latest ticket FROM THEIR OWN CHECKOUT (the id + number the server
@@ -591,6 +611,17 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
   /* v5.253.0 — the guest's latest ticket from THIS tab's own checkout, read
    * once at mount (sessionStorage is per-tab; no other tab can gain a key). */
   const [lastTicket] = useState(() => readLastTicket(qrToken));
+  /* v5.254.0 — the kitchen's ears: the order-level note, read once, kept
+   * beside the cart. */
+  const [orderNote, setOrderNote] = useState(() => readOrderNote(qrToken));
+  const changeNote = (v: string) => {
+    setOrderNote(v);
+    try {
+      sessionStorage.setItem(ORDER_NOTE_KEY(qrToken), v); // kept with the food
+    } catch {
+      /* private mode — the word just lives in the field */
+    }
+  };
   const [lockTone, setLockTone] = useState<'clock' | 'cut'>('clock');
   /* 5.216.0 — the ribbon's freshest SERVER verdict: { when it landed, seconds
      it said were left }. The 30s re-verify tick writes it; the 1s ribbon tick
@@ -911,6 +942,7 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
         addon_ids: l.addons.map((a) => a.id),
       })),
       customerName: customerName || null,
+      notes: orderNote.trim() || null, // v5.254.0 — the kitchen's ears, finally wired
       clientOperationId: crypto.randomUUID(),
       offerId: selectedOffer && offerReady ? selectedOffer.id : null,
       sessionToken: sessionToken?.session_token ?? null,
@@ -943,14 +975,14 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
       }
       if (res.error === 'INVALID_TOKEN') {
         sessionStorage.removeItem(CART_KEY(qrToken));
+        sessionStorage.removeItem(ORDER_NOTE_KEY(qrToken)); // the note goes with the cart
         sessionStorage.removeItem(LAST_ORDER_KEY(qrToken)); // the token died — the memory goes with it
         window.location.assign(`/t/${encodeURIComponent(qrToken)}`);
       }
       return;
     }
     sessionStorage.removeItem(CART_KEY(qrToken));
-    // v5.253.0 — the guest's own ticket becomes the menu's memory (the loop's
-    // other half: the ticket's "Order more" leads back here, the chip leads back).
+    sessionStorage.removeItem(ORDER_NOTE_KEY(qrToken)); // the note rode to the server — the field starts fresh
     try {
       sessionStorage.setItem(LAST_ORDER_KEY(qrToken), JSON.stringify({ id: res.order.id, n: res.order.order_number }));
     } catch {
@@ -1544,6 +1576,27 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
                 <p className="mt-2 flex items-center gap-1.5 text-[11.5px] text-[#6B6B6B]">
                   <Wallet size={13} aria-hidden /> {t('payNote')}
                 </p>
+                {/* v5.254.0 — the kitchen's ears: an optional word rides the
+                    whole order (allergies, spice, timing). The feedback
+                    card's textarea language — one input shape across the
+                    guest's surfaces. */}
+                <div className="mt-3">
+                  <label htmlFor="drawer-note" className="text-[11.5px] font-semibold text-[#6B6B6B]">
+                    {t('drawerNoteLabel')}
+                  </label>
+                  <textarea
+                    id="drawer-note"
+                    rows={2}
+                    maxLength={ORDER_NOTE_MAX}
+                    value={orderNote}
+                    onChange={(e) => changeNote(e.target.value)}
+                    placeholder={t('drawerNotePh')}
+                    className="mt-1.5 w-full resize-none rounded-2xl border border-[#E3E7E0] bg-[#FBF9F4] px-3.5 py-2.5 text-[13px] text-[#1A1A1A] placeholder:text-[#9A9A9A] focus:border-[#B88E2F] focus:outline-none focus:ring-2 focus:ring-[#B88E2F]/25"
+                  />
+                  <p className="mt-1 text-right text-[10.5px] tabular-nums text-[#9A9A9A]" aria-hidden>
+                    {orderNote.length}/{ORDER_NOTE_MAX}
+                  </p>
+                </div>
                 <button
                   type="button"
                   onClick={() => void placeOrder()}
@@ -2043,6 +2096,19 @@ export function GuestTrackPage({ orderId }: { orderId: string }): React.ReactEle
                     {it.notes && <p className="text-[12px] italic text-[#8A5A16]">↳ {it.notes}</p>}
                   </div>
                 ))}
+                {/* v5.254.0 — the note comes home: the order-level word the
+                    guest wrote at checkout, spoken verbatim on the ticket in
+                    the waiting ink (the straggler family — the guest's word
+                    sits on the bill where the counter reads it too). An
+                    empty/blank note renders nothing. */}
+                {order.notes && order.notes.trim().length > 0 && (
+                  <div className="mt-2 rounded-xl border border-[#F0E4C8] border-l-4 border-l-[#B45309] bg-[#FBF6EA] px-3 py-2.5">
+                    <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-[#8A5A00]">
+                      <StickyNote size={11} aria-hidden /> {t('trackNoteLabel')}
+                    </p>
+                    <p className="mt-1 break-words text-[12.5px] leading-relaxed text-[#6B4A0E]">{order.notes}</p>
+                  </div>
+                )}
                 <div className="space-y-1 pt-2 text-[13px] text-[#6B6B6B]">
                   <div className="flex justify-between">
                     <span>{t('subtotal')}</span>
