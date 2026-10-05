@@ -6662,3 +6662,43 @@ Work Log:
 
 Stage Summary:
 - Work committed and gated (battery 77/77, tsc ×2, build, live E2E on both sessions) but NOT on origin. The honesty rule holds: no push claimed that did not run.
+
+---
+Task ID: 272 (15-min webDevReview round, trace 1a0fba3beb0e3c89-cron-agent-loop-202610051403)
+Agent: glm-5.3 (cron webDevReview round)
+Task: Post-5.232.0 round — QA walk of the guest QR surfaces (gate, menu, cart, offers, track, invalid tokens) + the public pages + the Platform's ProvisioningWizard (the last unwalked room, cancel-only), then v5.233.0 "the words say what the money does": the fit voice's percent blindness and the wizard's trial-charge lie.
+
+Work Log:
+- Orientation: worklog tail — 271 closed (32d6d4f + 254aa14, v5.232.0, battery 77/77); tree clean. THIS round = Task 272, version → v5.233.0. tsc EXIT=0 pre-claim. NO token in round env — the push debt RIDES (addendum below).
+- QR-token recon: dining_tables RLS blocks the anon key; the token came through the auth REST flow (password grant as the QR owner, then a REST read) — T1/T2 tokens in hand. The gate's RPC probe with a fake token returned the honest INVALID_TOKEN voice.
+- QA walk, guest + public edition: the gate /t/:token (T1) — ordering-window countdown, TABLESIDE MENU, categories, offers, veg filter, the trilingual switcher; the menu /menu/:token (T2) — customize sheet (variant + add-on + cook note + qty), cart bar, drawer, offers (unlock red / applies gold / applied green), track /track/:number's honest broken-link voice, invalid table token's honest voice; /showcase + /help both healthy. THE SUSPECT that wasn't: "10% off applies" beside a full-price total — traced through offerFit/offerFitVoice/GuestPages: the design is tap-to-apply, the drawer's green Offer row + Applied chip + the math (283.50 → 255.15 on tap) all reconcile — verified honest end-to-end, NOT a bug.
+- Session swap: QR Owner → admin; the ProvisioningWizard walked all three steps (business → owner account → review) with a throwaway name and CANCELLED before provision — nothing provisioned. The wizard is healthy: progress rail, slug auto-gen, the strong-password generator with regenerate/copy, the review's handover note.
+- THE FIND (thin voice #1): a percent offer's 'applies' whisper names only a RATE — "10% off applies" — while the take on THIS cart (₹27.00) lived nowhere until the tap. offerFit already carried `take`; the sentence never said it. Flat offers' rules already speak their rupees — appending the take would say it twice (the same disease as the wizard's review).
+- THE FIND (thin voice #2): the wizard's price preview said "Charged at ₹4,999.00 / month" under a TRIAL plan — a charge that never lands during the trial (the tenant strip's own grammar is "no charge yet"). And the review said "Trial (status: trial)" — one fact twice in one breath.
+- Feature v5.233.0: (1) offerFitVoice — the 'applies' state gains "· ₹X off this order" for PERCENT offers only (the gate rides discount_type === 'percent' && take > 0; flat/applied/unlock byte-preserved; zero take silent); the ONE composer, so the counter pill and the guest bar (and their aria) gained the money in one stroke. (2) The wizard's preview speaks the plan's truth — trial: "No charge yet — ₹X / month after the trial ends" (the 5.125 clock's own words); standard: "Charged at ₹X / month" byte-preserved. (3) The review's plan word dedup'd to the option labels' voice ("Trial (14 days)" / "Standard (active)").
+- Suite discipline: unit272 born — 11 checks green (the composer's three-state contract BY BEHAVIOR: percent gains the clause, flat/applied/unlock byte-preserved, zero-take silence; offerRuleLabel untouched; the ONE-composer law with the no-local-dialect count; the gate's shape; the wizard's plan-aware preview + review dedup + option labels). Suite-author lesson (5.265 again, sharper): the review-dedup pin `includes('Trial (status: trial)') === false` FAILED — it matched MY OWN v5.233.0 comment in the file; the pin now reads the extinct CODE shape (the old ternary), never a bare string that documentation may contain.
+- Gates: tsc EXIT=0 ×2; build EXIT=0 (44 assets, VERSION → servepoint-v5.233.0-r1 baked); regression battery unit194–272 ALL PASS by exit code (78 suites, PASS=78 FAIL=0).
+- E2E (dev, live): the guest bar whispers "10% off applies · ₹27.00 off this order" (persisted cart — the 5.252 persistence rode along) with the aria carrying the same words; the applied confirmation "₹27.00 off applied" byte-true; the drawer's Offer row and totals reconcile exactly (283.50 unselected / 255.15 applied); the wizard's trial preview speaks "No charge yet — ₹4,999.00 / month after the trial ends" and Standard keeps "Charged at". Screenshot: scripts/qa272-words-say-the-money.png. Console: zero new errors (fossil epoch t=1791167034195 only). QR Owner session restored.
+- Commit + push: feat = dcacda1, then chore(worklog). Push: NO token again — the pile rides (addendum).
+
+Stage Summary:
+- 5.233.0 — every surface that speaks a rate now also speaks the money the rate takes (percent offers), and every surface that speaks a plan now speaks whether the plan charges (the wizard). The say-it-once law gained a sibling: a rule that already names its rupees never repeats them.
+- Watch item NEW: suite pins must read CODE SHAPES, not bare strings — any string literal a comment may contain will self-match (the 5.265 negative-lookahead lesson's sibling; this round's pin died on the suite author's own changelog-style comment and was re-anchored to the extinct ternary).
+- Census: the wizard — the last unwalked Platform room — is audited; the guest QR surfaces and the public pages are re-audited healthy. The chronicle's walk backlog is now fully EMPTY across tenant, platform, guest and public surfaces. Next round: owner word from the gated candidates, a DAILY-style docs sweep, or a deliberate deepening of an audited surface (e.g. the wizard's provisioning submit path is still unwalked by design — it creates real data; only an owner's word or a dedicated cleanup plan should walk it).
+- Parked (carried): 038 birthdays (owner-gated); drawer movements CSV (only if asked); CounterInbox bulk "Ok all" (risky); guest QR "room favourite" badges (owner decision); DS showcase links (owner OK pending); URL write-back; storage folder silting; KDS bump-back; chat→bell pings; phone-key normalization; offer time-windows (schema, owner); Reports/Notifications search; margin leaderboard; micro-chunk dieting; README docs siblings sweep (next DAILY); GST billed-toggle (owner word).
+- Owner action items (carried): (1) delete orphaned drill auth user drill.owner@recoverydrill.in at next pooler session; (2) QR Flow owner password remains provisional; (3) 038 DDL one-command unblock in owner's hands; (4) GST filing basis confirmation (collected-only current posture); (5) rotate retired-project keys if that Supabase project still exists.
+- Crons: 15-min webDevReview (job 430321) + DAILY deep pass (job 431587, 09:00 IST — README route-grammar refresh DONE 2026-10-05; docs siblings sweep next).
+
+---
+Task ID: 272-PUSH-ADDENDUM (same round, post-commit)
+Agent: glm-5.3
+Task: Record the round's push outcome honestly.
+
+Work Log:
+- NO GitHub token in this round's environment (no GH_* matches, no credential files, no gh CLI, no helper).
+- State: the ride grows — Tasks 267–271's pairs, the sweeper's ce4f858, THIS round's dcacda1 + the worklog commit all sit LOCAL; origin/main remains edc84af. Thirteen-plus commits ride.
+- Remote config untouched: nothing to scrub.
+- Standing instruction stands: the next token-bearing round pushes the whole pile FIRST, before its own work.
+
+Stage Summary:
+- Work committed and gated (battery 78/78, tsc ×2, build, live E2E on guest + platform surfaces) but NOT on origin. The honesty rule holds: no push claimed that did not run.
