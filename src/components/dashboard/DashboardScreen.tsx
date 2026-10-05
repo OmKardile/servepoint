@@ -773,23 +773,27 @@ export const morningTake = (data: Pick<DashboardData, 'weeklyRevenue'>): Morning
  * word, lib/bookingday); ahead = the slot still stands, quiet = the promised
  * hour went by with the booking still open. todayKey is a parameter (the
  * component passes bookingTodayKey()) so the grammar is testable without a
- * running clock.
+ * running clock. v5.227.0 — the quiet rows ride home (most recent first,
+ * the book's own voice rule, 5.221): a quiet-only book can NAME its debt
+ * instead of counting it behind a card that never opens — the paper is
+ * where the band's 60-minute lookback hands the day's story over.
  */
 export const bookAhead = (
   reservations: Reservation[],
   nowMs: number,
   todayKey: string = bookingTodayKey(),
-): { ahead: Reservation[]; quiet: number } => {
+): { ahead: Reservation[]; quiet: number; quietRows: Reservation[] } => {
   const ahead: Reservation[] = [];
-  let quiet = 0;
+  const quietRows: Reservation[] = [];
   for (const r of reservations) {
     if (r.status !== 'booked') continue;
     if (bookingDayKey(r.slot_at) !== todayKey) continue;
     if (new Date(r.slot_at).getTime() >= nowMs) ahead.push(r);
-    else quiet += 1;
+    else quietRows.push(r);
   }
   ahead.sort((a, b) => new Date(a.slot_at).getTime() - new Date(b.slot_at).getTime());
-  return { ahead, quiet };
+  quietRows.sort((a, b) => new Date(b.slot_at).getTime() - new Date(a.slot_at).getTime());
+  return { ahead, quiet: quietRows.length, quietRows };
 };
 
 /* ── v5.207.0 — the giveaways reducer: the paper's third register ──
@@ -885,7 +889,9 @@ const MorningPaper: React.FC<{ data: DashboardData }> = ({ data }) => {
    * no week, no promises ahead), the tile STILL ships — and when the ride
    * failed or the ledger is empty, its silence never props the paper up
    * alone (the async-arrival grammar the book tile already taught). */
-  if (!take.yesterday && !take.week && (!promises || promises.ahead.length === 0) && !give)
+  /* v5.227.0 — a quiet-only book props the paper up too: the day's debt is
+   * a story even when nothing is ahead. */
+  if (!take.yesterday && !take.week && (!promises || (promises.ahead.length === 0 && promises.quiet === 0)) && !give)
     return null;
 
   const go = useUi.getState().goSection;
@@ -928,35 +934,64 @@ const MorningPaper: React.FC<{ data: DashboardData }> = ({ data }) => {
           </button>
         </section>
       )}
-      {promises && promises.ahead.length > 0 && (
+      {promises && (promises.ahead.length > 0 || promises.quiet > 0) && (
         <section
           className="sp-card flex flex-col p-5"
-          aria-label={`The book — ${promises.ahead.length} ${promises.ahead.length === 1 ? 'promise' : 'promises'} for the rest of today`}
+          aria-label={
+            promises.ahead.length > 0
+              ? `The book — ${promises.ahead.length} ${promises.ahead.length === 1 ? 'promise' : 'promises'} for the rest of today`
+              : `The book — ${promises.quiet} ${promises.quiet === 1 ? 'promise' : 'promises'} went quiet today`
+          }
         >
           <p className="flex items-center gap-1.5 text-[10.5px] font-bold uppercase tracking-[0.08em] text-[#969696]">
             <BookOpen size={13} aria-hidden className="shrink-0 text-[#0F3D3E]" />
-            The book · rest of today
+            The book · {promises.ahead.length > 0 ? 'rest of today' : 'today'}
           </p>
-          <p className="mt-2.5 text-[22px] font-bold leading-tight text-[#1A1A1A]">
-            {promises.ahead.length} {promises.ahead.length === 1 ? 'promise' : 'promises'} ahead
-          </p>
-          <p className="mt-1 text-[12px] text-[#6B6B6B]">
-            {bookingSlotLabel(promises.ahead[0].slot_at)}
-            {foreign && ' IST'} · {promises.ahead[0].guest_name} · party of{' '}
-            {promises.ahead[0].party_size}
-          </p>
-          {promises.quiet > 0 && (
-            <p className="mt-1 flex items-center gap-1 text-[11.5px] font-medium text-[#967221]">
-              <Clock size={11} aria-hidden className="shrink-0" />
-              {promises.quiet === 1
-                ? "one promise's hour went by, still booked"
-                : `${promises.quiet} promises' hours went by, still booked`}
-            </p>
+          {promises.ahead.length > 0 ? (
+            <>
+              <p className="mt-2.5 text-[22px] font-bold leading-tight text-[#1A1A1A]">
+                {promises.ahead.length} {promises.ahead.length === 1 ? 'promise' : 'promises'} ahead
+              </p>
+              <p className="mt-1 text-[12px] text-[#6B6B6B]">
+                {bookingSlotLabel(promises.ahead[0].slot_at)}
+                {foreign && ' IST'} · {promises.ahead[0].guest_name} · party of{' '}
+                {promises.ahead[0].party_size}
+              </p>
+              {promises.quiet > 0 && (
+                <p className="mt-1 flex items-center gap-1 text-[11.5px] font-medium text-[#967221]">
+                  <Clock size={11} aria-hidden className="shrink-0" />
+                  {promises.quiet === 1
+                    ? "one promise's hour went by, still booked"
+                    : `${promises.quiet} promises' hours went by, still booked`}
+                </p>
+              )}
+            </>
+          ) : (
+            <>
+              {/* v5.227.0 — a quiet-only book is a story, not silence: the
+                  card the ahead-count owned now speaks the debt in the floor
+                  book header's own convict-free grey, and names the most
+                  recent quiet row the way the band's hint does (the book's
+                  own voice rule, 5.221) — the day's ledger keeps its voice
+                  after the band's lookback retires it. */}
+              <p className="mt-2.5 text-[22px] font-bold leading-tight text-[#6B6B6B]">
+                {promises.quiet} {promises.quiet === 1 ? 'promise' : 'promises'} went quiet
+              </p>
+              <p className="mt-1 text-[12px] text-[#6B6B6B]">
+                {bookingSlotLabel(promises.quietRows[0].slot_at)}
+                {foreign && ' IST'} · {promises.quietRows[0].guest_name} · party of{' '}
+                {promises.quietRows[0].party_size} — the promised hour went by, still booked
+              </p>
+            </>
           )}
           <button
             type="button"
             onClick={() => go('floor', ['Dashboard', 'Floor'])}
-            aria-label={`Open the floor's book — ${promises.ahead.length} ${promises.ahead.length === 1 ? 'promise' : 'promises'} ahead`}
+            aria-label={
+              promises.ahead.length > 0
+                ? `Open the floor's book — ${promises.ahead.length} ${promises.ahead.length === 1 ? 'promise' : 'promises'} ahead`
+                : `Open the floor's book — ${promises.quiet} went quiet today`
+            }
             className="mt-3 inline-flex items-center gap-1.5 self-start rounded-lg border border-[#E3E7E0] px-3 py-1.5 text-[11.5px] font-semibold text-[#0F3D3E] transition hover:bg-[#F6F5F2] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#B88E2F]/40"
           >
             <BookOpen size={12} aria-hidden />

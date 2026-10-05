@@ -141,7 +141,7 @@ const others = ['seated', 'no_show', 'cancelled'].map((status) => ({
   status,
 }));
 const b9 = bookAhead(others, now, T);
-assert.deepEqual(b9, { ahead: [], quiet: 0 });
+assert.deepEqual(b9, { ahead: [], quiet: 0, quietRows: [] });
 ok('a seated, no-show or cancelled promise never speaks');
 
 // 10. the booking clock's today is the PASSED key — other days never speak
@@ -155,7 +155,7 @@ assert.equal(b10.ahead[0].slot_at, `${T}T20:30:00+05:30`);
 ok("yesterday's kept and tomorrow's fresh promises stay out of today's book");
 
 // 11. an empty or unread book is silence
-assert.deepEqual(bookAhead([], now, T), { ahead: [], quiet: 0 });
+assert.deepEqual(bookAhead([], now, T), { ahead: [], quiet: 0, quietRows: [] });
 ok('an empty book reads silence');
 
 console.log(`\nunit214 — ${n} asserts, all green.`);
