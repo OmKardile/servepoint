@@ -98,7 +98,7 @@ assert.ok(guestCode.includes('font-semibold tabular-nums'), 'the whisper rides t
 
 const barBlock = guestCode.slice(guestCode.indexOf('floating cart bar'), guestCode.indexOf('cart drawer'));
 assert.ok(!barBlock.includes('role="status"'), 'the bar line is NOT a live region — the bar re-renders on every add, a live region would chatter; the button\'s aria carries the voice');
-assert.ok(barBlock.includes("aria-label={`${t('viewOrder', { amt: money(cartTotal) })}${fit ? `, ${offerFitVoice(fit)}` : ''}`}"), 'the bar button\'s aria names the fit (the counter pill\'s own grammar)');
+assert.ok(barBlock.includes("aria-label={`${t('viewOrder', { amt: money(cartTotal) })}${fit ? `, ${offerFitVoice(fit)}` : ''}${windowWarm ? `, ${t('windowWarmFab')}` : ''}`}"), 'the bar button\'s aria names the fit (the counter pill\'s own grammar) — 5.251.0 honest re-anchor: the warm word rides the same label');
 ok('the surface: the palette, the tabular money, the aria — and no live-region chatter');
 
 /* ── 5 — the counter side: the surface survives, the body does not ── */

@@ -55,7 +55,7 @@ const swJs = strip('../public/sw.js');
   assert.ok(tickIdx > 0, 'the page owns the ONE 1s tick');
   const depsIdx = pages.indexOf('[phase, sessionToken, serverAnchor]', tickIdx);
   assert.ok(depsIdx > 0 && depsIdx - tickIdx < 300, 'the tick re-derives on a fresh server anchor (the re-arm path)');
-  assert.ok(pages.includes('{sessionToken && <SessionRibbon session={sessionToken} msLeft={msLeft} />}'), 'the ribbon renders the page\u2019s number');
+  assert.ok(pages.includes('{sessionToken && <SessionRibbon session={sessionToken} msLeft={msLeft} ended={windowEnded} warm={windowWarm} />}'), 'the ribbon renders the page\u2019s number (5.251.0 honest re-anchor: the bands ride the same call)');
   ok('one window arithmetic: the page ticks, the ribbon renders');
 }
 

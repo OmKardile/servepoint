@@ -77,7 +77,7 @@ import { offerDiscount } from '../../store/cart';
    dialects). The bar's own total already includes the discount when one
    is applied — '₹40.00 off applied' explains why the number moved. */
 import { offerFit, offerFitVoice } from '../../lib/offerFit';
-import { appTimezone, formatWindowLeft } from '../../lib/appday';
+import { appTimezone, formatWindowLeft, WARM_WINDOW_MS } from '../../lib/appday';
 
 /**
  * Guest QR surfaces (v5.3.0) — the customer side of the main flow.
@@ -323,19 +323,24 @@ function windowLeft(
  *  (the dead window is exactly when a guest is most confused — English-only
  *  words there were a hole in the three-language promise), and the rescan
  *  hint is audible at EVERY width — `hidden sm:inline` hid the recovery
- *  sentence on the phones the ribbon exists for. */
+ *  sentence on the phones the ribbon exists for. 5.251.0 — the warm/ended
+ *  verdicts are derived ON THE PAGE now (windowEnded / windowWarm from the
+ *  same msLeft, the threshold in appday's WARM_WINDOW_MS): the ribbon
+ *  renders the verdicts it is handed and computes nothing — one window
+ *  arithmetic, never two, for the bands as well as the clock. */
 function SessionRibbon({
   session,
   msLeft,
+  ended,
+  warm,
 }: {
   session: TableSession;
   msLeft: number | null;
+  ended: boolean;
+  warm: boolean;
 }): React.ReactElement {
   const { t } = useGuestLang();
   if (msLeft === null) return null as unknown as React.ReactElement;
-  const totalSec = Math.max(0, Math.floor(msLeft / 1000));
-  const ended = totalSec === 0;
-  const warm = totalSec < 180 && !ended;
   /* 5.218.0 — the m:ss voice moved to lib/appday's formatWindowLeft: the
      owner's Floor drill now speaks the SAME grammar (one window arithmetic,
      never two — the cross-screen rule). */
@@ -742,6 +747,15 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
   // at checkout stays byte-true as the hard stop — this is the courtesy that
   // saves the cart journey, not a replacement of the server's word.
   const windowEnded = msLeft !== null && msLeft <= 0;
+  // 5.251.0 — the WARM band climbs off the ribbon too: `endingSoon` used to
+  // live and die inside the ribbon (the exact disease 5.250.0 cured for the
+  // dead band, one band earlier) while the guest's eyes were on a full cart.
+  // Same msLeft, same threshold constant (WARM_WINDOW_MS — one arithmetic),
+  // derived HERE so the drawer and the FAB speak the ribbon's own amber
+  // verdict. A warm window still ACCEPTS orders — this is the nudge, not a
+  // lock; the server's word at checkout stays the hard stop.
+  const windowWarmMs = msLeft !== null && msLeft > 0 && msLeft < WARM_WINDOW_MS ? msLeft : null;
+  const windowWarm = windowWarmMs !== null;
   const addLine = useCallback(
     (l: Omit<CartLine, 'key'>) => {
       if (phase !== 'ready' || windowEnded) return; // locked windows accept nothing (v5.24.0); dead windows neither (5.250.0)
@@ -933,7 +947,7 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
 
   return (
     <div className="flex min-h-screen flex-col bg-[#F6F5F2]">
-      {sessionToken && <SessionRibbon session={sessionToken} msLeft={msLeft} />}
+      {sessionToken && <SessionRibbon session={sessionToken} msLeft={msLeft} ended={windowEnded} warm={windowWarm} />}
 
       {/* brand hero */}
       <header className="px-4 pb-4 pt-6" style={{ background: `linear-gradient(160deg, ${brand.teal} 0%, #14514f 100%)` }}>
@@ -1239,13 +1253,25 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
           <button
             type="button"
             onClick={() => setDrawerOpen(true)}
-            aria-label={`${t('viewOrder', { amt: money(cartTotal) })}${fit ? `, ${offerFitVoice(fit)}` : ''}`}
+            aria-label={`${t('viewOrder', { amt: money(cartTotal) })}${fit ? `, ${offerFitVoice(fit)}` : ''}${windowWarm ? `, ${t('windowWarmFab')}` : ''}`}
             className="mx-auto flex w-full max-w-xl items-center justify-between rounded-full px-5 text-white shadow-lg transition-opacity hover:opacity-95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#B88E2F]"
             style={{ background: brand.teal, height: 52 }}
           >
             <span className="flex items-center gap-2 text-[13.5px] font-semibold">
               <ShoppingBag size={16} aria-hidden />
               {t('nItems', { n: cartCount, s: cartCount > 1 ? 's' : '' })}
+              {/* 5.251.0 — the warm band's pulse rides the FAB: the gold dot
+                  is the stepper's "still trying" energy (5.248's pager chip
+                  language) borrowed for "still open — but draining". The
+                  money stays calm (teal); the urgency is a word in the
+                  aria-label + a dot, never a recolor of the price. */}
+              {windowWarm && (
+                <span
+                  aria-hidden
+                  className="h-1.5 w-1.5 animate-pulse rounded-full"
+                  style={{ background: brand.gold }}
+                />
+              )}
             </span>
             <span className="text-[14px] font-bold">{t('viewOrder', { amt: money(cartTotal) })}</span>
           </button>
@@ -1442,6 +1468,19 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
                     now the cart's too). role="status" so the appearance AND
                     the recovery (a server anchor that re-arms the window)
                     are both announced. */}
+                {/* 5.251.0 — the WARM word reaches the cart: the ribbon's amber
+                    band (endingSoon) used to be the only voice while the guest
+                    sat on a full cart with the clock draining. Same straggler
+                    ink as the ended note (one waiting language), with the
+                    LIVE countdown OUTSIDE the role=status span — the word is
+                    announced once on arrival, the clock ticks silently beside
+                    it (an aria-live region must never inherit a 1s ticker). */}
+                {windowWarmMs !== null && (
+                  <div className="mt-3 flex items-center justify-between gap-2 rounded-xl border border-[#F0E4C8] border-l-4 border-l-[#B45309] bg-[#FBF6EA] px-3 py-2 text-[12.5px] font-medium text-[#8A5A00]">
+                    <span role="status">{t('windowWarmNote')}</span>
+                    <span className="shrink-0 font-mono tabular-nums">{formatWindowLeft(windowWarmMs)}</span>
+                  </div>
+                )}
                 {windowEnded && (
                   <p role="status" className="mt-3 rounded-xl border border-[#F0E4C8] border-l-4 border-l-[#B45309] bg-[#FBF6EA] px-3 py-2 text-[12.5px] font-medium text-[#8A5A00]">
                     {t('windowEndedNote')}

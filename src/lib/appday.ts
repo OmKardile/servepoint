@@ -256,6 +256,15 @@ export function appTzTag(tz: string = appTimezone()): string {
   }
 }
 
+/** The window's warm band — the ONE threshold every "closing soon" verdict
+ *  speaks (5.251.0). The ribbon wore this number from birth (`totalSec < 180`)
+ *  and 5.250.0's page machinery knew only the dead band (windowEnded); the
+ *  warm band now lives HERE, beside formatWindowLeft, so the ribbon, the page
+ *  and the cart's word all gate on the same constant — one window arithmetic,
+ *  never two. (The Floor drill's map carries its own pinned literal — its
+ *  voice is unit257's byte-truth; it can re-home here in a later round.) */
+export const WARM_WINDOW_MS = 180_000;
+
 /** The ONE window countdown grammar (5.218.0) — guest ribbon and the owner's
  *  Floor drill speak the same voice: "9:57", minutes unpadded, seconds padded,
  *  floored at 0:00. `msLeft` may be negative (a drifted clock, a stale tick) —

@@ -141,8 +141,8 @@ assert.ok(
   'the anchor threads to the tick (the freshest verdict wins within one second)',
 );
 assert.ok(
-  guestPages.includes('{sessionToken && <SessionRibbon session={sessionToken} msLeft={msLeft} />}'),
-  'the verdict rides msLeft to the ribbon',
+  guestPages.includes('{sessionToken && <SessionRibbon session={sessionToken} msLeft={msLeft} ended={windowEnded} warm={windowWarm} />}'),
+  'the verdict rides msLeft to the ribbon (5.251.0: the bands ride with it — honest re-anchor, the rider moved, the law didn\u0027t)',
 );
 ok('the anchor threads: serverAnchor → windowLeft → msLeft → ribbon + buttons');
 
