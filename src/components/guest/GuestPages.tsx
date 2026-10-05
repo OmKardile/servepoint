@@ -11,6 +11,7 @@ import {
   CloudOff,
   Copy,
   HeartHandshake,
+  History,
   Loader2,
   Minus,
   Plus,
@@ -36,6 +37,8 @@ import {
   openTableSession,
   resolveTableQr,
   submitPublicFeedback,
+  takeReorderPayload,
+  writeReorderPayload,
   ticketAge,
   ticketPlacedStamp,
   verifyTableSession,
@@ -371,6 +374,23 @@ interface CartLine {
 
 const lineKey = (itemId: string, variantId: string | null, addonIds: string[], notes: string) =>
   `${itemId}::${variantId || 'base'}::${[...addonIds].sort().join('|')}::${notes.trim().toLowerCase()}`;
+
+/* v5.269.0 — ONE merge grammar: the cart's dedupe-and-grow (same key → qty
+ * grows, capped at 50; new key → appended) is extracted here so the reorder
+ * landing speaks the SAME arithmetic the customizer's add has always spoken.
+ * Two grammars would mean two truths about what "the same plate twice" is. */
+const mergeLines = (prev: CartLine[], incoming: CartLine[]): CartLine[] => {
+  const next = [...prev];
+  for (const l of incoming) {
+    const idx = next.findIndex((x) => x.key === l.key);
+    if (idx >= 0) {
+      next[idx] = { ...next[idx], qty: Math.min(50, next[idx].qty + l.qty) };
+    } else {
+      next.push(l);
+    }
+  }
+  return next;
+};
 
 const lineUnit = (l: CartLine) =>
   round2(l.item.price + (l.variant?.price_delta || 0) + l.addons.reduce((s, a) => s + a.price, 0));
@@ -747,6 +767,10 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
      fresh bundle get marked HERE — the drawer shows the badge, the guest
      removes in one tap, the retry is clean. */
   const [staleIds, setStaleIds] = useState<ReadonlySet<string>>(new Set());
+  /* v5.269.0 — the reorder's landing word: what matched today's menu and
+     what was honestly dropped. One word per landing (the payload is
+     consumed read-once); the X is the only eraser. */
+  const [reorderNote, setReorderNote] = useState<{ orderNumber: number; matched: number; dropped: number } | null>(null);
   const [offers, setOffers] = useState<PublicOffer[]>([]);
   const [selectedOfferId, setSelectedOfferId] = useState<string | null>(() => {
     try {
@@ -794,6 +818,67 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
         setMenu(m);
         setPhase('ready');
         document.title = t('docTitleMenu', { cafe: r.tenant.name, n: r.table.table_number });
+        // v5.269.0 — the ticket's manifest lands HERE, on the page that owns
+        // the live items: each line is matched by name (item, variant, every
+        // add-on — case-insensitive, whitespace-tolerant) and priced at
+        // TODAY's numbers through the cart's own merge. A line whose exact
+        // plate no longer exists is dropped whole and counted — the honest
+        // alternative would be a silent substitution, and the house does not
+        // substitute. Nothing matched → the word still speaks (nothing was
+        // added, and the guest knows why).
+        const manifest = takeReorderPayload(qrToken);
+        if (manifest) {
+          const live = (m.categories ?? []).flatMap((c) => c.items);
+          const matched: CartLine[] = [];
+          let dropped = 0;
+          for (const rl of manifest.lines) {
+            const item = live.find((i) => i.name.trim().toLowerCase() === rl.name.trim().toLowerCase());
+            if (!item) {
+              dropped += 1;
+              continue;
+            }
+            const variant = rl.variantName
+              ? item.variants.find((v) => v.name.trim().toLowerCase() === (rl.variantName ?? '').trim().toLowerCase()) ||
+                null
+              : null;
+            if (rl.variantName && !variant) {
+              dropped += 1;
+              continue;
+            }
+            const addons: GuestAddon[] = [];
+            let addonsOk = true;
+            for (const an of rl.addonNames) {
+              const a = item.addons.find((x) => x.name.trim().toLowerCase() === an.trim().toLowerCase());
+              if (!a) {
+                addonsOk = false;
+                break;
+              }
+              addons.push(a);
+            }
+            if (!addonsOk) {
+              dropped += 1;
+              continue;
+            }
+            const qty = Math.max(1, Math.min(50, Math.round(rl.qty) || 1));
+            matched.push({
+              key: lineKey(item.id, variant?.id || null, addons.map((a) => a.id), rl.notes || ''),
+              item,
+              variant,
+              addons,
+              qty,
+              notes: rl.notes || '',
+            });
+          }
+          if (matched.length > 0) {
+            setLines((prev) => mergeLines(prev, matched));
+            setStaleIds((prev) => {
+              const next = new Set(prev);
+              for (const l of matched) next.delete(l.item.id);
+              return next.size === prev.size ? prev : next;
+            });
+          }
+          setReorderNote({ orderNumber: manifest.orderNumber, matched: matched.length, dropped });
+        }
         // offers banner — best effort, never blocks the menu
         fetchPublicOffers(r.tenant.slug).then((o) => {
           if (alive) setOffers(o);
@@ -913,16 +998,8 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
   const addLine = useCallback(
     (l: Omit<CartLine, 'key'>) => {
       if (phase !== 'ready' || windowEnded) return; // locked windows accept nothing (v5.24.0); dead windows neither (5.250.0)
-      setLines((prev) => {
-        const key = lineKey(l.item.id, l.variant?.id || null, l.addons.map((a) => a.id), l.notes);
-        const idx = prev.findIndex((x) => x.key === key);
-        if (idx >= 0) {
-          const next = [...prev];
-          next[idx] = { ...next[idx], qty: Math.min(50, next[idx].qty + l.qty) };
-          return next;
-        }
-        return [...prev, { ...l, key }];
-      });
+      const key = lineKey(l.item.id, l.variant?.id || null, l.addons.map((a) => a.id), l.notes);
+      setLines((prev) => mergeLines(prev, [{ ...l, key }]));
       // a dish the guest can add is, by definition, live again — clear its mark
       setStaleIds((prev) => {
         if (!prev.has(l.item.id)) return prev;
@@ -1190,6 +1267,49 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
 
       <main className="mx-auto w-full max-w-xl flex-1 px-4 pb-36 pt-4">
         <GuestNetBand />
+        {/* v5.269.0 — the reorder's landing word. Green is the thanks card's
+            family (a completed thing, not a warning); the History ear names
+            the past the plates came from. The matched word speaks "today's
+            prices" because the manifest carried none — the drop word exists
+            so a vanished plate is COUNTED, never silently swallowed. */}
+        {phase === 'ready' && reorderNote && (
+          <div
+            role="status"
+            className="mb-4 flex items-start gap-2.5 rounded-2xl border border-[#BBDBC0] border-l-4 border-l-[#2E7D32] bg-[#EAF4EC] px-3.5 py-3"
+            style={{ animation: 'spFadeIn 240ms ease-out both' }}
+          >
+            <History size={15} className="mt-0.5 shrink-0 text-[#2E7D32]" aria-hidden />
+            <p className="min-w-0 flex-1 text-[12.5px] leading-relaxed text-[#1F5C26]">
+              {reorderNote.matched > 0
+                ? t('reorderLanded', {
+                    n: String(reorderNote.orderNumber),
+                    m: String(reorderNote.matched),
+                    s: reorderNote.matched === 1 ? '' : 's',
+                  })
+                : t('reorderGone', { n: String(reorderNote.orderNumber) })}
+              {/* the drop count speaks as its own sentence — a number and its
+                  verb agree ({v}), and the line break keeps the two truths
+                  from running together */}
+              {reorderNote.matched > 0 && reorderNote.dropped > 0 && (
+                <span className="block">
+                  {t('reorderDropped', {
+                    d: String(reorderNote.dropped),
+                    s: reorderNote.dropped === 1 ? '' : 's',
+                    v: reorderNote.dropped === 1 ? t('dropIsnt') : t('dropArent'),
+                  })}
+                </span>
+              )}
+            </p>
+            <button
+              type="button"
+              onClick={() => setReorderNote(null)}
+              aria-label={t('reorderDismiss')}
+              className="-mr-1 -mt-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[#5F8A62] transition hover:bg-white/70 hover:text-[#1F5C26] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#2E7D32]"
+            >
+              <X size={13} aria-hidden />
+            </button>
+          </div>
+        )}
         {/* v5.253.0 — the ticket's word reaches the menu: the guest's latest
             ticket (from THIS tab's own checkout) rides a slim chip above the
             category rail. The chip claims NOTHING about the kitchen — the
@@ -2358,6 +2478,26 @@ export function GuestTrackPage({ orderId }: { orderId: string }): React.ReactEle
                   style={{ background: brand.teal }}
                 >
                   <UtensilsCrossed size={12} aria-hidden /> {t('orderMore')}
+                </button>
+              )}
+              {/* v5.269.0 — the ticket remembers the order: a COMPLETED
+                  ticket (and only a completed one — a cancelled ticket's way
+                  back is the staff, per 252's own law) with a resumable
+                  session leaves its plates as a name manifest for the menu
+                  page, then walks. The manifest carries names, never prices
+                  — the menu prices at today's numbers and says so. */}
+              {moreToken && order.status === 'completed' && order.items.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    writeReorderPayload(moreToken, order);
+                    window.location.assign(`/menu/${moreToken}`);
+                  }}
+                  aria-label={t('reorderCta')}
+                  title={t('reorderCtaTitle')}
+                  className="inline-flex items-center gap-1.5 rounded-full border border-[#0F3D3E]/25 bg-white px-3 py-1.5 font-medium text-[#0F3D3E] transition hover:border-[#2E7D32] hover:text-[#1F5C26] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#2E7D32]"
+                >
+                  <History size={12} aria-hidden /> {t('reorderCta')}
                 </button>
               )}
               <button

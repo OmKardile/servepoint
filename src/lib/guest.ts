@@ -173,6 +173,63 @@ function readJson<T>(key: string): T | null {
   }
 }
 
+/* ── the ticket remembers the order (v5.269.0) ─────────────────────────────
+ * A completed ticket's plates were display words only — no item ids in the
+ * payload (sp_get_public_order predates any reorder idea) — so the reorder
+ * cannot write cart lines directly. It doesn't have to: the cart's own law
+ * (289's kept cart, identity only, the server re-prices everything) already
+ * says the menu page is where prices live. So the ticket leaves a NAME
+ * MANIFEST for the next menu page with the same session token, and the menu
+ * — the only holder of live items — does the mapping: every plate matched
+ * against TODAY's menu, priced at TODAY's numbers, or honestly dropped and
+ * counted. The manifest carries names, counts and the guest's own words —
+ * never prices (the section's law above), so a stale manifest can lie about
+ * nothing. Read-once by construction: takeReorderPayload clears the key the
+ * moment it reads it, so a reload can never double-add the plates. */
+export interface ReorderLine {
+  name: string;
+  variantName: string | null;
+  addonNames: string[];
+  qty: number;
+  notes: string | null;
+}
+
+export interface ReorderPayload {
+  orderNumber: number;
+  placedAt: string;
+  lines: ReorderLine[];
+}
+
+const REORDER_KEY = (token: string) => `sp.guest.reorder.${token}`;
+
+export function writeReorderPayload(token: string, order: GuestOrderSummary): void {
+  const payload: ReorderPayload = {
+    orderNumber: order.order_number,
+    placedAt: order.created_at,
+    lines: order.items.map((it) => ({
+      name: it.name,
+      variantName: it.variant_name,
+      addonNames: it.addons.map((a) => a.name),
+      qty: it.qty,
+      notes: it.notes,
+    })),
+  };
+  cacheJson(REORDER_KEY(token), payload);
+}
+
+/** Read-once: the manifest is consumed the moment the menu sees it. */
+export function takeReorderPayload(token: string): ReorderPayload | null {
+  try {
+    const raw = sessionStorage.getItem(REORDER_KEY(token));
+    if (!raw) return null;
+    sessionStorage.removeItem(REORDER_KEY(token));
+    const parsed = JSON.parse(raw) as ReorderPayload;
+    return parsed && Array.isArray(parsed.lines) && parsed.lines.length > 0 ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
 /* ── RPC wrappers ────────────────────────────────────────────────────────── */
 
 /** QR gate: turn the printed token into tenant + table identity (cached). */

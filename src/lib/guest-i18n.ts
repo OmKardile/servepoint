@@ -172,6 +172,16 @@ const EN: Dict = {
   // v5.252.0 — the ticket's way back: the forward action and the paid word
   orderMore: 'Order more',
   flowServedPaidHint: 'Enjoy — the bill is settled',
+  // v5.269.0 — the ticket remembers the order: the completed ticket's plates
+  // come back as TODAY's order (the menu prices them; the manifest carries none)
+  reorderCta: 'Order this again',
+  reorderCtaTitle: "Adds these plates to your cart at today's prices",
+  reorderLanded: "#{n} is back in your cart — {m} item{s} at today's prices",
+  reorderDropped: "{d} item{s} from that visit {v} on the menu anymore.",
+  dropIsnt: "isn't",
+  dropArent: "aren't",
+  reorderGone: 'Nothing from #{n} is on the menu anymore — nothing was added.',
+  reorderDismiss: 'Dismiss',
   // v5.253.0 — the loop closes: the menu remembers the guest's own ticket
   lastTicketTitle: 'Your ticket #{n}',
   lastTicketSub: 'Placed from this table — tap to follow it',
@@ -328,6 +338,15 @@ const HI: Dict = {
   // v5.252.0 — the ticket's way back: the forward action and the paid word
   orderMore: 'और ऑर्डर करें',
   flowServedPaidHint: 'स्वाद लें — बिल चुक गया',
+  // v5.269.0 — the ticket remembers the order
+  reorderCta: 'फिर से यही ऑर्डर करें',
+  reorderCtaTitle: 'ये प्लेट आज के दामों पर आपकी कार्ट में जुड़ जाएंगी',
+  reorderLanded: '#{n} आपकी कार्ट में वापस है — आज के दामों पर {m} आइटम',
+  reorderDropped: 'उस विज़िट के {d} आइटम अब मेनू में {v}।',
+  dropIsnt: 'नहीं है',
+  dropArent: 'नहीं हैं',
+  reorderGone: '#{n} का कुछ भी अब मेनू में नहीं है — कुछ नहीं जोड़ा गया।',
+  reorderDismiss: 'हटाएँ',
   // v5.253.0 — the loop closes: the menu remembers the guest's own ticket
   lastTicketTitle: 'आपका टिकट #{n}',
   lastTicketSub: 'इसी टेबल से लगा — देखने के लिए टैप करें',
@@ -484,6 +503,15 @@ const KN: Dict = {
   // v5.252.0 — the ticket's way back: the forward action and the paid word
   orderMore: 'ಮತ್ತಷ್ಟು ಆರ್ಡರ್ ಮಾಡಿ',
   flowServedPaidHint: 'ಆನಂದಿಸಿ — ಬಿಲ್ ಪಾವತಿಸಲಾಗಿದೆ',
+  // v5.269.0 — the ticket remembers the order
+  reorderCta: 'ಮತ್ತೆ ಇದನ್ನೇ ಆರ್ಡರ್ ಮಾಡಿ',
+  reorderCtaTitle: 'ಈ ಪ್ಲೇಟ್‌ಗಳು ಇಂದಿನ ಬೆಲೆಯಲ್ಲಿ ನಿಮ್ಮ ಕಾರ್ಟ್‌ಗೆ ಸೇರುತ್ತವೆ',
+  reorderLanded: '#{n} ನಿಮ್ಮ ಕಾರ್ಟ್‌ಗೆ ಮರಳಿದೆ — ಇಂದಿನ ಬೆಲೆಯಲ್ಲಿ {m} ಐಟಂ',
+  reorderDropped: 'ಆ ಭೇಟಿಯ {d} ಐಟಂ{s} ಈಗ ಮೆನುವಿನಲ್ಲಿ {v}.',
+  dropIsnt: 'ಇಲ್ಲ',
+  dropArent: 'ಇಲ್ಲ',
+  reorderGone: '#{n} ನ ಯಾವುದೂ ಈಗ ಮೆನುವಿನಲ್ಲಿ ಇಲ್ಲ — ಏನೂ ಸೇರಿಸಲಾಗಿಲ್ಲ.',
+  reorderDismiss: 'ಮುಚ್ಚಿ',
   // v5.253.0 — the loop closes: the menu remembers the guest's own ticket
   lastTicketTitle: 'ನಿಮ್ಮ ಟಿಕೆಟ್ #{n}',
   lastTicketSub: 'ಇದೇ ಟೇಬಲ್‌ನಿಂದ ಆರ್ಡರ್ — ನೋಡಲು ಟ್ಯಾಪ್ ಮಾಡಿ',
