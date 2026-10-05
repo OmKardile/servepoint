@@ -158,8 +158,8 @@ assert.ok(dash.includes("'bg-[#FDF3E4] text-[#8A5A16]'"), 'the chip tone is the 
 assert.ok(dash.includes("'bg-[#F1F4F1] text-[#6B6B6B]'"), 'quiet-only speaks the book\'s convict-free grey');
 assert.ok(dash.includes('went quiet'), 'the value says "went quiet" — never a no-show conviction');
 assert.ok(dash.includes('the promised hour passed, still booked'), 'the aria spells the quiet state in full words');
-assert.ok(dash.includes('`next ${nextDue.guest_name} · ${nextDue.party_size}p · promised ${bookingSlotLabel(nextDue.slot_at)}`'),
-  'the hint names the next party in the book\'s own words');
+assert.ok(dash.includes('`next ${nextDue.guest_name} · ${nextDue.party_size}p${dueTable ? ` · ${dueTable}` : \'\'} · promised ${bookingSlotLabel(nextDue.slot_at)}`'),
+  'the hint names the next party in the book\'s own words (5.222 adds the table clause — the words stand)');
 assert.ok(dash.includes('the promised hour went by, still booked`'),
   'quiet-only scope names the most recent debt');
 assert.ok(dash.includes('the next is inside the book\'s 45-minute line'),
@@ -172,8 +172,8 @@ ok('the door follows the truth (5.89)');
 
 /* ── 5. The QR slot — the band already holds the tables, so WHERE is free ── */
 
-assert.ok(dash.includes('const qrTableNameById = new Map(now.tables.map((t) => [t.id, t.table_number]));'),
-  'the table names come from the read the band ALREADY holds — zero new fetches');
+assert.ok(dash.includes('const tableNameById = new Map(now.tables.map((t) => [t.id, t.table_number]));'),
+  'the table names come from the read the band ALREADY holds — zero new fetches (5.222 renames it: one map, two slots)');
 assert.ok(dash.includes("filter((n): n is string => !!n)"), 'unknown table ids drop out — never a fabricated name');
 assert.ok(dash.includes('qrNames ? ` · ${qrNames}` : \'\''),
   'the value carries the distinct table numbers');

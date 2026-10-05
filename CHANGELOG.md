@@ -3,6 +3,22 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.222.0] — 2026-10-05 — The trail counts its tickets: 5.219's history door grouped a table's scans under their IST days, but a scan is a look, not work — the owner reading "9 scans" could never tell whether any became a served ticket. The drill's day headings now append the day's served-ticket count from the SAME orders ledger the floor rhythm reads (lib/turn's tableTicketDays — ONE ticket rule with the census: table-bound, not cancelled; ONE day key with the trail; a day that served none stays silent, never a zero) in deep-ink quiet-bold beside the grey scan words; and the band's arrivals hint names its promise's table through the QR slot's own map (one table word per band), degrading silently to the tableless words when the promise holds no table
+
+### Added — the trail counts its tickets (`src/lib/turn.ts`, `src/components/floor/FloorScreen.tsx`)
+
+- `tableTicketDays(orders, tableId)` — the drilled table's served-ticket count per reporting day, from the orders ledger the FloorScreen already holds in memory (no second cloud read). The lib keeps the ONE ticket rule the census and the rhythm already speak: a ticket is table-bound and not cancelled ("a cancelled ticket never happened; a ticket with no table never held one"), keyed on appDayKey — the ONE day grammar. A day that served nothing stays OUT of the map — silence, never a zero; an unreadable instant is ledger noise, skipped.
+- The drill receives the map as `ticketDays` and each history-door day heading appends "· N ticket(s)" — only when N > 0 — in `font-semibold text-[#0F3D3E]` quiet-bold beside the grey scan words, with an honest tooltip ("Tickets seated at this table that day — a cancelled ticket never happened"). 5.219's scan words stand byte-identical ahead of the clause; the collapsed door button keeps its own words; the heartbeat count is unchanged (the day counts ride renders, not clocks).
+
+### Changed — the arrivals hint names WHERE (`src/components/dashboard/DashboardScreen.tsx`)
+
+- The band's table map drops its QR-only name (`qrTableNameById` → `tableNameById` — one map, two slots): the arrivals hint now carries the promise's own table — "next E2E Kumar · 4p · T2 · promised 8:05 am" — the same "· T1" word the QR slot has spoken since 5.221. A promise with no table (or a failed tables read) degrades silently to the tableless words — never a fabricated name. The quiet debt's hint names its place too, the book's tail words intact.
+
+### Tests
+
+- unit261 born — 11 checks green (the lib derivation: empty silence, table isolation, accumulation, only-cancelled excluded, the IST day key across UTC midnight, noise skipped, purity; the FloorScreen wiring: lib import, no local copy, memo + prop + type, the heading's silence rule + plural + deep-ink bytes + tooltip, 5.219's words byte-identical, no new timer; the Dashboard hint bytes: due + quiet clauses, degrade-safety, the rename held, the QR slot's words and the aria untouched).
+- unit260's pins evolved to the new homes (the hint template + the map rename — intents unchanged); regression battery unit194–261 ALL PASS by exit code (67 suites).
+
 ## [5.221.0] — 2026-10-05 — The band hears the whole book: the Dashboard's arrivals slot counted a party whose promised hour passed an hour ago as "due" — a SECOND book verdict spoken beside the Floor chip's own law — and the QR slot named a count but never a place, even though the band already holds the tables. The book's promise verdicts moved home to the booking clock's lib; the arrivals slot now splits DUE from WENT QUIET by that ONE rule; and both slots name their WHERE
 
 ### Changed — the promise verdicts live in the booking clock's lib now (`src/lib/bookingday.ts`, `src/components/floor/FloorScreen.tsx`)

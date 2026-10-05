@@ -25,6 +25,8 @@
      unread) is COUNTED but never MEASURED; a cancelled ticket never
      happened; a ticket with no table never held one. */
 
+import { appDayKey } from './appday';
+
 /** The floor's DURATION register — minutes to words ("<1m" · "45m" ·
  *  "1h 5m"). The census's median and Reports' spans read this: a finished
  *  seat that held under a minute lasted "<1m", never "just sat" — that
@@ -177,4 +179,32 @@ export function computeTurnCensus(
     stat.medianMin = medianMinOf(tableSpans.get(id) ?? []);
   }
   return census;
+}
+
+/* ── v5.222.0 — the trail counts its tickets. 5.219's history door groups
+   a table's scans under their IST days, but a scan is a look, not work:
+   the owner reading "9 scans" cannot tell whether any of them became a
+   served ticket. The day's ticket count answers it from the SAME orders
+   ledger the floor rhythm already reads — no second trip to the cloud.
+   ONE ticket rule with the census and the rhythm (a ticket is table-bound
+   and not cancelled — a cancelled ticket never happened; a ticket with no
+   table never held one), ONE day key with the trail (appDayKey — the ONE
+   day grammar). A day that served nothing stays OUT of the map — silence,
+   never a zero; an unreadable instant is ledger noise, skipped. */
+export function tableTicketDays(
+  orders: {
+    table_id?: string | null;
+    status?: string | null;
+    created_at: string;
+  }[],
+  tableId: string,
+): Map<string, number> {
+  const days = new Map<string, number>();
+  for (const o of orders) {
+    if (o.table_id !== tableId || o.status === 'cancelled') continue;
+    if (!Number.isFinite(new Date(o.created_at).getTime())) continue;
+    const key = appDayKey(o.created_at);
+    days.set(key, (days.get(key) || 0) + 1);
+  }
+  return days;
 }

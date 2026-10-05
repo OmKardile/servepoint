@@ -103,7 +103,7 @@ import { MarkHit } from '../shell/MarkHit';
 import { EmptyState } from '../shell/EmptyState';
 import { useCart } from '../../store/cart';
 import type { Order, OrderItem } from '../../types';
-import { seatSpanLabel, computeTurnCensus, namedBreachList } from '../../lib/turn';
+import { seatSpanLabel, computeTurnCensus, namedBreachList, tableTicketDays } from '../../lib/turn';
 import type { TableTurnStats } from '../../lib/turn';
 
 /**
@@ -959,6 +959,7 @@ function TableDrill({
   onNoShow,
   sessions,
   now,
+  ticketDays,
   candidates,
   cutArmId,
   cutBusyId,
@@ -1007,6 +1008,10 @@ function TableDrill({
    *  live/expired verdicts and the cut-all count all read THIS number, so a
    *  row's display and its verdict can never disagree inside one render. */
   now: number;
+  /** v5.222.0 — the drilled table's served-ticket count per reporting day
+   *  (the SAME ledger the rhythm reads; lib/turn keeps the ONE rule). A day
+   *  that served nothing is absent — the heading stays silent, never a zero. */
+  ticketDays: Map<string, number>;
   candidates: DiningTable[];
   cutArmId: string | null;
   cutBusyId: string | null;
@@ -1618,16 +1623,34 @@ function TableDrill({
                 {olderScans.length > 0 &&
                   (showAllScans ? (
                     <div className="mt-3 space-y-3">
-                      {olderDayGroups.map(([day, rows]) => (
+                      {olderDayGroups.map(([day, rows]) => {
+                        /* v5.222.0 — the day heading counts the WORK, not just
+                           the looks: the table's served tickets that day, from
+                           the ledger in hand. A day that served none says only
+                           its scans — silence, never a zero. */
+                        const served = ticketDays.get(day) ?? 0;
+                        return (
                         <div key={day}>
                           <p className="text-[10.5px] font-bold uppercase tracking-wide text-[#969696]">
                             {istDayPretty(day)} · {rows.length} scan{rows.length === 1 ? '' : 's'}
+                            {served > 0 && (
+                              <>
+                                {' · '}
+                                <span
+                                  className="font-semibold text-[#0F3D3E]"
+                                  title="Tickets seated at this table that day — a cancelled ticket never happened"
+                                >
+                                  {served} ticket{served === 1 ? '' : 's'}
+                                </span>
+                              </>
+                            )}
                           </p>
                           <ul className="mt-1.5 space-y-1.5">
                             {rows.map(sessionRow)}
                           </ul>
                         </div>
-                      ))}
+                        );
+                      })}
                       <button
                         type="button"
                         onClick={() => setShowAllScans(false)}
@@ -2288,6 +2311,13 @@ export function FloorScreen(): React.ReactElement {
   const drillOrder = useMemo(
     () => (drillTable?.active_order_id ? orderByTable.get(drillTable.active_order_id) : undefined),
     [drillTable, orderByTable],
+  );
+  /* v5.222.0 — the trail's day-ticket counts read the SAME orders ledger the
+     rhythm reads, keyed per drilled table; recomputed only when the ledger
+     or the drilled table changes. The lib keeps the ONE ticket rule. */
+  const drillTicketDays = useMemo(
+    () => (drillTable ? tableTicketDays(orders, drillTable.id) : new Map<string, number>()),
+    [orders, drillTable],
   );
   /* v5.193.0 — the drill rides the same precedence: ticket in hand → the
      round's clock; no ticket → the book's flip stamp. promiseTick ages it. */
@@ -3577,6 +3607,7 @@ export function FloorScreen(): React.ReactElement {
           onNoShow={(r) => void runAction(`res-${r.id}`, () => updateReservationStatus(r.id, 'no_show'))}
           sessions={sessionsByTable.get(drillTable.id) ?? []}
           now={nowTick}
+          ticketDays={drillTicketDays}
           candidates={drillCandidates}
           cutArmId={cutArmId}
           cutBusyId={cutBusyId}

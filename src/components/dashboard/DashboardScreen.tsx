@@ -1423,18 +1423,20 @@ const NeedsNow: React.FC = () => {
      for a quiet board; a failed read renders nothing at all. */
   const liveQr = now.sessions ? liveWindows(now.sessions, nowMs) : [];
   const qrWarm = liveQr.length > 0 && youngestLiveMs(liveQr, nowMs) < 180_000;
-  /* 5.221.0 — the band already holds the tables, so the slot names WHERE:
-     the value carries the distinct table numbers holding live windows
+  /* 5.221.0 — the band already holds the tables, so the slots name WHERE:
+     the QR value carries the distinct table numbers holding live windows
      (a failed tables read degrades to the old tableless words — never a
      fabricated name), and the warm hint names the dying window's own
-     table (the argmin lives in the lib — youngestLiveWindow). */
-  const qrTableNameById = new Map(now.tables.map((t) => [t.id, t.table_number]));
+     table (the argmin lives in the lib — youngestLiveWindow).
+     5.222.0 — the map stops being the QR slot's: the arrivals hint names
+     its promise's table through the SAME read — one table word per band. */
+  const tableNameById = new Map(now.tables.map((t) => [t.id, t.table_number]));
   const qrTableNames = [
-    ...new Set(liveQr.map((s) => qrTableNameById.get(s.table_id)).filter((n): n is string => !!n)),
+    ...new Set(liveQr.map((s) => tableNameById.get(s.table_id)).filter((n): n is string => !!n)),
   ];
   const qrNames = qrTableNames.length > 0 ? qrTableNames.join(' · ') : null;
   const youngestQr = youngestLiveWindow(liveQr, nowMs);
-  const youngestQrTable = youngestQr ? qrTableNameById.get(youngestQr.table_id) ?? null : null;
+  const youngestQrTable = youngestQr ? tableNameById.get(youngestQr.table_id) ?? null : null;
   /* 5.89.0 — the card speaks today's inbox count; when older `new` tickets
      are stuck off it (yesterday's ghosts the counter can no longer Ok), the
      amber whisper names them and points to Bills, the room that can still
@@ -1506,6 +1508,14 @@ const NeedsNow: React.FC = () => {
   if (dueArrivals.length > 0 || quietArrivals.length > 0) {
     const quietOnly = dueArrivals.length === 0;
     const nextDue = dueArrivals[0];
+    /* 5.222.0 — the hint names WHERE, the same word the QR slot speaks:
+       the promise's own table from the band's read. A promise with no
+       table (or a failed read) degrades silently to the tableless words —
+       never a fabricated name. The dereference is optional-chained: this
+       block also runs in quiet-only scope, where no due row exists. */
+    const dueTable = nextDue?.table_id ? tableNameById.get(nextDue.table_id) ?? null : null;
+    const quietHead = quietArrivals[0];
+    const quietTable = quietHead?.table_id ? tableNameById.get(quietHead.table_id) ?? null : null;
     const arrivalsValue =
       dueArrivals.length > 0 && quietArrivals.length > 0
         ? `${dueArrivals.length} ${dueArrivals.length === 1 ? 'party' : 'parties'} due · ${quietArrivals.length} went quiet`
@@ -1536,8 +1546,8 @@ const NeedsNow: React.FC = () => {
       }${arrivalsSoon ? "; the next is inside the book's 45-minute line" : ''}; Seat & order walks them straight to the counter`,
       hint:
         dueArrivals.length > 0
-          ? `next ${nextDue.guest_name} · ${nextDue.party_size}p · promised ${bookingSlotLabel(nextDue.slot_at)}`
-          : `${quietArrivals[0].guest_name} · ${quietArrivals[0].party_size}p — the promised hour went by, still booked`,
+          ? `next ${nextDue.guest_name} · ${nextDue.party_size}p${dueTable ? ` · ${dueTable}` : ''} · promised ${bookingSlotLabel(nextDue.slot_at)}`
+          : `${quietHead.guest_name} · ${quietHead.party_size}p${quietTable ? ` · ${quietTable}` : ''} — the promised hour went by, still booked`,
       hintIcon: arrivalsSoon ? (
         <Clock size={11} aria-hidden className="shrink-0" />
       ) : quietOnly ? (
