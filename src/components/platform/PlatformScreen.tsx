@@ -18,7 +18,7 @@ import {
   TrendingUp,
 } from 'lucide-react';
 import { fetchAuditLogs, fetchSubscriptions, fetchTenants } from '../../lib/api';
-import { subscriptionWords } from '../../lib/billing';
+import { planLabel, subscriptionWords } from '../../lib/billing';
 import { formatBillingDate as formatDate } from '../../lib/billing';
 import { isSupabaseConfigured } from '../../lib/supabase';
 import { authService } from '../../lib/authService';
@@ -165,16 +165,50 @@ function billingCell(s: Subscription) {
   return subscriptionWords(s);
 }
 
+/* v5.232.0 — the billing words' CLASS LAW, one place (the 5.196 shape: one
+ * set, no fork — this time for ink, not stages): the primary's grey and the
+ * secondary's 11px pair, urgent wearing the same amber-red every site
+ * already spoke. THREE projections read it now — the subscriptions table,
+ * the subscriptions card, and the businesses table's new status voice —
+ * so the amber can never fork between surfaces again. */
+const BillingWords: React.FC<{
+  cell: ReturnType<typeof subscriptionWords>;
+  block?: boolean;
+}> = ({ cell, block }) => {
+  const P = block ? 'span' : 'p';
+  return (
+    <>
+      <P
+        className={`${block ? 'block ' : ''}${
+          cell.urgent ? 'font-semibold text-[#B42318]' : 'text-[#6B6B6B]'
+        }`}
+      >
+        {cell.primary}
+      </P>
+      {cell.secondary && (
+        <P
+          className={`${block ? 'block ' : ''}text-[11px] ${
+            cell.urgent ? 'font-medium text-[#B42318]' : 'text-[#969696]'
+          }`}
+        >
+          {cell.secondary}
+        </P>
+      )}
+    </>
+  );
+};
+
 const SageChipIcon: React.FC<{ icon: React.ElementType }> = ({ icon: Icon }) => (
   <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#D9E2DD] text-[#0F3D3E]">
     <Icon size={18} strokeWidth={2} aria-hidden />
   </span>
 );
 
-const KpiCard: React.FC<{ icon: React.ElementType; label: string; value: string | number }> = ({
+const KpiCard: React.FC<{ icon: React.ElementType; label: string; value: string | number; hint?: string }> = ({
   icon,
   label,
   value,
+  hint,
 }) => (
   <div className="sp-card p-5">
     <div className="flex items-center gap-3">
@@ -184,6 +218,10 @@ const KpiCard: React.FC<{ icon: React.ElementType; label: string; value: string 
     <p className="mt-4 text-3xl font-bold tracking-tight text-[#1A1A1A]" aria-label={label}>
       {value}
     </p>
+    {/* v5.232.0 — the walking question answered beside the number: who
+        carries the MRR, when the nearest trial ends. The line's grey voice,
+        honest silence when there is nothing to name. */}
+    {hint && <p className="mt-1.5 truncate text-[11.5px] font-medium text-[#969696]">{hint}</p>}
   </div>
 );
 
@@ -259,7 +297,17 @@ const RowSkeletons: React.FC<{ rows?: number }> = ({ rows = 5 }) => (
 
 /* ─────────────────────── dashboard sub-views ─────────────────────── */
 
-const RecentBusinessRow: React.FC<{ tenant: Tenant }> = ({ tenant }) => (
+const RecentBusinessRow: React.FC<{ tenant: Tenant; sub?: Subscription | null }> = ({
+  tenant,
+  sub,
+}) => {
+  /* v5.232.0 — the strip hears the clock: a trialing business names its own
+   * end date in the line it already speaks, the EXACT words the clock
+   * says everywhere else (words.primary — no third phrasing). Active rows
+   * stay calm — renewal urgency is not a thing the strip raises. */
+  const cell = sub ? billingCell(sub) : null;
+  const trialClause = cell && (sub?.status === 'trialing' || sub?.status === 'trial') && cell.primary !== '—' ? cell.primary : null;
+  return (
   <div className="flex items-center gap-3 py-3.5">
     <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#D9E2DD] text-sm font-bold text-[#0F3D3E]">
       {(tenant.name || '?').charAt(0).toUpperCase()}
@@ -273,11 +321,18 @@ const RecentBusinessRow: React.FC<{ tenant: Tenant }> = ({ tenant }) => (
         {tenant.business_type ? tenant.business_type.charAt(0).toUpperCase() + tenant.business_type.slice(1) : 'Business'}
         {' · '}
         {formatDate(tenant.created_at)}
+        {trialClause && (
+          <>
+            {' · '}
+            <span className={cell?.urgent ? 'font-semibold text-[#B42318]' : 'font-medium text-[#6B6B6B]'}>{trialClause}</span>
+          </>
+        )}
       </p>
     </div>
     <StatusChip status={tenant.status} />
   </div>
-);
+  );
+};
 
 const ActivityRow: React.FC<{ log: AuditLogEntry }> = ({ log }) => (
   <div className="flex items-start gap-3 py-3.5">
@@ -349,6 +404,14 @@ export const PlatformScreen: React.FC = () => {
     [tenants]
   );
 
+  /* v5.232.0 — the businesses' own clock, joined once: every business voice
+   * (the table's status cell, the details panel, the dashboard's strip and
+   * hints) reads this Map — one join, no per-row finds, one register. */
+  const subByTenantId = useMemo(
+    () => new Map((subs ?? []).map((s) => [s.tenant_id, s] as const)),
+    [subs]
+  );
+
   const filteredTenants = useMemo(() => {
     const q = businessQuery.trim().toLowerCase();
     if (!q) return tenants ?? [];
@@ -382,6 +445,34 @@ export const PlatformScreen: React.FC = () => {
     const kpisLoading = tenants === null || subs === null;
     const anyError = tenantsError || subsError || logsError;
 
+    /* v5.232.0 — the walking questions answered beside the numbers: who
+     * carries the MRR, when the money next moves, when the nearest trial
+     * ends, where the fleet lives. Every hint derives from registers already
+     * in scope; silence when there is nothing honest to name. */
+    const activeSubs = (subs ?? []).filter((s) => s.status === 'active');
+    const payingSubs = activeSubs.filter((s) => (s.final_monthly_rate ?? s.monthly_price ?? 0) > 0);
+    let mrrHint: string | undefined;
+    if (payingSubs.length === 1) {
+      mrrHint = `from ${tenantNameById.get(payingSubs[0].tenant_id) || '—'} · ${planLabel(payingSubs[0].plan_id)}`;
+    } else if (payingSubs.length > 1) {
+      mrrHint = `from ${payingSubs.length} paying subscriptions`;
+    }
+    const nextCharges = activeSubs
+      .map((s) => s.next_billing_at)
+      .filter((d): d is string => !!d)
+      .sort();
+    const activeSubsHint =
+      nextCharges.length > 0 ? `next charge ${formatDate(nextCharges[0])}` : undefined;
+    const trialEnds = (subs ?? [])
+      .filter((s) => s.status === 'trialing' || s.status === 'trial')
+      .map((s) => s.trial_end)
+      .filter((d): d is string => !!d)
+      .sort();
+    const trialsHint = trialEnds.length > 0 ? `nearest ends ${formatDate(trialEnds[0])}` : undefined;
+    const cities = [...new Set((tenants ?? []).map((t) => (t.city || '').trim()).filter(Boolean))];
+    const businessesHint =
+      cities.length === 1 ? cities[0] : cities.length > 1 ? cities.join(' · ') : undefined;
+
     return (
       <div className="space-y-5">
         {anyError && (
@@ -405,10 +496,10 @@ export const PlatformScreen: React.FC = () => {
             </>
           ) : (
             <>
-              <KpiCard icon={Building2} label="Total businesses" value={tenantsError ? '—' : tenants?.length ?? 0} />
-              <KpiCard icon={CreditCard} label="Active subscriptions" value={subsError ? '—' : activeSubscriptions} />
-              <KpiCard icon={TrendingUp} label="Monthly recurring revenue" value={subsError ? '—' : formatMoney(mrr)} />
-              <KpiCard icon={Hourglass} label="Trials" value={tenantsError ? '—' : trialTenants} />
+              <KpiCard icon={Building2} label="Total businesses" value={tenantsError ? '—' : tenants?.length ?? 0} hint={businessesHint} />
+              <KpiCard icon={CreditCard} label="Active subscriptions" value={subsError ? '—' : activeSubscriptions} hint={activeSubsHint} />
+              <KpiCard icon={TrendingUp} label="Monthly recurring revenue" value={subsError ? '—' : formatMoney(mrr)} hint={mrrHint} />
+              <KpiCard icon={Hourglass} label="Trials" value={tenantsError ? '—' : trialTenants} hint={trialsHint} />
             </>
           )}
         </div>
@@ -441,7 +532,7 @@ export const PlatformScreen: React.FC = () => {
               ) : (
                 <div className="divide-y divide-[#E3E7E0]">
                   {recentTenants.map((t) => (
-                    <RecentBusinessRow key={t.id} tenant={t} />
+                    <RecentBusinessRow key={t.id} tenant={t} sub={subByTenantId.get(t.id)} />
                   ))}
                 </div>
               )}
@@ -484,7 +575,9 @@ export const PlatformScreen: React.FC = () => {
     );
   };
 
-  const renderBusinessDetailFields = (t: Tenant) => (
+  const renderBusinessDetailFields = (t: Tenant) => {
+    const sub = subByTenantId.get(t.id);
+    return (
     <dl className="grid grid-cols-1 gap-3 sm:grid-cols-3">
       <div>
         <dt className="text-[11px] font-medium uppercase tracking-wide text-[#969696]">Owner email</dt>
@@ -508,6 +601,18 @@ export const PlatformScreen: React.FC = () => {
           <CopyValueButton value={t.id} label="Business ID" />
         </dd>
       </div>
+      {/* v5.232.0 — the details panel hears the clock too: the plan's own
+          name (planLabel) and the subscription's words — the same words the
+          tables speak, never a third phrasing. No subscription row: an
+          honest dash, no invented plan. */}
+      <div>
+        <dt className="text-[11px] font-medium uppercase tracking-wide text-[#969696]">Plan</dt>
+        <dd className="mt-0.5 text-[13px] font-medium text-[#1A1A1A]">{sub ? planLabel(sub.plan_id) : '—'}</dd>
+      </div>
+      <div>
+        <dt className="text-[11px] font-medium uppercase tracking-wide text-[#969696]">Subscription</dt>
+        <dd className="mt-0.5">{sub ? <BillingWords cell={billingCell(sub)} /> : <span className="text-[13px] font-medium text-[#1A1A1A]">—</span>}</dd>
+      </div>
       <div>
         <dt className="text-[11px] font-medium uppercase tracking-wide text-[#969696]">Type</dt>
         <dd className="mt-0.5 text-[13px] font-medium capitalize text-[#1A1A1A]">{t.business_type || '—'}</dd>
@@ -521,7 +626,8 @@ export const PlatformScreen: React.FC = () => {
         <dd className="mt-0.5 whitespace-nowrap text-[13px] font-medium text-[#1A1A1A]">{formatDate(t.created_at)}</dd>
       </div>
     </dl>
-  );
+    );
+  };
 
   const renderBusinesses = () => (
     <div className="space-y-5">
@@ -644,9 +750,22 @@ export const PlatformScreen: React.FC = () => {
                         <td className="px-4 py-3.5 text-[#6B6B6B]">{t.city || '—'}</td>
                         <td className="max-w-[220px] truncate px-4 py-3.5 text-[#6B6B6B]">{t.owner_email || '—'}</td>
                         <td className="px-4 py-3.5">
+                          {/* v5.232.0 — the status cell hears the clock: the
+                              chip keeps its word, and the business's own
+                              subscription speaks beneath it — the SAME
+                              words and ink the Subscriptions table speaks
+                              (one join, one grammar, no fork). */}
                           <StatusChip status={t.status} />
+                          {(() => {
+                            const s = subByTenantId.get(t.id);
+                            if (!s) return null;
+                            return (
+                              <div className="mt-1.5 max-w-[190px]">
+                                <BillingWords cell={billingCell(s)} />
+                              </div>
+                            );
+                          })()}
                         </td>
-                        <td className="whitespace-nowrap px-4 py-3.5 text-[#6B6B6B]">{formatDate(t.created_at)}</td>
                       </tr>
                       {expanded && (
                         <tr className="border-t border-[#E3E7E0]">
@@ -694,6 +813,27 @@ export const PlatformScreen: React.FC = () => {
                         <dt className="text-[#969696]">Created</dt>
                         <dd className="whitespace-nowrap text-[#1A1A1A]">{formatDate(t.created_at)}</dd>
                       </div>
+                      {/* v5.232.0 — the mobile card hears the clock: plan's
+                          name and the subscription's words, the same law the
+                          desktop cell speaks. */}
+                      {(() => {
+                        const s = subByTenantId.get(t.id);
+                        if (!s) return null;
+                        return (
+                          <>
+                            <div className="flex justify-between gap-3">
+                              <dt className="text-[#969696]">Plan</dt>
+                              <dd className="text-[#1A1A1A]">{planLabel(s.plan_id)}</dd>
+                            </div>
+                            <div className="flex justify-between gap-3">
+                              <dt className="text-[#969696]">Subscription</dt>
+                              <dd className="text-right text-[#1A1A1A]">
+                                <BillingWords cell={billingCell(s)} block />
+                              </dd>
+                            </div>
+                          </>
+                        );
+                      })()}
                     </dl>
                   </div>
                   <button
@@ -786,21 +926,7 @@ export const PlatformScreen: React.FC = () => {
                         <StatusChip status={s.status} />
                       </td>
                       <td className="whitespace-nowrap px-4 py-3.5 text-right align-top">
-                        {(() => {
-                          const cell = billingCell(s);
-                          return (
-                            <>
-                              <p className={cell.urgent ? 'font-semibold text-[#B42318]' : 'text-[#6B6B6B]'}>
-                                {cell.primary}
-                              </p>
-                              {cell.secondary && (
-                                <p className={`text-[11px] ${cell.urgent ? 'font-medium text-[#B42318]' : 'text-[#969696]'}`}>
-                                  {cell.secondary}
-                                </p>
-                              )}
-                            </>
-                          );
-                        })()}
+                        <BillingWords cell={billingCell(s)} />
                       </td>
                     </tr>
                   ))}
@@ -840,21 +966,7 @@ export const PlatformScreen: React.FC = () => {
                     <div className="flex justify-between gap-3">
                       <dt className="text-[#969696]">Next charge</dt>
                       <dd className="text-right text-[#1A1A1A]">
-                        {(() => {
-                          const cell = billingCell(s);
-                          return (
-                            <>
-                              <span className={`block ${cell.urgent ? 'font-semibold text-[#B42318]' : ''}`}>
-                                {cell.primary}
-                              </span>
-                              {cell.secondary && (
-                                <span className={`block text-[11px] ${cell.urgent ? 'font-medium text-[#B42318]' : 'text-[#969696]'}`}>
-                                  {cell.secondary}
-                                </span>
-                              )}
-                            </>
-                          );
-                        })()}
+                        <BillingWords cell={billingCell(s)} block />
                       </dd>
                     </div>
                   </dl>
