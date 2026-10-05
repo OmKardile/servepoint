@@ -6888,3 +6888,41 @@ Work Log:
 
 Stage Summary:
 - Work committed and gated (battery 83/83, tsc ×2, build, live E2E with the two-surface count reconciliation) but NOT on origin — the push ran and failed for lack of credentials, not for lack of trying. The honesty rule holds: no push claimed that did not run.
+
+---
+Task ID: 278 (15-min webDevReview round, trace 1a0fba3beb0e3c89-cron-agent-loop-202610051645)
+Agent: glm-5.3 (cron webDevReview round)
+Task: Post-5.238.0 round — the classified watch item paid: ONE app-day clock for the ticket rooms. v5.239.0 "one today in every room".
+
+Work Log:
+- Orientation: worklog tail — 277 closed (d41a164 + d38ff9c, v5.238.0, battery 83/83); tree clean. THIS round = Task 278, version → v5.239.0. Task stamp 16:40 +08:00. Push ATTEMPTED FIRST per the standing instruction — failed honestly (no token); 28 commits ride (addendum below). tsc EXIT=0 pre-claim.
+- Recon of the clock entanglement: the full isSameLocalDay sweep found TWELVE sites across FIVE rooms (not the four from 277's note): Bills ×6 (the 5.203 ghost at 132, the CSV age gate at 351 — unit258-pinned, the today filter at 672, the older census at 732, the row age chip at 1475, the detail pane's "from an earlier day" at 1689), Dashboard ×2 (liveToday/staleOlder at 1397-1398 — the ONE-population claim forces the Dashboard along with Bills' ghost), CounterInbox ×1 (the new queue at 284), Kitchen ×3 (todays, cancelledToday, and the quiet line's INJECTED grammar — lastRailTicketAt(orders, isSameLocalDay)). Partial unification would have INTRODUCED new forks (Bills app-day vs Kitchen local-day) — so the honest scope was all twelve.
+- SCOPE DISCIPLINE: the reader-register voices stay local — Messages' chat day dividers and FoodDrinks' fmtLastSeen ("last seen today") label the READER's day; the browser's clock is the honest one there. lib/day's twins live on with a scope note saying who moved and why. The rolling 7d week keeps its bytes (a separate, still-classified watch item).
+- Feature: lib/appday's isSameAppDayAs(iso, nowMs, tz?) + the bare isSameAppDay(iso) — built on appDayKey (the app-day string of an instant), deterministic in any runner (Intl with the explicit tz — the runner's zone is irrelevant). All twelve sites swapped; the Kitchen's doc comment updated (isSameAppDay since 5.239.0).
+- The round's behavioral proof (runner-tz-independent, in unit278): at NOW = 17:30Z (22:30 IST), the instant 20:30Z is "today" on the local clock but 02:00 TOMORROW in IST — isSameLocalDayAs says true, isSameAppDayAs says false. That disagreement is the bug. The mid-day case agrees on both; the explicit clock is honored over the wall; the bare form delegates.
+- MID-ROUND CATCHES: (a) the Kitchen's old doc comment still said "(isSameLocalDay)" — the suite's no-local-day pin caught the STRING, the comment fixed; (b) the Kitchen site-count pin counted prose mentions (comments + import) — re-pinned to the two calls + the grammar reference; (c) unit267's hhmm import pin and unit277's frozen version pin went stale — re-anchored (the version law now the agreement shape in BOTH 276 and 277 — the unit241 lesson, third time pinned: never freeze a number the next round honestly bumps).
+- Gates: tsc EXIT=0 ×2; build EXIT=0 (45 assets, VERSION → servepoint-v5.239.0-r1 baked); regression battery unit194–278 ALL PASS by exit code (84 suites, PASS=84 FAIL=0).
+- E2E (dev, live): BASELINE taken BEFORE the swap (today = 3 tickets #130/#129/#128, stuck = 3, all = 58, "8 unpaid · 5 older") and RE-VERIFIED after: every count byte-identical; the Kitchen's quiet line "· last ticket 05:19 · 3 completed today"; the Dashboard's "3 older tickets are stuck off today's board" + the inbox group's voices. In the demo's tz the fix is invisible — which IS the point: the rooms already agreed here; now they agree everywhere. Console clean. Screenshot: scripts/qa278-one-today-every-room.png (Bills Today view — the population the one clock governs).
+- Commit + push: feat = aecaaaf, then chore(worklog). Push: ATTEMPTED (first, per the standing instruction) and again post-commit — both failed honestly, no token (addendum below).
+
+Stage Summary:
+- 5.239.0 — one today in every room: the chase's Today, the stuck register, the counter's queue, the board's counters and the quiet line's memory answer the SAME "today" the Close-out closes and Reports windows — the cafe's own day, wherever the browser lives.
+- Watch item REMAINING: Bills' rolling 7d week (168h back from now) vs the 5.19 calendar week ("N days = N calendar days ending today") — still classified; unifying changes the 7d filter's boundary behavior and its miss-sentence tests; needs its own round. The reader-register locals (chat dividers, fmtLastSeen) stay by design.
+- Census: five rooms now on one clock; the window grammar has two consumers; the app's "today" voices: appday everywhere it gates money or tickets, lib/day where it labels the reader's own day.
+- Parked (carried): variant/add-on recipe costing (the BIG one — migration 039 + the 015 engine, owner word advised); 038 birthdays (owner-gated); drawer movements CSV (only if asked); CounterInbox bulk "Ok all" (risky); guest QR "room favourite" badges (owner decision); DS showcase links (owner OK pending); storage folder silting; phone-key normalization (OWNER-GATED — data policy); offer time-windows (schema, owner); micro-chunk dieting; README docs siblings sweep (next DAILY); GST billed-toggle (owner word); NEW: Bills rolling-7d → calendar-week unification (classified watch item). Deliberately designed out (do not re-park): chat→bell pings (031); KDS bump-back (engine reversal); the reader-register clock (by design).
+- Owner action items (carried): (1) delete orphaned drill auth user drill.owner@recoverydrill.in at next pooler session; (2) QR Flow owner password remains provisional; (3) 038 DDL one-command unblock in owner's hands; (4) GST filing basis confirmation (collected-only current posture); (5) rotate retired-project keys if that Supabase project still exists.
+- Crons: 15-min webDevReview (job 430321) + DAILY deep pass (job 431587, 09:00 IST — README route-grammar refresh DONE 2026-10-05; docs siblings sweep next).
+
+---
+Task ID: 278-PUSH-ADDENDUM (same round, post-commit)
+Agent: glm-5.3
+Task: Record the round's push outcome honestly.
+
+Work Log:
+- Push ATTEMPTED TWICE this round (the standing instruction was honored — once FIRST per its terms, once post-commit): both ran and failed — "fatal: could not read Username for 'https://github.com': No such device or address". NO GitHub token in the round environment (0 GH_* matches, no credential files, no gh CLI, no helper).
+- State: the ride grows — Tasks 267–277's pairs, the sweeper's ce4f858, THIS round's aecaaaf + the worklog commit all sit LOCAL; origin/main remains edc84af. Thirty commits ride.
+- Remote config untouched: nothing to scrub.
+- Standing instruction stands: the next token-bearing round pushes the whole pile FIRST, before its own work.
+
+Stage Summary:
+- Work committed and gated (battery 84/84, tsc ×2, build, live E2E byte-identical to baseline + the runner-tz-independent behavioral proof) but NOT on origin — the push ran and failed for lack of credentials, not for lack of trying. The honesty rule holds: no push claimed that did not run.
