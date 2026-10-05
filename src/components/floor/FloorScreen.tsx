@@ -82,6 +82,7 @@ import {
   liveWindowsOf,
   sessionState,
   SESSION_TONE,
+  sessionsInWindow,
   youngestLiveMs,
 } from '../../lib/tableSession';
 import {
@@ -2411,6 +2412,18 @@ export function FloorScreen(): React.ReactElement {
     return computeTurnCensus(orders, settleByOrder, turnMin, startMs, endMs);
   }, [orders, settleByOrder, turnMin]);
 
+  /* v5.223.0 — the look count: the week's opened menu windows and the prior
+     week's, from the session ledger already in hand (no second cloud read).
+     The SAME bounds the seated-rounds census draws — the look count and the
+     work count can never draw from different weeks. */
+  const windowCensus = useMemo(() => {
+    const { startMs, endMs, prevStartMs } = floorWeekWindow();
+    return {
+      count: sessionsInWindow(sessions, startMs, endMs),
+      prev: sessionsInWindow(sessions, prevStartMs, startMs),
+    };
+  }, [sessions]);
+
   /* v5.183.0 — the named breach list: WHICH tables held past the house
      line this week, worst span first. One pure sort, recomputed with the
      census it reads; silent when no seat crossed. */
@@ -2511,8 +2524,13 @@ export function FloorScreen(): React.ReactElement {
       else map.set(k, [r]);
     }
     const pastCount = rows.filter((r) => new Date(r.slot_at).getTime() < startMs).length;
-    const bookedToday = rows.filter((r) => bookingDayKey(r.slot_at) === today && r.status === 'booked').length;
-    return { groups: [...map.entries()], pastCount, bookedToday, total: rows.length };
+    /* v5.223.0 — the header's "still expected" count moved OUT of this memo:
+       a status-count went stale between fetches while the row badges flipped
+       on the promise clock (the header said "still expected" about a party
+       whose badge already read "went quiet" — a second verdict, live). The
+       expected/quiet split is computed at render beside the badges' own
+       clock now — one pass, one verdict. */
+    return { groups: [...map.entries()], pastCount, total: rows.length };
   }, [reservations, showPast]);
 
   /* v5.87.0 — the book speaks the board's language: a booked row whose hour
@@ -2524,6 +2542,17 @@ export function FloorScreen(): React.ReactElement {
      clock, so a row flips between fetches without one. */
   const rowNowMs = Date.now();
   const rowTodayKey = bookingTodayKey();
+  /* v5.223.0 — the book header's count follows the book's own verdicts
+     (5.221's law, applied home): "still expected" counts booked rows whose
+     promised hour has NOT passed, and the quiet debt speaks its own words
+     in the book's grey — never a status-count the row badges contradict.
+     Computed at render beside the badges' clock (rowNowMs) so the count
+     and the rows can never disagree inside one pass. */
+  const bookedTodayRows = (reservations ?? []).filter(
+    (r) => r.status === 'booked' && bookingDayKey(r.slot_at) === rowTodayKey,
+  );
+  const expectedToday = bookedTodayRows.filter((r) => new Date(r.slot_at).getTime() >= rowNowMs).length;
+  const quietToday = bookedTodayRows.length - expectedToday;
 
   if (loading) {
     return <SkeletonBoard />;
@@ -2642,7 +2671,18 @@ export function FloorScreen(): React.ReactElement {
             <h2 className="text-[15px] font-bold text-[#1A1A1A]">The book</h2>
             <p className="mt-0.5 text-[12.5px] text-[#6B6B6B]">
               Reservations · every phone promise and what became of it
-              {book.bookedToday > 0 && <> · <span className="font-bold text-[#8A5A00]">{book.bookedToday} still expected today</span></>}
+              {expectedToday > 0 && <> · <span className="font-bold text-[#8A5A00]">{expectedToday} still expected today</span></>}
+              {quietToday > 0 && (
+                <>
+                  {' · '}
+                  <span
+                    className="font-bold text-[#6B6B6B]"
+                    title="The promised hour went by — the party is still booked. Seat them or mark the no-show; the clock does not convict."
+                  >
+                    {quietToday} went quiet{expectedToday === 0 ? ' today' : ''}
+                  </span>
+                </>
+              )}
             </p>
           </div>
           <button
@@ -2905,10 +2945,18 @@ export function FloorScreen(): React.ReactElement {
             <p className="max-w-[250px] text-[11.5px] text-[#6B6B6B]">
               Seat a table from this board — the rhythm builds itself as rounds land.
             </p>
+            {/* v5.223.0 — the all-lookers honesty: scans with zero seated rounds
+                is the exact gap the week's story exists to tell; the empty state
+                names it instead of leaving the windows uncounted. */}
+            {windowCensus.count > 0 && (
+              <p className="max-w-[280px] text-[11.5px] font-semibold text-[#8A5A00]">
+                {windowCensus.count} menu window{windowCensus.count === 1 ? '' : 's'} opened this week — none became a ticket yet
+              </p>
+            )}
           </div>
         ) : (
           <>
-            <div className="mb-3 grid grid-cols-2 gap-2 md:grid-cols-4">
+            <div className="mb-3 grid grid-cols-2 gap-2 md:grid-cols-5">
               <div className="rounded-2xl border border-[#E3E7E0] bg-white px-3 py-2">
                 <p className="text-[10.5px] font-semibold uppercase tracking-wide text-[#6B6B6B]">Seated rounds · 7d</p>
                 <p className="mt-0.5 text-[18px] font-bold tabular-nums text-[#1A1A1A]">{rhythm.total}</p>
@@ -2944,6 +2992,39 @@ export function FloorScreen(): React.ReactElement {
                   {rhythm.busiest ? rhythm.busiest.label : '—'}{' '}
                   <span className="text-[12px] font-semibold text-[#6B6B6B]">{rhythm.busiest ? `· ${rhythm.busiest.n}` : ''}</span>
                 </p>
+              </div>
+              {/* v5.223.0 — the look count beside the work count: every scan of a
+                  table's QR opens a 10-minute window; the owner reads the gap
+                  between windows and seated rounds themselves (attribution would
+                  be a lie — counter-created tickets never scanned). Compare mode
+                  deltas the prior week in the seated-rounds tile's own grammar. */}
+              <div className="rounded-2xl border border-[#E3E7E0] bg-white px-3 py-2">
+                <p className="text-[10.5px] font-semibold uppercase tracking-wide text-[#6B6B6B]">Menu windows · 7d</p>
+                <p
+                  className="mt-0.5 text-[18px] font-bold tabular-nums text-[#0F3D3E]"
+                  title="Every scan of a table's QR opens a 10-minute menu window — the raw look count, before any of it became a ticket."
+                >
+                  {windowCensus.count}
+                </p>
+                {rhythmMode === 'compare' && (
+                  <p className="mt-0.5 text-[10.5px] font-semibold tabular-nums">
+                    {windowCensus.prev > 0 ? (
+                      (() => {
+                        const delta = windowCensus.count - windowCensus.prev;
+                        const pct = Math.round((delta / windowCensus.prev) * 100);
+                        return (
+                          <span className={delta >= 0 ? 'text-[#2E7D32]' : 'text-[#B4483C]'}>
+                            {delta >= 0 ? '+' : '-'}{Math.abs(delta)} vs prior 7d
+                            {Number.isFinite(pct) ? ` (${delta >= 0 ? '+' : '-'}${Math.abs(pct)}%)` : ''}
+                            <span className="ml-1 font-normal text-[#969696]">· prior {windowCensus.prev}</span>
+                          </span>
+                        );
+                      })()
+                    ) : (
+                      <span className="text-[#969696]">no prior-week windows in the loaded ledger yet</span>
+                    )}
+                  </p>
+                )}
               </div>
               {/* v5.181.0 — the held time: the week's median finished seat and
                   the seats that ran past the house line, measured the way the

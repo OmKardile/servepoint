@@ -3,6 +3,21 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.223.0] — 2026-10-05 — The book's count keeps its own verdicts, and the rhythm counts the looks: the book header's "N still expected today" was a status-count that went stale between fetches while its row badges flipped on the promise clock — a went-quiet party stayed 'booked' and the header kept saying "still expected" (a second verdict, live; 261's band caught the same disease mid-flip). The header now splits expected (hour not passed) from quiet (it has) at render beside the row badges' own clock, the quiet debt speaking its own words in the book's grey; and the Floor rhythm gains a fifth tile, "Menu windows · 7d" — the look count from the session ledger already in hand, inside the SAME bounds the seated-rounds census draws, with the all-lookers case named in the empty state
+
+### Fixed — the book header's count follows the book's own verdicts (`src/components/floor/FloorScreen.tsx`)
+
+- The memo's `bookedToday` (status === 'booked' today) is retired: a went-quiet party stays 'booked' in the ledger, so the header said "still expected" about a party whose row badge already read "Booked · went quiet" — and kept saying it until the next fetch, a second verdict running on a second clock. The expected/quiet split is computed at render beside `rowNowMs` (the row badges' own clock — 5.218's one-pass law): expected = the promised hour has not passed, quiet = the complement. The header speaks "N still expected today" (gold, unchanged) and "· M went quiet" in the book's grey (#6B6B6B) with the badge's own "the clock does not convict" title; quiet-only scope reads "M went quiet today" — never a gold lie.
+
+### Added — the rhythm's look count (`src/lib/tableSession.ts`, `src/components/floor/FloorScreen.tsx`)
+
+- `sessionsInWindow(sessions, startMs, endMs)` — the session ledger's opened-window count inside the census's own [start, end) bounds; unreadable instants are noise. The Floor rhythm gains a fifth tile, "Menu windows · 7d" (grid → md:grid-cols-5), beside "Seated rounds · 7d" — the owner reads the scan→work gap themselves; attribution would be a lie (counter-created tickets never scanned). Compare mode deltas the prior week in the seated-rounds tile's own grammar ("+N vs prior 7d (…%) · prior M"), and the all-lookers week — windows with zero seated rounds — is named in the empty state: "N menu windows opened this week — none became a ticket yet".
+
+### Tests
+
+- unit262 born — 11 checks green (the lib count: bounds semantics, empty silence, noise skipped, disjoint windows partitioning the ledger, purity; the Floor wiring: lib import with no local copy, same-bounds reads, the tile's name/value/grid/tooltip/compare grammar, the empty-state silence rule, no new timer; the book header: the stale count retired, the render-time split beside the badges' clock, the grey words + title + conditional today tail, the gold phrase byte-identical).
+- Regression battery unit194–262 ALL PASS by exit code (68 suites); tsc EXIT=0 ×2; build EXIT=0 (44 assets, VERSION → servepoint-v5.223.0-r1).
+
 ## [5.222.0] — 2026-10-05 — The trail counts its tickets: 5.219's history door grouped a table's scans under their IST days, but a scan is a look, not work — the owner reading "9 scans" could never tell whether any became a served ticket. The drill's day headings now append the day's served-ticket count from the SAME orders ledger the floor rhythm reads (lib/turn's tableTicketDays — ONE ticket rule with the census: table-bound, not cancelled; ONE day key with the trail; a day that served none stays silent, never a zero) in deep-ink quiet-bold beside the grey scan words; and the band's arrivals hint names its promise's table through the QR slot's own map (one table word per band), degrading silently to the tableless words when the promise holds no table
 
 ### Added — the trail counts its tickets (`src/lib/turn.ts`, `src/components/floor/FloorScreen.tsx`)

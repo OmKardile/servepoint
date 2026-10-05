@@ -67,3 +67,24 @@ export function youngestLiveMs(rows: TableSession[], nowMs: number = Date.now())
   const youngest = youngestLiveWindow(rows, nowMs);
   return youngest ? new Date(youngest.expires_at).getTime() - nowMs : Infinity;
 }
+
+/** v5.223.0 — the week's opened-window count. The rhythm's "Menu windows ·
+ *  7d" tile reads this: a scan's session row IS an opened window, counted
+ *  by its own created_at inside the SAME reporting window the seated-rounds
+ *  census draws ([startMs, endMs) — the exact bounds, so the look count and
+ *  the work count can never draw from different weeks). An unreadable
+ *  instant is ledger noise, skipped; the count is a raw look count — the
+ *  tile says nothing about what became of it (5.222's per-table trail owns
+ *  that story day by day). */
+export function sessionsInWindow(
+  sessions: { created_at: string }[],
+  startMs: number,
+  endMs: number,
+): number {
+  let n = 0;
+  for (const s of sessions) {
+    const t = new Date(s.created_at).getTime();
+    if (Number.isFinite(t) && t >= startMs && t < endMs) n += 1;
+  }
+  return n;
+}
