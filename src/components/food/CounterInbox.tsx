@@ -25,7 +25,9 @@ import {
 } from '../../lib/api';
 import { useTenant } from '../../lib/tenant';
 import { formatMoney } from '../../lib/prefs';
-import { isSameLocalDay } from '../../lib/day';
+/* v5.239.0 — the queue's "new" reads the app's clock (isSameAppDay), the
+ * same "today" the board and the chase speak — one day in every room. */
+import { isSameAppDay } from '../../lib/appday';
 
 /**
  * CounterInbox (v5.3.0 — "the counter is the gate", NOVA rule #1).
@@ -279,7 +281,7 @@ export function CounterInbox(): React.ReactElement | null {
   const tickets = useMemo(
     () =>
       orders
-        .filter((o) => String(o.status) === 'new' && isSameLocalDay(o.created_at))
+        .filter((o) => String(o.status) === 'new' && isSameAppDay(o.created_at))
         .sort((a, b) => a.created_at.localeCompare(b.created_at)),
     [orders]
   );

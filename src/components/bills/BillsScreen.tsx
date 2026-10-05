@@ -17,7 +17,7 @@ import {
   Split,
   X,
 } from 'lucide-react';
-import { chaseAge, dayTime, isSameLocalDay, isSameLocalDayAs } from '../../lib/day';
+import { chaseAge, dayTime } from '../../lib/day';
 import {
   advanceOrder,
   fetchOrderHistory,
@@ -34,7 +34,7 @@ import { buildReceiptText, printReceipt, type ReceiptOpts } from './ReceiptPrint
 import { preloadPrintImage } from '../../lib/printFrame';
 import { formatMoney, getPrefs } from '../../lib/prefs';
 import { downloadCsv } from '../../lib/csv';
-import { appTodayIso, appFormatters, appTzTag } from '../../lib/appday';
+import { appTodayIso, appFormatters, appTzTag, isSameAppDay, isSameAppDayAs } from '../../lib/appday';
 /* v5.238.0 — the chase borrows the window grammar's ONE home (5.236): the
  * custom pair's bounds and its spoken span come from lib/reportWindow —
  * orderedCustom inside, the same swap and the same fallback Reports asks.
@@ -129,7 +129,7 @@ export function isGhostTicket(
   o: Pick<Order, 'status' | 'created_at'>,
   nowMs: number,
 ): boolean {
-  return isOnRail(String(o.status)) && !isSameLocalDayAs(o.created_at, nowMs);
+  return isOnRail(String(o.status)) && !isSameAppDayAs(o.created_at, nowMs);
 }
 
 /** The chip's words. An unpaid ghost already wears its chase age (the
@@ -348,7 +348,7 @@ export function billsCsvRows(
        clock gate beside an injected chaseAge is two clocks in one cell, and
        at a day boundary they disagreed — an aged cell could say 'today'. */
     const ageCell =
-      isActive && !isSameLocalDayAs(o.created_at, nowMs) ? chaseAge(o.created_at, nowMs) : '';
+      isActive && !isSameAppDayAs(o.created_at, nowMs) ? chaseAge(o.created_at, nowMs) : '';
     /* v5.189.0 — the open cell: the chase's own math (max(0, total − paid));
        paid reads '0.00' — the debt closed; cancelled reads silence. */
     const openCell = isActive
@@ -669,7 +669,7 @@ const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRet
       if (statusFilter === 'stuck') {
         if (!isGhostTicket(o, Date.now())) return false;
       } else if (statusFilter !== 'all' && displayStatus(o) !== statusFilter) return false;
-      if (dateFilter === 'today' && !isSameLocalDay(o.created_at)) return false;
+      if (dateFilter === 'today' && !isSameAppDay(o.created_at)) return false;
       if (dateFilter === '7d' && new Date(o.created_at).getTime() < weekAgo) return false;
       if (dateFilter === 'custom') {
         /* v5.238.0 — the owner's own calendar, through THE window builder:
@@ -729,7 +729,7 @@ const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRet
   const olderUnpaidCount = useMemo(
     () =>
       orders.filter(
-        (o) => displayStatus(o) === 'active' && !isSameLocalDay(o.created_at)
+        (o) => displayStatus(o) === 'active' && !isSameAppDay(o.created_at)
       ).length,
     [orders]
   );
@@ -1472,7 +1472,7 @@ const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRet
                                 an honest age ("1d old"), amber under 48h,
                                 red beyond — the chase priority reads at a
                                 glance now. */}
-                            {status === 'active' && !isSameLocalDay(o.created_at) && (
+                            {status === 'active' && !isSameAppDay(o.created_at) && (
                               <span
                                 title={`From an earlier day — still awaiting payment (${chaseAge(o.created_at, Date.now())})`}
                                 className={`inline-flex shrink-0 items-center gap-1 rounded px-1.5 py-px text-[10px] font-bold ${
@@ -1686,7 +1686,7 @@ const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRet
               {/* 5.92.0 — the detail speaks the day too: an off-today ticket's
                   header no longer implies tonight. Bare clock for today,
                   "Yesterday 17:28" / "2 Oct · 17:28" otherwise. */}
-              {!isSameLocalDay(selected.created_at) && (
+              {!isSameAppDay(selected.created_at) && (
                 <p className="mt-1.5 flex items-center gap-1.5 text-[12px] font-medium text-[#8A5A00]">
                   <History size={12} aria-hidden />
                   {dayTime(selected.created_at)} — from an earlier day

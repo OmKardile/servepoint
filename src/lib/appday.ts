@@ -169,6 +169,24 @@ export function appDayKey(iso: string, tz: string = appTimezone()): string {
   }).format(new Date(iso));
 }
 
+/* v5.239.0 — the ticket rooms' ONE "today". Bills' filter and chase gates,
+ * the Dashboard's older split, the counter inbox's queue and the Kitchen's
+ * quiet line all ask "is this ticket from today" — and until now each asked
+ * the BROWSER's local day (lib/day's isSameLocalDay), so a browser outside
+ * the cafe's zone answered a different day than the Close-out's book and
+ * Reports' windows (which already speak the app clock). One clock now: the
+ * cafe's own. The explicit-clock twin (228's doctrine): suites own now,
+ * predicates stay deterministic; the bare one-arg form delegates. The
+ * local-clock twins stay in lib/day for the reader-register voices (chat
+ * day dividers, last-seen labels) — those label the READER's day. */
+export function isSameAppDayAs(iso: string, nowMs: number, tz: string = appTimezone()): boolean {
+  return appDayKey(iso, tz) === appDayKey(new Date(nowMs).toISOString(), tz);
+}
+
+export function isSameAppDay(iso: string, tz: string = appTimezone()): boolean {
+  return isSameAppDayAs(iso, Date.now(), tz);
+}
+
 /** Hour-of-day (0–23) in `tz` for an ISO timestamp. */
 export function appHour(iso: string, tz: string = appTimezone()): number {
   const h = new Intl.DateTimeFormat('en-GB', {

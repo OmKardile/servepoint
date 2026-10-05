@@ -112,10 +112,15 @@ assert.ok(bills.includes('Showing {customSpan}'), 'the hint speaks the span live
 assert.ok(bills.includes("the dates were swapped, the chase read them the honest way"), 'the reversed pair says so');
 ok('the labels speak the DATES the owner chose');
 
-/* ── 9. the fixed keys stay byte-true ── */
-assert.ok(bills.includes("if (dateFilter === 'today' && !isSameLocalDay(o.created_at)) return false;"), 'Today keeps its predicate');
+/* ── 9. the fixed keys' clock — 5.239.0 moved Today to the app's clock ── */
+/* 5.239.0 re-anchor: the "fixed keys byte-true" law was about not touching
+ * them while Custom joined (5.238); the next round's ONE-clock law moved
+ * Today's predicate to isSameAppDay (the cafe's day — the same "today"
+ * the custom bounds and the Close-out speak). The rolling weekAgo keeps
+ * its bytes. */
+assert.ok(bills.includes("if (dateFilter === 'today' && !isSameAppDay(o.created_at)) return false;"), 'Today asks the app-day clock');
 assert.ok(bills.includes("if (dateFilter === '7d' && new Date(o.created_at).getTime() < weekAgo) return false;"), 'Last 7 days keeps its rolling week');
-ok('the fixed keys byte-true — their clock fossil is a classified watch item');
+ok('the fixed keys — Today on the app clock, the rolling week byte-true');
 
 /* ── 10. the lib behavior the borrower rides (the contract, re-proven) ── */
 assert.deepEqual(orderedCustom({ from: '2026-10-05', to: '2026-10-02' }), ['2026-10-02', '2026-10-05'], 'the swap holds');
@@ -126,8 +131,12 @@ assert.equal(rangeLabelOf('custom', { from: '2026-10-02', to: '2026-10-05' }), '
 ok('the borrowed contract holds (swap, window, span)');
 
 /* ── 11. the version law: one word, two homes ── */
-assert.ok(versionSrc.includes("APP_VERSION = '5.238.0'"), 'version.ts speaks 5.238.0');
-assert.ok(swSrc.includes('const VERSION = "servepoint-v5.238.0-r1";'), 'the service worker bakes the same round');
-ok('the version law — 5.238.0 in version.ts and sw.js');
+/* 5.239.0 re-anchor: the law is the AGREEMENT (sw bakes whatever word
+ * version.ts speaks — unit274's shape), not a frozen number; a frozen
+ * pin goes stale on every honest bump. */
+const { APP_VERSION: v277 } = await import('/src/version.ts');
+assert.ok(v277.length > 0, 'version.ts speaks a word');
+assert.ok(swSrc.includes(`servepoint-v${v277}-r1`), 'the service worker bakes the same round');
+ok(`the version law — version.ts and sw.js agree on ${v277}`);
 
 console.log(`\nunit277: ${n} checks green — the chase answers to a calendar`);

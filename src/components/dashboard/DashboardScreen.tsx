@@ -62,7 +62,11 @@ import {
   PROMISE_DUE_SOON_MIN,
 } from '../../lib/bookingday';
 import { CHART_TOOLTIP_LABEL, CHART_TOOLTIP_STYLE } from '../../lib/chartvoice';
-import { chaseAge, isSameLocalDay } from '../../lib/day';
+import { chaseAge } from '../../lib/day';
+/* v5.239.0 — the older split speaks the app's clock (isSameAppDay), the
+ * same "today" the Close-out's book and Bills' chase answer to — one
+ * day in every room, never the browser's. */
+import { isSameAppDay } from '../../lib/appday';
 import { useTenant } from '../../lib/tenant';
 import { useUi } from '../../store/session';
 import { DoorChip } from '../shell/DoorChip';
@@ -1394,8 +1398,8 @@ const NeedsNow: React.FC = () => {
      only, the same grammar as the board and inbox the cards open into. The
      older stuck tickets are counted separately — they speak as whispers,
      never as tonight's work. */
-  const liveToday = live.filter((o) => isSameLocalDay(o.created_at));
-  const staleOlder = live.filter((o) => !isSameLocalDay(o.created_at));
+  const liveToday = live.filter((o) => isSameAppDay(o.created_at));
+  const staleOlder = live.filter((o) => !isSameAppDay(o.created_at));
   const newTickets = liveToday.filter((o) => o.status === 'new');
   const staleNew = staleOlder.filter((o) => o.status === 'new');
   const inKitchen = liveToday.filter((o) => isOnRail(String(o.status)));

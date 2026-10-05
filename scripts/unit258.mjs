@@ -163,8 +163,10 @@ assert.ok(day.includes('export function dayTime(iso: string, tz?: string, nowMs:
 ok('the day word judges on the clock it is given, never the wall behind it');
 
 /* and the CSV's gate obeys the injection — no two clocks in one cell */
+/* 5.239.0 re-anchor: the gate's clock is now the APP's (isSameAppDayAs —
+ * the cafe's day), the injected-now law unchanged. */
 const bills = strip('../src/components/bills/BillsScreen.tsx');
-assert.ok(bills.includes('isActive && !isSameLocalDayAs(o.created_at, nowMs) ? chaseAge(o.created_at, nowMs) : \'\''),
+assert.ok(bills.includes('isActive && !isSameAppDayAs(o.created_at, nowMs) ? chaseAge(o.created_at, nowMs) : \'\''),
   'the CSV age cell: gate and arithmetic share the injected now');
 ok('the CSV cell has ONE clock');
 

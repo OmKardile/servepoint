@@ -22,7 +22,13 @@ import {
   type RealtimeState,
 } from '../../lib/api';
 import { useTenant } from '../../lib/tenant';
-import { hhmm, isSameLocalDay } from '../../lib/day';
+import { hhmm } from '../../lib/day';
+/* v5.239.0 — the board's day grammar is the app's clock (isSameAppDay):
+ * the counters, the cancelled-today clause and the quiet line's memory
+ * answer "today" the same way the Close-out's book does — one day in
+ * every room, never the browser's. The grammar stays INJECTED —
+ * lastRailTicketAt still takes it, suites still own now. */
+import { isSameAppDay } from '../../lib/appday';
 import { isQuietNow, subscribePrefs } from '../../lib/prefs';
 import type { Order } from '../../types';
 
@@ -119,7 +125,8 @@ export function isOnRail(status: string): boolean {
  *  story, so the two clauses must never disagree — cancelledToday > 0
  *  forces a stamp). The counter inbox's `new` never landed: the
  *  Dashboard's NEEDS YOU NOW owns that voice. The caller passes the day
- *  grammar (isSameLocalDay) — one day, one derivation, the same bounds
+ *  grammar (isSameAppDay since 5.239.0 — the app's clock, one "today"
+ *  in every room) — one day, one derivation, the same bounds
  *  law the floor's week split obeys (5.226). Null when the kitchen has
  *  seen nothing today; the line says so in its own words — silence is
  *  still never a zero, and no new timer: a stamp, not a duration. */
@@ -653,7 +660,7 @@ export const KitchenScreen: React.FC = () => {
 
   /* board data — today only; completed capped to the newest 12 */
   const board = useMemo(() => {
-    const todays = orders.filter((o) => isSameLocalDay(o.created_at) && stageOf(String(o.status)) !== null);
+    const todays = orders.filter((o) => isSameAppDay(o.created_at) && stageOf(String(o.status)) !== null);
     const byStage = new Map<StageKey, Order[]>([
       ['new', []],
       ['preparing', []],
@@ -680,7 +687,7 @@ export const KitchenScreen: React.FC = () => {
       null
     );
     const cancelled = orders.filter(
-      (o) => String(o.status).toLowerCase() === 'cancelled' && isSameLocalDay(o.created_at)
+      (o) => String(o.status).toLowerCase() === 'cancelled' && isSameAppDay(o.created_at)
     ).length;
     return {
       byStage,
@@ -688,7 +695,7 @@ export const KitchenScreen: React.FC = () => {
       completedToday,
       oldestWait: oldest ? elapsed(oldest, nowMs) : null,
       cancelledToday: cancelled,
-      lastTicketAt: lastRailTicketAt(orders, isSameLocalDay),
+      lastTicketAt: lastRailTicketAt(orders, isSameAppDay),
     };
   }, [orders, nowMs]);
 

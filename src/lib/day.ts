@@ -75,6 +75,14 @@ function nowKeyIn(tz: string, offsetDays = 0, nowMs: number = Date.now()): strin
 }
 
 /** Local-day equality — the one test every "today" in the app uses. */
+/** v5.239.0 — SCOPE NOTE: the ticket rooms no longer ask this. Bills'
+ * filter and chase gates, the Dashboard's older split, the counter
+ * inbox's queue and the Kitchen's board all moved to appday's
+ * isSameAppDay(As) — the cafe's own clock, the same "today" the
+ * Close-out's book and Reports' windows speak. This local twin stays
+ * for the reader-register voices (chat day dividers, last-seen
+ * labels) — those label the READER's day, and the browser's clock is
+ * the honest one there. */
 /** v5.196.0 — the same local-day question with an EXPLICIT clock, so
  * suites can own now (228's rule) and pure predicates stay deterministic.
  * The bare one-arg form delegates here — ONE arithmetic, two registers. */

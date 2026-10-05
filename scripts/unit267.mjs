@@ -164,10 +164,10 @@ const src = strip('../src/components/kitchen/KitchenScreen.tsx');
  * the split can never draw a different day than the counts it sits
  * beside — here, than the cancelledToday clause beside it). */
 assert.ok(
-  src.includes('lastTicketAt: lastRailTicketAt(orders, isSameLocalDay),'),
-  'the memo wires lastRailTicketAt(orders, isSameLocalDay)'
+  src.includes('lastTicketAt: lastRailTicketAt(orders, isSameAppDay),'),
+  'the memo wires lastRailTicketAt(orders, isSameAppDay) — 5.239.0 moved the grammar to the app clock, the injection unchanged'
 );
-ok('memo wiring: lastRailTicketAt(orders, isSameLocalDay) — one day grammar');
+ok('memo wiring: lastRailTicketAt(orders, isSameAppDay) — one day grammar');
 
 /* 11 — the quiet branch's memory clause, exact bytes. */
 assert.ok(
@@ -201,8 +201,8 @@ ok('active branch: byte-identical — oldestWait + (off rail) untouched');
 /* 14 — hhmm comes from lib/day: the bare local clock the whole app
  * already speaks — no second formatter born here. */
 assert.ok(
-  src.includes("import { hhmm, isSameLocalDay } from '../../lib/day';"),
-  'hhmm imported from lib/day'
+  src.includes("import { hhmm } from '../../lib/day';"),
+  'hhmm imported from lib/day — the day grammar moved to appday (5.239.0), hhmm stays'
 );
 ok('clock: hhmm from lib/day — one formatter, the app\u2019s own clock');
 
