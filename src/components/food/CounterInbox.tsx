@@ -3,6 +3,7 @@ import {
   BellRing,
   ChevronDown,
   CircleSlash,
+  History,
   QrCode,
   ShoppingBag,
   Timer,
@@ -25,9 +26,13 @@ import {
 } from '../../lib/api';
 import { useTenant } from '../../lib/tenant';
 import { formatMoney } from '../../lib/prefs';
+import { useUi } from '../../store/session';
 /* v5.239.0 — the queue's "new" reads the app's clock (isSameAppDay), the
- * same "today" the board and the chase speak — one day in every room. */
-import { isSameAppDay } from '../../lib/appday';
+ * same "today" the board and the chase speak — one day in every room.
+ * v5.241.0 — the stragglers (new tickets from BEFORE today) read the SAME
+ * lib's one census (staleNewTickets), so the counter and the Dashboard's
+ * whisper derive one number from one home — never a second derivation. */
+import { isSameAppDay, staleNewTickets } from '../../lib/appday';
 
 /**
  * CounterInbox (v5.3.0 — "the counter is the gate", NOVA rule #1).
@@ -38,6 +43,31 @@ import { isSameAppDay } from '../../lib/appday';
  * ticket into the kitchen queue (`pending`); "Decline" kills it. Recording a
  * payment on an un-started ticket auto-advances it (money in hand ⇒ cook).
  */
+
+/* 5.241.0 — the straggler line: the counter's own voice for older `new`
+ * tickets. ONE text flow in the amber family the book's quiet voices wear
+ * (the a11y-glue law: the sentence is one span, the door is its own button
+ * — no newline-glued names), and the ONLY action is the door: the Ok and
+ * Decline paths stay on today's cards alone, where the ledger's eye is. */
+const StragglerLine: React.FC<{ count: number }> = ({ count }) => {
+  const goBills = () => useUi.getState().goSection('bills', ['Food & Drinks', 'Bills'], 'unpaid');
+  return (
+    <p className="flex flex-wrap items-center gap-x-1.5 gap-y-1 rounded-xl border border-[#F0E4C8] bg-[#FBF6EA] px-3 py-2 text-[12px] font-medium text-[#8A5A00]">
+      <History size={13} aria-hidden />
+      <span>
+        {count} older {count === 1 ? 'ticket is' : 'tickets are'} stuck off today's inbox — new tickets wait here on their own
+        day.
+      </span>
+      <button
+        type="button"
+        onClick={goBills}
+        className="rounded font-extrabold underline underline-offset-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#967221] hover:text-[#5F4708]"
+      >
+        See them in Bills
+      </button>
+    </p>
+  );
+};
 
 /* ── counter doorbell — two soft notes, distinct from the KDS chime ─────── */
 function doorbell(): void {
@@ -286,6 +316,16 @@ export function CounterInbox(): React.ReactElement | null {
     [orders]
   );
 
+  /* 5.241.0 — the stragglers: today's queue is the gate's news, but a `new`
+   * ticket from an OLDER day never had its moment here — it bypassed the
+   * band, sat unpaid, and only the Dashboard's whisper knew. The room that
+   * owns the inbox now speaks them too, from the ONE census (the lib's
+   * staleNewTickets) the Dashboard asks — one predicate, one number. They
+   * are NOT listable here: Ok would fire yesterday's coffee at the pass,
+   * and Decline would kill money from a room that can't see the ledger —
+   * so the band only names them and doors to Bills (the chase's home). */
+  const stragglers = useMemo(() => staleNewTickets(orders), [orders]);
+
   const tableLabelFor = useCallback(
     (id: string | null | undefined): string | null => {
       if (!id) return null;
@@ -348,10 +388,13 @@ export function CounterInbox(): React.ReactElement | null {
     });
   }, []);
 
-  /* zero tickets → the band disappears entirely (zero noise on the POS).
-   * A muted bell rides the same rule: the next ticket re-opens the band
-   * (silently), and the chip is waiting there with its honest word. */
-  if (!loading && tickets.length === 0 && !error) return null;
+  /* zero tickets AND zero stragglers → the band disappears entirely (zero
+   * noise on the POS). 5.241.0 — the guard grew a second eye: when older
+   * `new` tickets hold, the band stays and speaks them (the counter owns
+   * that knowledge now; vanishing would be the old silence). A muted bell
+   * rides the same rule: the next ticket re-opens the band (silently), and
+   * the chip is waiting there with its honest word. */
+  if (!loading && tickets.length === 0 && stragglers.length === 0 && !error) return null;
 
   return (
     <section
@@ -458,10 +501,15 @@ export function CounterInbox(): React.ReactElement | null {
                 <div key={i} className="h-44 w-[300px] shrink-0 animate-pulse rounded-2xl bg-[#F0F2EF]" />
               ))}
             </div>
-          ) : tickets.length === 0 ? (
+          ) : tickets.length === 0 && stragglers.length === 0 ? (
             <p className="py-4 text-center text-[12.5px] text-[#6B6B6B]">
               No tickets awaiting the counter — all caught up.
             </p>
+          ) : tickets.length === 0 ? (
+            /* 5.241.0 — the quiet-but-not-caught-up state: the caught-up
+             * claim would LIE with stragglers holding, so they own the
+             * empty body instead. */
+            <StragglerLine count={stragglers.length} />
           ) : (
             <div className="flex gap-3 overflow-x-auto pb-1.5 [scrollbar-width:thin]">
               {tickets.map((t) => (
@@ -479,6 +527,14 @@ export function CounterInbox(): React.ReactElement | null {
                   }}
                 />
               ))}
+            </div>
+          )}
+          {/* 5.241.0 — the rail's straggler footer: today's news and the
+           * older stuck tickets in one band, the same ONE-census line the
+           * empty body speaks. */}
+          {!loading && tickets.length > 0 && stragglers.length > 0 && (
+            <div className="mt-3">
+              <StragglerLine count={stragglers.length} />
             </div>
           )}
         </div>

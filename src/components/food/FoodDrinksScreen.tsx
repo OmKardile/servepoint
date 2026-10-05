@@ -1658,7 +1658,9 @@ const FoodDrinksInner: React.FC<{ onRetry: () => void }> = ({ onRetry }) => {
       )}
 
       {/* Counter gate (v5.3.0): fresh tickets wait HERE for an Ok — the KDS
-          never sees `new`. Self-contained band; vanishes when empty. */}
+          never sees `new`. Self-contained band; 5.241.0 — it stays to speak
+          older `new` stragglers even when today's queue is empty, and only
+          vanishes when nothing waits AND nothing holds. */}
       <div className="mb-5">
         <CounterInbox />
       </div>

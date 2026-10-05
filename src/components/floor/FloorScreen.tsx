@@ -3301,7 +3301,11 @@ export function FloorScreen(): React.ReactElement {
       {sections.map(([section, list]) => (
         <section key={section} aria-label={section}>
           <h2 className="mb-2 font-serif text-[19px] italic text-[#0F3D3E]">
-            <MarkHit text={section} query={query} />
+            {/* 5.241.0 — the name carries its space (the 5.237 law, part 2):
+                JSX stripped the newline between the name and the badge, and
+                the a11y name read "Main Floor1" while the margin painted
+                the visual gap. The Ledger dialect: the space rides the JSX. */}
+            <MarkHit text={section} query={query} />{' '}
             <span className="ml-2 rounded-full bg-[#F1F4F1] px-2 py-0.5 align-middle text-[10.5px] font-sans font-bold not-italic text-[#0F3D3E]">{list.length}</span>
           </h2>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">

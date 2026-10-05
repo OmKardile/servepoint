@@ -187,6 +187,30 @@ export function isSameAppDay(iso: string, tz: string = appTimezone()): boolean {
   return isSameAppDayAs(iso, Date.now(), tz);
 }
 
+/* v5.241.0 — the inbox stragglers' ONE census. A `new` ticket that is NOT
+ * from today never reached the counter's gate as its news (the inbox lists
+ * TODAY's new tickets only), and until now the Dashboard counted them alone
+ * in a whisper while the room that owns the inbox said nothing. One census,
+ * two rooms: the Dashboard's "stuck off today's inbox" whisper and the
+ * counter's own straggler band ask THIS function — one predicate, one sort,
+ * one number. The verdict is "off today" — NOT-today, the whisper's own
+ * grammar, preserved byte-for-byte (a future-dated created_at is corrupt
+ * data, but it was never today's news either; the census does not quietly
+ * forgive it). The clock is the ticket rooms' ONE "today" (isSameAppDayAs,
+ * the cafe's own day); the explicit-clock twin keeps the suite
+ * deterministic in any runner (228's doctrine). Oldest first: the chase
+ * reads top-down, the stuck-est waits longest. Status IS the population:
+ * 'new' excludes 'cancelled' by construction (one status per ticket), so
+ * no second cancelled filter. */
+export function staleNewTickets<T extends { status: string | null; created_at: string }>(
+  orders: readonly T[] | null | undefined,
+  nowMs: number = Date.now(),
+): T[] {
+  return (orders ?? [])
+    .filter((o) => String(o.status) === 'new' && !isSameAppDayAs(o.created_at, nowMs))
+    .sort((a, b) => a.created_at.localeCompare(b.created_at));
+}
+
 /** Hour-of-day (0–23) in `tz` for an ISO timestamp. */
 export function appHour(iso: string, tz: string = appTimezone()): number {
   const h = new Intl.DateTimeFormat('en-GB', {

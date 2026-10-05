@@ -65,8 +65,10 @@ import { CHART_TOOLTIP_LABEL, CHART_TOOLTIP_STYLE } from '../../lib/chartvoice';
 import { chaseAge } from '../../lib/day';
 /* v5.239.0 — the older split speaks the app's clock (isSameAppDay), the
  * same "today" the Close-out's book and Bills' chase answer to — one
- * day in every room, never the browser's. */
-import { isSameAppDay } from '../../lib/appday';
+ * day in every room, never the browser's. v5.241.0 — the inbox whisper's
+ * stale-new count rides the lib's ONE census (staleNewTickets), the same
+ * home the counter's straggler band asks — one predicate, one number. */
+import { isSameAppDay, staleNewTickets } from '../../lib/appday';
 import { useTenant } from '../../lib/tenant';
 import { useUi } from '../../store/session';
 import { DoorChip } from '../shell/DoorChip';
@@ -1401,7 +1403,11 @@ const NeedsNow: React.FC = () => {
   const liveToday = live.filter((o) => isSameAppDay(o.created_at));
   const staleOlder = live.filter((o) => !isSameAppDay(o.created_at));
   const newTickets = liveToday.filter((o) => o.status === 'new');
-  const staleNew = staleOlder.filter((o) => o.status === 'new');
+  /* 5.241.0 — the whisper's number is the ONE census now (the counter's
+   * straggler band asks the same home): status 'new' excludes 'cancelled'
+   * by construction, so the lib's all-orders read is the same population
+   * the old inline filter drew. */
+  const staleNew = staleNewTickets(now.orders);
   const inKitchen = liveToday.filter((o) => isOnRail(String(o.status)));
   const staleKitchen = staleOlder.filter((o) => isOnRail(String(o.status)));
   const latePrep = liveToday.filter(

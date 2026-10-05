@@ -753,7 +753,7 @@ const NotificationsContent: React.FC<{ onTenantRetry: () => void }> = ({ onTenan
                   : 'border-[#E3E7E0] bg-white text-[#0F3D3E] hover:bg-[#F6F5F2]'
               }`}
             >
-              Unread
+              Unread{' '}
               <span className={`ml-1.5 tabular-nums ${unreadOnly ? 'text-white/70' : 'text-[#8A5A00]'}`}>
                 {unreadCount}
               </span>
@@ -768,7 +768,7 @@ const NotificationsContent: React.FC<{ onTenantRetry: () => void }> = ({ onTenan
                 : 'border-[#E3E7E0] bg-white text-[#0F3D3E] hover:bg-[#F6F5F2]'
             }`}
           >
-            All
+            All{' '}
             <span className={`ml-1.5 tabular-nums ${filter === 'all' ? 'text-white/70' : 'text-[#969696]'}`}>
               {kept.length}
             </span>
@@ -784,7 +784,7 @@ const NotificationsContent: React.FC<{ onTenantRetry: () => void }> = ({ onTenan
                   : 'border-[#E3E7E0] bg-white text-[#0F3D3E] hover:bg-[#F6F5F2]'
               }`}
             >
-              {CATEGORY_LABEL[cat] || cat}
+              {CATEGORY_LABEL[cat] || cat}{' '}
               <span className={`ml-1.5 tabular-nums ${filter === cat ? 'text-white/70' : 'text-[#969696]'}`}>
                 {count}
               </span>
