@@ -208,3 +208,40 @@ export function tableTicketDays(
   }
   return days;
 }
+
+/* v5.226.0 — the rhythm names its tables: the week's seated rounds and menu
+ * windows per table, from the two ledgers the card already holds (no second
+ * cloud read). ONE ticket rule — table-bound, never cancelled, the same law
+ * the trail's day counts speak; ONE week grammar — the caller passes the
+ * floorWeekWindow bounds it already gave the tiles above, so the split can
+ * never draw a different week than the totals it sits beside. A table with
+ * neither a round nor a look stays out of the map — silence, never a zero. */
+export function tableWeekSplit(
+  orders: {
+    table_id?: string | null;
+    status?: string | null;
+    created_at: string;
+  }[],
+  sessions: { table_id?: string | null; created_at: string }[],
+  fromMs: number,
+  toMs: number,
+): Map<string, { rounds: number; looks: number }> {
+  const out = new Map<string, { rounds: number; looks: number }>();
+  const bump = (id: string, key: 'rounds' | 'looks') => {
+    const row = out.get(id) ?? { rounds: 0, looks: 0 };
+    row[key] += 1;
+    out.set(id, row);
+  };
+  for (const o of orders) {
+    if (o.table_id === null || o.table_id === undefined) continue;
+    if (o.status === 'cancelled') continue;
+    const t = new Date(o.created_at).getTime();
+    if (Number.isFinite(t) && t >= fromMs && t < toMs) bump(o.table_id, 'rounds');
+  }
+  for (const s of sessions) {
+    if (s.table_id === null || s.table_id === undefined) continue;
+    const t = new Date(s.created_at).getTime();
+    if (Number.isFinite(t) && t >= fromMs && t < toMs) bump(s.table_id, 'looks');
+  }
+  return out;
+}

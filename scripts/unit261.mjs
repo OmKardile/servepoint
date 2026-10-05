@@ -116,8 +116,8 @@ ok('the derivation is pure — a fresh map every call');
 
 const floor = strip('../src/components/floor/FloorScreen.tsx');
 
-assert.ok(floor.includes("tableTicketDays } from '../../lib/turn'"),
-  'the Floor imports the lib rule');
+assert.ok(floor.includes("tableTicketDays, tableWeekSplit } from '../../lib/turn'"),
+  'the Floor imports the lib rule (grown by 5.226\'s week split — the 5.261 rename-pin law)');
 assert.ok(!/\bfunction tableTicketDays\b/.test(floor.replace(/tableTicketDays,\n/g, '')),
   'no local copy of the rule was born');
 assert.ok(floor.includes('tableTicketDays(orders, drillTable.id)'),

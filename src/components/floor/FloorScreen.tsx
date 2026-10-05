@@ -105,7 +105,7 @@ import { MarkHit } from '../shell/MarkHit';
 import { EmptyState } from '../shell/EmptyState';
 import { useCart } from '../../store/cart';
 import type { Order, OrderItem } from '../../types';
-import { seatSpanLabel, computeTurnCensus, namedBreachList, tableTicketDays } from '../../lib/turn';
+import { seatSpanLabel, computeTurnCensus, namedBreachList, tableTicketDays, tableWeekSplit } from '../../lib/turn';
 import type { TableTurnStats } from '../../lib/turn';
 
 /**
@@ -2425,6 +2425,28 @@ export function FloorScreen(): React.ReactElement {
     };
   }, [sessions]);
 
+  /* v5.226.0 — the rhythm names its tables: the week's looks-and-work split
+     per table from the SAME floorWeekWindow bounds the tiles speak — one
+     week grammar, no second read. The breach strip already taught the card
+     the by-table chip; this strip is its whole-week sibling. */
+  const tableSplit = useMemo(() => {
+    const { startMs, endMs } = floorWeekWindow();
+    return tableWeekSplit(orders, sessions, startMs, endMs);
+  }, [orders, sessions]);
+  const tableSplitRows = useMemo(() => {
+    const nameById = new Map((tables ?? []).map((t) => [t.id, t.table_number]));
+    const rows = [...tableSplit.entries()].map(([id, v]) => ({
+      id,
+      label: nameById.get(id) ?? 'Table',
+      rounds: v.rounds,
+      looks: v.looks,
+    }));
+    rows.sort(
+      (a, b) => b.rounds - a.rounds || b.looks - a.looks || a.label.localeCompare(b.label, undefined, { numeric: true }),
+    );
+    return rows;
+  }, [tableSplit, tables]);
+
   /* v5.183.0 — the named breach list: WHICH tables held past the house
      line this week, worst span first. One pure sort, recomputed with the
      census it reads; silent when no seat crossed. */
@@ -3171,6 +3193,52 @@ export function FloorScreen(): React.ReactElement {
                   : ' No prior-week table tickets in the loaded ledger yet — the comparison unlocks as the ledger ages.')}
             </p>
           </>
+        )}
+
+        {/* v5.226.0 — the by-table strip beside the breach strip's own
+            by-table grammar: looks and work per table, this 7d, the SAME
+            bounds the tiles above speak. A table that neither looked nor
+            served stays off the strip — silence, never a zero. The
+            all-lookers table (windows, no rounds) wears the card's amber —
+            the exact gap the windows tile totals; a rounds-only chip stays
+            quiet about its zero windows (the title carries the counter-born
+            honesty — attribution would be a lie). */}
+        {tableSplitRows.length > 0 && (
+          <div className="mt-3 rounded-2xl px-4 py-3" style={{ background: '#F6F5F2', boxShadow: 'inset 0 0 0 1px #E3E7E0' }}>
+            <p className="flex items-center gap-1.5 text-[10.5px] font-bold uppercase tracking-wide text-[#6B6B6B]">
+              <Armchair size={12} aria-hidden /> By table · this 7d
+            </p>
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {tableSplitRows.map((r) => (
+                <span
+                  key={r.id}
+                  className="inline-flex items-center gap-1 rounded-full bg-white px-2.5 py-1 text-[11px] font-semibold tabular-nums text-[#0F3D3E]"
+                  style={{ boxShadow: 'inset 0 0 0 1px #E3E7E0' }}
+                  title={
+                    r.rounds > 0 && r.looks === 0
+                      ? `${r.label} this week — ${r.rounds} seated round${r.rounds === 1 ? '' : 's'} · no menu windows opened — counter tickets never scan`
+                      : r.rounds === 0
+                        ? `${r.label} this week — no seated rounds yet · ${r.looks} menu window${r.looks === 1 ? '' : 's'} opened, none became a ticket`
+                        : `${r.label} this week — ${r.rounds} seated round${r.rounds === 1 ? '' : 's'} · ${r.looks} menu window${r.looks === 1 ? '' : 's'} opened`
+                  }
+                >
+                  {r.label}
+                  {r.rounds > 0 ? (
+                    <span className="font-bold">
+                      {r.rounds} round{r.rounds === 1 ? '' : 's'}
+                    </span>
+                  ) : (
+                    <span className="font-bold text-[#8A5A00]">no rounds yet</span>
+                  )}
+                  {r.looks > 0 && (
+                    <span className={r.looks > r.rounds ? 'text-[#8A5A00]' : 'text-[#969696]'}>
+                      · {r.looks} window{r.looks === 1 ? '' : 's'}
+                    </span>
+                  )}
+                </span>
+              ))}
+            </div>
+          </div>
         )}
       </section>
 

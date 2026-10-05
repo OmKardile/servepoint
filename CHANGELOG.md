@@ -3,6 +3,15 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.226.0] — 2026-10-05 — The rhythm names its tables: the floor rhythm card counted the week's looks and work as two flat totals (Menu windows · 7d beside Seated rounds · 7d, 5.223), but the census had named the thin read still missing — the split BY TABLE, which tables get looked at and which get seated, the gap each table's own QR sees. lib/turn's tableWeekSplit derives it from the two ledgers the card already holds — ONE ticket rule with the trail's day counts (table-bound, never cancelled), ONE week grammar (the caller passes floorWeekWindow's own bounds, so the split can never draw a different week than the totals it sits beside), a table with neither a round nor a look stays out of the map (silence, never a zero). The by-table strip renders after the rhythm's ternary — both branches get it, one render site — in the breach strip's own chip family (ivory canvas, inset ring, white pills): the label says "this 7d" so compare mode never implies the chips delta; the all-lookers table (windows, no rounds) wears the card's amber ("no rounds yet"); a rounds-only chip stays quiet about its zero windows — the title carries the counter-born honesty (counter tickets never scan; attribution would be a lie)
+
+### Added
+- Floor rhythm card: "By table · this 7d" chip strip — per-table seated rounds and menu windows from the same ledgers and bounds the tiles speak (lib/turn.ts tableWeekSplit; FloorScreen split memos + strip render).
+- unit265 born — 12 checks green (lib predicate incl. window-bounds honesty + purity + merged rows; Floor wiring incl. the same-bounds pin, name map, sort; strip voice laws incl. amber all-lookers + zero-silence + counter-born title; neighbours byte-identical + no new timer).
+
+### Changed
+- unit261's Floor import pin evolved to the grown turn family bytes (the 5.261 rename-pin law).
+
 ## [5.225.0] — 2026-10-05 — The past book keeps the verdict: the book's row badges computed their promise verdict under a TODAY gate, so a Saturday promise opened in Monday's archive still wore the ledger's gold "Booked" — the exact second-verdict disease 5.223 killed in the header, still alive one scope over (caught live: "Sat · 3 Oct · 4:47 pm · Booked", two days past its hour). The quiet verdict is now the archive's too: the lib's isQuietPromiseAnyDay speaks for ANY booked row whose hour has passed, and the book's day headings count their own quiet debt beside the badges' clock — the board and the arrivals slot keep their today-gated silence (5.86 was right there: a past promise is not an arrival)
 
 ### Fixed — the archive keeps the verdict (`src/lib/bookingday.ts`, `src/components/floor/FloorScreen.tsx`)
