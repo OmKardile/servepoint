@@ -6851,3 +6851,40 @@ Work Log:
 
 Stage Summary:
 - Work committed and gated (battery 82/82, tsc ×2, build, live E2E with the one-clock + one-record reconciliation) but NOT on origin — the push ran and failed for lack of credentials, not for lack of trying. The honesty rule holds: no push claimed that did not run.
+
+---
+Task ID: 277 (15-min webDevReview round, trace 1a0fba3beb0e3c89-cron-agent-loop-202610051625)
+Agent: glm-5.3 (cron webDevReview round)
+Task: Post-5.237.0 round — QA sweep (Menu, Inventory, Dashboard), then the window grammar's next borrower: Bills' date filter gains Custom. v5.238.0 "the chase answers to a calendar".
+
+Work Log:
+- Orientation: worklog tail — 276 closed (218f177 + d63ef0f, v5.237.0, battery 82/82); tree clean. THIS round = Task 277, version → v5.238.0. Task stamp 16:25 +08:00. Push ATTEMPTED FIRST per the standing instruction — failed honestly (no token, "could not read Username"); 26 commits ride (addendum below). tsc EXIT=0 pre-claim.
+- QA sweep (agent-browser, live, QR Owner session restored): Menu — search, copy/WhatsApp/catalog CSV, the add-on library, per-item costs and margins ("costs ₹36.00 · keeps ₹184.00 (84%)"), the honest thin-margin count ("1 keeps under 25%"), the Gold No.N movers; Inventory — THE SHELF'S ANSWER coverage list ("~232 more · thinnest: Coffee beans (g)"), Stock/Recipes/Reorder tabs, stock value ₹18,219.00, low/out at 0; Dashboard — NEEDS YOU NOW, Daily Sales, Total Revenue, Team, Trending Dishes, Today's margin, Guest love. No blocking bugs.
+- Feature v5.238.0 "the chase answers to a calendar": Bills' date filter spoke only Today / Last 7 days / All time — "show me the 2nd's tickets" had no answer. (1) CUSTOM JOINS as the fourth DateFilter key, riding lib/reportWindow's ONE home: the predicate asks rangeWindow('custom', pair) — orderedCustom inside (the reversed pair swapped), the 7-day fallback for a malformed pair, the structural null guard; the span phrase asks rangeLabelOf. No inline calendar math in Bills (the suite pins no setUTC arithmetic in the file). (2) THE HONEST LAWS — the pair arms pre-filled (shiftDayIso(-6)…appTodayIso(), the last 7 calendar days ending today); the cleared-filters chip leaves the pair armed (the owner's own words persist); the bounds are the app-day clock (IST) — "2 Oct" means the same day in every room; the label everywhere speaks the DATES ("No bills from 2 Oct – 5 Oct" in the miss title, "Custom (2 Oct – 5 Oct)" in the filterLabels, "Showing 2 Oct – 5 Oct" in the row's hint, with the honest swapped note), never the bare chip word; both inputs max today and wear the house date-box ink (sp-input + gold ring #967221). (3) THE FIXED KEYS BYTE-TRUE — Today keeps isSameLocalDay, 7d keeps its rolling weekAgo; their clock fossil (browser-local day vs the app-day clock, entangled with the 5.203 ghost law) is a classified watch item, deliberately not this round's reach. (4) THE CALENDAR ROW — revealed only while Custom stands (the 5.236 pattern), From/To with max today, flex-wrap.
+- MID-ROUND CATCHES: (a) unit276's version pin froze "5.237.0" and went stale on this round's honest bump — re-anchored to unit274's agreement shape (sw bakes whatever word version.ts speaks); a frozen number goes stale every round, the agreement never does (the unit241 lesson again). (b) unit277's gold-ring count pin matched a pre-existing third ring (the search button's) — re-anchored to the full date-box class string (count === 2). (c) An assert.equal(actual, message) misuse — assert.ok is the honest shape.
+- Suite discipline: unit277 born — 11 checks green; battery script battery277.sh (the glob already carries the new suite).
+- Gates: tsc EXIT=0 ×2; build EXIT=0 (45 assets, VERSION → servepoint-v5.238.0-r1 baked); regression battery unit194–277 ALL PASS by exit code (83 suites, PASS=83 FAIL=0).
+- E2E (dev, live): Custom selected → the row reveals armed 29 Sept – 5 Oct with "Showing 29 Sept – 5 Oct" (49 orders); the single day 2 Oct reads "Showing 2 Oct" with 16 orders — exactly the Close-out's own 2 Oct book (15 live + 1 cancelled; one record, two surfaces, one count); the empty day 15 Aug answers "No bills from 15 Aug" with the ledger census ("The ledger holds 58 bills — none from 15 Aug. Widen the window, or clear it."); a search riding the empty window speaks "No bill matches “zzqx” … The Custom (15 Aug) filter is also in play — either can miss."; the clear chip resets to All time and the row hides; console clean. Screenshot: scripts/qa277-chase-answers-calendar.png.
+- Commit + push: feat committed, then chore(worklog). Push: ATTEMPTED (first, per the standing instruction) and again post-commit — both failed honestly, no token (addendum below).
+
+Stage Summary:
+- 5.238.0 — the chase answers to a calendar: "show me the 2nd's tickets" is now one select away, the span spoken everywhere, the same swap/fallback/clock as Reports — the window grammar's second borrower, ONE home holding.
+- Watch item NEW (classified, not parked-actionable): Bills' fixed keys speak browser-local days (isSameLocalDay) while the custom bounds speak the app-day clock (IST) — the two-clocks fossil. Unifying touches the 5.203 ghost law (isGhostTicket's older-day definition) and the "5 older" census; needs its own round with the suites' pins re-read. Invisible while the browser tz == app tz.
+- Census: Menu, Inventory, Dashboard join the walked-healthy list; the window grammar now has TWO consumers (Reports, Bills) — the Close-out remains a single-day room (5.237), correct by its own doctrine.
+- Parked (carried): variant/add-on recipe costing (the BIG one — migration 039 + the 015 engine, owner word advised); 038 birthdays (owner-gated); drawer movements CSV (only if asked); CounterInbox bulk "Ok all" (risky); guest QR "room favourite" badges (owner decision); DS showcase links (owner OK pending); storage folder silting; phone-key normalization (OWNER-GATED — data policy); offer time-windows (schema, owner); micro-chunk dieting; README docs siblings sweep (next DAILY); GST billed-toggle (owner word); NEW: Bills fixed-key clock unification (watch item above). Deliberately designed out (do not re-park): chat→bell pings (031); KDS bump-back (engine reversal).
+- Owner action items (carried): (1) delete orphaned drill auth user drill.owner@recoverydrill.in at next pooler session; (2) QR Flow owner password remains provisional; (3) 038 DDL one-command unblock in owner's hands; (4) GST filing basis confirmation (collected-only current posture); (5) rotate retired-project keys if that Supabase project still exists.
+- Crons: 15-min webDevReview (job 430321) + DAILY deep pass (job 431587, 09:00 IST — README route-grammar refresh DONE 2026-10-05; docs siblings sweep next).
+
+---
+Task ID: 277-PUSH-ADDENDUM (same round, post-commit)
+Agent: glm-5.3
+Task: Record the round's push outcome honestly.
+
+Work Log:
+- Push ATTEMPTED TWICE this round (the standing instruction was honored — once FIRST per its terms, once post-commit): both ran and failed — "fatal: could not read Username for 'https://github.com': No such device or address". NO GitHub token in the round environment (0 GH_* matches, no credential files, no gh CLI, no helper).
+- State: the ride grows — Tasks 267–276's pairs, the sweeper's ce4f858, THIS round's feature commit + the worklog commit all sit LOCAL; origin/main remains edc84af. Twenty-eight commits ride.
+- Remote config untouched: nothing to scrub.
+- Standing instruction stands: the next token-bearing round pushes the whole pile FIRST, before its own work.
+
+Stage Summary:
+- Work committed and gated (battery 83/83, tsc ×2, build, live E2E with the two-surface count reconciliation) but NOT on origin — the push ran and failed for lack of credentials, not for lack of trying. The honesty rule holds: no push claimed that did not run.
