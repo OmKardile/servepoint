@@ -6777,3 +6777,41 @@ Work Log:
 
 Stage Summary:
 - Work committed and gated (battery 80/80, tsc ×2, build, live E2E across root/alias/restore/404 paths) but NOT on origin — the push ran and failed for lack of credentials, not for lack of trying. The honesty rule holds: no push claimed that did not run.
+
+---
+Task ID: 275 (15-min webDevReview round, trace 1a0fba3beb0e3c89-cron-agent-loop-202610051520)
+Agent: glm-5.3 (cron webDevReview round)
+Task: Post-5.235.0 round — QA walk (Reports with fresh eyes), then the next owner need: a Custom date range for Reports. v5.236.0 "the range answers to a calendar".
+
+Work Log:
+- Orientation: worklog tail — 274 closed (279dad7 + ab24d12, v5.235.0, battery 80/80); tree clean. THIS round = Task 275, version → v5.236.0. Task stamp 15:10 +08:00. tsc EXIT=0 pre-claim. NO token in round env — the push debt RIDES (addendum below).
+- Parked-list reconnaissance: phone-key normalization is OWNER-GATED by its own record (016 upserts guests by raw string; an owner must choose to normalize — a data-policy change); chat→bell pings were DELIBERATELY designed out (documented in 031); KDS bump-back "needs engine reversal — deliberate". With those properly classified, the next genuine non-gated owner need: Reports' fixed windows cannot answer "show me the 2nd".
+- QA walk (Reports, fresh eyes): the window plumbing is ONE pure family (rangeWindow/priorWindow/priorRangeLabel, ~10 call sites on a single range state) — the ideal host for a fifth key.
+- Feature v5.236.0 "the range answers to a calendar": (1) Custom joins as a FIFTH RangeKey; the strip chip auto-renders from RANGE_LABEL's keys. (2) THE GRAMMAR MOVED — lib/reportWindow.ts is now the window family's ONE home (RangeKey, RANGE_LABEL, orderedCustom, customDayKeys, rangeWindow, priorWindow, priorRangeLabel, rangeLabelOf, shiftDayIso exported) — suite-importable, reusable (the Close-out may one day ask the same windows); the screen imports the lib. (3) THE HONEST LAWS — "N days" ends today, today inclusive; the prior window is EQUAL-LENGTH and immediately before ("vs prior N days", true by construction; N=1 says "prior day"); All time keeps its no-baseline silence; a reversed pair is swapped by THE one swap (orderedCustom — window builder AND day-filler ask it); malformed pairs fall back to the last 7 days (never a fabricated window; the inputs arm pre-filled anyway); the label everywhere (captions, CSVs, print header, share texts) speaks the DATES ("2 Oct – 5 Oct", single day alone), never the bare chip word. (4) THE DAY-FILLER — customDayKeys steps calendar STRINGS through the noon anchor (DST-safe; 400-key sanity bound). (5) THE UI — the calendar row reveals only while Custom stands (From/To date inputs, max today, house ink + gold focus ring), a line-grey hint speaks the span live ("Showing 2 Oct – 5 Oct") with an honest note when the dates were swapped. (6) THE DEPS — all eleven window memos/effects ride customWindow (no stale window behind a forgotten dependency).
+- MID-ROUND CATCHES: (a) the replace_all that fed rangeLabelOf through the label sites ALSO rewrote the RANGE_LABEL[range] inside rangeLabelOf itself — self-recursion, caught at typecheck, pinned extinct by the suite (a new sibling of the 5.265/5.272 lessons: mechanical refactors must exclude their own definition site). (b) TS null-narrowing on the custom prior (startMs: number | null) — structural guards added with the honest comment (every custom path resolves a real start). (c) The battery caught unit241's window pin ("rangeWindow found before priorWindow") reading the SCREEN's source — the family moved homes, so the pin re-anchored to lib/reportWindow.ts (the contract unchanged, the home is not). (d) .mjs suites cannot parse TS syntax (`as const`, type annotations, inline type imports) — the third round running; stripped.
+- Suite discipline: unit275 born — 20 checks green (the windows by behavior ×6; the priors ×5; the labels ×3; the day-filler ×3; the screen's wiring ×3 including the recursion-extinct pin).
+- Gates: tsc EXIT=0 ×2; build EXIT=0 (44 assets, VERSION → servepoint-v5.236.0-r1 baked); regression battery unit194–275 ALL PASS by exit code (81 suites, PASS=81 FAIL=0).
+- E2E (dev, live): the Custom chip arms pre-filled (29 Sept – 5 Oct, the same window the 7d chip spoke); the span 2–5 Oct reads ₹6,169.80 / 19 orders with "vs prior 4 days"; collapsing to the single day 2 Oct reads ₹5,046.30 with "vs prior day" — EXACTLY the best-day figure the day-by-day chart has spoken since 5.230: one record, two surfaces, one number. The caption speaks the span ("IST days · 2 oct"). Console: fresh session clean (the census entries were the session's accumulated fossils — the page fully interactive, all gates green). Screenshot: scripts/qa275-range-answers-calendar.png.
+- Commit + push: feat committed, then chore(worklog). Push: ATTEMPTED and failed honestly — no token (same "could not read Username") — the pile rides (addendum below).
+
+Stage Summary:
+- 5.236.0 — Reports answers "show me the 2nd": a Custom range with the honest baseline ("vs prior N days"), the dates spoken everywhere, and the whole window grammar in ONE lib home. The reconciliation to the chart's own number is the round's proof: one record, two surfaces, one number.
+- Watch item NEW: the custom span has a 400-day sanity bound on the day-filler (~13 months of thin bars); an owner wanting a year gets a dense chart — deliberate. The lib home makes the Close-out's future windows a natural borrower (same grammar, one clock).
+- Census: Reports now window-complete (fixed + custom, labels, priors, CSVs, print). The walk's classification work (phone-key = owner-gated, chat→bell = designed-out, bump-back = deliberate) shrinks the parked list to genuinely gated items plus the BIG candidate.
+- Parked (carried): variant/add-on recipe costing (the BIG one — migration 039 + the 015 engine, owner word advised); 038 birthdays (owner-gated); drawer movements CSV (only if asked); CounterInbox bulk "Ok all" (risky); guest QR "room favourite" badges (owner decision); DS showcase links (owner OK pending); storage folder silting; phone-key normalization (OWNER-GATED — data policy); offer time-windows (schema, owner); micro-chunk dieting; README docs siblings sweep (next DAILY); GST billed-toggle (owner word). Deliberately designed out (do not re-park): chat→bell pings (031); KDS bump-back (engine reversal).
+- Owner action items (carried): (1) delete orphaned drill auth user drill.owner@recoverydrill.in at next pooler session; (2) QR Flow owner password remains provisional; (3) 038 DDL one-command unblock in owner's hands; (4) GST filing basis confirmation (collected-only current posture); (5) rotate retired-project keys if that Supabase project still exists.
+- Crons: 15-min webDevReview (job 430321) + DAILY deep pass (job 431587, 09:00 IST — README route-grammar refresh DONE 2026-10-05; docs siblings sweep next).
+
+---
+Task ID: 275-PUSH-ADDENDUM (same round, post-commit)
+Agent: glm-5.3
+Task: Record the round's push outcome honestly.
+
+Work Log:
+- Push ATTEMPTED this round (the standing instruction was honored): `git push origin main` ran and failed — "fatal: could not read Username for 'https://github.com'". NO GitHub token in the round environment (0 GH_* matches, no credential files, no gh CLI, no helper).
+- State: the ride grows — Tasks 267–274's pairs, the sweeper's ce4f858, THIS round's feature commit + the worklog commit all sit LOCAL; origin/main remains edc84af. Nineteen-plus commits ride.
+- Remote config untouched: nothing to scrub.
+- Standing instruction stands: the next token-bearing round pushes the whole pile FIRST, before its own work.
+
+Stage Summary:
+- Work committed and gated (battery 81/81, tsc ×2, build, live E2E with the paisa-exact reconciliation) but NOT on origin — the push ran and failed for lack of credentials, not for lack of trying. The honesty rule holds: no push claimed that did not run.
