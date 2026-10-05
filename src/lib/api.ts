@@ -188,6 +188,44 @@ export async function fetchOpenOrders(tenantId: string): Promise<Order[]> {
 }
 
 /**
+ * v5.245.0 — the day the working surfaces speak, read whole. The kitchen
+ * board's columns and the counter's inbox both render ONE day — the app's
+ * today, by their own isSameAppDay verdicts — but both rode fetchOrders'
+ * all-time newest-100 window to feed it: on a day whose ledger rows pass
+ * 100, the OLDEST of today's tickets fall outside the window and the
+ * working surfaces go blind to exactly the work that needs them most (a
+ * rail ticket past the page never fires; a `new` ticket past the page can
+ * never be Ok'd or killed). This read draws the bounds the surfaces
+ * actually speak: created_at within the app-today containing the clock
+ * given (offTodayBoundsIso's [start, end) — byte-equal to isSameAppDay by
+ * construction, the 5.243 boundary law: same day iff the instant sits
+ * inside the day's bounds; the future-dated corrupt row is outside BOTH
+ * mouths). No limit — a day is finite (business-bounded, the Close-out
+ * day-read precedent): today's tickets, all of them, however busy the
+ * ledger runs. Same shape as fetchOrders — the table embed resolves
+ * table_id → table_number in the SAME read and attachItems bridges the
+ * lines, so callers get complete Orders and every downstream filter,
+ * sort and card is unchanged.
+ */
+export async function fetchTodayOrders(tenantId: string, nowMs?: number): Promise<Order[]> {
+  requireCloud();
+  const { startIso, endIso } = offTodayBoundsIso(nowMs);
+  const { data, error } = await supabase
+    .from('orders')
+    .select('*, dining_tables(table_number)')
+    .eq('tenant_id', tenantId)
+    .gte('created_at', startIso)
+    .lt('created_at', endIso)
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  const rows = (data || []).map((r: unknown) => {
+    const { dining_tables, ...rest } = r as OrderRow & { dining_tables?: { table_number: string } | null };
+    return { ...rest, table_label: dining_tables?.table_number ?? null } as OrderRow;
+  });
+  return attachItems(rows, tenantId);
+}
+
+/**
  * v5.244.0 — ONE engine for every off-today census: a server HEAD-COUNT of
  * tickets whose status sits in `statuses` AND whose created_at is NOT the
  * app's today, wherever they sit in the ledger — uncapped. v5.243.0 gave

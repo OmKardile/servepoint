@@ -121,8 +121,8 @@ ok('null / undefined / empty → silence, never a throw');
   assert.equal(callsInbox, 1, 'CounterInbox asks the census exactly once');
   assert.match(
     inbox,
-    /import \{ isSameAppDay, staleNewTickets \} from '\.\.\/\.\.\/lib\/appday';/,
-    "the queue keeps its own today predicate (isSameAppDay) — pinned by unit278 — and the stragglers ride the same lib",
+    /import \{ isSameAppDay, staleNewTickets(, appFormatters)? \} from '\.\.\/\.\.\/lib\/appday';/,
+    "the queue keeps its own today predicate (isSameAppDay) — pinned by unit278 — and the stragglers ride the same lib (v5.245.0: the day chip's house formatter rides the same import — re-anchored honestly, the unit241 lesson)",
   );
   /* the inline fossil is extinct from the Dashboard */
   assert.equal(

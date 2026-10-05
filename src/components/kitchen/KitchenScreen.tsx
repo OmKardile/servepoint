@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useReducer, useRef, useState } 
 import {
   Armchair,
   BellRing,
+  CalendarDays,
   Check,
   CheckCheck,
   ChefHat,
@@ -16,7 +17,11 @@ import {
 } from 'lucide-react';
 import {
   advanceOrder,
-  fetchOrders,
+  /* v5.245.0 — the board reads the day it speaks: fetchTodayOrders' bounds
+   * are the app-today the board's own isSameAppDay verdicts mean, so the
+   * columns can never go blind to today's oldest work on a busy ledger
+   * (fetchOrders' all-time newest-100 window is extinct here). */
+  fetchTodayOrders,
   setOrderItemChecked,
   subscribeOrdersRealtime,
   type RealtimeState,
@@ -28,7 +33,7 @@ import { hhmm } from '../../lib/day';
  * answer "today" the same way the Close-out's book does — one day in
  * every room, never the browser's. The grammar stays INJECTED —
  * lastRailTicketAt still takes it, suites still own now. */
-import { isSameAppDay } from '../../lib/appday';
+import { isSameAppDay, appFormatters } from '../../lib/appday';
 import { isQuietNow, subscribePrefs } from '../../lib/prefs';
 import type { Order } from '../../types';
 
@@ -517,7 +522,16 @@ export const KitchenScreen: React.FC = () => {
   const refetch = useCallback(async () => {
     if (!tenantId) return;
     try {
-      const rows = await fetchOrders(tenantId, 100);
+      /* v5.245.0 — the day-bounded read: the board speaks today (its own
+       * isSameAppDay verdicts below), so it reads today — every ticket from
+       * the day's first minute to its last, uncapped (a day is finite).
+       * The all-time newest-100 window went blind to today's oldest work
+       * once 100 newer rows stacked past it: a rail ticket past the page
+       * never fired, a tally quietly undercounted. The client's day
+       * filters stay — the read's [start, end) bounds are byte-equal to
+       * isSameAppDay by construction, so the filters now VERIFY instead
+       * of rescue. */
+      const rows = await fetchTodayOrders(tenantId);
       // overlay ticks still in flight (see toggleItem) — a refetch that
       // started before a tick committed must never clobber the flip
       if (pendingTicksRef.current.size > 0) {
@@ -754,6 +768,18 @@ export const KitchenScreen: React.FC = () => {
           </div>
         </div>
         <div className="ml-auto flex flex-wrap items-center gap-2">
+          {/* v5.245.0 — the day-scope chip: the board speaks one day, and now
+           * the header SAYS so — the day in the house formatter's own voice
+           * (appFormatters' dayLabel), the title naming the whole-day read.
+           * One chip language, two rooms (the counter inbox wears its
+           * sibling) — the scope word travels with the surfaces. */}
+          <span
+            className="flex h-8 items-center gap-1.5 rounded-full border border-[#E3E7E0] bg-white px-2.5 text-[12px] font-semibold text-[#5B6B63]"
+            title="The board reads the whole day — every ticket from the day's first minute to its last, however busy the ledger runs"
+          >
+            <CalendarDays size={13} aria-hidden />
+            Today · {appFormatters().dayLabel.format(new Date(nowMs))}
+          </span>
           <span
             className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11.5px] font-semibold ${rtChip.cls}`}
             title={

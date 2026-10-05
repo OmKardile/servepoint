@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import {
   BellRing,
+  CalendarDays,
   ChevronDown,
   CircleSlash,
   History,
@@ -19,7 +20,12 @@ import { isQuietNow, subscribePrefs } from '../../lib/prefs';
 import {
   advanceOrder,
   fetchOffTodayCount,
-  fetchOrders,
+  /* v5.245.0 — the inbox reads the day it speaks: the list below filters
+   * status 'new' AND isSameAppDay, but the read drew from the all-time
+   * newest-100 window — on a day whose ledger rows pass 100, today's
+   * oldest news slid past the page and could never be Ok'd or killed.
+   * fetchTodayOrders draws the bounds the inbox speaks. */
+  fetchTodayOrders,
   fetchTables,
   subscribeOrdersRealtime,
   type DiningTable,
@@ -33,7 +39,7 @@ import { useUi } from '../../store/session';
  * v5.241.0 — the stragglers (new tickets from BEFORE today) read the SAME
  * lib's one census (staleNewTickets), so the counter and the Dashboard's
  * whisper derive one number from one home — never a second derivation. */
-import { isSameAppDay, staleNewTickets } from '../../lib/appday';
+import { isSameAppDay, staleNewTickets, appFormatters } from '../../lib/appday';
 
 /**
  * CounterInbox (v5.3.0 — "the counter is the gate", NOVA rule #1).
@@ -292,7 +298,11 @@ export function CounterInbox(): React.ReactElement | null {
     setError(null);
     try {
       const [os, ts, cnt] = await Promise.all([
-        fetchOrders(tenantId, 100),
+        /* v5.245.0 — the day-bounded list read: the inbox speaks today (its
+         * own status 'new' + isSameAppDay verdicts below), so it reads
+         * today — uncapped, a day is finite. The census legs ride the
+         * same cycle unchanged (the 5.243 law). */
+        fetchTodayOrders(tenantId),
         fetchTables(tenantId),
         /* v5.243.0 — the whole-book word rides the SAME load cycle as the
            page it dims to; individually fail-soft so a failed count never
@@ -466,6 +476,16 @@ export function CounterInbox(): React.ReactElement | null {
             </p>
           </span>
         </button>
+        {/* v5.245.0 — the day-scope chip: the kitchen board's sibling, the
+         * same classes, the same house formatter, the same honest scope
+         * word in the news grammar — one chip language, two rooms. */}
+        <span
+          className="flex h-8 shrink-0 items-center gap-1.5 rounded-full border border-[#E3E7E0] bg-white px-2.5 text-[12px] font-semibold text-[#5B6B63]"
+          title="The inbox reads the whole day — every news ticket from the day's first minute to its last, however busy the ledger runs"
+        >
+          <CalendarDays size={13} aria-hidden />
+          Today · {appFormatters().dayLabel.format(new Date(nowMs))}
+        </span>
         {/* the counter's own bell switch — the KDS chime chip's sibling, same
          * three honest states: gold on / deep-teal on-but-quiet / grey muted */}
         <button
