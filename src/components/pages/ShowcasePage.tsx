@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import brandMark from '../../assets/brand/mark.png';
 import brandArt from '../../assets/brand/hero-lockup.jpg';
+import { APP_VERSION } from '../../version';
 
 /**
  * /showcase — public product tour for ServePoint — smartPOS.
@@ -194,13 +195,15 @@ const ShowcasePage: React.FC = () => {
             </ul>
             <div className="mt-8 grid gap-4 sm:grid-cols-3">
               {[
-                /* 5.140.0 — the numbers re-censused against the tree: 37
-                    migration files on disk, 34 distinct guarded sp_ functions
-                    (the old "2 engine RPCs" claim also overstated its scope —
-                    the guarded set now covers drawers, stock and guest
-                    capability paths, not just status & money). */
-                { k: '37', v: 'idempotent migrations applied from the CLI' },
-                { k: '34', v: 'guarded RPCs — every cloud write passes a database-side guard' },
+                /* 5.247.0 — the census counts itself, or rather: the BATTERY
+                    counts the tree and pins these literals — a migration or
+                    RPC that lands without this block moving FAILS unit286
+                    (the suite owns now; 5.140's hand census rotted
+                    silently: 34 → 21 since). The migration wording
+                    survives 038's owner-gated pending state — the number
+                    is the TREE's truth, not the deployment's. */
+                { k: '37', v: 'idempotent migrations — one command rebuilds the whole schema' },
+                { k: '21', v: 'guarded RPCs — every cloud write passes a database-side guard' },
                 { k: '0', v: 'mock data paths — every screen reads the live cloud' },
               ].map((s) => (
                 <div key={s.k} className="rounded-2xl border border-white/10 bg-white/6 p-4">
@@ -243,8 +246,11 @@ const ShowcasePage: React.FC = () => {
             <img src={brandMark} alt="" aria-hidden className="h-full w-full object-contain" />
           </span>
           {/* 5.140.0 — the version token is gone: a hardcoded one rots (it read
-              v5.2.0 for 137 releases). The sidebar's footer line is the voice. */}
-          <p className="text-[12px] text-[#969696]">© 2026 ServePoint · smartPOS</p>
+              v5.2.0 for 137 releases). 5.247.0 — it returns DERIVED from
+              version.ts (a read that already carries the fact is a free
+              derivation — it cannot rot); the battery pins all three porch
+              footers to APP_VERSION. */}
+          <p className="text-[12px] text-[#969696]">© 2026 ServePoint · smartPOS · v{APP_VERSION}</p>
           <nav className="ml-auto flex items-center gap-4 text-[12px] font-semibold text-[#0F3D3E]" aria-label="Footer">
             <a href="/" className="hover:underline hover:underline-offset-2">App</a>
             <a href="/showcase" className="hover:underline hover:underline-offset-2">Showcase</a>

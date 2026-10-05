@@ -127,11 +127,15 @@ const swJs = strip('../public/sw.js');
   ok('no other room moved: tenants/subscriptions bytes, the row grammar\'s shape');
 }
 
-/* 7 — the version law. */
+/* 7 — the version law, in the agreement shape (the suite reads BOTH sides
+ *     and asserts they AGREE — version-agnostic, so the law survives every
+ *     future bump; the 5.286 re-anchor joins the honest-re-anchor family). */
 {
-  assert.match(versionTs, /APP_VERSION = '5\.246\.0';/, 'version.ts speaks 5.246.0');
-  assert.match(swJs, /VERSION = "servepoint-v5\.246\.0-r1";/, 'sw.js speaks the matching build');
-  ok('the version law: 5.246.0 on both sides');
+  const v = versionTs.match(/APP_VERSION = '([\d.]+)'/)?.[1];
+  const sw = swJs.match(/const VERSION = "servepoint-v([\d.]+)-r1"/)?.[1];
+  assert.ok(v && sw, 'both sides carry a version');
+  assert.equal(v, sw, 'version.ts and sw.js speak the SAME version');
+  ok(`the version law: ${v} on both sides`);
 }
 
 console.log(`\nunit285 — ${n} checks green.`);

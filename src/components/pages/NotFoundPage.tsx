@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import { ArrowLeft, ArrowRight, LifeBuoy, MapPin } from 'lucide-react';
 import brandMark from '../../assets/brand/mark.png';
+import { APP_VERSION } from '../../version';
 
 /**
  * NotFoundPage (v5.141.0) — the honest 404.
@@ -124,7 +125,9 @@ const NotFoundPage: React.FC<{ path?: string }> = ({ path }) => {
           <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#F6F1E9] p-0.5">
             <img src={brandMark} alt="" aria-hidden className="h-full w-full object-contain" />
           </span>
-          <p className="text-[12px] text-[#969696]">© 2026 ServePoint · smartPOS</p>
+          {/* 5.247.0 — the DERIVED version joins the line (the battery pins
+              all three porch footers to APP_VERSION — it cannot rot). */}
+          <p className="text-[12px] text-[#969696]">© 2026 ServePoint · smartPOS · v{APP_VERSION}</p>
           <nav className="ml-auto flex items-center gap-4 text-[12px] font-semibold text-[#0F3D3E]" aria-label="Footer">
             <a href="/" className="hover:underline hover:underline-offset-2">App</a>
             <a href="/showcase" className="hover:underline hover:underline-offset-2">Showcase</a>

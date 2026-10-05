@@ -11,6 +11,7 @@ import {
   Users,
 } from 'lucide-react';
 import brandMark from '../../assets/brand/mark.png';
+import { APP_VERSION } from '../../version';
 
 /**
  * /index-help — public getting-started guide for ServePoint — smartPOS.
@@ -258,8 +259,9 @@ const IndexHelpPage: React.FC = () => {
             <img src={brandMark} alt="" aria-hidden className="h-full w-full object-contain" />
           </span>
           {/* 5.140.0 — the version token is gone (it read v5.2.0 for 137
-              releases); the sidebar's footer line is the voice. */}
-          <p className="text-[12px] text-[#969696]">© 2026 ServePoint · smartPOS</p>
+              releases). 5.247.0 — the line speaks the DERIVED version (the
+              battery pins all three porch footers to APP_VERSION). */}
+          <p className="text-[12px] text-[#969696]">© 2026 ServePoint · smartPOS · v{APP_VERSION}</p>
           <nav className="ml-auto flex items-center gap-4 text-[12px] font-semibold text-[#0F3D3E]" aria-label="Footer">
             <a href="/" className="hover:underline hover:underline-offset-2">App</a>
             <a href="/showcase" className="hover:underline hover:underline-offset-2">Showcase</a>
