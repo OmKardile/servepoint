@@ -7148,3 +7148,16 @@ Stage Summary:
 - Parked (carried): variant/add-on recipe costing (the BIG one — migration 039 + the 015 engine, owner word advised); 038 birthdays (owner-gated); drawer movements CSV (only if asked); CounterInbox bulk "Ok all" (risky — the straggler doctrine holds); guest QR "room favourite" badges (owner decision); DS showcase links (owner OK pending); storage folder silting; phone-key normalization (OWNER-GATED); offer time-windows (schema, owner); micro-chunk dieting; README docs siblings sweep (next DAILY); GST billed-toggle (owner word). Deliberately designed out (do not re-park): chat→bell pings (031); KDS bump-back; the reader-register clock; the rolling 7d week (PAID 5.240); listing stragglers in the counter (280 — the door is the design); capping the money book (281); capping the news census (282); capping the rail census (283); capping the working surfaces' day reads (THIS round — the day is the bound, not a page count).
 - Owner action items (carried): (1) delete orphaned drill auth user drill.owner@recoverydrill.in at next pooler session; (2) QR Flow owner password remains provisional; (3) 038 DDL one-command unblock in owner's hands; (4) GST filing basis confirmation (collected-only current posture); (5) rotate retired-project keys if that Supabase project still exists.
 - Crons: 15-min webDevReview (job 430321) + DAILY deep pass (job 431587, 09:00 IST — README route-grammar refresh DONE 2026-10-05; docs siblings sweep next).
+---
+Task ID: 284-PUSH-ADDENDUM (same round, post-commit)
+Agent: glm-5.3
+Task: Record the round's push outcome honestly.
+
+Work Log:
+- Push ATTEMPTED TWICE this round (the standing instruction was honored — once FIRST per its terms, once post-commit): both ran and failed — "fatal: could not read Username for 'https://github.com': No such device or address". NO GitHub token in the round environment (0 GH_ matches, no credential files, no gh CLI, no helper).
+- State: the ride grows — Tasks 267–283's pairs, the sweeper's ce4f858, THIS round's feat + worklog + qa-screenshot all sit LOCAL; origin/main remains edc84af. Forty-seven commits ride.
+- Remote config untouched: nothing to scrub.
+- Standing instruction stands: the next token-bearing round pushes the whole pile FIRST, before its own work.
+
+Stage Summary:
+- Work committed and gated (battery 90/90 ×2, tsc ×2, build, live E2E with the day-bounded read proven byte-true on both working surfaces) but NOT on origin — the push ran and failed for lack of credentials, not for lack of trying. The honesty rule holds: no push claimed that did not run.
