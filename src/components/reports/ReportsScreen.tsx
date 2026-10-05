@@ -1596,6 +1596,29 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
     void load();
   }, [tenantId, load]);
 
+  /* v5.265.0 — the last sleeper wakes. Reports was the one data surface the
+     wake family (300–302) never reached: read on mount and on range change,
+     but blind to the owner's return. The wake rides the SAME one path —
+     load — the mount and the refresh button ride; load stamps refreshedAt,
+     so the ledger and hop riders, keyed on that stamp, follow for free.
+     The wake adds a beat to the one road; it never builds a second road.
+     (Reports keeps NO poll by design — the receipt below is the proof the
+     read happened, and the button's title is the word about it.) */
+  const [caughtUpAt, setCaughtUpAt] = useState<number | null>(null);
+  useEffect(() => {
+    if (caughtUpAt === null) return;
+    const t = window.setTimeout(() => setCaughtUpAt(null), 4000);
+    return () => window.clearTimeout(t);
+  }, [caughtUpAt]);
+  const wake = useCallback(() => {
+    if (document.visibilityState !== 'visible') return;
+    void load().then(() => setCaughtUpAt(Date.now()));
+  }, [load]);
+  useEffect(() => {
+    document.addEventListener('visibilitychange', wake);
+    return () => document.removeEventListener('visibilitychange', wake);
+  }, [wake]);
+
   const inRange = useMemo(() => {
     const { startMs, endMs } = rangeWindow(range, customWindow);
     return orders.filter((o) => {
@@ -2793,6 +2816,21 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {/* v5.265.0 — the wake's receipt, in the family's words: it rises
+              when the report catches up on the owner's return, keyed by the
+              instant so a second wake re-raises rather than replaces, and it
+              clears itself after 4s — a receipt, not a resident. */}
+          {caughtUpAt !== null && (
+            <span
+              key={caughtUpAt}
+              className="flex h-8 items-center gap-1.5 rounded-full border border-[#E3E7E0] bg-white px-2.5 text-[12px] font-semibold text-[#5B6B63]"
+              title="The report just caught up — the read rode the same path the refresh button rides"
+              style={{ animation: 'spFadeIn 0.35s ease' }}
+            >
+              <Check size={13} aria-hidden />
+              Caught up · {appFormatters().hhmm.format(new Date(caughtUpAt))}
+            </span>
+          )}
           <div
             className="flex rounded-full border border-[#E3E7E0] bg-white p-1"
             role="tablist"
@@ -2816,7 +2854,11 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
             onClick={retry}
             disabled={loading}
             aria-label="Refresh report"
-            title={refreshedAt ? `Refreshed ${refreshedAt.toLocaleTimeString()}` : 'Refresh'}
+            title={
+              refreshedAt
+                ? `Refreshed ${appFormatters().hhmm.format(refreshedAt)} — and the moment you look back`
+                : 'Refresh'
+            }
             className="flex h-11 w-11 items-center justify-center rounded-xl border border-[#E3E7E0] bg-white text-[#0F3D3E] transition hover:border-[#B88E2F] hover:text-[#B88E2F] disabled:opacity-50"
           >
             <RefreshCw size={15} aria-hidden className={loading ? 'animate-spin' : ''} />
