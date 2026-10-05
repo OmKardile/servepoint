@@ -50,6 +50,18 @@ import type { Order } from '../../types';
  * line now says which: "last ticket HH:MM" when a ticket landed today,
  * "nothing yet today" when the kitchen has seen nothing (lastRailTicketAt,
  * the pure read beside isOnRail).
+ * v5.229.0: the line carries the day's tally — the context line said how
+ * LONG the oldest ticket has waited and WHEN the last one landed, but
+ * never how FAR the day has come: the pass's Completed column keeps the
+ * newest 12 (overflow hidden), so on a 14-ticket day the true count lived
+ * nowhere on the board. Both branches now speak "· N completed today"
+ * when the day has completed anything (silence, never a zero) — the
+ * UNCAPPED count, captured before the column's cap so tally = column +
+ * overflow always; the tally's number wears the completed stage's own
+ * ink (#0F3D3E, the pill's color); and the Completed stat tile whispers
+ * "+N" when the column is hiding older work. A cancelled-only day stays
+ * stamp-true with no tally — completed ⊂ landed, the two clauses can
+ * never disagree.
  */
 
 /* ───────────────────────────── board model ────────────────────────────── */
@@ -654,7 +666,13 @@ export const KitchenScreen: React.FC = () => {
     });
     byStage.forEach((list) => list.sort((a, b) => a.created_at.localeCompare(b.created_at)));
     const completed = byStage.get('completed')!;
-    const overflow = Math.max(0, completed.length - 12);
+    /* v5.229.0 — the day's tally: the UNCAPPED completed count, captured
+     * BEFORE the column's 12-card cap below. One array, one read — the
+     * tally and the column can never disagree: tally = column + overflow
+     * exactly (the 5.262 law: a count computed beside a verdict is a
+     * second verdict — here the tally IS the verdict the cap reads). */
+    const completedToday = completed.length;
+    const overflow = Math.max(0, completedToday - 12);
     if (overflow > 0) byStage.set('completed', completed.slice(overflow));
     const activeWait = [...byStage.get('new')!, ...byStage.get('preparing')!, ...byStage.get('ready')!];
     const oldest = activeWait.reduce<string | null>(
@@ -667,6 +685,7 @@ export const KitchenScreen: React.FC = () => {
     return {
       byStage,
       overflow,
+      completedToday,
       oldestWait: oldest ? elapsed(oldest, nowMs) : null,
       cancelledToday: cancelled,
       lastTicketAt: lastRailTicketAt(orders, isSameLocalDay),
@@ -777,8 +796,21 @@ export const KitchenScreen: React.FC = () => {
           <div key={s.key} className="flex items-center gap-2.5 rounded-xl border border-[#E3E7E0] bg-white px-3 py-2">
             <span className={`h-2 w-2 shrink-0 rounded-full ${s.pill}`} aria-hidden />
             <p className="min-w-0 truncate text-[11.5px] font-medium text-[#969696]">{s.title}</p>
-            <p className="ml-auto font-mono text-[15px] font-bold tabular-nums text-[#1A1A1A]">
+            {/* v5.229.0 — the Completed tile whispers "+N" when the column
+             * hides older work: the tile still speaks the column's own
+             * count (12), the whisper names the hidden — the same words
+             * the context line's overflow clause uses (5.198: two
+             * surfaces, one register, one number). */}
+            <p className="ml-auto flex items-baseline gap-1 font-mono text-[15px] font-bold tabular-nums text-[#1A1A1A]">
               {board.byStage.get(s.key)!.length}
+              {s.key === 'completed' && board.overflow > 0 && (
+                <span
+                  className="text-[11px] font-semibold text-[#969696]"
+                  title={`${board.overflow} older completed orders hidden — the day's tally is ${board.completedToday}`}
+                >
+                  +{board.overflow}
+                </span>
+              )}
             </p>
           </div>
         ))}
@@ -790,6 +822,21 @@ export const KitchenScreen: React.FC = () => {
           <>
             Oldest active ticket waiting{' '}
             <span className="font-mono font-bold text-[#1A1A1A]">{board.oldestWait}</span>
+            {/* v5.229.0 — the day's tally, after the wait and before the
+             * cancelled aside: how far the day has come. The number wears
+             * the completed stage's own ink (#0F3D3E — the pill's color). */}
+            {board.completedToday > 0 && (
+              <>
+                {' · '}
+                <span
+                  className="font-semibold text-[#0F3D3E]"
+                  title="Completed today — the day's tally; the column keeps the newest 12"
+                >
+                  {board.completedToday}
+                </span>{' '}
+                completed today
+              </>
+            )}
             {board.cancelledToday > 0 && <> · {board.cancelledToday} cancelled today (off rail)</>}
           </>
         ) : (
@@ -798,6 +845,22 @@ export const KitchenScreen: React.FC = () => {
             {board.lastTicketAt
               ? ` · last ticket ${hhmm(board.lastTicketAt)}`
               : ' · nothing yet today'}
+            {/* v5.229.0 — the quieter case hears the tally too (5.266: a
+             * card's sub-voice inherits the headline's blindness): a quiet
+             * board at day's end says the day's SIZE, not just its last
+             * moment. Zero completes = silence, never a zero. */}
+            {board.completedToday > 0 && (
+              <>
+                {' · '}
+                <span
+                  className="font-semibold text-[#0F3D3E]"
+                  title="Completed today — the day's tally; the column keeps the newest 12"
+                >
+                  {board.completedToday}
+                </span>{' '}
+                completed today
+              </>
+            )}
             {board.cancelledToday > 0 ? ` · ${board.cancelledToday} cancelled today` : ''}
           </>
         )}
