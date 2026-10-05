@@ -1701,7 +1701,11 @@ function FeedbackCard({
   onRated: (n: number) => void;
 }): React.ReactElement {
   const { t } = useGuestLang();
-  const rated = order.feedback_rating; // server truth — survives reloads
+  /* v5.256.0 — the thanks that stayed: server truth first (the day the
+   * payload carries it again — 039 pending), the tab's own accepted act
+   * second. The poll can no longer ask the guest to rate twice. */
+  const [tab, setTab] = useState<GuestTabFeedback | null>(() => readGuestTabFeedback(order.id));
+  const rated = order.feedback_rating ?? tab?.rating ?? null;
   const [hoverN, setHoverN] = useState(0);
   const [picked, setPicked] = useState(0);
   const [comment, setComment] = useState('');
@@ -1716,8 +1720,18 @@ function FeedbackCard({
     setErr(false);
     const res = await submitPublicFeedback(order.id, picked, comment.trim() || null);
     setSending(false);
-    if (res.is_valid) {
-      onRated(picked); // the parent refreshes the pager → thank-you from server truth
+    /* v5.256.0 — ALREADY is acceptance, not failure: the ledger's
+     * UNIQUE(order_id) answers a second submit with error 'ALREADY' — the
+     * guest's voice REACHED the counter. The pre-256 chain (poll flips the
+     * card back → guest rates again) read that as "Could not send your
+     * rating" — an accusation where the truth was "already heard". The
+     * thanks card shows the guest's own choice; the counter's verdict row
+     * (this same release) reads the ledger — the truth where it matters. */
+    if (res.is_valid || res.error === 'ALREADY') {
+      const word = comment.trim() || null;
+      writeGuestTabFeedback(order.id, picked, word); // the tab keeps its own accepted act
+      setTab({ rating: picked, comment: word });
+      onRated(picked); // the parent's summary also learns the rating
     } else {
       setErr(true);
     }
@@ -1743,6 +1757,13 @@ function FeedbackCard({
           <StarRow value={rated} interactive={false} />
           <span className="ml-auto text-[12px] font-semibold text-[#8A5A16] tabular-nums">{rated}/5</span>
         </div>
+        {/* v5.256.0 — the guest hears their own word back: the tab kept what
+            they wrote, so the thank-you speaks it — verbatim, never cut. */}
+        {tab?.comment && (
+          <p className="mt-2.5 break-words text-[12.5px] italic leading-relaxed text-[#6B6B6B]">
+            “{tab.comment}”
+          </p>
+        )}
       </section>
     );
   }
@@ -1838,6 +1859,47 @@ function recoverGuestSessionToken(): string | null {
     /* private mode — no session to recover, no pill */
   }
   return null;
+}
+
+/* ── v5.256.0 — the thanks that stayed ──────────────────────────────────────
+ * The guest rates the visit; the acceptance comes back is_valid — and then
+ * the ticket page's 10-second poll REPLACED the order with a payload that
+ * carries no feedback_rating (025/037's rebuild of sp_get_public_order
+ * dropped the 019 field; migration 039 sits ready to give it back). The
+ * thanks card flipped back to the form: the guest was asked to rate what
+ * they had already rated. The tab now keeps its own act: keyed by ORDER ID
+ * (the ticket's own deed, not the session's), per-tab by design (the pill's
+ * law — no other tab can claim this one's word), rating + the guest's own
+ * word so the thank-you speaks it back. Server truth stays first choice the
+ * day the payload carries it again; the tab's act covers the gap honestly —
+ * and the resubmit it prevents was a replay-silent no-op anyway. */
+interface GuestTabFeedback {
+  rating: number;
+  comment: string | null;
+}
+
+function readGuestTabFeedback(orderId: string): GuestTabFeedback | null {
+  try {
+    const raw = sessionStorage.getItem(`sp.guest.fb.${orderId}`);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { rating?: unknown; comment?: unknown };
+    const rating = Number(parsed.rating);
+    if (!Number.isInteger(rating) || rating < 1 || rating > 5) return null;
+    return {
+      rating,
+      comment: typeof parsed.comment === 'string' && parsed.comment.trim().length > 0 ? parsed.comment : null,
+    };
+  } catch {
+    return null; // unreadable → no tab act, the form asks honestly
+  }
+}
+
+function writeGuestTabFeedback(orderId: string, rating: number, comment: string | null): void {
+  try {
+    sessionStorage.setItem(`sp.guest.fb.${orderId}`, JSON.stringify({ rating, comment }));
+  } catch {
+    /* private mode — the act lives in memory for this mount, nowhere else */
+  }
 }
 
 export function GuestTrackPage({ orderId }: { orderId: string }): React.ReactElement {

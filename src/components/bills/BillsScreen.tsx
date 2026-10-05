@@ -15,6 +15,7 @@ import {
   Search,
   SlidersHorizontal,
   Split,
+  Star,
   StickyNote,
   X,
 } from 'lucide-react';
@@ -28,10 +29,14 @@ import {
   fetchOrderPayments,
   fetchOpenPaymentSums,
   fetchOrders,
+  fetchOrderFeedback,
   insertPartialPayment,
   recordPayment,
 } from '../../lib/api';
-import type { OrderStatusEvent, PaymentMethod, ReceiptPayment } from '../../lib/api';
+import type { OrderStatusEvent, OrderVerdict, PaymentMethod, ReceiptPayment } from '../../lib/api';
+/* v5.256.0 — the verdict wears the dashboard's own tone law (one voice,
+ * never a fork): the thresholds and words live in lib/verdict. */
+import { verdictTone } from '../../lib/verdict';
 import { buildReceiptText, printReceipt, type ReceiptOpts } from './ReceiptPrint';
 import { preloadPrintImage } from '../../lib/printFrame';
 import { formatMoney, getPrefs } from '../../lib/prefs';
@@ -502,6 +507,29 @@ const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRet
     return () => useUi.getState().setSearchMeta(null);
   }, []);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  /* ── v5.256.0 — the bill hears the verdict ──────────────────────────────
+   * The guest's rating + word ride the order_feedback ledger; the aggregates
+   * read it on the dashboard and Reports, but the operator looking at THIS
+   * bill never heard THIS guest. ONE row per order (UNIQUE(order_id)), read
+   * fail-soft the moment the selection moves — a hiccup or an unrated ticket
+   * both honestly render as no row, never an error banner. */
+  const [verdict, setVerdict] = useState<OrderVerdict | null>(null);
+  useEffect(() => {
+    setVerdict(null); // honest absence until the read lands
+    if (!selectedId) return;
+    let live = true;
+    fetchOrderFeedback(selectedId)
+      .then((v) => {
+        if (live) setVerdict(v);
+      })
+      .catch(() => {
+        if (live) setVerdict(null);
+      });
+    return () => {
+      live = false;
+    };
+  }, [selectedId]);
 
   const [menuOpen, setMenuOpen] = useState(false);
   const [confirmArm, setConfirmArm] = useState(false);
@@ -1950,6 +1978,52 @@ const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRet
                   <p className="mt-1 break-words text-[12.5px] leading-relaxed text-[#6B4A0E]">
                     {selected.notes}
                   </p>
+                </div>
+              )}
+
+              {/* v5.256.0 — the bill hears the verdict: the guest's stars and
+                  word join the counter's detail panel, right after the kitchen
+                  note (the words-family seat order). The gold family — the
+                  dashboard's guest-love ink — and the dashboard's own tone
+                  law (verdictTone) speak the health word. The comment renders
+                  VERBATIM, break-words, never a cut word (the 294 law);
+                  absent or failed read → no row, honestly. */}
+              {verdict && (
+                <div className="mt-3 rounded-xl border border-[#E9DFC8] border-l-4 border-l-[#B88E2F] bg-[#FBF9F1] px-3 py-2.5">
+                  <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-[#8A5A16]">
+                    <Star size={11} aria-hidden /> Guest verdict
+                  </p>
+                  <div className="mt-1.5 flex items-center gap-2">
+                    <span className="flex items-center gap-1" role="img" aria-label={`Rated ${verdict.rating} of 5 stars`}>
+                      {[1, 2, 3, 4, 5].map((n) => (
+                        <Star
+                          key={n}
+                          size={13}
+                          fill={n <= verdict.rating ? '#B88E2F' : 'transparent'}
+                          stroke={n <= verdict.rating ? '#B88E2F' : '#C9CFC9'}
+                          strokeWidth={1.6}
+                          aria-hidden
+                        />
+                      ))}
+                    </span>
+                    <span className="text-[12px] font-semibold text-[#1A1A1A] tabular-nums">{verdict.rating}/5</span>
+                    <span
+                      className="rounded-full px-2 py-0.5 text-[10.5px] font-extrabold"
+                      style={{ color: verdictTone(verdict.rating).color, backgroundColor: verdictTone(verdict.rating).bg }}
+                    >
+                      {verdictTone(verdict.rating).word}
+                    </span>
+                  </div>
+                  {verdict.comment && verdict.comment.trim().length > 0 && (
+                    <p className="mt-1.5 break-words text-[12.5px] italic leading-relaxed text-[#6B5A2E]">
+                      “{verdict.comment.trim()}”
+                    </p>
+                  )}
+                  {selected.customer_name && (
+                    <p className="mt-1 text-[10.5px] font-semibold text-[#969696]">
+                      — {selected.customer_name}
+                    </p>
+                  )}
                 </div>
               )}
 

@@ -3303,3 +3303,36 @@ export async function fetchFeedbackRows(tenantId: string, limit = 500): Promise<
     customer_phone: r.orders?.customer_phone ?? null,
   }));
 }
+
+/* ── v5.256.0 — the bill hears the verdict ───────────────────────────────────
+ * ONE order's verdict for the counter's bill detail panel. The ledger was
+ * read only in aggregates (the dashboard's guest-love card, Reports' quotes
+ * ledger) — the operator looking at THAT bill never heard the guest speak
+ * about IT. The schema's UNIQUE(order_id) makes this a one-row read:
+ * maybeSingle, never a list. RLS scopes the row to this tenant (staff) —
+ * guests still write only through the SECURITY DEFINER RPC. Fail-soft is
+ * the CALLER's job (the panel hides the row when this returns null).
+ * ────────────────────────────────────────────────────────────────────────── */
+export interface OrderVerdict {
+  rating: number;
+  comment: string | null;
+  createdAt: string;
+}
+
+export async function fetchOrderFeedback(orderId: string): Promise<OrderVerdict | null> {
+  try {
+    const { data, error } = await supabase
+      .from('order_feedback')
+      .select('rating, comment, created_at')
+      .eq('order_id', orderId)
+      .maybeSingle();
+    if (error || !data) return null;
+    return {
+      rating: data.rating,
+      comment: data.comment,
+      createdAt: data.created_at,
+    };
+  } catch {
+    return null;
+  }
+}

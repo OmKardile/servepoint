@@ -178,8 +178,9 @@ const ShowcasePage: React.FC = () => {
             </h2>
             <p className="mt-2 max-w-2xl text-[13.5px] leading-6 text-white/70">
               {/* 5.140.0 — the spelled count was frozen at the 5.2.2 porch (“Ten”)
-                  while the repo carried 37 migrations; brittle numbers left the
-                  prose, the stat chips below carry the census. */}
+                  while the repo carried 38 migrations; brittle numbers left the
+                  prose, the stat chips below carry the census. 039 (5.256.0)
+                  re-anchored both this prose and the chip below. */}
               Idempotent migrations shape the schema; every write that matters goes through a
               SECURITY DEFINER RPC with a membership check; status changes are append-only history.
             </p>
@@ -202,7 +203,7 @@ const ShowcasePage: React.FC = () => {
                     silently: 34 → 21 since). The migration wording
                     survives 038's owner-gated pending state — the number
                     is the TREE's truth, not the deployment's. */
-                { k: '37', v: 'idempotent migrations — one command rebuilds the whole schema' },
+                { k: '38', v: 'idempotent migrations — one command rebuilds the whole schema' },
                 { k: '21', v: 'guarded RPCs — every cloud write passes a database-side guard' },
                 { k: '0', v: 'mock data paths — every screen reads the live cloud' },
               ].map((s) => (
