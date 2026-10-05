@@ -97,6 +97,24 @@ export function bookingDayTag(iso: string): string {
   }).format(new Date(iso));
 }
 
+/** "14:32" — the stock diary's row clock (v5.266.0). The diary's day
+ *  headers group by THIS lib's day keys (5.162.0: the booking clock, the
+ *  same key the bell feed groups on) — but the rows' times rendered the
+ *  DEVICE's clock in an unpinned locale, so on any device outside IST a
+ *  row could contradict its own group header, and the same house spoke
+ *  "2:45 PM" on one tablet and "14:45" on another. The row clock now
+ *  rides the SAME clock its day key rides, in the house's own 24h shape
+ *  (en-IN · hour12:false — byte-equal to the appFormatters hhmm shape,
+ *  anchored to the DB's booking clock instead of the device's). */
+export function bookingClockLabel(iso: string): string {
+  return new Intl.DateTimeFormat('en-IN', {
+    timeZone: BOOKING_TZ,
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(new Date(iso));
+}
+
 /** True when the owner's reporting timezone is NOT the booking clock — the
  *  surfaces append the "IST" tag to promise labels so the two words are
  *  never confused. On every Indian device this is false and the UI is

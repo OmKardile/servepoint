@@ -57,7 +57,7 @@ import { downloadCsv } from '../../lib/csv';
 import { appTodayIso, appFormatters, appTzTag } from '../../lib/appday';
 import { useDialogA11y } from '../../lib/useDialogA11y';
 import { useTenant } from '../../lib/tenant';
-import { bookingDayKey, bookingTodayKey } from '../../lib/bookingday';
+import { bookingDayKey, bookingTodayKey, bookingClockLabel, bookingDayTag } from '../../lib/bookingday';
 import { useUi } from '../../store/session';
 import { MarkHit } from '../shell/MarkHit';
 import { EmptyState } from '../shell/EmptyState';
@@ -1467,7 +1467,17 @@ const InventoryInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
                                   {row.qty > 0 ? '+' : '−'}
                                   {fmtQty(Math.abs(row.qty))} {unit}
                                 </span>
-                                {new Date(row.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                <span
+                                  className="flex shrink-0 items-center gap-1.5 whitespace-nowrap"
+                                  title="The diary's own clock — the same clock the day headers ride"
+                                >
+                                  {group.key === 'earlier' && (
+                                    <span className="text-[10px] font-bold uppercase tracking-wider text-[#8A5A00]">
+                                      {bookingDayTag(row.at)}
+                                    </span>
+                                  )}
+                                  <span>{bookingClockLabel(row.at)}</span>
+                                </span>
                               </span>
                             </li>
                           );
