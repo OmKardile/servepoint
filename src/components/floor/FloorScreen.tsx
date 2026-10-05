@@ -96,6 +96,7 @@ import {
      Floor keeps its words, loses its local bodies. */
   isLivePromise,
   isQuietPromise,
+  isQuietPromiseAnyDay,
   minsUntil,
   PROMISE_DUE_SOON_MIN,
 } from '../../lib/bookingday';
@@ -2723,22 +2724,42 @@ export function FloorScreen(): React.ReactElement {
           </div>
         )}
 
-        {book.groups.map(([dayKey, rows]) => (
+        {book.groups.map(([dayKey, rows]) => {
+          /* v5.225.0 — the day heading counts its own quiet debt, derived
+             beside the badges' clock (rowNowMs — 5.223's one-pass law): the
+             archive scan-reads which days left promises unanswered, without
+             opening anything. Same convict-free grey; silent when zero. */
+          const quietCount = rows.filter((r) => isQuietPromiseAnyDay(r, rowNowMs)).length;
+          return (
           <div key={dayKey} className="mt-4">
             <h3 className="flex items-center gap-2 text-[12px] font-bold uppercase tracking-wide text-[#6B6B6B]">
               {istDayHeading(dayKey)}
               <span className="rounded-full bg-[#F1F4F1] px-2 py-0.5 text-[10.5px] font-bold normal-case tabular-nums text-[#0F3D3E]">{rows.length}</span>
+              {quietCount > 0 && (
+                <span
+                  className="rounded-full bg-[#F1F4F1] px-2 py-0.5 text-[10.5px] font-bold normal-case text-[#6B6B6B]"
+                  title="Booked promises whose hour passed and were never resolved — still booked; the clock does not convict."
+                >
+                  {quietCount} went quiet
+                </span>
+              )}
             </h3>
             <div className="mt-2 space-y-2">
               {rows.map((r) => {
                 const busy = busyId === `res-${r.id}`;
                 const res = RES_META[r.status];
                 const table = r.table_id ? (tables ?? []).find((t) => t.id === r.table_id) : null;
+                /* v5.225.0 — the quiet verdict is the archive's too: a booked
+                   row whose promised hour has passed reads "went quiet" on
+                   ANY day (the lib's isQuietPromiseAnyDay), so a Saturday
+                   promise opened on Monday no longer wears the ledger's gold
+                   "Booked". The amber due-soon stays today-only — an hour
+                   two days away cannot be due in 45 minutes; a future-day
+                   promise keeps the honest gold (its hour is still ahead). */
                 const promise =
-                  r.status === 'booked' && bookingDayKey(r.slot_at) === rowTodayKey
+                  r.status === 'booked'
                     ? (() => {
-                        const t = new Date(r.slot_at).getTime();
-                        if (t < rowNowMs)
+                        if (isQuietPromiseAnyDay(r, rowNowMs))
                           return {
                             bg: '#F1F4F1',
                             fg: '#6B6B6B',
@@ -2746,14 +2767,16 @@ export function FloorScreen(): React.ReactElement {
                             title:
                               'The promised hour went by — the party is still booked. Seat them or mark the no-show; the clock does not convict.',
                           };
-                        const mins = minsUntil(r.slot_at, rowNowMs);
-                        if (mins <= PROMISE_DUE_SOON_MIN)
-                          return {
-                            bg: '#FDF3E4',
-                            fg: '#8A5A16',
-                            label: 'Booked · due soon',
-                            title: `The party is due in about ${mins} minutes — the table's hour is close.`,
-                          };
+                        if (bookingDayKey(r.slot_at) === rowTodayKey) {
+                          const mins = minsUntil(r.slot_at, rowNowMs);
+                          if (mins <= PROMISE_DUE_SOON_MIN)
+                            return {
+                              bg: '#FDF3E4',
+                              fg: '#8A5A16',
+                              label: 'Booked · due soon',
+                              title: `The party is due in about ${mins} minutes — the table's hour is close.`,
+                            };
+                        }
                         return null;
                       })()
                     : null;
@@ -2849,7 +2872,8 @@ export function FloorScreen(): React.ReactElement {
               })}
             </div>
           </div>
-        ))}
+          );
+        })}
 
         {reservations !== null && !bookError && book.pastCount > 0 && (
           <button

@@ -145,6 +145,19 @@ export function isQuietPromise(r: PromiseRow, nowMs: number, todayKey: string): 
   return new Date(r.slot_at).getTime() < nowMs;
 }
 
+/** v5.225.0 — the ARCHIVE's verdict: a booked promise whose hour has passed,
+ *  whatever day it was promised for. The board keeps its today-gated silence
+ *  (isQuietPromise — it advertises arrivals, and 5.86 was right that a past
+ *  promise is not an arrival); the book's past week is a different room —
+ *  the host goes there to RECONCILE, and a two-day-old promise still wearing
+ *  the gold "Booked" is the ledger speaking where the clock has already
+ *  answered. Same convict-free boundary: the hour went by, nobody sat them;
+ *  the verdict stays the host's, the words stay "went quiet". */
+export function isQuietPromiseAnyDay(r: PromiseRow, nowMs: number): boolean {
+  if (r.status !== 'booked') return false;
+  return new Date(r.slot_at).getTime() < nowMs;
+}
+
 /** Minutes until the slot, rounded up (a slot 30s away is still 1 min). */
 export function minsUntil(iso: string, nowMs: number): number {
   return Math.max(0, Math.ceil((new Date(iso).getTime() - nowMs) / 60000));

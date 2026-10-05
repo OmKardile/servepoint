@@ -3,6 +3,20 @@
 All notable changes to **ServePoint — smartPOS** (formerly TSOS — The Cafe Operating System; renamed per owner directive 2026-10-01) are recorded in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.225.0] — 2026-10-05 — The past book keeps the verdict: the book's row badges computed their promise verdict under a TODAY gate, so a Saturday promise opened in Monday's archive still wore the ledger's gold "Booked" — the exact second-verdict disease 5.223 killed in the header, still alive one scope over (caught live: "Sat · 3 Oct · 4:47 pm · Booked", two days past its hour). The quiet verdict is now the archive's too: the lib's isQuietPromiseAnyDay speaks for ANY booked row whose hour has passed, and the book's day headings count their own quiet debt beside the badges' clock — the board and the arrivals slot keep their today-gated silence (5.86 was right there: a past promise is not an arrival)
+
+### Fixed — the archive keeps the verdict (`src/lib/bookingday.ts`, `src/components/floor/FloorScreen.tsx`)
+
+- `isQuietPromiseAnyDay` — the archive's verdict: booked + hour passed, whatever the day. Same convict-free boundary as the today-gated pair; the board's and arrivals' today-gated callers are byte-untouched (a past promise is not an arrival).
+- The book's row verdict opens on booked and asks the any-day predicate first: a booked row whose hour passed reads "Booked · went quiet" on every day, the amber due-soon stays today-gated behind rowTodayKey (an hour two days away cannot be due in 45 minutes), and a future-day promise keeps the honest gold. Badge + title bytes unchanged — one voice on every day.
+- The book's day headings count their own quiet debt (`N went quiet`, guarded on zero — silence never a zero), derived beside the badges' clock (rowNowMs — 5.223's one-pass law) in the quiet grey with the convict-free title: the archive scan-reads which days left promises unanswered without opening anything.
+
+### Tests
+
+- unit264 born — 10 checks green (the archive predicate: past-day speaks, future-day and non-booked silent, hour-edge honesty, purity; the today-gated pair UNCHANGED with both old callers pinned; the Floor wiring incl. the retired-gate scoping — the today gate survives exactly once, in the header's today-scoped count; the heading chip's grey + guard + one-pass derivation; the map's block-body closure; no new timer — the four heartbeats stand).
+- unit260 evolved — the Floor import pin grows the archive verdict (the 5.261 rename-pin law).
+- Regression battery unit194–264 ALL PASS by exit code (70 suites); tsc EXIT=0 ×2; build EXIT=0 (44 assets, VERSION → servepoint-v5.225.0-r1).
+
 ## [5.224.0] — 2026-10-05 — The Z-report answers the book: the close-out's floor strip counted what the book RECORDED (no-shows, v5.83) but never what the book never ANSWERED — a booked promise whose hour passed and was never resolved left no trace in the Z while the book, the band and the drill all spoke it. The Z's floor block now carries the quiet debt: the strip whisper speaks in BOTH branches (a zero-rounds day can still carry book debt), the print-HTML and Copy/WhatsApp builders both print "Went quiet · N promise(s) still booked" — the same convict-free words, drawn by the same day bounds as the no-show read, silent when the debt is zero
 
 ### Added — the Z's quiet-debt row (`src/components/eod/EodScreen.tsx`)

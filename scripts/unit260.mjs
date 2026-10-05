@@ -123,8 +123,8 @@ ok('youngestLiveMs composes youngestLiveWindow — no second reduce');
 
 const floor = strip('../src/components/floor/FloorScreen.tsx');
 
-assert.ok(floor.includes('  isLivePromise,\n  isQuietPromise,\n  minsUntil,\n  PROMISE_DUE_SOON_MIN,\n} from \'../../lib/bookingday\';'),
-  'the Floor imports the promise family from the booking clock\'s lib');
+assert.ok(floor.includes('  isLivePromise,\n  isQuietPromise,\n  isQuietPromiseAnyDay,\n  minsUntil,\n  PROMISE_DUE_SOON_MIN,\n} from \'../../lib/bookingday\';'),
+  'the Floor imports the promise family from the booking clock\'s lib (grown by 5.225\'s archive verdict)');
 assert.ok(!floor.includes('function isLivePromise('), 'no local live-verdict copy');
 assert.ok(!floor.includes('function isQuietPromise('), 'no local quiet-verdict copy');
 assert.ok(!floor.includes('function minsUntil('), 'no local minsUntil copy');
