@@ -7,8 +7,10 @@ import {
   CircleAlert,
   CircleOff,
   Clock,
+  CloudOff,
   Copy,
   HeartHandshake,
+  Loader2,
   Minus,
   Plus,
   QrCode,
@@ -173,7 +175,11 @@ function GuestFooter({
   );
 }
 
-function GuestErrorCard({ title, body, onRetry }: { title: string; body: string; onRetry?: () => void }): React.ReactElement {
+/* 5.249.0 — the card learns its own busy voice: a retry that is RUNNING says
+   so (the loader swaps for the refresh arrow, the button disables) — a guest
+   who taps twice must never fire two chains, and a spinning arrow is the
+   honest word for "the phone is trying". aria-busy names it to the reader. */
+function GuestErrorCard({ title, body, onRetry, busy = false }: { title: string; body: string; onRetry?: () => void; busy?: boolean }): React.ReactElement {
   const { t } = useGuestLang();
   return (
     <div className="mx-auto mt-10 max-w-md px-4">
@@ -187,10 +193,12 @@ function GuestErrorCard({ title, body, onRetry }: { title: string; body: string;
           <button
             type="button"
             onClick={onRetry}
-            className="mt-5 inline-flex h-11 items-center gap-2 rounded-full px-5 text-[13.5px] font-semibold text-white transition-opacity hover:opacity-90"
+            disabled={busy}
+            aria-busy={busy || undefined}
+            className="mt-5 inline-flex h-11 items-center gap-2 rounded-full px-5 text-[13.5px] font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-60"
             style={{ background: brand.teal }}
           >
-            <RefreshCw size={15} aria-hidden /> {t('tryAgain')}
+            {busy ? <Loader2 size={15} className="animate-spin" aria-hidden /> : <RefreshCw size={15} aria-hidden />} {t('tryAgain')}
           </button>
         )}
       </div>
@@ -204,19 +212,25 @@ export function GuestGatePage({ qrToken }: { qrToken: string }): React.ReactElem
   const { t } = useGuestLang();
   const [state, setState] = useState<'working' | 'invalid' | 'session'>('working');
   const [detail, setDetail] = useState(t('checking'));
+  /* 5.249.0 — the gate's own busy word: the session-retry wears the card's
+     shared busy voice (one card, one language). */
+  const [busy, setBusy] = useState(false);
 
   const run = useCallback(async () => {
+    setBusy(true);
     setState('working');
     setDetail(t('checking'));
     if (!qrToken) {
       setState('invalid');
       setDetail(t('missingCode'));
+      setBusy(false);
       return;
     }
     const resolved = await resolveTableQr(qrToken);
     if (!resolved.is_valid || !resolved.tenant || !resolved.table) {
       setState('invalid');
       setDetail(resolved.message || t('invalidCode'));
+      setBusy(false);
       return;
     }
     setDetail(t('opening', { cafe: resolved.tenant.name }));
@@ -228,6 +242,7 @@ export function GuestGatePage({ qrToken }: { qrToken: string }): React.ReactElem
     if (!opened.ok || !opened.session) {
       setState('session');
       setDetail(opened.message || t('sessionFail'));
+      setBusy(false);
       return;
     }
     window.location.assign(`/menu/${encodeURIComponent(qrToken)}`);
@@ -250,7 +265,7 @@ export function GuestGatePage({ qrToken }: { qrToken: string }): React.ReactElem
           </div>
         )}
         {state === 'invalid' && <GuestErrorCard title={t('gateInvalidTitle')} body={detail} />}
-        {state === 'session' && <GuestErrorCard title={t('gateSessionTitle')} body={detail} onRetry={() => void run()} />}
+        {state === 'session' && <GuestErrorCard title={t('gateSessionTitle')} body={detail} busy={busy} onRetry={() => void run()} />}
       </main>
       <GuestFooter />
     </div>
@@ -586,44 +601,58 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
     }
   });
 
-  useEffect(() => {
+  /* 5.249.0 — the load chain is ONE runnable: the effect calls it, and the
+     error card's Try again calls it again. The menu used to dead-end on a
+     Wi-Fi blip — the network's own message said "Check your connection and
+     try again" while the card offered no way to (the gate's session card had
+     the button from birth; the menu's never did). The busy word rides the
+     card while the chain re-runs. */
+  const [loadBusy, setLoadBusy] = useState(false);
+  const run = useCallback((): (() => void) => {
     let alive = true;
+    setLoadBusy(true);
     (async () => {
-      const r = await resolveTableQr(qrToken);
-      if (!alive) return;
-      if (!r.is_valid || !r.tenant || !r.table) {
-        setPhase('error');
-        setErrorBody(r.message || t('invalidCode'));
-        return;
+      try {
+        const r = await resolveTableQr(qrToken);
+        if (!alive) return;
+        if (!r.is_valid || !r.tenant || !r.table) {
+          setPhase('error');
+          setErrorBody(r.message || t('invalidCode'));
+          return;
+        }
+        setResolved({ tenantName: r.tenant.name, slug: r.tenant.slug, tableNumber: r.table.table_number, capacity: r.table.capacity });
+        const opened = await openTableSession({ slug: r.tenant.slug, tableNumber: r.table.table_number, qrToken });
+        if (!alive) return;
+        if (!opened.ok || !opened.session) {
+          setPhase('locked');
+          setErrorBody(opened.message || t('sessionClosed'));
+          return;
+        }
+        setSessionToken(opened.session);
+        const m = await fetchPublicMenu(r.tenant.slug);
+        if (!alive) return;
+        if (!m.is_valid) {
+          setPhase('error');
+          setErrorBody(m.message || t('menuFail'));
+          return;
+        }
+        setMenu(m);
+        setPhase('ready');
+        document.title = t('docTitleMenu', { cafe: r.tenant.name, n: r.table.table_number });
+        // offers banner — best effort, never blocks the menu
+        fetchPublicOffers(r.tenant.slug).then((o) => {
+          if (alive) setOffers(o);
+        });
+      } finally {
+        if (alive) setLoadBusy(false);
       }
-      setResolved({ tenantName: r.tenant.name, slug: r.tenant.slug, tableNumber: r.table.table_number, capacity: r.table.capacity });
-      const opened = await openTableSession({ slug: r.tenant.slug, tableNumber: r.table.table_number, qrToken });
-      if (!alive) return;
-      if (!opened.ok || !opened.session) {
-        setPhase('locked');
-        setErrorBody(opened.message || t('sessionClosed'));
-        return;
-      }
-      setSessionToken(opened.session);
-      const m = await fetchPublicMenu(r.tenant.slug);
-      if (!alive) return;
-      if (!m.is_valid) {
-        setPhase('error');
-        setErrorBody(m.message || t('menuFail'));
-        return;
-      }
-      setMenu(m);
-      setPhase('ready');
-      document.title = t('docTitleMenu', { cafe: r.tenant.name, n: r.table.table_number });
-      // offers banner — best effort, never blocks the menu
-      fetchPublicOffers(r.tenant.slug).then((o) => {
-        if (alive) setOffers(o);
-      });
     })();
     return () => {
       alive = false;
     };
-  }, [qrToken]);
+  }, [qrToken, t]);
+
+  useEffect(() => run(), [run]);
 
   // cart survives refresh (identity only — the server re-prices everything)
   useEffect(() => {
@@ -867,7 +896,7 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
     return (
       <div className="flex min-h-screen flex-col bg-[#F6F5F2]">
         <main className="flex-1">
-          <GuestErrorCard title={t('menuUnavailable')} body={errorBody} />
+          <GuestErrorCard title={t('menuUnavailable')} body={errorBody} busy={loadBusy} onRetry={() => run()} />
         </main>
         <GuestFooter />
       </div>
@@ -1733,6 +1762,24 @@ export function GuestTrackPage({ orderId }: { orderId: string }): React.ReactEle
                 <span>
                   {t('placedAt', { t: placedStamp })}
                   {placedAgeWord ? ` · ${placedAgeWord}` : ''}
+                </span>
+              </p>
+            )}
+            {/* 5.249.0 — the pager speaks its own silence: when the poll fails
+                with a ticket on the page, the word below froze — say so. The
+                chip wears the 287 pill's glass (one header language); the
+                gold pulse is the phone's own "still trying" energy, the
+                stepper's pulse voice. The next successful tick removes it —
+                the loop never stopped (the 5.24 fail-soft law, guest side). */}
+            {order && state === 'net' && (
+              <p
+                role="status"
+                className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-white/10 px-2.5 py-1 text-[11px] font-semibold text-white/85"
+              >
+                <CloudOff size={11} aria-hidden />
+                <span className="inline-flex items-center gap-1">
+                  <span className="h-1.5 w-1.5 animate-pulse rounded-full" style={{ background: brand.gold }} aria-hidden />
+                  {t('netStale')}
                 </span>
               </p>
             )}
