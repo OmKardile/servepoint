@@ -82,7 +82,10 @@ check('the en-IN 2dp digit shape lives in exactly ONE src file — the money lib
 check('the guest book rides the one register — its own helper and the raw straggler are gone', () => {
   assert.ok(!guest.includes('const money = ('), 'the guest\u2019s local money helper is retired');
   assert.ok(!guest.includes('₹${round2('), 'the raw ₹-interpolation straggler is gone — the broken paise voice with it');
-  assert.ok(guest.includes("import { money, signedMoney } from '../../lib/money';"), 'the guest imports the ONE register');
+  /* v5.280.0 re-pin per the read-the-actual-shape law: the paise rounder's
+   * census adopted round2 into the guest's import edge (the MATH rides the
+   * same lib home as the voice) — the edge grew, the register is ONE. */
+  assert.ok(guest.includes("import { money, signedMoney, round2 } from '../../lib/money';"), 'the guest imports the ONE register');
   assert.ok(guest.includes('money(a.price)'), 'the addon line speaks the register — paise and grouping restored');
   assert.ok(guest.includes('tabular-nums text-[#6B6B6B]'), 'the addon line wears the tabular voice');
   assert.ok(guest.includes('signedMoney(v.price_delta)'), 'the guest pill rides the signed register');
@@ -97,7 +100,9 @@ check('the staff customizer adopts the register — paise held, the zero pill re
   assert.ok(!/price_delta\)\s*% 1 === 0/.test(modal), 'the % 1 === 0 grammar is gone from the code');
   assert.ok(modal.includes('signedMoney(Number(v.price_delta))'), 'the pill rides the signed register');
   assert.ok(modal.includes('v.price_delta !== 0 && ('), 'the zero pill is gated — the guest twin\u2019s shape (a free variant reads its name alone)');
-  assert.ok(modal.includes('import { signedMoney } from \'../../lib/money\';'), 'the modal imports the register');
+  /* v5.280.0 re-pin per the read-the-actual-shape law: the modal's edge
+   * grew to carry round2 too — the CTA's own law (unit311) stands. */
+  assert.ok(modal.includes('import { signedMoney, round2 } from \'../../lib/money\';'), 'the modal imports the register');
   assert.ok(modal.includes('Update · {formatMoney(round2(runningUnit * qty))}'), 'the CTA\u2019s own law (unit311) stands untouched');
 });
 
