@@ -212,6 +212,15 @@ function Overlay({
 const fieldLabel = 'mb-1 block text-[12px] font-medium text-[#6B6B6B]';
 const fieldInput = 'sp-input h-11 w-full px-3 text-[13.5px]';
 
+/* v5.291.0 — the hunt chip's two voices, byte-twins of the Platform
+ * console's own constants (327 audit → 328 businesses → 330 menu): idle
+ * wears the card's quiet border, active wears the rail's strong teal.
+ * unit330 pins the twins EQUAL — one grammar, three rooms, never drift. */
+const HUNT_CHIP_IDLE =
+  'inline-flex h-8 items-center rounded-full border border-[#E3E7E0] bg-white px-3 text-xs font-medium text-[#6B6B6B] transition-colors hover:bg-[#F6F5F2] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B88E2F]/70 focus-visible:ring-offset-2 focus-visible:ring-offset-[#F6F5F2]';
+const HUNT_CHIP_ACTIVE =
+  'inline-flex h-8 items-center rounded-full border border-transparent bg-[#0F3D3E] px-3 text-xs font-semibold text-white shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B88E2F]/70 focus-visible:ring-offset-2 focus-visible:ring-offset-[#F6F5F2]';
+
 /* v5.290.0 — the overlays learn the stick. The wizard taught the Platform
  * (v5.289.0) that a modal's verb rows must hold the panel's own bottom
  * edge while the content scrolls beneath — this family's panels wear the
@@ -820,6 +829,11 @@ export function MenuScreen(): React.ReactElement {
     return () => useUi.getState().setSearchMeta(null);
   }, []);
 
+  /* v5.291.0 — the shelf joins the hunt (327 audit → 328 businesses → 330
+   * menu): a category census chip row narrowing the shelf beside the
+   * search, one state, the second tap standing the chip down. */
+  const [shelfCat, setShelfCat] = useState<string | null>(null);
+
   const [itemModal, setItemModal] = useState<{ mode: 'new' } | { mode: 'edit'; itemId: string } | null>(null);
   const [variantsModalFor, setVariantsModalFor] = useState<string | null>(null);
   const [catModalOpen, setCatModalOpen] = useState(false);
@@ -988,18 +1002,47 @@ export function MenuScreen(): React.ReactElement {
   }, [fireSaved]);
 
   const q = query.trim().toLowerCase();
+  /* v5.291.0 — the shelf's own census: every named category with the count
+   * of dishes it holds, loudest first, ties alphabetical — the chips speak
+   * the shelf's own words, never invented rooms. A zero-item category
+   * speaks too (count 0, an honest empty room). */
+  const shelfCats = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const item of items) {
+      const cat = categories.find((c) => c.id === item.category_id);
+      if (cat) counts.set(cat.id, (counts.get(cat.id) || 0) + 1);
+    }
+    return categories
+      .map((c) => ({ id: c.id, name: c.name, count: counts.get(c.id) || 0 }))
+      .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+  }, [categories, items]);
   const catsWithItems = useMemo(() => {
-    const grouped: { category: Category | null; list: MenuItem[] }[] = categories.map((c) => ({
-      category: c,
-      list: items.filter((i) => i.category_id === c.id),
-    }));
+    const grouped: { category: Category | null; list: MenuItem[] }[] = categories
+      .filter((c) => shelfCat === null || c.id === shelfCat)
+      .map((c) => ({
+        category: c,
+        list: items.filter((i) => i.category_id === c.id),
+      }));
     const orphan = items.filter((i) => !categories.some((c) => c.id === i.category_id));
-    if (orphan.length > 0) grouped.push({ category: null, list: orphan });
-    if (!q) return grouped;
+    if (orphan.length > 0 && shelfCat === null) grouped.push({ category: null, list: orphan });
+    if (!q && shelfCat === null) return grouped;
     return grouped
       .map((g) => ({ ...g, list: g.list.filter((i) => `${i.name} ${i.description || ''}`.toLowerCase().includes(q)) }))
       .filter((g) => g.list.length > 0 || (q && g.category && g.category.name.toLowerCase().includes(q)));
-  }, [categories, items, q]);
+  }, [categories, items, q, shelfCat]);
+  /* v5.291.0 — the census's filtered voice: N of M when the hunt is on
+   * (the whole count staying in the h1's own subline when it is not), and
+   * the no-match word naming the prey — the same honesty the audit room
+   * and the businesses room already speak. */
+  const shelfFiltering = shelfCat !== null || q !== '';
+  const shelfHits = useMemo(
+    () => catsWithItems.reduce((n, g) => n + g.list.length, 0),
+    [catsWithItems],
+  );
+  const shelfHuntWords = [
+    shelfCat !== null ? `the category “${categories.find((c) => c.id === shelfCat)?.name ?? ''}”` : '',
+    query.trim() ? `“${query.trim()}”` : '',
+  ].filter(Boolean).join(' and ');
 
   /* v5.152.0 — one assembly feeds Copy + WhatsApp (5.146.0 rule, menu
    * edition): the chat menu is built from the same categories, items
@@ -1336,6 +1379,42 @@ export function MenuScreen(): React.ReactElement {
         )}
       </section>
 
+      {/* v5.291.0 — the hunt row: the shelf's own category census as chips
+       * (All owns the null chip, the second tap stands a chip down), with
+       * the census's filtered voice beside it when the hunt is on. */}
+      {categories.length > 0 && (
+        <>
+          <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Filter the shelf by category">
+            <button
+              type="button"
+              onClick={() => setShelfCat(null)}
+              aria-pressed={shelfCat === null}
+              className={shelfCat === null ? HUNT_CHIP_ACTIVE : HUNT_CHIP_IDLE}
+            >
+              All
+              <span className="ml-1.5 text-[11px] opacity-70 tabular-nums">{totalItems}</span>
+            </button>
+            {shelfCats.map((c) => (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => setShelfCat(shelfCat === c.id ? null : c.id)}
+                aria-pressed={shelfCat === c.id}
+                className={shelfCat === c.id ? HUNT_CHIP_ACTIVE : HUNT_CHIP_IDLE}
+              >
+                {c.name}
+                <span className="ml-1.5 text-[11px] opacity-70 tabular-nums">{c.count}</span>
+              </button>
+            ))}
+          </div>
+          {shelfFiltering && (
+            <p className="text-[12px] text-[#6B6B6B]" role="status">
+              {shelfHits} of {totalItems} item{totalItems === 1 ? '' : 's'} on the shelf.
+            </p>
+          )}
+        </>
+      )}
+
       {/* menu sections */}
       {totalItems === 0 && categories.length === 0 ? (
         <div className="rounded-3xl border border-dashed border-[#C9D4CC] bg-white/60 p-10 text-center">
@@ -1352,6 +1431,21 @@ export function MenuScreen(): React.ReactElement {
           >
             <Layers size={15} aria-hidden /> Add your first category
           </button>
+        </div>
+      ) : shelfFiltering && catsWithItems.length === 0 ? (
+        /* v5.291.0 — the no-match card names the prey: chip, needle, or
+         * both — the same honesty the audit room and the businesses room
+         * already speak (one card, not N empty shelves). */
+        <div className="rounded-3xl border border-[#E3E7E0] bg-white p-2 shadow-sm">
+          <div className="flex flex-col items-center justify-center px-6 py-14 text-center">
+            <span className="flex h-24 w-24 items-center justify-center rounded-full bg-[#EAF0EC] text-[#2C3E3E]">
+              <Search size={38} strokeWidth={1.8} aria-hidden />
+            </span>
+            <h3 className="mt-6 text-lg font-semibold text-[#1A1A1A]">No matches</h3>
+            <p className="mt-2 max-w-sm text-sm leading-relaxed text-[#6B6B6B]">
+              {`No dishes match ${shelfHuntWords}. Try a name, a description or a category.`}
+            </p>
+          </div>
         </div>
       ) : (
         catsWithItems.map(({ category, list }) => (
