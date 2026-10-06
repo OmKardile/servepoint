@@ -9290,3 +9290,38 @@ Work Log:
 
 Stage Summary:
 - Work committed and gated (battery 150/150, tsc, build, all three doors live-proven at the fresh lens with the reset law exercised against a pre-set filter) but NOT on origin — the push ran and failed for lack of credentials, not for lack of trying. The honesty rule holds: no push claimed that did not run.
+
+---
+Task ID: 345
+Agent: glm-5.3
+Task: Round 430321 (01:56 template, trace tail 0156) — worklog orientation; agent-browser QA at a fresh lens; fix bugs or carry features; mandatory styling + feature work; worklog handover. Orientation found Task 344 / v5.305.0 fully closed (feat ae690ec + qa 50bd0f5 + worklog efe92ee, tree clean, 236 riding) — so this round = Task 345 → v5.306.0. The fresh-eyes lens: 1728×1117 (the MacBook Pro 16-inch native panel — the desktop history had 1280/1366/1440/1512/1600/1680/1792/1920/2048/2560; 1728 never walked), and this round's walk deliberately took the businesses DETAILS PANEL — a surface the recent rounds had not entered.
+
+Work Log:
+- Push attempted FIRST per the standing instruction — failed again, no write token (addendum below). Dev server alive (curl 200).
+- The fresh-lens walk: dashboard clean at 1728×1117 (docW 1728, console CLEAN); the businesses details panel walked and clean (all fields speaking — owner email, status, business ID with copy, plan, the 5.304 clock sentence, type, city, created). No bugs found. But the walk sharpened the standing asymmetry: Task 344 made the KPI cards doors, and the Recent businesses strip right below them stayed dead paint — the only exit was the View-all link, while the strip's rows name exactly the thing an operator usually wants.
+- [Mandatory feature] THE STRIP'S ROWS BECOME DOORS (PlatformScreen.tsx): each Recent-businesses row is now a button that opens the businesses room AT that very business, landed in the state that makes the row true — the named business VISIBLE (the hunt reset: query cleared, census chip reset; a filtered room could hide the very row the operator clicked — proven live against exactly that state), EXPANDED (the details panel open via the screen-level expandedTenantId — no state lift needed), then the room's own setTab carries the URL sync. The doorless shape keeps the original div byte-shape. The Recent activity rows stay undoorable HONESTLY — they carry the nested copy verb, and a button inside a button would be a lie to the DOM (pinned in unit345).
+- [Mandatory styling] THE ROW DOOR'S GRAMMAR: the row keeps its anatomy and its seat — the hover warms to the house's own soft row tone (#F6F5F2, the wizard's row hover, zero new colors) with the tint bleeding a breath past the text (-mx-2 px-2 rounded-lg) so the whole row reads as one target, on a 150ms colors transition; the global focus ring answers the Tab key.
+- unit345 born, 8 checks in the agreement shape, 8/8 at birth (both render shapes; the landing law's four moves verified in file order by index; the aria naming the business; the strip's anatomy byte-still inside the door; zero new colors counted — #F6F5F2 at ≥5 uses; the neighbours standing incl. the activity rows' honest undoorability; the law naming itself; the version law pinning 5.306.0). unit344's version literal relaxed per the unit308 precedent (the 320→…→345 chain). No re-pins needed anywhere this round — the first clean birth in a while.
+- Gates: tsc EXIT=0; battery unit194–345 ALL PASS (151 suites) via the canonical runner (scripts/battery345.sh); build EXIT=0 (servepoint-v5.306.0-r1 baked).
+- E2E walked LIVE at 1728×1117: the row door proven against the exact state the reset law exists for — the active filter set first (QR Flow Cafe verified HIDDEN, qrVisible=false), then the row clicked from the dashboard: landed /businesses with the census back on All (aria-pressed All=true), QR Flow Cafe VISIBLE again, and its details panel EXPANDED (BUSINESS ID + Starter + the clock sentence on the board); docW 1728 zero overflow, console CLEAN throughout; the doors' bytes verified in the minified PlatformScreen chunk ("in the businesses room`" template spine + the aria family), the hover tone compiled into the production CSS. Screenshots archived (scripts/qa345-*.png, 2 shots).
+- Parked (carried): the standing list stands (variant/add-on recipe costing; 038 birthdays; guest QR "room favourite" badges; DS showcase links; storage folder silting; offer time-windows; micro-chunk dieting; README docs siblings sweep — the daily 09:00 round's next item; GST billed-toggle; the positive-rating notification; the guest 86'd presentation — migration-gated; all owner/DDL-gated or ask-first, unchanged). Deliberately designed out (do not re-park): the full 287–345 list stands (…the trial naming its clock; the cards becoming doors; the strip's rows becoming doors — THIS round).
+- Owner action items (carried): (1) delete orphaned drill auth user drill.owner@recoverydrill.in at next pooler session; (2) QR Flow owner password — BLOCKING tenant QA (needs the OWNER's Supabase access); (3) 038 DDL one-command unblock in owner's hands; (4) apply 039_track_payload_whole.sql (prepared, verified, one command); (5) GST filing basis confirmation (collected-only posture); (6) rotate retired-project keys if that Supabase project still exists.
+- Crons: 15-min webDevReview (job 430321) + DAILY deep pass (job 431587, 09:00 IST — README route-grammar refresh DONE 2026-10-05; docs siblings sweep next).
+
+Stage Summary:
+- 5.306.0 — the strip's rows become doors: the dashboard's last dead navigation surface learned its door — a row opens the businesses room at the named business, visible through a reset hunt and expanded to its details, the room's own words carrying the walk. The activity rows stay honest (the nested copy verb forbids their door), and the whole arc — cards (5.305) then rows (5.306) — now speaks one law: every clickable-looking thing on the dashboard actually opens what it names. A milestone number carried honestly: 151 suites green, tsc clean, the build baked, the door live-proven against the exact filtered state it was built to cure.
+- Commit + push: feat = this round's first commit (b60765d), chore(qa) = the second (a609a72), chore(worklog) = this commit. Push: ATTEMPTED (first per the standing instruction, and again post-commit) — failed honestly, no token (addendum below). The ride measured at 239.
+
+---
+Task ID: 345-PUSH-ADDENDUM (same round, post-commit)
+Agent: glm-5.3
+Task: Record the round's push outcome honestly.
+
+Work Log:
+- Push ATTEMPTED this round (FIRST, before its own work; attempted AGAIN post-commit): failed — "fatal: could not read Username for 'https://github.com': No such device or address". NO GitHub write token in the round environment.
+- State: remote unchanged (ecc6365 = Task 266's worklog commit, an ANCESTOR of local HEAD). Measured (git rev-list --count ecc6365..HEAD, after the feat + qa + worklog commits): 239 riding. The next token-bearing round pushes a clean fast-forward.
+- Remote config untouched: nothing to scrub.
+- Standing instruction stands: the next token-bearing round pushes the whole pile FIRST, before its own work.
+
+Stage Summary:
+- Work committed and gated (battery 151/151, tsc, build, the row door live-proven against a pre-set filter that genuinely hid the named business) but NOT on origin — the push ran and failed for lack of credentials, not for lack of trying. The honesty rule holds: no push claimed that did not run.
