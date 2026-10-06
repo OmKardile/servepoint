@@ -70,16 +70,19 @@ check('the drawer line carries Edit — Pencil, deep-green ink, the dish\u2019s 
   assert.ok(staff.includes("onEditLine={(line, item) => {"), 'the parent hands down the front door');
 });
 
-/* ── 2. the stale law extends ────────────────────────────────────────── */
+/* ── 2. the stale law extends (re-pinned 5.273.0: the staff drawer's PLUS
+   joins the edit — a pulled dish's line can shrink or leave, never grow,
+   never be re-said; exactly TWO dead buttons, the 310 shape come home) ── */
 check('the edit reads the LIVE menu and is dead for a stale line — shrink or leave, never re-said', () => {
   assert.ok(drawerBlock[0].includes('const lineItem = items.find((m) => m.id === l.menuItemId) || null;'), 'the verb reads the live menu');
   assert.ok(drawerBlock[0].includes('const stale = !lineItem || lineItem.is_available === false;'), 'pulled or vanished = stale');
   const deadCount = (drawerBlock[0].match(/(?<!aria-)disabled=\{stale\}/g) ?? []).length;
-  assert.equal(deadCount, 1, 'exactly ONE dead button — the edit (the staff minus has no guest cap)');
+  assert.equal(deadCount, 2, 'exactly TWO dead buttons — the plus and the edit (the 273 law)');
   const editDisabled = drawerBlock[0].indexOf('disabled={stale}', drawerBlock[0].indexOf('onEditLine(l, lineItem)') - 300);
   assert.ok(editDisabled > 0, 'the edit carries its own disabled={stale}');
   assert.ok(drawerBlock[0].includes('cursor-not-allowed'), 'the dead verb says so under the thumb');
   assert.ok(drawerBlock[0].includes('can shrink or leave, but not be re-said'), 'the aria names the law');
+  assert.ok(drawerBlock[0].includes('can shrink or leave, but not grow'), 'the plus carries the law\u2019s own word (273)');
   assert.ok(drawerBlock[0].includes("two\n                     verbs later"), 'the drawer names the law it extends');
 });
 
@@ -141,10 +144,11 @@ check('lineKey is exported from the store — ONE key grammar, one speaker', () 
   assert.ok(!/(const|function|let)\s+lineKey\s*[=(]/.test(modalBody.replace("import { lineKey, useCart } from '../../store/cart';", '')), 'no second builder lives in the modal');
 });
 
-/* ── 8. the version law ──────────────────────────────────────────────── */
-check('APP_VERSION and sw.js agree at 5.272.0', () => {
+/* ── 8. the version law (relaxed to the agreement shape, per unit308's own
+   precedent — the literal belongs to the current round's unit) ────────── */
+check('APP_VERSION and sw.js agree (the same word, wherever it now stands)', () => {
   const v = versionTs.match(/APP_VERSION = '([^']+)'/)?.[1] ?? '';
-  assert.equal(v, '5.272.0', 'the version word is this round\u2019s');
+  assert.ok(/^5\.\d+\.\d+$/.test(v), 'the version word is a semver word');
   assert.ok(swJs.includes(`const VERSION = "servepoint-v${v}-r1";`), `sw.js carries the same word (${v})`);
 });
 
