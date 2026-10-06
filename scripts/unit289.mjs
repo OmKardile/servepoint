@@ -68,10 +68,13 @@ const swJs = strip('../public/sw.js');
   );
   assert.ok(pages.includes('[phase, windowEnded],'), 'addLine\u2019s deps speak the window too');
   assert.ok(
-    pages.includes("locked={phase !== 'ready' || windowEnded} lockedLabel={windowEnded ? t('windowEndedCta') : undefined}"),
-    'the customizer\u2019s lock wears the window\u2019s word (a dead clock \u2260 a staff cut)',
+    pages.includes("locked={phase !== 'ready' || windowEnded}") && pages.includes("lockedLabel={windowEnded ? t('windowEndedCta') : undefined}"),
+    'the customizer\u2019s lock wears the window\u2019s word (a dead clock \u2260 a staff cut) — v5.271.0: the props now sit on their own lines beside the edit-mode wiring',
   );
-  assert.ok(pages.includes("locked ? (lockedLabel ?? t('orderingPaused')) : t('addToOrder'"), 'the customizer button keeps the staff-cut word for staff cuts');
+  assert.ok(
+    pages.includes("locked ? (lockedLabel ?? t('orderingPaused')) : editing ? t('updateLine'") && pages.includes(": t('addToOrder', { amt: money(unit * qty) })"),
+    'the customizer button keeps the staff-cut word for staff cuts — the edit CTA joins the chain AFTER the lock, never before (v5.271.0)',
+  );
   assert.ok(pages.includes('disabled={placing || windowEnded}'), 'the drawer\u2019s place button is disabled on the dead window');
   assert.ok(
     pages.includes("{placing ? t('sending') : windowEnded ? t('windowEndedCta') : t('placeOrder', { amt: money(cartTotal) })}"),

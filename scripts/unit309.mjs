@@ -89,7 +89,11 @@ check('the sold-out line\u2019s plus is dead; its minus and remove stay live', (
   const disabledAt = drawerBlock[0].indexOf('disabled={stale}');
   assert.ok(liveAt >= 0 && removeAt > liveAt, 'the drawer block order sane');
   assert.ok(disabledAt > liveAt && disabledAt < removeAt, 'disabled={stale} sits on the PLUS — between the count and remove');
-  assert.equal((drawerBlock[0].match(/disabled=\{stale\}/g) ?? []).length, 1, 'exactly one dead button — never the minus');
+  // v5.271.0 — TWO dead buttons now: the plus (a sold-out line cannot grow)
+  // AND the edit (a sold-out line cannot be re-said — 308's law, one verb
+  // later). The minus and the remove stay live: the line can still shrink
+  // and it can still leave.
+  assert.equal((drawerBlock[0].match(/disabled=\{stale\}/g) ?? []).length, 2, 'exactly two dead buttons — the plus and the edit, never the minus');
   assert.ok(drawerBlock[0].includes('cursor-not-allowed'), 'the dead button says so under the thumb');
   assert.ok(/the house does not\s+substitute/.test(drawerBlock[0]), 'the law word stands in the drawer');
 });
@@ -127,9 +131,9 @@ check('mergeLines byte-kept — add, reorder and count speak ONE arithmetic', ()
 });
 
 /* ── 8. the version law ──────────────────────────────────────────────── */
-check('APP_VERSION and sw.js agree at 5.270.0', () => {
+check('APP_VERSION and sw.js agree (the literal belongs to the current round\u2019s unit)', () => {
   const v = versionTs.match(/APP_VERSION = '([^']+)'/)?.[1] ?? '';
-  assert.equal(v, '5.270.0', 'the version word is this round\u2019s');
+  assert.ok(v.length > 0, 'APP_VERSION is present');
   assert.ok(swJs.includes(`const VERSION = "servepoint-v${v}-r1";`), `sw.js carries the same word (${v})`);
 });
 
