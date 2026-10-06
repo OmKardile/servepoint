@@ -1,6 +1,12 @@
 import { formatMoney } from '../../lib/prefs';
 import { printHiddenFrame } from '../../lib/printFrame';
 import { BOOKING_TZ } from '../../lib/bookingday';
+/* v5.280.0 — the receipt's GST labels are DERIVED now (the rate's one
+ * home, lib/tax): "CGST 2.5%" was typed by hand while the money was
+ * derived — the day the slab moves, a typed label keeps lying. The split
+ * rides cgstSgstSplit (the stored tax halved, the odd paise to SGST,
+ * sums back exactly). */
+import { cgstPercentWord, cgstSgstSplit } from '../../lib/tax';
 
 /**
  * Customer receipt — thermal 80mm print view (Task 49).
@@ -8,8 +14,9 @@ import { BOOKING_TZ } from '../../lib/bookingday';
  * but the money block is the TICKET's own truth: every figure below is a
  * stored column on orders — subtotal, discount_amount, tax_amount, total —
  * never recomputed. The CGST/SGST split is a display-only halving of the
- * stored tax_amount (sums back exactly); India restaurant bills print the
- * 5% GST as 2.5% + 2.5%.
+ * stored tax_amount (sums back exactly); the printed rate words ride the
+ * ONE rate (lib/tax) — India's standard slab prints as half-slabs
+ * ("CGST 2.5% + SGST 2.5%" today, derived, never typed).
  */
 
 /* v5.106.0 — the receipt is a legal record, so it keeps the DB's clock
@@ -125,8 +132,7 @@ export function buildReceiptHtml(opts: ReceiptOpts): string {
     })
     .join('');
 
-  const cgst = Math.round((opts.tax / 2) * 100) / 100;
-  const sgst = Math.round((opts.tax - cgst) * 100) / 100;
+  const { cgst, sgst } = cgstSgstSplit(opts.tax);
   const discount = Number(opts.discount ?? 0);
 
   const discountRow =
@@ -213,8 +219,8 @@ export function buildReceiptHtml(opts: ReceiptOpts): string {
   <div style="border-bottom:1px dashed #000;padding:6px 0;">
     ${row('Subtotal', formatMoney(opts.subtotal))}
     ${discountRow}
-    ${row('CGST 2.5%', formatMoney(cgst))}
-    ${row('SGST 2.5%', formatMoney(sgst))}
+    ${row(`CGST ${cgstPercentWord()}`, formatMoney(cgst))}
+    ${row(`SGST ${cgstPercentWord()}`, formatMoney(sgst))}
     ${row('TOTAL', formatMoney(opts.total), true)}
     <div style="border-top:1px dashed #000;margin:6px 0 2px;"></div>
     ${paymentBlock}
@@ -260,8 +266,7 @@ export function buildReceiptText(opts: ReceiptOpts): string {
     return t.length >= W ? t : ' '.repeat(Math.floor((W - t.length) / 2)) + t;
   };
 
-  const cgst = Math.round((opts.tax / 2) * 100) / 100;
-  const sgst = Math.round((opts.tax - cgst) * 100) / 100;
+  const { cgst, sgst } = cgstSgstSplit(opts.tax);
   const discount = Number(opts.discount ?? 0);
 
   /* v5.255.0 — the share voice wraps the note like the chase list wraps its
@@ -324,8 +329,8 @@ export function buildReceiptText(opts: ReceiptOpts): string {
   out.push(hr);
   out.push(two('Subtotal', formatMoney(opts.subtotal)));
   if (discount > 0) out.push(two(`DISCOUNT${opts.offerTitle ? ` - ${opts.offerTitle}` : ''}`, `-${formatMoney(discount)}`));
-  out.push(two('CGST 2.5%', formatMoney(cgst)));
-  out.push(two('SGST 2.5%', formatMoney(sgst)));
+  out.push(two(`CGST ${cgstPercentWord()}`, formatMoney(cgst)));
+  out.push(two(`SGST ${cgstPercentWord()}`, formatMoney(sgst)));
   out.push(two('TOTAL', formatMoney(opts.total)));
   out.push(hr);
 

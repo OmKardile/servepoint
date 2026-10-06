@@ -1,6 +1,12 @@
 import { supabase, isSupabaseConfigured } from './supabase';
 import { appTodayIso, appDayKey, appDayBoundsIso, appHour, lastNDaysMs, lastNDayKeys, offTodayBoundsIso } from './appday';
 import { moverWindow } from './movers';
+/* v5.280.0 — the written order's tax rides the ONE rate (lib/tax) and the
+ * ONE rounding (lib/money's round2): the staff cart's preview and the
+ * guest cart's preview speak the same lib, so a preview can never
+ * disagree with its own written order. */
+import { gstTax } from './tax';
+import { round2 } from './money';
 import type {
   AppNotification,
   AuditLogEntry,
@@ -354,9 +360,12 @@ export async function createOrder(tenantId: string, input: NewOrderInput): Promi
   // Offer discount (016) applies on the subtotal BEFORE GST — an MRP-level
   // reduction, so tax follows the discounted base. Clamp: never below zero.
   const discount = Math.min(Math.max(input.discountAmount || 0, 0), subtotal);
-  const taxRate = 0.05; // GST 5% — standard F&B rate
-  const taxAmount = Math.round((subtotal - discount) * taxRate * 100) / 100;
-  const total = Math.round((subtotal - discount + taxAmount) * 100) / 100;
+  /* v5.280.0 — the tax math rides lib/tax's ONE rate (gstTax: the rate,
+   * the paise rounding, the never-negative floor). The bare 0.05 literal
+   * and its local rounding retired — four files rolled this rate by hand;
+   * one home now. */
+  const taxAmount = gstTax(subtotal - discount);
+  const total = round2(subtotal - discount + taxAmount);
 
   // orders has NO guest_count column (migration 001) — sending one 400s.
   // Table/guest context rides in notes for KDS display, while tableId takes

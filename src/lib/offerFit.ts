@@ -38,7 +38,9 @@ export interface OfferFit {
  * local voice ternary retires with it: offerFitVoice is the sentence's
  * ONE composer, read by both surfaces (the pill's chip and aria, the
  * guest bar's whisper line and aria). */
-const round2 = (n: number) => Math.round(n * 100) / 100;
+/* v5.280.0 — the rounding rides money.ts's round2 (the ONE arithmetic
+ * home; five hand-rolled locals retired house-wide). */
+import { round2 } from './money';
 
 export function offerFit(
   offers: (OfferVoice & { id: string })[] | null | undefined,

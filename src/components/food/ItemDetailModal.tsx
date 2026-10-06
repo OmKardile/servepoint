@@ -3,12 +3,10 @@ import { CircleOff, Clock, Minus, Pencil, Plus, RotateCcw, UtensilsCrossed, X } 
 import type { MenuItem, MenuItemAddon } from '../../types';
 import { lineKey, useCart } from '../../store/cart';
 import { formatMoney } from '../../lib/prefs';
-import { signedMoney } from '../../lib/money';
+import { signedMoney, round2 } from '../../lib/money';
 import { useDialogA11y } from '../../lib/useDialogA11y';
 import { VegMark } from '../shell/VegMark';
 import { counterShelfLine, shelfDaysClause, type ShelfCoverage } from '../../lib/shelf';
-
-const round2 = (n: number) => Math.round(n * 100) / 100;
 
 /**
  * Item detail modal (Figma Frame_30_219-30083):

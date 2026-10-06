@@ -83,7 +83,11 @@ import { offerDiscount } from '../../store/cart';
    dialects). The bar's own total already includes the discount when one
    is applied — '₹40.00 off applied' explains why the number moved. */
 import { offerFit, offerFitVoice } from '../../lib/offerFit';
-import { money, signedMoney } from '../../lib/money';
+import { money, signedMoney, round2 } from '../../lib/money';
+/* v5.280.0 — the guest cart's tax rides the ONE rate (lib/tax's gstTax;
+ * the bare 0.05 retired) and the spoken rate fills the translation
+ * through the guest's own {var} grammar — three languages, one truth. */
+import { gstPercent, gstTax } from '../../lib/tax';
 import { useCopyAck } from '../../lib/useCopyAck';
 import { appTimezone, formatWindowLeft, WARM_WINDOW_MS } from '../../lib/appday';
 
@@ -103,13 +107,12 @@ const brand = {
   gold: '#B88E2F',
   cream: '#F6F5F2',
 };
-
-const round2 = (n: number) => Math.round(n * 100) / 100;
 /* v5.278.0 — the guest's own money helper is retired: its one shape (the
  * en-IN two-decimal digit run, re-rolled here because prefs are a staff
  * surface) lives in lib/money.ts now, whose ₹-pinned word needs NO prefs
- * to speak — the guest rides the house's one register. round2 stays: it
- * is MATH (line-total arithmetic), not voice. */
+ * to speak — the guest rides the house's one register. v5.280.0 — and
+ * round2 rides the money lib too: MATH, but now the ONE arithmetic home
+ * (five hand-rolled locals retired house-wide). */
 
 function twoToneChime(): void {
   try {
@@ -1185,7 +1188,7 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
           : Math.min(Number(selectedOffer.discount_value), cartSubtotal),
       )
     : 0;
-  const cartTax = round2((cartSubtotal - cartDiscount) * 0.05);
+  const cartTax = gstTax(cartSubtotal - cartDiscount);
   const cartTotal = round2(cartSubtotal - cartDiscount + cartTax);
   /* v5.214.0 — the bar's fit: the best live offer for this line set, the
      counter pill's exact grammar (offerFit picks it — best take wins,
@@ -1990,7 +1993,7 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
                     </div>
                   )}
                   <div className="flex justify-between">
-                    <span>{t('gst')}</span>
+                    <span>{t('gst', { rate: gstPercent() })}</span>
                     <span className="tabular-nums">{money(cartTax)}</span>
                   </div>
                   <div className="flex justify-between text-[15px] font-bold text-[#1A1A1A]">
@@ -2676,7 +2679,7 @@ export function GuestTrackPage({ orderId }: { orderId: string }): React.ReactEle
                     </div>
                   )}
                   <div className="flex justify-between">
-                    <span>{t('gst')}</span>
+                    <span>{t('gst', { rate: gstPercent() })}</span>
                     <span className="tabular-nums">{money(order.tax_amount)}</span>
                   </div>
                   <div className="flex justify-between text-[15px] font-bold text-[#1A1A1A]">

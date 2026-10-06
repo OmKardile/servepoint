@@ -42,3 +42,14 @@ export function signedMoney(amount: number): string {
   if (n < 0) return `−${money(-n)}`;
   return '±₹0.00';
 }
+
+/** The paise rounding — the ONE home (v5.280.0). Five files rolled
+ *  `Math.round(n * 100) / 100` by hand beside this lib (offerFit, the
+ *  staff cart, the dish modal, the guest book, and one dead local on the
+ *  floor that nothing ever called); the register's arithmetic lives in
+ *  exactly ONE src file now — the same file that owns the voice, because
+ *  the digit shape and its rounding are one truth, not two. MATH, not
+ *  voice: this never renders, it computes. */
+export function round2(n: number): number {
+  return Math.round(n * 100) / 100;
+}

@@ -40,6 +40,10 @@ import { verdictTone } from '../../lib/verdict';
 import { buildReceiptText, printReceipt, type ReceiptOpts } from './ReceiptPrint';
 import { preloadPrintImage } from '../../lib/printFrame';
 import { formatMoney, getPrefs } from '../../lib/prefs';
+/* v5.280.0 — the bill row's rate word is DERIVED now (the rate's one
+ * home, lib/tax): "GST (5% · CGST+SGST)" was typed — the day the slab
+ * moves, a typed word keeps lying. */
+import { gstPercentWord } from '../../lib/tax';
 import { downloadCsv } from '../../lib/csv';
 import { useCopyAck, ackWord } from '../../lib/useCopyAck';
 import { appStampLabel, appTodayIso, appFormatters, appTzTag, isSameAppDay, isSameAppDayAs } from '../../lib/appday';
@@ -2143,7 +2147,7 @@ const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRet
                 )}
                 {Number(selected.tax_amount ?? 0) > 0 && (
                   <div className="flex items-center justify-between text-[12.5px] text-[#6B6B6B]">
-                    <span>GST (5% · CGST+SGST)</span>
+                    <span>GST ({gstPercentWord()} · CGST+SGST)</span>
                     <span className="font-medium tabular-nums text-[#1A1A1A]">
                       {formatMoney(selected.tax_amount)}
                     </span>

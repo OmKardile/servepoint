@@ -32,6 +32,11 @@ import { CounterInbox } from './CounterInbox';
 import { useTenant } from '../../lib/tenant';
 import { useDialogA11y } from '../../lib/useDialogA11y';
 import { formatMoney } from '../../lib/prefs';
+/* v5.280.0 — the tax rides the ONE rate (lib/tax: gstTax + the derived
+ * percent words) and the rounding rides money.ts's round2 (the ONE
+ * arithmetic home — the local def retired). */
+import { gstPercentWord, gstTax } from '../../lib/tax';
+import { round2 } from '../../lib/money';
 /* v5.214.0 — the fit family moved to its cart-domain home (lib/offerFit):
    the guest menu's floating bar whispers the SAME fit, and a component
    file must never be a lib (the guest would have imported this screen's
@@ -209,8 +214,6 @@ const ORDER_TYPES: { value: OrderType; label: string }[] = [
   { value: 'takeaway', label: 'Takeaway' },
   { value: 'delivery', label: 'Delivery' },
 ];
-
-const round2 = (n: number) => Math.round(n * 100) / 100;
 
 /* ── v5.210.0 — the cart hears the offers ────────────────────────────
  * The fit's REDUCER and VOICE live in lib/offerFit.ts since v5.214.0
@@ -637,7 +640,7 @@ const OrderDrawer: React.FC<{
 
   const subtotal = round2(cartTotal(cart.lines));
   const discount = offerDiscount(cart.offer, subtotal);
-  const tax = round2((subtotal - discount) * 0.05);
+  const tax = gstTax(subtotal - discount);
   const total = round2(subtotal - discount + tax);
   const offerEligible = (o: Offer) => subtotal >= o.min_order_amount;
   const canPlace = cart.lines.length > 0 && !submitting;
@@ -1158,7 +1161,7 @@ const OrderDrawer: React.FC<{
               </div>
             )}
             <div className="flex items-center justify-between">
-              <dt className="text-[#6B6B6B]">GST (5%)</dt>
+              <dt className="text-[#6B6B6B]">GST ({gstPercentWord()})</dt>
               <dd className="font-medium text-[#1A1A1A]">{formatMoney(tax)}</dd>
             </div>
             <div className="flex items-center justify-between border-t border-[#E3E7E0] pt-2">
