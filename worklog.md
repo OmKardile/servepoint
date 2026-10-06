@@ -9062,3 +9062,17 @@ Work Log:
 Stage Summary:
 - 5.299.0 — the drawer learns the guest's own name: the name persists per-tab beside the cart, rides every checkout, STAYS at checkout (the same person is ordering again), dies only with the token, and a fresh link claims nothing — the whisper teaches the convention in three languages, and all four laws were proven live on the public family (#135's ride, the second round's stay, the whisper, the cleared key). The QHD lens — 2× the design width — walked clean end to end, and the 337 drain bar met its first honesty check at scale (clock 4:52, bar 48.76%: one arithmetic).
 - Commit + push: feat = this round's first commit (985faf9), chore(qa) = the second (07b97a1), chore(worklog) = this commit. Push: ATTEMPTED (first per the standing instruction, and again post-commit) — failed honestly, no token (addendum below).
+
+---
+Task ID: 338-PUSH-ADDENDUM (same round, post-commit)
+Agent: glm-5.3
+Task: Record the round's push outcome honestly.
+
+Work Log:
+- Push ATTEMPTED this round (FIRST, before its own work; attempted AGAIN post-commit): failed — "fatal: could not read Username for 'https://github.com': No such device or address". NO GitHub write token in the round environment.
+- State: remote unchanged (ecc6365 = Task 266's worklog commit, an ANCESTOR of local HEAD). Measured (git rev-list --count ecc6365..HEAD, after the feat 985faf9 + qa 07b97a1 + worklog d15c038 commits): 217 riding. The next token-bearing round pushes a clean fast-forward.
+- Remote config untouched: nothing to scrub.
+- Standing instruction stands: the next token-bearing round pushes the whole pile FIRST, before its own work.
+
+Stage Summary:
+- Work committed and gated (battery 144/144, tsc, build, all four name-laws verified LIVE on the public family — the round's family needing no auth-wall protocol) but NOT on origin — the push ran and failed for lack of credentials, not for lack of trying. The honesty rule holds: no push claimed that did not run.
