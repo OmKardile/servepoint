@@ -139,10 +139,11 @@ check('the five new words speak in en, hi and kn — 15 dictionary lines', () =>
   assert.ok(i18n.includes("updateLine: 'ಅಪ್‌ಡೇಟ್ · {amt}'"), 'the kn CTA word');
 });
 
-/* ── 8. the version law ──────────────────────────────────────────────── */
-check('APP_VERSION and sw.js agree at 5.271.0', () => {
+/* ── 8. the version law (relaxed to the agreement shape, per unit308's own
+ *       precedent — the literal belongs to the current round's unit) ───── */
+check('APP_VERSION and sw.js agree (the same word, wherever it now stands)', () => {
   const v = versionTs.match(/APP_VERSION = '([^']+)'/)?.[1] ?? '';
-  assert.equal(v, '5.271.0', 'the version word is this round\u2019s');
+  assert.ok(/^5\.\d+\.\d+$/.test(v), 'the version word is a semver word');
   assert.ok(swJs.includes(`const VERSION = "servepoint-v${v}-r1";`), `sw.js carries the same word (${v})`);
 });
 
