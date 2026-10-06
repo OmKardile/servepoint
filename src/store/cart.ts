@@ -1,6 +1,8 @@
 import { create } from 'zustand';
 import type { MenuItem, Offer, OrderType } from '../types';
 import type { OfferVoice } from '../lib/offerLabel';
+/* v5.280.0 — the cart's capped discount rounding rides money.ts's round2. */
+import { round2 } from '../lib/money';
 
 export interface CartLine {
   key: string;
@@ -170,7 +172,7 @@ export const useCart = create<CartState>((set, get) => ({
 }));
 
 export const cartTotal = (lines: CartLine[]): number =>
-  Math.round(lines.reduce((s, l) => s + l.qty * l.unitPrice, 0) * 100) / 100;
+  round2(lines.reduce((s, l) => s + l.qty * l.unitPrice, 0));
 
 /** Offer discount in rupees against a subtotal — percent or flat, never below zero, capped at the subtotal.
  *  v5.212.0 — the parameter speaks the voice triple, not the whole row: the
@@ -182,5 +184,5 @@ export const offerDiscount = (offer: OfferVoice | null, subtotal: number): numbe
   const raw = offer.discount_type === 'percent'
     ? (subtotal * offer.discount_value) / 100
     : offer.discount_value;
-  return Math.min(Math.round(raw * 100) / 100, subtotal);
+  return Math.min(round2(raw), subtotal);
 };

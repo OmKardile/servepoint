@@ -43,13 +43,23 @@ export function signedMoney(amount: number): string {
   return '±₹0.00';
 }
 
-/** The paise rounding — the ONE home (v5.280.0). Five files rolled
- *  `Math.round(n * 100) / 100` by hand beside this lib (offerFit, the
- *  staff cart, the dish modal, the guest book, and one dead local on the
- *  floor that nothing ever called); the register's arithmetic lives in
- *  exactly ONE src file now — the same file that owns the voice, because
- *  the digit shape and its rounding are one truth, not two. MATH, not
- *  voice: this never renders, it computes. */
+/** The paise rounding — the ONE home (v5.280.0). A whole-house census
+ *  found `Math.round(n * 100) / 100` rolled by hand in ELEVEN FILES
+ *  beside this lib — nineteen call sites strong: offerFit's local; the
+ *  staff cart's capped discount and its total; the dish modal AND the
+ *  menu screen beside it (a private round2 with three call sites); the
+ *  guest book; api.ts's written order item_total and the drawer
+ *  movement's p_amount; the offers' write path and the addon snapshot's
+ *  base price (four sites); the EOD drawer's open/close floats and its
+ *  variance; the waste card's quantities and rupees (four sites); the
+ *  GST register's own cgst/sgst split (the twin lib/tax never knew it
+ *  had — it rides cgstSgstSplit now); the bill's balance; and one dead
+ *  local on the floor that nothing ever called. The bill's ways-split
+ *  keeps its deliberate Math.floor (each way rounds DOWN so the parts
+ *  never overpay) — a judgment, not this rounder's twin. The register's
+ *  arithmetic lives in exactly ONE src file now — the same file that
+ *  owns the voice, because the digit shape and its rounding are one
+ *  truth, not two. MATH, not voice: this never renders, it computes. */
 export function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }

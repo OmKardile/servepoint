@@ -408,7 +408,7 @@ export async function createOrder(tenantId: string, input: NewOrderInput): Promi
     name: it.name,
     qty: it.qty,
     unit_price: it.unitPrice,
-    item_total: Math.round(it.qty * it.unitPrice * 100) / 100,
+    item_total: round2(it.qty * it.unitPrice),
     // v5.55.0 — the counter finally writes the column the guest side always
     // did (direct insert, no RPC change — order_items.variant_name exists
     // since migration 001's lineage and attachItems already reads it back).
@@ -3264,7 +3264,7 @@ export async function recordDrawerMovement(
   const { error } = await supabase.rpc('sp_record_drawer_movement', {
     p_session_id: sessionId,
     p_kind: kind,
-    p_amount: Math.round(amount * 100) / 100,
+    p_amount: round2(amount),
     p_reason: reason.trim(),
   });
   if (error) throw error;

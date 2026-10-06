@@ -54,6 +54,8 @@ import {
   type FeedbackRow,
 } from '../../lib/api';
 import { formatMoney } from '../../lib/prefs';
+/* v5.280.0 — the offer write path's rounding rides money.ts's round2. */
+import { round2 } from '../../lib/money';
 import { offerBadgeLabel } from '../../lib/offerLabel';
 import { downloadCsv } from '../../lib/csv';
 import { dayTime, usedAgo } from '../../lib/day';
@@ -2123,8 +2125,8 @@ const OfferDialog: React.FC<{
       title: title.trim(),
       description: description.trim() || null,
       discount_type: dtype,
-      discount_value: Math.round(v * 100) / 100,
-      min_order_amount: Math.round(m * 100) / 100,
+      discount_value: round2(v),
+      min_order_amount: round2(m),
       is_active: isActive,
     });
   };
@@ -2267,8 +2269,8 @@ const GuestDetailDrawer: React.FC<{
       name: a.name,
       price: Number(a.price),
     }));
-    const addonSum = Math.round(addonSnap.reduce((s, a) => s + a.price, 0) * 100) / 100;
-    const basePrice = Math.round((Number(it.unit_price) - addonSum) * 100) / 100;
+    const addonSum = round2(addonSnap.reduce((s, a) => s + a.price, 0));
+    const basePrice = round2(Number(it.unit_price) - addonSum);
     useCart.getState().add(
       { id: it.menu_item_id as string, name: it.name, price: basePrice, image_url: null, is_veg: null },
       qty ?? it.qty,

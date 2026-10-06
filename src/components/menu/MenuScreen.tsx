@@ -56,6 +56,8 @@ import { shelfCoverage, shelfDays, type ShelfCoverage } from '../../lib/shelf';
 import { appFormatters, appTzTag, appTodayIso } from '../../lib/appday';
 import { useTenant } from '../../lib/tenant';
 import { formatMoney } from '../../lib/prefs';
+/* v5.280.0 — the rounding rides money.ts's round2 (the ONE arithmetic home). */
+import { round2 } from '../../lib/money';
 import { downloadCsv } from '../../lib/csv';
 import { useExportFlash } from '../../lib/useExportFlash';
 import { useTransientFlag } from '../../lib/useTransientFlag';
@@ -100,7 +102,6 @@ import type { MenuItem } from '../../types';
  * EMPTY-vs-zero line is drawn where the shelf stops answering.
  */
 
-const round2 = (n: number) => Math.round(n * 100) / 100;
 
 const VegDot: React.FC<{ veg: boolean }> = ({ veg }) => (
   <span

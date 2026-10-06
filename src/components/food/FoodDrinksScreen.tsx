@@ -55,7 +55,7 @@ import { EmptyState } from '../shell/EmptyState';
  * Food & Drinks (Figma Food_&_Drinks_219-30044 / 219-29357 / Add_to_Order_219-30062 /
  * 219-26844 skeleton / Empty_State_219-29868):
  * categories grid of sage photo cards → items grid (gold prices, gold selected card)
- * → item detail modal → floating order pill + review drawer with GST 5% checkout.
+ * → item detail modal → floating order pill + review drawer with GST checkout.
  *
  * v5.119.0 — the first door learns to say why: the shell search's oldest
  * consumer now keeps the box's promise level-honest (dynamic placeholder —

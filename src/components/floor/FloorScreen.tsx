@@ -555,7 +555,8 @@ function istDayHeading(dateKey: string): string {
   return `${weekday} · ${pretty}`;
 }
 
-const round2 = (n: number) => Math.round(n * 100) / 100;
+/* v5.280.0 — the floor's dead local round2 retires: nothing ever called it,
+ * and the ONE arithmetic home (lib/money's round2) holds the shape now. */
 
 function LiveChip({ state }: { state: RealtimeState }): React.ReactElement {
   const map: Record<RealtimeState, { label: string; color: string; hint?: string }> = {

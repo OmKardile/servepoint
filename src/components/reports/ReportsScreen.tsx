@@ -90,6 +90,11 @@ import {
  * AGE_SLA_MIN): the 10 the kitchen board shouts, the EOD mirrors and the
  * counter's red pill tints — one home for the house's attention line. */
 import { AGE_SLA_MIN } from '../../lib/age';
+/* v5.280.0 — the waste card's quantities and rupees ride money.ts's round2;
+ * the GST register's own split rides lib/tax's cgstSgstSplit (the twin it
+ * never knew it had — same rule, one home). */
+import { round2 } from '../../lib/money';
+import { cgstSgstSplit } from '../../lib/tax';
 import { downloadCsv } from '../../lib/csv';
 import { useCopyAck, ackWord } from '../../lib/useCopyAck';
 import { useExportFlash } from '../../lib/useExportFlash';
@@ -271,8 +276,7 @@ export function buildGstRegister(
     if (String(o.status || '').toLowerCase() === 'cancelled') continue; // cancelled never happened
     if (String(o.payment_status || '').toLowerCase() !== 'completed') continue; // collected money only
     const tax = Number(o.tax_amount ?? 0);
-    const cgst = Math.round((tax / 2) * 100) / 100;
-    const sgst = Math.round((tax - cgst) * 100) / 100;
+    const { cgst, sgst } = cgstSgstSplit(tax);
     const ot = String(o.order_type || 'dine_in');
     out.push({
       day: dayKey(o.created_at),
@@ -4672,7 +4676,7 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
                       Binned in this range
                     </p>
                     <p className="text-[26px] font-extrabold leading-tight tabular-nums text-[#B4483C]">
-                      {formatMoney(Math.round(wasteAgg.total * 100) / 100)}
+                      {formatMoney(round2(wasteAgg.total))}
                     </p>
                     {wasteAgg.unvalued > 0 && (
                       <p className="mt-0.5 text-[11px] text-[#8A5A00]">
@@ -4708,7 +4712,7 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
                             />
                           </span>
                           <span className="min-w-14 text-right font-bold tabular-nums text-[#1A1A1A]">
-                            {formatMoney(Math.round(wasteAgg.reasons[r].rupees * 100) / 100)}
+                            {formatMoney(round2(wasteAgg.reasons[r].rupees))}
                           </span>
                         </li>
                       );
@@ -4726,7 +4730,7 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
                         <p className="flex flex-wrap items-center gap-1.5">
                           <span className="truncate text-[13px] font-bold text-[#1A1A1A]">{it.name}</span>
                           <span className="shrink-0 rounded-full bg-[#F1F4F1] px-1.5 py-0.5 text-[9.5px] font-bold tabular-nums text-[#0F3D3E]">
-                            {Math.round(it.qty * 100) / 100} {it.unit} · {it.count} {it.count === 1 ? 'move' : 'moves'}
+                            {round2(it.qty)} {it.unit} · {it.count} {it.count === 1 ? 'move' : 'moves'}
                           </span>
                           {it.unvalued > 0 && (
                             <span
@@ -4748,7 +4752,7 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
                         </p>
                       </div>
                       <span className="shrink-0 text-[13px] font-extrabold tabular-nums text-[#B4483C]">
-                        {formatMoney(Math.round(it.rupees * 100) / 100)}
+                        {formatMoney(round2(it.rupees))}
                       </span>
                     </li>
                   ))}

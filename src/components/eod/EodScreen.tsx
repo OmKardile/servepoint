@@ -50,6 +50,8 @@ import { formatMoney, subscribePrefs } from '../../lib/prefs';
  * breach count, the counter's red line). The local name stays — this strip
  * speaks "Late prep", the KDS's own shout — but the number has one home. */
 import { AGE_SLA_MIN } from '../../lib/age';
+/* v5.280.0 — the drawer's open/close floats ride money.ts's round2. */
+import { round2 } from '../../lib/money';
 import { guestVoice } from '../../lib/verdict';
 import {
   appTimezone,
@@ -737,7 +739,7 @@ const DrawerDialog: React.FC<{
   const expected = mode === 'close' && active ? Number(active.opening_float) + cashIn - moveOut : 0;
   const parsed = amount.trim() === '' ? null : Number(amount);
   const valid = parsed !== null && Number.isFinite(parsed) && parsed >= 0;
-  const variance = mode === 'close' && valid ? Math.round((parsed! - expected) * 100) / 100 : null;
+  const variance = mode === 'close' && valid ? round2(parsed! - expected) : null;
   const tone = variance === null ? null : varianceTone(variance);
 
   return (
@@ -1451,7 +1453,7 @@ const EodScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
     setDrawerBusy(true);
     setDrawerError(null);
     try {
-      await openDrawerSession(Math.round(amount * 100) / 100);
+      await openDrawerSession(round2(amount));
       setDrawerDialog(null);
       await loadDrawer();
     } catch (e: unknown) {
@@ -1466,7 +1468,7 @@ const EodScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
     setDrawerBusy(true);
     setDrawerError(null);
     try {
-      await closeDrawerSession(drawerActive.id, Math.round(amount * 100) / 100, note);
+      await closeDrawerSession(drawerActive.id, round2(amount), note);
       setDrawerDialog(null);
       await loadDrawer();
     } catch (e: unknown) {

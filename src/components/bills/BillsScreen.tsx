@@ -44,6 +44,10 @@ import { formatMoney, getPrefs } from '../../lib/prefs';
  * home, lib/tax): "GST (5% · CGST+SGST)" was typed — the day the slab
  * moves, a typed word keeps lying. */
 import { gstPercentWord } from '../../lib/tax';
+/* v5.280.0 — the bill's balance rides money.ts's round2 (the split's own
+ * Math.floor stays: each way rounds DOWN so the parts never overpay — a
+ * deliberate judgment, not the rounder's twin). */
+import { round2 } from '../../lib/money';
 import { downloadCsv } from '../../lib/csv';
 import { useCopyAck, ackWord } from '../../lib/useCopyAck';
 import { appStampLabel, appTodayIso, appFormatters, appTzTag, isSameAppDay, isSameAppDayAs } from '../../lib/appday';
@@ -976,7 +980,7 @@ const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRet
    * absorbs the cents and the parts sum to exactly the total. */
   const selectedTotal = Number(selected?.total ?? 0);
   const paidSum = useMemo(() => ledger.reduce((s, r) => s + Number(r.amount || 0), 0), [ledger]);
-  const balance = Math.max(0, Math.round((selectedTotal - paidSum) * 100) / 100);
+  const balance = Math.max(0, round2(selectedTotal - paidSum));
   const covered = selectedTotal > 0 && balance <= 0.005;
   const remainingWays = Math.max(0, splitWays - ledger.length);
   const nextPartAmount =
