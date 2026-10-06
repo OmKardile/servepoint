@@ -316,6 +316,16 @@ const STATUS_META: Record<TableStatus, { label: string; bg: string; fg: string; 
   billing: { label: 'Billing', bg: '#FDECEA', fg: '#B4483C', dot: '#B4483C' },
 };
 
+/* v5.292.0 — the hunt chip's two voices, byte-twins of the Platform
+ * console's own constants (327 audit → 328 businesses → 330 menu → 331
+ * board): idle wears the card's quiet border, active wears the rail's
+ * strong teal. unit331 pins the twins EQUAL — one grammar, four rooms,
+ * never drift. */
+const HUNT_CHIP_IDLE =
+  'inline-flex h-8 items-center rounded-full border border-[#E3E7E0] bg-white px-3 text-xs font-medium text-[#6B6B6B] transition-colors hover:bg-[#F6F5F2] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B88E2F]/70 focus-visible:ring-offset-2 focus-visible:ring-offset-[#F6F5F2]';
+const HUNT_CHIP_ACTIVE =
+  'inline-flex h-8 items-center rounded-full border border-transparent bg-[#0F3D3E] px-3 text-xs font-semibold text-white shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B88E2F]/70 focus-visible:ring-offset-2 focus-visible:ring-offset-[#F6F5F2]';
+
 /* ── The floor owns its holds (v5.82.0) — hold-audit verdicts. ──────────
    Migration 011's trigger releases a table when its ticket COMPLETES or
    CANCELS — but a ticket that was hard-DELETED never fires that UPDATE,
@@ -2015,6 +2025,9 @@ export function FloorScreen(): React.ReactElement {
   const [tokenAck, runTokenAck] = useKeyedCopyAck();
   const [drillId, setDrillId] = useState<string | null>(null);
   const [filter, setFilter] = useState<TableStatus | null>(null);
+  /* v5.292.0 — the hunt's chip seat: the section census's chosen room,
+   * null = All. The second tap stands a chip down (the family law). */
+  const [sectionChip, setSectionChip] = useState<string | null>(null);
   /* v5.128.0 — the floor joins the shell-search contract: the box says what
    * it searches (table numbers and section names), a miss says why it
    * missed, and every surviving card glints at the span that kept it. */
@@ -2434,6 +2447,10 @@ export function FloorScreen(): React.ReactElement {
     (tables || []).forEach((t) => {
       if (filter && t.status !== filter) return;
       const key = t.section || 'Main Floor';
+      /* v5.292.0 — the chip door: a chosen section keeps only its own room.
+       * The chip composes beside the status tile AND the search (the family
+       * law — the doors narrow together, the census reads the rows). */
+      if (sectionChip !== null && key !== sectionChip) return;
       /* v5.128.0 — the query narrows the board: a section whose NAME says
        * the word keeps its whole list (the section is the hit); otherwise
        * only tables whose number matches survive. No word, no narrowing. */
@@ -2443,7 +2460,7 @@ export function FloorScreen(): React.ReactElement {
       map.set(key, list);
     });
     return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0]));
-  }, [tables, filter, q]);
+  }, [tables, filter, q, sectionChip]);
   const matchedCount = useMemo(() => sections.reduce((n, [, list]) => n + list.length, 0), [sections]);
 
   /* v5.290.0 — the section census, the datalist's voice: every distinct
@@ -2455,13 +2472,42 @@ export function FloorScreen(): React.ReactElement {
     [tables]
   );
 
+  /* v5.292.0 — the section census, the chips' voice: every distinct section
+   * word the board already speaks with the count of tables it holds, read
+   * from the board's own rows, loudest first, ties alphabetical (the
+   * family census law — 327 audit → 328 businesses → 330 menu → 331
+   * board). The datalist above names the whole house alphabetically; the
+   * chips speak the house's loudest rooms first. Each count is
+   * whole-house — the census reads the rows, never the narrowing. */
+  const sectionCats = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const t of tables ?? []) {
+      const key = t.section || 'Main Floor';
+      counts.set(key, (counts.get(key) || 0) + 1);
+    }
+    return [...counts.entries()]
+      .map(([section, count]) => ({ section, count }))
+      .sort((a, b) => b.count - a.count || a.section.localeCompare(b.section));
+  }, [tables]);
+
   /* v5.128.0 — the miss says why: the search's word, the tile's word, or
    * both — the same either-can-miss grammar the ledger (5.121.0) and the
    * book (5.123.0) already speak. The floor's truth state ("No tables
-   * yet") stays its own sentence — an empty floor is not a filtered one. */
+   * yet") stays its own sentence — an empty floor is not a filtered one.
+   * v5.292.0 — the census chip joins the doors, so the miss names every
+   * door that stands open (chip, tile, needle) and "any" replaces
+   * "either" — three doors make either a lie. */
   const missQ = query.trim();
   const filterLabel = filter ? STATUS_META[filter].label : '';
   const boardEmpty = (tables || []).length > 0 && matchedCount === 0 && !loadError;
+  /* v5.292.0 — the showing line's door words: every open door names
+   * itself (the census voice, board edition — the shelf speaks "N of M
+   * items on the shelf.", the board's own Showing line grows the words). */
+  const huntDoors = [
+    sectionChip !== null ? `${sectionChip} only` : '',
+    filter ? `${STATUS_META[filter].label.toLowerCase()} only` : '',
+    missQ ? `matching “${missQ}”` : '',
+  ].filter(Boolean);
   const missTitle = missQ
     ? `No table matches “${missQ}”`
     : filterLabel
@@ -2470,7 +2516,13 @@ export function FloorScreen(): React.ReactElement {
   const missBody = missQ ? (
     <>
       Search reads table numbers and section names.
-      {filterLabel && <> The {filterLabel} tile is also in play — either can miss.</>}
+      {filterLabel && <> The {filterLabel} tile is also in play — any can miss.</>}
+      {sectionChip !== null && <> The “{sectionChip}” chip is also in play — any can miss.</>}
+    </>
+  ) : sectionChip !== null ? (
+    <>
+      “{sectionChip}” holds {sectionCats.find((c) => c.section === sectionChip)?.count ?? 0} tables — none of
+      them {filterLabel.toLowerCase()}. Tap the tile again, or show the whole floor.
     </>
   ) : (
     <>
@@ -2478,6 +2530,11 @@ export function FloorScreen(): React.ReactElement {
       the tile again, or show the whole floor.
     </>
   );
+  /* v5.292.0 — the miss card's way out names the doors it clears: one
+   * door standing, the word names that door; two, "both"; all three,
+   * "all three". The chip's seat clears with the rest — a way out that
+   * leaves a door standing is not a way out. */
+  const missDoorCount = (missQ ? 1 : 0) + (filterLabel ? 1 : 0) + (sectionChip !== null ? 1 : 0);
 
   const drillTable = useMemo(
     () => (tables || []).find((t) => t.id === drillId) || null,
@@ -2523,10 +2580,6 @@ export function FloorScreen(): React.ReactElement {
   const drillCandidates = useMemo(
     () => (tables || []).filter((t) => t.status === 'available' && t.id !== drillTable?.id),
     [tables, drillTable],
-  );
-  const visibleCount = useMemo(
-    () => (filter ? sections.reduce((n, [, list]) => n + list.length, 0) : (tables || []).length),
-    [sections, filter, tables],
   );
 
   /* Guest session trail (v5.23.0) — sessions grouped by table for the card
@@ -2875,6 +2928,37 @@ export function FloorScreen(): React.ReactElement {
         })}
       </div>
 
+      {/* v5.292.0 — the section census, the chips' voice: the board's own
+          rooms, loudest first, whole-house counts (the census reads the
+          rows, never the narrowing), one tap to narrow beside the tiles
+          and the search. The family's hunt grammar — byte-twins of the
+          Platform console's own constants; unit331 pins the twins EQUAL. */}
+      {(tables || []).length > 0 && sectionCats.length > 0 && (
+        <div role="group" aria-label="Filter the board by section" className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            aria-pressed={sectionChip === null}
+            onClick={() => setSectionChip(null)}
+            className={sectionChip === null ? HUNT_CHIP_ACTIVE : HUNT_CHIP_IDLE}
+          >
+            All
+            <span className="ml-1.5 text-[11px] opacity-70 tabular-nums">{(tables || []).length}</span>
+          </button>
+          {sectionCats.map((c) => (
+            <button
+              key={c.section}
+              type="button"
+              aria-pressed={sectionChip === c.section}
+              onClick={() => setSectionChip(sectionChip === c.section ? null : c.section)}
+              className={sectionChip === c.section ? HUNT_CHIP_ACTIVE : HUNT_CHIP_IDLE}
+            >
+              {c.section}
+              <span className="ml-1.5 text-[11px] opacity-70 tabular-nums">{c.count}</span>
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* the book (v5.38.0) — the phone promises, on the record */}
       <section className="sp-card p-5" aria-label="The book">
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -3097,28 +3181,31 @@ export function FloorScreen(): React.ReactElement {
         )}
       </section>
 
-      {filter && (
-        <div className="flex flex-wrap items-center gap-2 text-[12px] text-[#6B6B6B]">
+      {/* v5.292.0 — the hunt's census voice, the board's own Showing line:
+          every open door names itself (chip, tile, needle), the narrowed
+          count rides matchedCount, and role=status hands it to the ear.
+          The old polite shrug below ("Nothing occupied right now") is
+          retired — a filter miss used to speak TWICE (this card plus the
+          miss card, the shelf's N-shrugs disease one room late); the miss
+          card is the floor's ONE miss voice, naming the prey and handing
+          back the doors. */}
+      {huntDoors.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 text-[12px] text-[#6B6B6B]" role="status">
           <span>
-            Showing <span className="font-bold text-[#0F3D3E]">{visibleCount}</span> of {(tables || []).length} tables &middot; {STATUS_META[filter].label.toLowerCase()} only
+            Showing <span className="font-bold text-[#0F3D3E]">{matchedCount}</span> of {(tables || []).length} tables
+            <> &middot; {huntDoors.join(' &middot; ')}</>
           </span>
           <button
             type="button"
-            onClick={() => setFilter(null)}
+            onClick={() => {
+              setQuery('');
+              setSectionChip(null);
+              setFilter(null);
+            }}
             className="rounded-full border border-[#E3E7E0] px-3 py-1 text-[11.5px] font-bold text-[#0F3D3E] hover:border-[#B88E2F]"
           >
             Show everything
           </button>
-        </div>
-      )}
-
-      {filter && visibleCount === 0 && (
-        <div className="rounded-3xl border border-dashed border-[#C9D4CC] bg-white/60 p-10 text-center">
-          <Armchair size={30} className="mx-auto text-[#6B6B6B]" aria-hidden />
-          <h2 className="mt-3 font-serif text-[22px] italic text-[#0F3D3E]">Nothing {STATUS_META[filter].label.toLowerCase()} right now</h2>
-          <p className="mx-auto mt-1 max-w-sm text-[13px] text-[#6B6B6B]">
-            The board refreshes itself the moment an order lands or a table frees up.
-          </p>
         </div>
       )}
 
@@ -3475,11 +3562,12 @@ export function FloorScreen(): React.ReactElement {
                 type="button"
                 onClick={() => {
                   setQuery('');
+                  setSectionChip(null);
                   if (filterLabel) setFilter(null);
                 }}
                 className="rounded-lg bg-[#F3E8CF] px-3 py-1.5 text-[12px] font-semibold text-[#1A1A1A] transition hover:bg-[#E9D9AF]"
               >
-                {missQ && filterLabel ? 'Clear both' : missQ ? 'Clear search' : 'Show all tables'}
+                {missDoorCount >= 3 ? 'Clear all three' : missQ && filterLabel ? 'Clear both' : missQ ? 'Clear search' : 'Show all tables'}
               </button>
             }
           />
