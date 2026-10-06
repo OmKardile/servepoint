@@ -8847,3 +8847,17 @@ Work Log:
 Stage Summary:
 - 5.293.0 — the drawer's movements learn to travel: the close-out room's export family completes. The day-ledger CSV, the Z-report's print and its chat voice — and now the movements out ride the same grammar (one row per payout and drop, moneyBare paise-true, the reason whole, the hand named), the house's ONE chip register seating the verb, the green Saved breath after, and no drawer with no movements ever exporting an empty file.
 - Commit + push: feat = this round's first commit, chore(qa) = the second, chore(worklog) = this commit. Push: ATTEMPTED (first per the standing instruction, and again post-commit) — failed honestly, no token (addendum below).
+
+---
+Task ID: 332-PUSH-ADDENDUM (same round, post-commit)
+Agent: glm-5.3
+Task: Record the round's push outcome honestly.
+
+Work Log:
+- Push ATTEMPTED this round (FIRST, before its own work; attempted AGAIN post-commit): failed — "fatal: could not read Username for 'https://github.com': No such device or address". NO GitHub write token in the round environment.
+- State: remote unchanged (ecc6365 = Task 266's worklog commit, an ANCESTOR of local HEAD). Measured (git rev-list --count ecc6365..HEAD, after the feat + qa + worklog commits): 194 riding. The next token-bearing round pushes a clean fast-forward.
+- Remote config untouched: nothing to scrub.
+- Standing instruction stands: the next token-bearing round pushes the whole pile FIRST, before its own work.
+
+Stage Summary:
+- Work committed and gated (battery 138/138, tsc, build, the movements' words in the EOD chunk) but NOT on origin — the push ran and failed for lack of credentials, not for lack of trying. The honesty rule holds: no push claimed that did not run.
