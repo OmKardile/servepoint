@@ -8917,3 +8917,17 @@ Work Log:
 Stage Summary:
 - 5.295.0 — the guests book learns its own digits: the search now speaks the key language the book's ledger, merges and offer registers always spoke — "9876543210" finds the guest stored as "98765 43210", the honest-miss card can never again claim no match while the guest stands on the books, and the field's hover word plus the miss card's body teach the convention.
 - Commit + push: feat = this round's first commit, chore(qa) = the second, chore(worklog) = this commit. Push: ATTEMPTED (first per the standing instruction, and again post-commit) — failed honestly, no token (addendum below).
+
+---
+Task ID: 334-PUSH-ADDENDUM (same round, post-commit)
+Agent: glm-5.3
+Task: Record the round's push outcome honestly.
+
+Work Log:
+- Push ATTEMPTED this round (FIRST, before its own work; attempted AGAIN post-commit): failed — "fatal: could not read Username for 'https://github.com': No such device or address". NO GitHub write token in the round environment.
+- State: remote unchanged (ecc6365 = Task 266's worklog commit, an ANCESTOR of local HEAD). Measured (git rev-list --count ecc6365..HEAD, after the feat + qa + worklog commits): 202 riding. The next token-bearing round pushes a clean fast-forward.
+- Remote config untouched: nothing to scrub.
+- Standing instruction stands: the next token-bearing round pushes the whole pile FIRST, before its own work.
+
+Stage Summary:
+- Work committed and gated (battery 140/140, tsc, build, the digit law's words in the Customers chunk) but NOT on origin — the push ran and failed for lack of credentials, not for lack of trying. The honesty rule holds: no push claimed that did not run.
