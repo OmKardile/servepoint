@@ -31,6 +31,11 @@ const ok = (name) => console.log(`  ok ${++n} - ${name}`);
 const { redemptionsByPhone, guestsCsvRows, offerGivenAway } = await import(
   '/src/components/customers/CustomersScreen.tsx'
 );
+/* v5.274.0 — the book's stamps ride the house's own voice (appStampLabel):
+ * the cells could not keep agreeing with the exporting device's bare
+ * toLocaleString() across devices — the suite now pins the stamp itself
+ * (the appday lib's shape: en-IN · Asia/Kolkata default in node · 24h). */
+const { appStampLabel } = await import('/src/lib/appday.ts');
 
 const strip = (p) =>
   readFileSync(new URL(p, import.meta.url), 'utf8')
@@ -85,7 +90,8 @@ assert.deepEqual(lines[0].slice(9), ['Offer redemptions', 'Given away (INR)', 'L
 const asha = lines[1];
 assert.equal(asha[9], 2, 'Asha: 2 redemptions');
 assert.equal(asha[10], '100.00', 'Asha: 50 + 50 given');
-assert.equal(asha[11], new Date(r1.createdAt).toLocaleString(), 'Asha: last = the bucket head, no re-sort');
+assert.equal(asha[11], appStampLabel(r1.createdAt), 'Asha: last = the bucket head, no re-sort — the house stamp (v5.274.0)');
+assert.equal(asha[11], '04 Oct 2026, 11:28', 'the stamp\u2019s own bytes: en-IN, the booking default\u2019s day, the 24h shape');
 const bunty = lines[2];
 assert.equal(bunty[9], 1);
 assert.equal(bunty[10], '44.00');

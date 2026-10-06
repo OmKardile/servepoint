@@ -23,7 +23,9 @@
  *   5. THE MINUS STAYS LIVE: shrink and leave are never gated;
  *   6. THE PLACE FLOW BYTE-KEPT: placeOrder still clears after success —
  *      the store now has exactly two callers, both named;
- *   7. THE VERSION LAW: APP_VERSION and sw.js agree at 5.273.0. */
+ *   7. THE VERSION LAW: APP_VERSION and sw.js agree (relaxed to the
+ *      agreement shape in 313 — the literal belongs to the current
+ *      round's unit, unit308's own precedent). */
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
@@ -111,9 +113,9 @@ check('placeOrder still clears after success — the store has exactly two calle
 });
 
 /* ── 7. the version law ──────────────────────────────────────────────── */
-check('APP_VERSION and sw.js agree at 5.273.0', () => {
+check('APP_VERSION and sw.js agree — the agreement shape', () => {
   const v = versionTs.match(/APP_VERSION = '([^']+)'/)?.[1] ?? '';
-  assert.equal(v, '5.273.0', 'the version word is this round\u2019s');
+  assert.ok(v.length > 0, 'the version word is spoken');
   assert.ok(swJs.includes(`const VERSION = "servepoint-v${v}-r1";`), `sw.js carries the same word (${v})`);
 });
 
