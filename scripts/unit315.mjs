@@ -87,32 +87,40 @@ check('the clipboard API is spoken in exactly ONE src file — the lib\'s own', 
 });
 
 /* ── 3. the four twins retired ────────────────────────────────────────── */
-check('the four hand-rolled helpers are retired — every platform word rides the lib', () => {
+check('the four hand-rolled helpers are retired — every platform word rides the ack home', () => {
   assert.ok(!/async function copyToClipboard|function copyToClipboard/.test(settings), 'settings\u2019 local is gone');
   assert.ok(!/const copyText = \(text: string, onDone/.test(support), 'support\u2019s local is gone');
   assert.ok(!/function copyPlain/.test(platform), 'the platform\u2019s copyPlain is gone');
   assert.ok(!/async function copyText/.test(wizard), 'the wizard\u2019s local is gone');
-  for (const [name, src] of [['settings', settings], ['support', support], ['platform', platform], ['wizard', wizard]]) {
-    assert.ok(src.includes("import { copyText } from '../../lib/clipboard';"), `${name} imports the ONE door`);
+  /* v5.277.0 — the call sites stopped importing the door directly: the
+   * ACK home (lib/useCopyAck) rides the door for them. */
+  for (const [name, src, hook] of [
+    ['settings', settings, 'useCopyAck'],
+    ['support', support, 'useCopyAck'],
+    ['platform', platform, 'useCopyAck'],
+    ['wizard', wizard, 'useKeyedCopyAck'],
+  ]) {
+    assert.ok(src.includes("from '../../lib/useCopyAck';") && src.includes(hook), `${name} rides the ack home (${hook})`);
+    assert.ok(!src.includes('await copyText('), `${name} never speaks the door directly — the ack lib does`);
   }
-  assert.ok(settings.includes('const ok = await copyText(value);') && settings.includes('if (ok) fireCopied();'), 'settings\u2019 CopyButton keeps its honest boolean gate');
-  assert.ok(platform.includes('const ok = await copyText(value);') && platform.includes('if (!ok) return;'), 'the platform\u2019s refusal stays silent');
-  assert.ok(wizard.includes('const ok = await copyText(text);'), 'the wizard\u2019s call sites keep their name — the lib word IS copyText');
 });
 
 /* ── 4. the seventeen wake ─────────────────────────────────────────────── */
-check('all seventeen guarded verbs hand through copyText — the fail words stay honest', () => {
-  assert.equal(count(eod, 'await copyText('), 1, 'the closeout\u2019s Z-report copy');
-  assert.equal(count(bills, 'await copyText('), 2, 'the chase text and the receipt text');
-  assert.equal(count(reports, 'await copyText('), 6, 'the six report copies');
-  assert.equal(count(inventory, 'await copyText('), 2, 'the production sheet and the reorder list');
-  assert.equal(count(menu, 'await copyText('), 1, 'the menu\u2019s chat text');
-  assert.equal(count(customers, 'await copyText('), 1, 'the offer scorecard copy');
+check('all seventeen guarded verbs ride the ack home — the fail words stay honest', () => {
+  /* v5.277.0 — the verbs' hands moved into the ack lib (one door-ride per
+   * hook shape); the surfaces ride the hooks and keep their words. */
+  assert.equal(count(eod, 'await copyText('), 0, 'the closeout rides the hook now');
+  assert.equal(count(bills, 'await copyText('), 0, 'the chase and receipt ride the hook now');
+  assert.equal(count(reports, 'await copyText('), 0, 'the six report copies ride the hook now');
+  assert.equal(count(inventory, 'await copyText('), 0, 'the sheet and list ride the hook now');
+  assert.equal(count(menu, 'await copyText('), 0, 'the menu rides the hook now');
+  assert.equal(count(customers, 'await copyText('), 0, 'the offer copy rides the hook now');
+  assert.equal(count(readFileSync('/home/z/my-project/src/lib/useCopyAck.ts', 'utf8'), 'copyText('), 2, 'the ack lib speaks the door EXACTLY twice — tri-state and keyed');
   for (const [name, src] of [['eod', eod], ['bills', bills], ['reports', reports], ['inventory', inventory], ['menu', menu], ['customers', customers]]) {
     assert.ok(!src.includes('navigator.clipboard'), `${name} never speaks the raw API`);
-    assert.ok(src.includes("import { copyText } from '../../lib/clipboard';"), `${name} imports the ONE door`);
+    assert.ok(src.includes("from '../../lib/useCopyAck';"), `${name} rides the ack home`);
   }
-  assert.ok(eod.includes("throw new Error('clipboard unavailable');"), 'the guard\u2019s fail word stays — the catch decides what the surface says');
+  assert.ok(eod.includes("ackWord(zCopyState, 'Copy report')"), 'the fail word stays — ackWord decides what the surface says');
 });
 
 /* ── 5. the guest lie fixed ────────────────────────────────────────────── */
@@ -124,13 +132,14 @@ check('the guest\u2019s copy-link says Copied only when the copy happened', () =
 });
 
 /* ── 6. the floor's verbs speak ────────────────────────────────────────── */
-check('the floor\u2019s copy verbs ride the door — the silent token copy earns its OWN word', () => {
-  assert.equal(count(floor, 'await copyText('), 3, 'the link, the token, and the session\u2019s own copy');
-  assert.ok(floor.includes("if (!(await copyText(text))) return;"), 'a refused link/token copy stays silent — the raw text is on screen anyway');
-  assert.ok(floor.includes("setActionError('Copy failed — long-press the link text instead.')"), 'the copy-link\u2019s error word stays');
-  assert.ok(floor.includes('const [copiedTokenId, setCopiedTokenId] = useState<string | null>(null);'), 'the token copy has its OWN state — sharing would flip the LINK button\u2019s word (a lie)');
-  assert.ok(floor.includes('copiedTokenId === t.id ? `QR token for table ${t.table_number} copied` : `Copy raw QR token for table ${t.table_number}`'), 'the token\u2019s aria flips with the breath');
-  assert.ok(floor.includes('{copiedTokenId === t.id ? <BadgeCheck size={13} className="text-[#2E7D32]" aria-hidden /> : <Copy size={13} aria-hidden />}'), 'the token\u2019s ear swaps for the breath');
+check('the floor\u2019s copy verbs ride the keyed ack — the fail words speak on the button', () => {
+  assert.equal(count(floor, 'await copyText('), 0, 'the link, the token, and the dialog copy ride the hooks now');
+  assert.ok(floor.includes('const [linkAck, runLinkAck] = useKeyedCopyAck();') && floor.includes('const [tokenAck, runTokenAck] = useKeyedCopyAck();'), 'the cards\u2019 two verbs each keep their OWN keyed ack — sharing would flip the LINK button\u2019s word when the TOKEN was copied (a lie)');
+  assert.ok(floor.includes('const [copied, runDlgCopy] = useKeyedCopyAck();'), 'the dialog\u2019s pair rides the keyed ack');
+  assert.ok(floor.includes("ackWord(linkAck && linkAck.id === t.id ? linkAck.kind : null, 'Link')"), 'the card link\u2019s word comes from ackWord');
+  assert.ok(floor.includes('const copyLink = (t: DiningTable) => runLinkAck(t.id, guestUrlOf(t));'), 'the copy-link\u2019s refusal speaks ON THE BUTTON — the global action strip is not hijacked');
+  assert.ok(!floor.includes("setActionError('Copy failed"), 'the old global-strip word is retired');
+  assert.ok(floor.includes('The copy was refused — the token stays on screen'), 'the token\u2019s title says the refusal honestly');
 });
 
 /* ── 7. the one breath ─────────────────────────────────────────────────── */
@@ -144,16 +153,18 @@ check('the breath has ONE home — the flag lib; the export ack rides it', () =>
   assert.ok(flash.includes('const FLASH_MS = 2200;'), 'the export\u2019s own breath length stays');
   assert.ok(flash.match(/const speak = \(run: \(\) => void\): void => \{\s*run\(\);\s*setSaved\(\);\s*\};/), 'run-then-speak: the export still exports before the word');
   assert.ok(flash.includes('re-tap inside the window just re-arms'), 'the ack\u2019s own law stays spoken');
-  for (const [name, src, ms] of [['menu', menu, 'useTransientFlag(2200)'], ['settings', settings, 'useTransientFlag(1600)']]) {
-    assert.ok(src.includes(`import { useTransientFlag } from '../../lib/useTransientFlag';`), `${name} imports the ONE breath`);
+  for (const [name, src, ms] of [['menu', menu, 'useTransientFlag(2200)'], ['settings', settings, 'useCopyAck(1600)']]) {
+    assert.ok(src.includes(`from '../../lib/${ms.startsWith('useCopyAck') ? 'useCopyAck' : 'useTransientFlag'}';`), `${name} rides the one home for its timed word`);
     assert.ok(src.includes(ms), `${name} keeps its own breath length`);
   }
 });
 
 /* ── 8. the version law ───────────────────────────────────────────────── */
 check('APP_VERSION and sw.js agree — the agreement shape', () => {
+  /* the literal belongs to the current round's unit (unit308's precedent);
+   * this check only asserts the two files agree. */
   const v = versionTs.match(/APP_VERSION = '([^']+)'/)?.[1] ?? '';
-  assert.equal(v, '5.276.0', 'the version word is this round\u2019s');
+  assert.ok(/^5\.\d+\.\d+$/.test(v), 'the version word is a release word');
   assert.ok(swJs.includes(`const VERSION = "servepoint-v${v}-r1";`), `sw.js carries the same word (${v})`);
 });
 
