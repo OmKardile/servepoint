@@ -8882,3 +8882,17 @@ Work Log:
 Stage Summary:
 - 5.294.0 — the cart drawer learns the stick; the counter learns to clear the rush. The stick family's last unlearned member — the drawer the GUEST places orders from — now holds Place order at its own bottom edge at ANY height (verified live at the finding's own 390px lens, byte-identical at generous heights), and the counter's lunch rush clears in two taps with the kitchen's gate seeing one honest event per ticket.
 - Commit + push: feat = this round's first commit, chore(qa) = the second, chore(worklog) = this commit. Push: ATTEMPTED (first per the standing instruction, and again post-commit) — failed honestly, no token (addendum below).
+
+---
+Task ID: 333-PUSH-ADDENDUM (same round, post-commit)
+Agent: glm-5.3
+Task: Record the round's push outcome honestly.
+
+Work Log:
+- Push ATTEMPTED this round (FIRST, before its own work; attempted AGAIN post-commit): failed — "fatal: could not read Username for 'https://github.com': No such device or address". NO GitHub write token in the round environment.
+- State: remote unchanged (ecc6365 = Task 266's worklog commit, an ANCESTOR of local HEAD). Measured (git rev-list --count ecc6365..HEAD, after the feat + qa + worklog commits): 198 riding. The next token-bearing round pushes a clean fast-forward.
+- Remote config untouched: nothing to scrub.
+- Standing instruction stands: the next token-bearing round pushes the whole pile FIRST, before its own work.
+
+Stage Summary:
+- Work committed and gated (battery 139/139, tsc, build, the fix verified live at the finding's own lens, the rush verb's bytes in the Food chunk) but NOT on origin — the push ran and failed for lack of credentials, not for lack of trying. The honesty rule holds: no push claimed that did not run.
