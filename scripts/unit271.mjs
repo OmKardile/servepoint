@@ -60,8 +60,8 @@ const src = strip('../src/components/platform/PlatformScreen.tsx');
 
 /* 2 — planLabel joins subscriptionWords from the same lib. */
 assert.ok(
-  src.includes("import { planLabel, subscriptionWords } from '../../lib/billing';"),
-  'planLabel rides the same import as the words'
+  src.includes("import { daysUntil, planLabel, subscriptionWords, trialBucket, trialRelWords } from '../../lib/billing';"),
+  'planLabel rides the same import as the words (v5.304.0 grew the clock family on the same line)'
 );
 ok('import: planLabel + subscriptionWords from the one clock');
 
@@ -134,8 +134,12 @@ assert.ok(
   'KpiCard carries an optional hint'
 );
 assert.ok(
-  src.includes('mt-1.5 truncate text-[11.5px] font-medium text-[#969696]'),
-  'the hint wears the line-grey voice'
+  src.includes('mt-1.5 truncate text-[11.5px]'),
+  'the hint keeps its size and seat'
+);
+assert.ok(
+  src.includes(": 'font-medium text-[#969696]'"),
+  'the hint wears the line-grey voice (v5.304.0 moved the tone into a ternary — grey stays the default arm)'
 );
 assert.ok(
   src.includes('`from ${tenantNameById.get(payingSubs[0].tenant_id) || \'—\'} · ${planLabel(payingSubs[0].plan_id)}`'),
@@ -146,8 +150,8 @@ assert.ok(
   'many carriers count; zero stays silent (undefined)'
 );
 assert.ok(
-  src.includes('`nearest ends ${formatDate(trialEnds[0])}`'),
-  'the trials hint names the nearest end'
+  src.includes('${trialRelWords(nearestTrial.d)} · ${formatDate(nearestTrial.end)}`'),
+  'the trials hint names the nearest end (v5.304.0: business + the rows\u2019 own rel words + the owner\u2019s date)'
 );
 assert.ok(
   src.includes('`next charge ${formatDate(nextCharges[0])}`'),
