@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { CircleOff, Repeat, RotateCcw } from 'lucide-react';
+import { CircleOff, Repeat, RotateCcw, Trash2 } from 'lucide-react';
 import {
   Armchair,
   CircleAlert,
@@ -514,6 +514,20 @@ const OrderDrawer: React.FC<{
     setNoteDraft('');
   };
 
+  /* v5.273.0 — the clear door's arm: armed by the first tap, disarmed by
+     four seconds alone, by the drawer closing, or by the clear itself.
+     One arm at a time — a destructive verb that cannot be undone earns a
+     second word before it acts. */
+  const [clearArmed, setClearArmed] = useState(false);
+  useEffect(() => {
+    if (!clearArmed) return;
+    const t = window.setTimeout(() => setClearArmed(false), 4000);
+    return () => window.clearTimeout(t);
+  }, [clearArmed]);
+  useEffect(() => {
+    if (!open) setClearArmed(false);
+  }, [open]);
+
   /* Regular guest recognition (5.62.0) — the CRM + ledger speak while the
      cashier keys the phone. Recognition is a bonus, never a gate: any read
      failure stays silent and the ticket flows as if the book were empty. */
@@ -921,6 +935,19 @@ const OrderDrawer: React.FC<{
                             {l.variantName}
                           </span>
                         )}
+                        {/* v5.273.0 — the line says WHY its verbs are dead: the
+                            dish's own SOLD OUT vocabulary (the grid card's
+                            strip, the modal's badge — one house tone) rides
+                            the drawer row when the dish is pulled or gone. */}
+                        {stale && (
+                          <span
+                            className="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-[#FDF3F2] px-1.5 py-px text-[9.5px] font-bold uppercase tracking-[0.08em] text-[#B4483C]"
+                            title="This dish is pulled — the line can shrink or leave, but not grow or be re-said"
+                          >
+                            <CircleOff size={9} aria-hidden />
+                            Sold out
+                          </span>
+                        )}
                       </p>
                       {l.addonNames.length > 0 && (
                         <p className="mt-0.5 truncate text-[11.5px] text-[#5F6B63]">
@@ -986,8 +1013,17 @@ const OrderDrawer: React.FC<{
                         <button
                           type="button"
                           onClick={() => cart.increment(l.key)}
-                          aria-label={`Add one more ${l.name}`}
-                          className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#B88E2F] text-white transition-colors hover:bg-[#967221] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#967221]"
+                          disabled={stale}
+                          aria-disabled={stale}
+                          aria-label={
+                            stale
+                              ? `${l.name} is sold out — this line can shrink or leave, but not grow`
+                              : `Add one more ${l.name}`
+                          }
+                          title={stale ? 'Sold out — this line cannot grow' : undefined}
+                          className={`flex h-11 w-11 items-center justify-center rounded-xl bg-[#B88E2F] text-white transition-colors hover:bg-[#967221] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#967221] ${
+                            stale ? 'cursor-not-allowed opacity-40' : ''
+                          }`}
                         >
                           <Plus size={15} aria-hidden />
                         </button>
@@ -1130,6 +1166,45 @@ const OrderDrawer: React.FC<{
               <dd className="text-base font-bold text-[#1A1A1A]">{formatMoney(total)}</dd>
             </div>
           </dl>
+          {/* v5.273.0 — the drawer's way out: an abandoned order (the
+              walk-in who leaves, the wrong table) used to mean decrementing
+              every line by hand. Clear is a QUIET destructive verb in the
+              house's red register, ARMED by a two-tap confirm (the first
+              tap turns it solid and speaks the warning; the second acts;
+              four seconds alone or the drawer closing disarms) — because
+              this one cannot be undone. clear() is the place flow's own
+              reset: the lines leave, the note editor's draft dies, and the
+              TABLE BINDING RELEASES with them (the store's own clause) so
+              the next walk-in can never inherit a table already seated. */}
+          {cart.lines.length > 0 && !submitting && (
+            <button
+              type="button"
+              onClick={() => {
+                if (clearArmed) {
+                  useCart.getState().clear();
+                  setNoteKey(null);
+                  setNoteDraft('');
+                  setClearArmed(false);
+                  onClose();
+                } else {
+                  setClearArmed(true);
+                }
+              }}
+              aria-label={
+                clearArmed
+                  ? 'Tap again — clearing the order cannot be undone'
+                  : 'Clear the whole order'
+              }
+              className={`mb-2 flex h-11 w-full items-center justify-center gap-2 rounded-xl border text-[13px] font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#967221] ${
+                clearArmed
+                  ? 'border-[#B4483C] bg-[#B4483C] text-white hover:bg-[#9E3F35]'
+                  : 'border-transparent bg-transparent text-[#B4483C] hover:bg-[#FDF3F2]'
+              }`}
+            >
+              <Trash2 size={14} aria-hidden />
+              {clearArmed ? 'Tap again — this cannot be undone' : 'Clear order'}
+            </button>
+          )}
           <button
             type="button"
             onClick={placeOrder}
