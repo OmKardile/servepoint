@@ -291,6 +291,44 @@ export async function fetchOrderById(tenantId: string, orderId: string): Promise
   return (await attachItems([row], tenantId))[0] ?? null;
 }
 
+/* v5.302.0 — the drill reads the table's PAST. The board's ledger is the
+ * latest 100 tickets ACROSS the tenant — a browsing window that forgets a
+ * busy table's older nights, so the trail's day counts (5.222) and tonight's
+ * rows (5.259) could never become a real history. This targeted read brings
+ * ONE table's newest tickets across days — the hold audit's own pattern
+ * (bounded, targeted, caller-cached). Slim columns only: the trail speaks
+ * number, time, state, money, paid — never the plates, so no items ride and
+ * no second read is spent on rows the block never shows. */
+export interface TableTicketRow {
+  id: string;
+  order_number: number;
+  status: string;
+  payment_status: string;
+  total: number;
+  created_at: string;
+  table_id: string | null;
+}
+
+/** The read's own bound — the drill's cap whisper reads the SAME number. */
+export const TABLE_TICKET_READ_LIMIT = 120;
+
+export async function fetchTableTickets(
+  tenantId: string,
+  tableId: string,
+  limit: number = TABLE_TICKET_READ_LIMIT,
+): Promise<TableTicketRow[]> {
+  requireCloud();
+  const { data, error } = await supabase
+    .from('orders')
+    .select('id, order_number, status, payment_status, total, created_at, table_id')
+    .eq('tenant_id', tenantId)
+    .eq('table_id', tableId)
+    .order('created_at', { ascending: false })
+    .limit(limit);
+  if (error) throw error;
+  return (data ?? []) as TableTicketRow[];
+}
+
 export interface NewOrderInput {
   orderType: OrderType;
   /** Real FK to dining_tables — the 011 trigger uses this to hold/release the table. */

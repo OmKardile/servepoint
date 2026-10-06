@@ -12,6 +12,7 @@ import {
   CreditCard,
   ExternalLink,
   Hourglass,
+  History,
   Link2,
   Loader2,
   Pencil,
@@ -51,6 +52,7 @@ import {
   fetchPaymentMoments,
   fetchReservations,
   fetchTableSessions,
+  fetchTableTickets,
   fetchTables,
   revokeTableSession,
   subscribeReservationsRealtime,
@@ -64,6 +66,8 @@ import {
   type ReservationStatus,
   type TableSession,
   type TableStatus,
+  type TableTicketRow,
+  TABLE_TICKET_READ_LIMIT,
 } from '../../lib/api';
 import { useTenant } from '../../lib/tenant';
 import { printHiddenFrame, preloadPrintImage } from '../../lib/printFrame';
@@ -1032,6 +1036,8 @@ function TableDrill({
   now,
   ticketDays,
   tonightTickets,
+  historyRows,
+  historyFailed,
   candidates,
   cutArmId,
   cutBusyId,
@@ -1089,6 +1095,13 @@ function TableDrill({
    *  shared — rows and counts are the same sentence). Newest first. An
    *  empty array is silence — the block never renders a zero list. */
   tonightTickets: Order[];
+  /** v5.302.0 — the table's newest tickets across days (the targeted read),
+   *  newest first. Null = still reading (the block stays silent until rows
+   *  land — a sub-second read needs no loading word); true-failed rides
+   *  historyFailed. The block speaks only the days BEFORE today — tonight's
+   *  block above owns today, and one ticket can never double-render. */
+  historyRows: TableTicketRow[] | null;
+  historyFailed: boolean;
   candidates: DiningTable[];
   cutArmId: string | null;
   cutBusyId: string | null;
@@ -1118,6 +1131,13 @@ function TableDrill({
      IST days (appDayKey — the ONE day key), newest day first, riding the
      5.218 heartbeat with no timer of their own. */
   const [showAllScans, setShowAllScans] = useState(false);
+  /* v5.302.0 — the history remembers its own expansion: the newest two days
+     show by default, the earlier ones sit behind the toggle. One flag; a
+     table switch folds it back — the next table's past starts closed. */
+  const [showAllHistory, setShowAllHistory] = useState(false);
+  useEffect(() => {
+    setShowAllHistory(false);
+  }, [table.id]);
   const [removeArmed, setRemoveArmed] = useState(false);
   /* v5.59.0 — the party moves: picker expansion + the one armed target.
      Same 3s disarm discipline as the bulk cut and the remove confirm. */
@@ -1134,6 +1154,37 @@ function TableDrill({
     isLive && order && (!hold || hold === 'live')
       ? seatClockFor(order.created_at, Date.now(), turnAfterMin)
       : null;
+  /* v5.302.0 — the past days, under the ONE ticket rule and the ONE day
+     grammar: the same words the trail's counts and tonight's rows speak,
+     now across days. A cancelled ticket never happened; TODAY belongs to
+     the Tonight block above — the history speaks only the days before it,
+     so one ticket can never double-render. Newest day first. The cap
+     whisper reads the read's own bound (the SAME constant the lib read
+     used) — the record says so when it had to stop at 120. */
+  const history = useMemo(() => {
+    if (!historyRows) return null;
+    const todayKey = appDayKey(new Date(now).toISOString());
+    const byDay = new Map<string, TableTicketRow[]>();
+    let count = 0;
+    let total = 0;
+    for (const o of historyRows) {
+      if (o.status === 'cancelled') continue;
+      const key = appDayKey(o.created_at);
+      if (key === todayKey) continue;
+      count += 1;
+      total += Number(o.total || 0);
+      const list = byDay.get(key) ?? [];
+      list.push(o);
+      byDay.set(key, list);
+    }
+    const groups = [...byDay.entries()]
+      .map(([day, rows]) => ({
+        day,
+        rows: [...rows].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()),
+      }))
+      .sort((a, b) => (a.day < b.day ? 1 : a.day > b.day ? -1 : 0));
+    return { groups, count, total, truncated: historyRows.length >= TABLE_TICKET_READ_LIMIT };
+  }, [historyRows, now]);
   /* A table that still holds an order (or a reservation) can't be retired —
      the guard is honest: the hint names what to do first. */
   const canRemove = table.status === 'available' && !table.active_order_id;
@@ -1709,6 +1760,89 @@ function TableDrill({
                   );
                 })}
               </ul>
+            </div>
+          )}
+
+          {history && history.groups.length > 0 && (
+            /* v5.302.0 — the drill reads the table's past: the days BEFORE
+               today, from the targeted read, under the same day label the
+               scan trail speaks (istDayPretty — one label for one day). The
+               two newest days show by default; the earlier ones sit behind
+               the toggle (the scan trail's own 5.219 law), and a table
+               switch folds the block back closed. The rows wear the Tonight
+               block's exact anatomy minus the pulse — nothing in the past
+               is living. Each day heading counts the work AND its money —
+               the same chip voice tonight speaks — and the cap whisper
+               tells the truth when the read hit its bound. */
+            <div className="rounded-2xl border border-[#E3E7E0] bg-white p-4 shadow-sm">
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <p
+                  className="flex items-center gap-1.5 text-[14px] font-bold text-[#1A1A1A]"
+                  title="Every ticket this table has held before today — a cancelled ticket never happened"
+                >
+                  <History size={14} className="text-[#0F3D3E]" aria-hidden /> Earlier at this table
+                </p>
+                <span className="rounded-full bg-[#F1F4F1] px-2.5 py-1 text-[10.5px] font-bold tabular-nums text-[#0F3D3E]">
+                  {history.count} ticket{history.count === 1 ? '' : 's'} · {formatMoney(history.total)}
+                </span>
+              </div>
+              {(showAllHistory ? history.groups : history.groups.slice(0, 2)).map(({ day, rows }, gi) => (
+                /* the day groups walk in on the fade's own family, staggered —
+                   the same motion grammar the guest panel speaks (v5.301) */
+                <div
+                  key={day}
+                  className="mb-3 last:mb-0.5"
+                  style={{ animation: 'spFadeIn 240ms ease-out both', animationDelay: `${gi * 40}ms` }}
+                >
+                  <p className="text-[10.5px] font-bold uppercase tracking-wide text-[#969696]">
+                    {istDayPretty(day)} · {rows.length} ticket{rows.length === 1 ? '' : 's'} ·{' '}
+                    {formatMoney(rows.reduce((s, o) => s + Number(o.total || 0), 0))}
+                  </p>
+                  <ul className="mt-1.5 space-y-1.5">
+                    {rows.map((o) => {
+                      const paid = o.payment_status === 'completed';
+                      return (
+                        <li
+                          key={o.id}
+                          className="flex items-center gap-2.5 rounded-xl bg-[#FBFBF9] px-3 py-2"
+                          title={`Ticket #${o.order_number} · placed ${istHM(o.created_at)} · ${String(o.status)}${paid ? ' · the bill is settled' : ' · payment due'}`}
+                        >
+                          <span className="w-12 shrink-0 font-bold tabular-nums text-[#0F3D3E]">#{o.order_number}</span>
+                          <span className="w-11 shrink-0 font-mono text-[11px] tabular-nums text-[#6B6B6B]">{istHM(o.created_at)}</span>
+                          <span className="min-w-0 flex-1 truncate text-[11px] font-semibold uppercase tracking-wide text-[#969696]">
+                            {String(o.status)}
+                          </span>
+                          <span className="shrink-0 text-[12px] font-bold tabular-nums text-[#1A1A1A]">{formatMoney(Number(o.total))}</span>
+                          <span
+                            className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                              paid ? 'bg-[#EAF4EC] text-[#2E7D32]' : 'bg-[#FDF3E4] text-[#8A5A16]'
+                            }`}
+                          >
+                            {paid ? 'PAID' : 'DUE'}
+                          </span>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              ))}
+              {history.groups.length > 2 && (
+                <button
+                  type="button"
+                  onClick={() => setShowAllHistory((v) => !v)}
+                  className="text-[11px] font-semibold text-[#0F3D3E] hover:underline"
+                  aria-label={showAllHistory ? 'Show the two newest days only' : 'Show every day this table holds'}
+                >
+                  {showAllHistory
+                    ? 'Show recent days only'
+                    : `Show ${history.groups.length - 2} earlier day${history.groups.length - 2 === 1 ? '' : 's'}`}
+                </button>
+              )}
+              {history.truncated && (
+                <p className="mt-2 text-[11px] text-[#969696]">
+                  The newest {TABLE_TICKET_READ_LIMIT} tickets on record — deeper nights live in Bills.
+                </p>
+              )}
             </div>
           )}
 
@@ -2566,6 +2700,31 @@ export function FloorScreen(): React.ReactElement {
         : [],
     [orders, drillTable, nowTick],
   );
+  /* v5.302.0 — the drill reads the table's PAST. The trail's day counts
+     (5.222) and tonight's rows (5.259) ride the board's latest-100 ledger —
+     a browsing window that forgets a busy table's older nights. When the
+     drill opens, ONE targeted read brings the table's newest tickets across
+     days (fetchTableTickets — the hold audit's own pattern: cached per
+     table, in-flight guarded, StrictMode-safe; a failed read is silence —
+     the drill never blocks on a nicety). */
+  const [historyRows, setHistoryRows] = useState<Map<string, TableTicketRow[]>>(new Map());
+  const [historyFailed, setHistoryFailed] = useState<Set<string>>(new Set());
+  const historyInFlight = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (!tenantId || !drillTable) return;
+    const id = drillTable.id;
+    if (historyRows.has(id) || historyFailed.has(id) || historyInFlight.current.has(id)) return;
+    historyInFlight.current.add(id);
+    fetchTableTickets(tenantId, id)
+      .then((rows) => setHistoryRows((prev) => (prev.has(id) ? prev : new Map(prev).set(id, rows))))
+      .catch(() => setHistoryFailed((prev) => (prev.has(id) ? prev : new Set(prev).add(id))))
+      .finally(() => {
+        historyInFlight.current.delete(id);
+      });
+    // Same idempotence shape as the hold audit above: every write guarded,
+    // each path clears its own in-flight marker.
+  }, [tenantId, drillTable, historyRows, historyFailed]);
   /* v5.193.0 — the drill rides the same precedence: ticket in hand → the
      round's clock; no ticket → the book's flip stamp. promiseTick ages it. */
   const drillBookSeat = useMemo(
@@ -4096,6 +4255,8 @@ export function FloorScreen(): React.ReactElement {
           now={nowTick}
           ticketDays={drillTicketDays}
           tonightTickets={drillTonightTickets}
+          historyRows={historyRows.get(drillTable.id) ?? null}
+          historyFailed={historyFailed.has(drillTable.id)}
           candidates={drillCandidates}
           cutArmId={cutArmId}
           cutBusyId={cutBusyId}
