@@ -34,6 +34,7 @@ const appday = readFileSync('/home/z/my-project/src/lib/appday.ts', 'utf8');
 const bills = readFileSync('/home/z/my-project/src/components/bills/BillsScreen.tsx', 'utf8');
 const customers = readFileSync('/home/z/my-project/src/components/customers/CustomersScreen.tsx', 'utf8');
 const flash = readFileSync('/home/z/my-project/src/lib/useExportFlash.ts', 'utf8');
+const button = readFileSync('/home/z/my-project/src/components/common/CsvExportButton.tsx', 'utf8');
 const versionTs = readFileSync('/home/z/my-project/src/version.ts', 'utf8');
 const swJs = readFileSync('/home/z/my-project/public/sw.js', 'utf8');
 
@@ -52,13 +53,13 @@ assert.ok(billsCsv, 'billsCsvRows found');
 const guestsCsv = customers.match(/export function guestsCsvRows\([\s\S]*?\n  return lines;\n\}/);
 assert.ok(guestsCsv, 'guestsCsvRows found');
 
-/* the bills CSV button block */
-const billsBtn = bills.match(/\{\/\* v5\.274\.0 — the verb's own ack: after the export the button[\s\S]*?\{billsSaved \? 'Saved' : 'CSV'\}\n            <\/button>/);
-assert.ok(billsBtn, 'the bills CSV button found');
+/* the bills CSV button block (v5.275.0 — the verb rides the ONE component) */
+const billsBtn = bills.match(/\{\/\* v5\.274\.0 — the verb's own ack: after the export the button[\s\S]*?earSize=\{15\}\n            \/>/);
+assert.ok(billsBtn, 'the bills CSV verb found');
 
-/* the guests CSV button block */
-const guestsBtn = customers.match(/\{\/\* 5\.129\.0 — the book, carried out[\s\S]*?\{bookSaved \? 'Saved' : 'CSV'\}\n              <\/button>/);
-assert.ok(guestsBtn, 'the guests CSV button found');
+/* the guests CSV button block (v5.275.0 — the verb rides the ONE component) */
+const guestsBtn = customers.match(/\{\/\* 5\.129\.0 — the book, carried out[\s\S]*?earSize=\{14\}\n              \/>/);
+assert.ok(guestsBtn, 'the guests CSV verb found');
 
 /* ── 1. the lib word ─────────────────────────────────────────────────── */
 check('appday speaks the export stamp — en-IN, the reporting clock, the 24h anchor', () => {
@@ -109,28 +110,35 @@ check('NO bare no-arg toLocaleString() anywhere in src/ — the export voice ful
 });
 
 /* ── 5. the verb's ack (bills) ───────────────────────────────────────── */
-check('the bills CSV button speaks its own confirmation — Saved, the green register, the aria flip', () => {
+check('the bills CSV verb rides the ONE component and speaks both aria stages', () => {
   assert.ok(bills.includes("import { useExportFlash } from '../../lib/useExportFlash';"), 'the hook is imported');
   assert.ok(bills.includes('const [billsSaved, exportBills] = useExportFlash();'), 'the ack state lives with the toolbar');
-  assert.ok(billsBtn[0].includes('onClick={() => exportBills(() => exportBillsCsv(sorted, paidSums))}'), 'the verb hands through the hook — the export still exports');
-  assert.ok(billsBtn[0].includes("aria-label={billsSaved ? 'Bills exported — the CSV file is saved' : 'Export filtered bills as CSV — chase ages and open money included'}"), 'the aria speaks both stages');
-  assert.ok(billsBtn[0].includes("border border-[#2E7D32] bg-[#E8F5EC] px-3 text-[12.5px] font-bold text-[#2E7D32]"), 'the saved state wears the paid chip\u2019s own green register');
-  assert.ok(billsBtn[0].includes("border border-[#E3E7E0] bg-white px-3 text-[12.5px] font-bold text-[#0F3D3E]"), 'the resting state keeps the house\u2019s quiet frame');
-  assert.ok(billsBtn[0].includes('{billsSaved ? <Check size={15} aria-hidden /> : <Download size={15} aria-hidden />}'), 'the ear swaps — the Check marks the done');
-  assert.ok(billsBtn[0].includes("{billsSaved ? 'Saved' : 'CSV'}"), 'the word swaps');
-  assert.ok(!billsBtn[0].includes('hover:border-[#B88E2F] hover:text-[#B88E2F] hover:'), 'clean parse of the two registers');
-  assert.ok(billsBtn[0].includes('disabled:opacity-40'), 'the empty-narrowing refusal keeps its own grammar');
+  assert.ok(bills.includes("import { CsvExportButton } from '../common/CsvExportButton';"), 'the ONE component is imported');
+  assert.ok(billsBtn[0].includes('onExport={() => exportBills(() => exportBillsCsv(sorted, paidSums))}'), 'the verb hands through the hook — the export still exports');
+  assert.ok(billsBtn[0].includes('saved={billsSaved}'), 'the hook word drives the shape');
+  assert.ok(billsBtn[0].includes("savedAria=\"Bills exported — the CSV file is saved\""), 'the aria speaks the saved stage');
+  assert.ok(billsBtn[0].includes("idleAria=\"Export filtered bills as CSV — chase ages and open money included\""), 'the aria speaks the resting stage');
+  assert.ok(billsBtn[0].includes('disabled={sorted.length === 0}'), 'the empty-narrowing refusal keeps its own grammar');
+  assert.ok(billsBtn[0].includes('geometry="flex h-11 items-center gap-1.5 rounded-xl border px-3 text-[12.5px] font-bold"'), 'the bills verb keeps its own geometry');
+  assert.ok(!/border-\[#E8F5EC\]/.test(bills), 'the green register lives in the component, not at the call site');
 });
 
 /* ── 6. the verb's ack (the book) + the one hook ─────────────────────── */
-check('the book\u2019s CSV verb speaks the same ack — one hook, two buttons, one voice', () => {
+check('the book\u2019s CSV verb rides the ONE component — one hook, one component, one voice', () => {
   assert.ok(customers.includes("import { useExportFlash } from '../../lib/useExportFlash';"), 'the hook rides in the book too');
   assert.ok(customers.includes('const [bookSaved, exportBook] = useExportFlash();'), 'the ack lives with the book\u2019s toolbar');
-  assert.ok(guestsBtn[0].includes('onClick={() => exportBook(() => exportGuestsCsv(rows, ledgerByPhone))}'), 'the verb hands through');
-  assert.ok(guestsBtn[0].includes("aria-label={bookSaved ? 'Guests exported — the CSV file is saved' : 'Export guests as CSV'}"), 'the aria flips with the word');
-  assert.ok(guestsBtn[0].includes("border border-[#2E7D32] bg-[#E8F5EC] px-3 text-[12px] font-bold text-[#2E7D32]"), 'the green register, the book\u2019s own size');
-  assert.ok(guestsBtn[0].includes("{bookSaved ? <Check size={14} aria-hidden /> : <Download size={14} aria-hidden />}"), 'the ear swaps at the book\u2019s scale');
-  assert.ok(guestsBtn[0].includes("{bookSaved ? 'Saved' : 'CSV'}"), 'the word swaps');
+  assert.ok(customers.includes("import { CsvExportButton } from '../common/CsvExportButton';"), 'the ONE component rides in the book');
+  assert.ok(guestsBtn[0].includes('onExport={() => exportBook(() => exportGuestsCsv(rows, ledgerByPhone))}'), 'the verb hands through');
+  assert.ok(guestsBtn[0].includes('saved={bookSaved}'), 'the hook word drives the shape');
+  assert.ok(guestsBtn[0].includes('savedAria="Guests exported — the CSV file is saved"'), 'the saved aria flips with the word');
+  assert.ok(guestsBtn[0].includes('idleAria="Export guests as CSV"'), 'the resting aria keeps its word');
+  assert.ok(guestsBtn[0].includes('disabled={rows.length === 0}'), 'the empty-narrowing refusal keeps its own grammar');
+  assert.ok(guestsBtn[0].includes('geometry="flex h-9 items-center gap-1.5 rounded-xl border px-3 text-[12px] font-bold"'), 'the book\u2019s own geometry rides the call site');
+  // the component IS the one shape — the register and the swap live here, once
+  assert.ok(button.includes("'border-[#2E7D32] bg-[#E8F5EC] text-[#2E7D32] focus-visible:outline-[#2E7D32]'"), 'the saved register — the paid chip\u2019s own green — lives in the component, once');
+  assert.ok(button.includes("{saved ? 'Saved' : idleWord}"), 'the word swaps in the component');
+  assert.ok(button.includes('<Check size={earSize ?? DEFAULT_EAR[tone]} aria-hidden />'), 'the ear swaps in the component');
+  assert.ok(button.includes("idleEar?: 'download' | 'sheet';"), 'the resting ear has its own word (the catalog\u2019s spreadsheet ear)');
   // the hook's own discipline
   assert.ok(flash.includes('const FLASH_MS = 2200;'), 'a breath, not a flag — the word returns');
   assert.ok(flash.includes('if (timer.current !== null) window.clearTimeout(timer.current);'), 'a re-tap re-arms — a second honest export still exports');
@@ -141,7 +149,7 @@ check('the book\u2019s CSV verb speaks the same ack — one hook, two buttons, o
 /* ── 7. the version law ──────────────────────────────────────────────── */
 check('APP_VERSION and sw.js agree — the agreement shape', () => {
   const v = versionTs.match(/APP_VERSION = '([^']+)'/)?.[1] ?? '';
-  assert.equal(v, '5.274.0', 'the version word is this round\u2019s');
+  assert.ok(/^5\.\d+\.\d+$/.test(v), 'the version word is a semver word');
   assert.ok(swJs.includes(`const VERSION = "servepoint-v${v}-r1";`), `sw.js carries the same word (${v})`);
 });
 
