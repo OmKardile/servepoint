@@ -314,6 +314,9 @@ export interface AppFormatters {
   stickerDate: Intl.DateTimeFormat;
   /** HH:MM 24h — slips and shift clocks. */
   hhmm: Intl.DateTimeFormat;
+  /** "06 Oct 2026, 14:32" — the EXPORT stamp (v5.274.0): the day AND the
+   *  time in one stable word for data leaving the house (CSV cells). */
+  stamp: Intl.DateTimeFormat;
 }
 
 let fmtTz = '';
@@ -355,7 +358,32 @@ export function appFormatters(tz: string = appTimezone()): AppFormatters {
       minute: '2-digit',
       hour12: false,
     }),
+    stamp: new Intl.DateTimeFormat('en-IN', {
+      timeZone: tz,
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    }),
   };
   fmtTz = tz;
   return fmtCache;
+}
+
+/* v5.274.0 — the export stamp. A CSV cell is data LEAVING the house: it
+ * lands in the owner's accounting, a GST filing folder, a reconciliation
+ * sheet — where it is read months later, on whatever machine opens it.
+ * The bills and guests exports stamped those cells with the EXPORTING
+ * DEVICE's toLocaleString() — no locale, no timezone pinned — so the same
+ * order exported from the counter tablet and from the owner's phone spoke
+ * two different shapes in two different clocks ("10/6/2026, 9:56:07 AM"
+ * vs "06/10/2026, 09:56:07"), and a reconciliation never agreed with
+ * itself. The stamp rides the reporting day's own voice (appTimezone(),
+ * en-IN — the register every pinned render already shares) in the house's
+ * 24h shape (hour12:false — the hhmm anchor), one stable word: the same
+ * rows, exported from any device in the house, now read back byte-equal. */
+export function appStampLabel(iso: string, tz: string = appTimezone()): string {
+  return appFormatters(tz).stamp.format(new Date(iso));
 }

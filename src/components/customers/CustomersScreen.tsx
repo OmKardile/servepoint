@@ -57,7 +57,7 @@ import { formatMoney } from '../../lib/prefs';
 import { offerBadgeLabel } from '../../lib/offerLabel';
 import { downloadCsv } from '../../lib/csv';
 import { dayTime, usedAgo } from '../../lib/day';
-import { appTodayIso, appFormatters, appTzTag, lastNDaysMs } from '../../lib/appday';
+import { appStampLabel, appTodayIso, appFormatters, appTzTag, lastNDaysMs } from '../../lib/appday';
 import { bookingSlotLabel, bookingDayKey, bookingTodayKey, bookingTzIsForeign } from '../../lib/bookingday';
 import { useTenant } from '../../lib/tenant';
 import { computeUsual, isPaidTicket, USUAL_WINDOW } from '../../lib/usual';
@@ -66,6 +66,7 @@ import { computeUsual, isPaidTicket, USUAL_WINDOW } from '../../lib/usual';
  * home since the bill's row learned it). */
 import { guestVoice } from '../../lib/verdict';
 import { useDialogA11y } from '../../lib/useDialogA11y';
+import { useExportFlash } from '../../lib/useExportFlash';
 import { useCart } from '../../store/cart';
 import { useUi } from '../../store/session';
 import { MarkHit } from '../shell/MarkHit';
@@ -532,15 +533,21 @@ export function guestsCsvRows(
       tier,
       s?.visits ?? 0,
       Number(s?.total_spent ?? 0).toFixed(2),
-      s?.last_visit_at ? new Date(s.last_visit_at).toLocaleString() : '',
-      new Date(g.created_at).toLocaleString(),
+      s?.last_visit_at ? appStampLabel(s.last_visit_at) : '',
+      /* v5.274.0 — the book's cells ride the house's own stamp
+         (appStampLabel): the device's bare toLocaleString() could not
+         agree with itself across devices — two shapes, two clocks, one
+         file. */
+      appStampLabel(g.created_at),
       g.email || '',
       g.notes || '',
       /* the guest side: landed read speaks (0 is provable), null read
-       * stays silent — never an invented number. */
+       * stays silent — never an invented number. v5.274.0: the stamp
+       * needs a timestamp to speak — a row without one stays silent too
+       * (the 5.190 law: silence, never an invented word). */
       ledger ? (bucket ? bucket.length : 0) : '',
       ledger ? given.toFixed(2) : '',
-      bucket && bucket[0] ? new Date(bucket[0].createdAt).toLocaleString() : '',
+      bucket && bucket[0]?.createdAt ? appStampLabel(bucket[0].createdAt) : '',
     ]);
   }
   return lines;
@@ -710,6 +717,9 @@ export const CustomersScreen: React.FC = () => {
 const GuestsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }) => {
   const { tenantId, loading: tenantLoading, error: tenantError, tenant } = useTenant();
   const [tab, setTab] = useState<TabKey>('guests');
+  /* v5.274.0 — the book's CSV verb speaks its own ack (the Saved word, the
+   * green register) — no second tap born of a silent download tray. */
+  const [bookSaved, exportBook] = useExportFlash();
   const [guests, setGuests] = useState<Customer[]>([]);
   const [stats, setStats] = useState<Map<string, CustomerStats>>(new Map());
   const [offers, setOffers] = useState<Offer[]>([]);
@@ -1129,17 +1139,25 @@ const GuestsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry })
             <>
               {/* 5.129.0 — the book, carried out: the narrowed list IS the
                   file. Disabled while the current narrowing shows nothing —
-                  an empty narrowing exports an empty file, so it refuses. */}
+                  an empty narrowing exports an empty file, so it refuses.
+                  v5.274.0 — the verb's own ack: after the export the button
+                  wears the tier chip's green register (#2E7D32 on the ghost)
+                  and speaks "Saved" with the Check ear for a breath, then
+                  returns; the aria flips with the word. */}
               <button
                 type="button"
-                onClick={() => exportGuestsCsv(rows, ledgerByPhone)}
+                onClick={() => exportBook(() => exportGuestsCsv(rows, ledgerByPhone))}
                 disabled={rows.length === 0}
-                aria-label="Export guests as CSV"
+                aria-label={bookSaved ? 'Guests exported — the CSV file is saved' : 'Export guests as CSV'}
                 title="Export the filtered list as CSV (opens in Excel / Sheets)"
-                className="flex h-9 items-center gap-1.5 rounded-xl border border-[#E3E7E0] bg-white px-3 text-[12px] font-bold text-[#0F3D3E] transition hover:border-[#B88E2F] hover:text-[#B88E2F] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#B88E2F] disabled:cursor-not-allowed disabled:opacity-40"
+                className={
+                  bookSaved
+                    ? 'flex h-9 items-center gap-1.5 rounded-xl border border-[#2E7D32] bg-[#E8F5EC] px-3 text-[12px] font-bold text-[#2E7D32] transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#2E7D32] disabled:cursor-not-allowed disabled:opacity-40'
+                    : 'flex h-9 items-center gap-1.5 rounded-xl border border-[#E3E7E0] bg-white px-3 text-[12px] font-bold text-[#0F3D3E] transition hover:border-[#B88E2F] hover:text-[#B88E2F] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#B88E2F] disabled:cursor-not-allowed disabled:opacity-40'
+                }
               >
-                <Download size={14} aria-hidden />
-                CSV
+                {bookSaved ? <Check size={14} aria-hidden /> : <Download size={14} aria-hidden />}
+                {bookSaved ? 'Saved' : 'CSV'}
               </button>
               <button
                 type="button"
