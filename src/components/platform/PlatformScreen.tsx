@@ -168,6 +168,29 @@ function billingCell(s: Subscription) {
   return subscriptionWords(s);
 }
 
+/* v5.288.0 — the event's one line for the support ticket: verb, details,
+ * actor, stamp — joined by the house's own separator. The copy verb rides
+ * the ONE breath (CopyValueButton → useCopyAck); no new clipboard code. */
+function auditLineFor(log: AuditLogEntry): string {
+  return [
+    log.action,
+    log.details,
+    log.actor_email || 'System',
+    dayTime(log.timestamp, appTimezone()),
+  ]
+    .filter(Boolean)
+    .join(' · ');
+}
+
+/* v5.288.0 — the hunt chip's two voices: idle wears the card's own quiet
+ * border, active wears the rail's strong teal (the same voice the active
+ * nav pill speaks, scaled to a chip). The focus ring is the house's gold
+ * ring, offset to the room's own floor. */
+const HUNT_CHIP_IDLE =
+  'inline-flex h-8 items-center rounded-full border border-[#E3E7E0] bg-white px-3 text-xs font-medium text-[#6B6B6B] transition-colors hover:bg-[#F6F5F2] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B88E2F]/70 focus-visible:ring-offset-2 focus-visible:ring-offset-[#F6F5F2]';
+const HUNT_CHIP_ACTIVE =
+  'inline-flex h-8 items-center rounded-full border border-transparent bg-[#0F3D3E] px-3 text-xs font-semibold text-white shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B88E2F]/70 focus-visible:ring-offset-2 focus-visible:ring-offset-[#F6F5F2]';
+
 /* v5.232.0 — the billing words' CLASS LAW, one place (the 5.196 shape: one
  * set, no fork — this time for ink, not stages): the primary's grey and the
  * secondary's 11px pair, urgent wearing the same amber-red every site
@@ -403,6 +426,10 @@ export const PlatformScreen: React.FC = () => {
   const [logs, setLogs] = useState<AuditLogEntry[] | null>(null);
   const [logsError, setLogsError] = useState<string | null>(null);
   const [businessQuery, setBusinessQuery] = useState('');
+  /* v5.288.0 — the audit log learns the hunt: the room's own query and the
+   * verb chip it is standing on (null = All). Two filters that compose. */
+  const [auditQuery, setAuditQuery] = useState('');
+  const [auditVerb, setAuditVerb] = useState<string | null>(null);
   const [expandedTenantId, setExpandedTenantId] = useState<string | null>(null);
   const [wizardOpen, setWizardOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
@@ -468,6 +495,32 @@ export const PlatformScreen: React.FC = () => {
 
   const recentTenants = useMemo(() => (tenants ?? []).slice(0, 5), [tenants]);
   const recentLogs = useMemo(() => (logs ?? []).slice(0, 10), [logs]);
+
+  /* v5.288.0 — the hunt's own census: each distinct verb with its count,
+   * loudest first (ties walk alphabetical). The chips read this; the room
+   * never invents a verb the ledger does not carry. */
+  const auditVerbs = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const log of logs ?? []) counts.set(log.action, (counts.get(log.action) || 0) + 1);
+    return [...counts.entries()]
+      .map(([verb, count]) => ({ verb, count }))
+      .sort((a, b) => b.count - a.count || a.verb.localeCompare(b.verb));
+  }, [logs]);
+
+  /* The hunt composes BOTH filters: the chip's verb (exact match) AND the
+   * query (case-insensitive across action, actor and details). */
+  const filteredLogs = useMemo(() => {
+    const q = auditQuery.trim().toLowerCase();
+    return (logs ?? []).filter((log) => {
+      if (auditVerb !== null && log.action !== auditVerb) return false;
+      if (!q) return true;
+      return (
+        log.action.toLowerCase().includes(q) ||
+        (log.actor_email || '').toLowerCase().includes(q) ||
+        log.details.toLowerCase().includes(q)
+      );
+    });
+  }, [logs, auditQuery, auditVerb]);
 
   const openWizard = useCallback(() => setWizardOpen(true), []);
 
@@ -694,7 +747,7 @@ export const PlatformScreen: React.FC = () => {
               onChange={(e) => setBusinessQuery(e.target.value)}
               placeholder="Search name, slug, city"
               aria-label="Search businesses by name, slug or city"
-              className="sp-input h-11 w-full pl-10 pr-4 text-sm sm:w-64"
+              className="sp-input h-11 w-full pl-10 pr-4 text-sm sm:w-72"
               style={{ borderRadius: 9999 }}
             />
           </div>
@@ -1062,20 +1115,83 @@ export const PlatformScreen: React.FC = () => {
     );
   };
 
-  const renderAudit = () => (
+  const renderAudit = () => {
+    /* v5.288.0 — the hunt's words: when the operator is filtering, the
+     * census answers with the filtered truth ("N of M events on record")
+     * and the no-match card names what was actually hunted. */
+    const needle = auditQuery.trim();
+    const filtering = auditVerb !== null || needle !== '';
+    const huntWords = [
+      auditVerb !== null ? `the verb “${auditVerb}”` : '',
+      needle ? `“${needle}”` : '',
+    ]
+      .filter(Boolean)
+      .join(' and ');
+    return (
     <div className="space-y-5">
       {/* v5.246.0 — the ledger speaks its own census: "N events on record"
        *  names the size the reader is reading (the 5.282 law — a register
        *  answers from its own count). Silent while loading; the empty
-       *  state owns the zero. */}
-      <div>
-        <h2 className="text-lg font-semibold text-[#1A1A1A]">Audit log</h2>
-        {logs !== null && logs.length > 0 && (
-          <p className="mt-0.5 text-xs text-[#6B6B6B]">
-            {logs.length} {logs.length === 1 ? 'event' : 'events'} on record
-          </p>
-        )}
+       *  state owns the zero. v5.288.0 — while hunting, the census
+       *  answers with the filtered count ("N of M"). */}
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-semibold text-[#1A1A1A]">Audit log</h2>
+          {logs !== null && logs.length > 0 && (
+            <p className="mt-0.5 text-xs text-[#6B6B6B]">
+              {filtering
+                ? `${filteredLogs.length} of ${logs.length} ${logs.length === 1 ? 'event' : 'events'} on record`
+                : `${logs.length} ${logs.length === 1 ? 'event' : 'events'} on record`}
+            </p>
+          )}
+        </div>
+        {/* The hunt's field — the businesses room's own search grammar,
+         * one byte-sibling input so the console speaks ONE search. */}
+        <div className="relative">
+          <Search
+            size={16}
+            aria-hidden
+            className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[#969696]"
+          />
+          <input
+            type="search"
+            value={auditQuery}
+            onChange={(e) => setAuditQuery(e.target.value)}
+            placeholder="Search verb, actor, business"
+            aria-label="Search the audit log by verb, actor or business"
+            className="sp-input h-11 w-full pl-10 pr-4 text-sm sm:w-72"
+            style={{ borderRadius: 9999 }}
+          />
+        </div>
       </div>
+      {/* The verb chips — the hunt's census, read from the ledger itself
+       * (no invented verbs). "All" owns the null chip; a verb chip toggles
+       * itself off on the second tap. aria-pressed speaks the state. */}
+      {logs !== null && logs.length > 0 && auditVerbs.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Filter the log by verb">
+          <button
+            type="button"
+            onClick={() => setAuditVerb(null)}
+            aria-pressed={auditVerb === null}
+            className={auditVerb === null ? HUNT_CHIP_ACTIVE : HUNT_CHIP_IDLE}
+          >
+            All
+            <span className="ml-1.5 text-[11px] opacity-70 tabular-nums">{logs.length}</span>
+          </button>
+          {auditVerbs.map(({ verb, count }) => (
+            <button
+              key={verb}
+              type="button"
+              onClick={() => setAuditVerb(auditVerb === verb ? null : verb)}
+              aria-pressed={auditVerb === verb}
+              className={auditVerb === verb ? HUNT_CHIP_ACTIVE : HUNT_CHIP_IDLE}
+            >
+              {verb}
+              <span className="ml-1.5 text-[11px] opacity-70 tabular-nums">{count}</span>
+            </button>
+          ))}
+        </div>
+      )}
       {logsError ? (
         <ErrorCard title="Audit log could not be loaded" message={logsError} onRetry={() => void load()} />
       ) : logs === null ? (
@@ -1090,12 +1206,27 @@ export const PlatformScreen: React.FC = () => {
             body="Platform actions will be recorded here as they happen."
           />
         </div>
+      ) : filteredLogs.length === 0 ? (
+        <div className="sp-card">
+          <EmptyState
+            icon={Search}
+            title="No matches"
+            body={`No events match ${huntWords}. Try a verb, an actor or a business.`}
+          />
+        </div>
       ) : (
         <div className="sp-card divide-y divide-[#E3E7E0] px-5 py-1">
-          {logs.map((log) => (
+          {filteredLogs.map((log) => (
             <div key={log.id} className="flex items-start gap-3 py-3.5">
               <div className="min-w-0 flex-1">
-                <p className="break-words text-sm font-semibold text-[#1A1A1A]">{log.action}</p>
+                {/* v5.288.0 — the row's headline learned to leave: the
+                 * copy verb rides the quiet flex pair (min-w-0 keeps the
+                 * verb's words wrapping, the button never squeezes) and
+                 * carries the WHOLE event line for the support ticket. */}
+                <div className="flex items-start gap-1.5">
+                  <p className="min-w-0 break-words text-sm font-semibold text-[#1A1A1A]">{log.action}</p>
+                  <CopyValueButton value={auditLineFor(log)} label="event line" />
+                </div>
                 {log.details && <p className="mt-0.5 break-words text-xs text-[#6B6B6B]">{log.details}</p>}
               </div>
               <div className="shrink-0 text-right">
@@ -1108,7 +1239,8 @@ export const PlatformScreen: React.FC = () => {
         </div>
       )}
     </div>
-  );
+    );
+  };
 
   /* ── chrome ── */
 
