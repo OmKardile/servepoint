@@ -8991,3 +8991,17 @@ Work Log:
 Stage Summary:
 - 5.297.0 — the menu remembers the guest's plates: the guest's own last ticket speaks on the rows it fed — one fetch per ticket, names only, the manifest's grammar, the warm band's chip in three languages, fail-soft everywhere, and the honesty proof live (memory cleared → chip gone → menu alive). The round also walked the 820×1180 iPad lens clean end-to-end and watched a real window die mid-cart — the house already holds that edge with grace (the paused card, the re-open door, the surviving cart).
 - Commit + push: feat = this round's first commit, chore(qa) = the second, chore(worklog) = this commit. Push: ATTEMPTED (first per the standing instruction, and again post-commit) — failed honestly, no token (addendum below).
+
+---
+Task ID: 336-PUSH-ADDENDUM (same round, post-commit)
+Agent: glm-5.3
+Task: Record the round's push outcome honestly.
+
+Work Log:
+- Push ATTEMPTED this round (FIRST, before its own work; attempted AGAIN post-commit): failed — "fatal: could not read Username for 'https://github.com': No such device or address". NO GitHub write token in the round environment.
+- State: remote unchanged (ecc6365 = Task 266's worklog commit, an ANCESTOR of local HEAD). Measured (git rev-list --count ecc6365..HEAD, after the feat + qa + worklog commits): 209 riding. The next token-bearing round pushes a clean fast-forward.
+- Remote config untouched: nothing to scrub.
+- Standing instruction stands: the next token-bearing round pushes the whole pile FIRST, before its own work.
+
+Stage Summary:
+- Work committed and gated (battery 142/142, tsc, build, the favourite chip verified LIVE on the public menu in three languages with the honesty proof — the round's family needing no auth-wall protocol) but NOT on origin — the push ran and failed for lack of credentials, not for lack of trying. The honesty rule holds: no push claimed that did not run.
