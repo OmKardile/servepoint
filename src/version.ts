@@ -3,4 +3,4 @@
  * so a forgotten bump fails the gate), and the shell speaks it (the sidebar
  * footer's build word) so support can ask "which build?" and the app
  * answers. Bump BOTH this file and public/sw.js on every release. */
-export const APP_VERSION = '5.286.0';
+export const APP_VERSION = '5.287.0';

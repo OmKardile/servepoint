@@ -87,14 +87,23 @@ function shortId(id: string): string {
  * own local copyText — is retired with the other three hand-rolled
  * clipboard helpers. */
 
-const CopyValueButton: React.FC<{ value: string; label: string }> = ({ value, label }) => {
+const CopyValueButton: React.FC<{ value: string; label: string; stopRowClick?: boolean }> = ({
+  value,
+  label,
+  stopRowClick,
+}) => {
   /* v5.277.0 — the ack rides the one home (lib/useCopyAck): the timer,
    * the re-arm and the cleanup live there now; a refused copy says so. */
   const [copied, runCopy] = useCopyAck();
   return (
     <button
       type="button"
-      onClick={() => runCopy(value)}
+      onClick={(e) => {
+        /* v5.287.0 — stopRowClick: inside the businesses table's row
+         * the copy tap must not fire the row's expand. */
+        if (stopRowClick) e.stopPropagation();
+        runCopy(value);
+      }}
       aria-live="polite"
       aria-label={`${label} — copy to clipboard`}
       className="inline-flex h-6 items-center gap-1 rounded-md px-1.5 text-[11px] font-semibold text-[#0F3D3E] transition-colors hover:bg-[#E3E7E0]"
@@ -729,8 +738,19 @@ export const PlatformScreen: React.FC = () => {
         </div>
       ) : (
         <>
-          {/* Desktop table */}
-          <div className="sp-card hidden overflow-hidden md:block">
+          {/* Desktop table — v5.287.0 "the console's tables learn
+              their belt": the crossover learns the rail's own appetite.
+              Below lg the rail eats 228px and this table's columns
+              clipped silently (measured at 768: 474px of card vs 696px
+              of table — Status and Created simply vanished,
+              overflow-hidden, no scrollbar, no ellipsis). The stacked
+              cards — already proven at the phone — own the band below
+              lg; the table owns lg and above, and the belt below
+              (overflow-x-auto, the EOD escape's own convention)
+              guarantees any future crunch degrades to a scroll, never
+              a silent clip. */}
+          <div className="sp-card hidden overflow-hidden lg:block">
+            <div className="overflow-x-auto [scrollbar-width:thin]">
             <table className="w-full text-left text-sm">
               <caption className="sr-only">All provisioned businesses</caption>
               <thead>
@@ -782,7 +802,27 @@ export const PlatformScreen: React.FC = () => {
                         </td>
                         <td className="px-4 py-3.5 capitalize text-[#6B6B6B]">{t.business_type || '—'}</td>
                         <td className="px-4 py-3.5 text-[#6B6B6B]">{t.city || '—'}</td>
-                        <td className="max-w-[220px] truncate px-4 py-3.5 text-[#6B6B6B]">{t.owner_email || '—'}</td>
+                        <td className="max-w-[220px] px-4 py-3.5 text-[#6B6B6B]">
+                          {/* v5.287.0 — the handover: the email learns to
+                              leave the row. The verb rides the one copy
+                              breath (useCopyAck via CopyValueButton) and
+                              stopRowClick keeps the row's expand out of
+                              the tap; the address keeps truncate + title
+                              so a long email never reflows the row, and
+                              the button never squeezes (shrink-0 in the
+                              verb's own classes). The full address and
+                              its verdict still live in the detail panel
+                              below — this is the one-tap shortcut, not a
+                              second grammar. */}
+                          <span className="flex items-center gap-1">
+                            <span className="min-w-0 truncate" title={t.owner_email || undefined}>
+                              {t.owner_email || '—'}
+                            </span>
+                            {t.owner_email && (
+                              <CopyValueButton value={t.owner_email} label="Owner email" stopRowClick />
+                            )}
+                          </span>
+                        </td>
                         <td className="px-4 py-3.5">
                           {/* v5.232.0 — the status cell hears the clock: the
                               chip keeps its word, and the business's own
@@ -813,10 +853,12 @@ export const PlatformScreen: React.FC = () => {
                 })}
               </tbody>
             </table>
+            </div>
           </div>
 
-          {/* Mobile stacked cards */}
-          <div className="space-y-3 md:hidden">
+          {/* Mobile stacked cards — the crossover climbs with the
+              table's (v5.287.0): these cards own everything below lg. */}
+          <div className="space-y-3 lg:hidden">
             {filteredTenants.map((t) => {
               const expanded = expandedTenantId === t.id;
               return (
@@ -929,8 +971,13 @@ export const PlatformScreen: React.FC = () => {
           </div>
         ) : (
           <>
-            {/* Desktop table */}
-            <div className="sp-card hidden overflow-hidden md:block">
+            {/* Desktop table — the same belt the businesses table
+                wears (v5.287.0): seven columns and a whitespace-nowrap
+                tail clipped Final rate at the card's own edge at 768;
+                the cards own the band below lg, the belt keeps lg+
+                honest forever. */}
+            <div className="sp-card hidden overflow-hidden lg:block">
+              <div className="overflow-x-auto [scrollbar-width:thin]">
               <table className="w-full text-left text-sm">
                 <caption className="sr-only">All business subscriptions</caption>
                 <thead>
@@ -966,10 +1013,12 @@ export const PlatformScreen: React.FC = () => {
                   ))}
                 </tbody>
               </table>
+              </div>
             </div>
 
-            {/* Mobile stacked cards */}
-            <div className="space-y-3 md:hidden">
+            {/* Mobile stacked cards — the crossover climbs with the
+                table's (v5.287.0). */}
+            <div className="space-y-3 lg:hidden">
               {rows.map((s) => (
                 <div key={s.id} className="sp-card p-4">
                   <div className="flex items-start justify-between gap-3">
