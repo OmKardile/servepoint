@@ -51,6 +51,9 @@ import {
 } from '../../lib/api';
 import { computePaceByItem, computeTopMovers, MOVER_WINDOW_DAYS, type Mover } from '../../lib/movers';
 import { formatMoney } from '../../lib/prefs';
+/* v5.282.0 — the books' bare paise voice lives here too (the shopping
+ * list's and recipe-fit's cost columns ride moneyBare). */
+import { moneyBare } from '../../lib/money';
 import { LOW_COVER, computeBurnByIngredient, shelfCoverage, shelfDays, shelfDaysClause, shelfTouch } from '../../lib/shelf';
 import { downloadCsv } from '../../lib/csv';
 import { CsvExportButton } from '../common/CsvExportButton';
@@ -488,7 +491,8 @@ export function productionSheetRows(o: ProductionSheetOpts): (string | number)[]
       l.short > 0 ? 'short' : 'covered',
       l.short > 0 ? Number(l.short.toFixed(3)) : '',
       l.costUnit == null ? '' : Number(l.costUnit.toFixed(4)),
-      l.costUnit == null ? '' : (l.need * l.costUnit).toFixed(2),
+      /* v5.282.0 — the cost column rides moneyBare (round2's math first). */
+      l.costUnit == null ? '' : moneyBare(l.need * l.costUnit),
     ]);
   }
   return out;
@@ -1332,7 +1336,8 @@ const InventoryInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
                       </p>
                     </div>
                     <div className="flex shrink-0 items-center gap-2">
-                      <span className="hidden text-[11px] text-[#969696] sm:block">
+                      {/* v5.282.0 — the cost's digits hold still (tabular-nums). */}
+                      <span className="hidden text-[11px] tabular-nums text-[#969696] sm:block">
                         {it.cost_per_unit != null ? `${formatMoney(Number(it.cost_per_unit))}/${it.unit}` : 'no cost set'}
                       </span>
                       <button
@@ -2951,8 +2956,9 @@ const ReorderBoard: React.FC<{
         r.burnPerDay.toFixed(3),
         r.daysLeft == null ? '' : r.daysLeft.toFixed(1),
         q,
-        Number(r.item.cost_per_unit ?? 0).toFixed(2),
-        (q * Number(r.item.cost_per_unit ?? 0)).toFixed(2),
+        /* v5.282.0 — the cost columns ride moneyBare. */
+        moneyBare(Number(r.item.cost_per_unit ?? 0)),
+        moneyBare(q * Number(r.item.cost_per_unit ?? 0)),
       ]);
     }
     downloadCsv(`servepoint-shopping-list-${todayIso}.csv`, out);

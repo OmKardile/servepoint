@@ -93,7 +93,7 @@ import { AGE_SLA_MIN } from '../../lib/age';
 /* v5.280.0 — the waste card's quantities and rupees ride money.ts's round2;
  * the GST register's own split rides lib/tax's cgstSgstSplit (the twin it
  * never knew it had — same rule, one home). */
-import { round2 } from '../../lib/money';
+import { round2, moneyBare } from '../../lib/money';
 import { cgstSgstSplit } from '../../lib/tax';
 import { downloadCsv } from '../../lib/csv';
 import { useCopyAck, ackWord } from '../../lib/useCopyAck';
@@ -1897,9 +1897,11 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
         i + 1,
         it.name,
         it.units,
-        it.revenue.toFixed(2),
-        it.cost.toFixed(2),
-        margin.toFixed(2),
+        /* v5.282.0 — the money cells ride moneyBare (the ONE bare paise
+           voice); the share and rate cells keep the percent's own voice. */
+        moneyBare(it.revenue),
+        moneyBare(it.cost),
+        moneyBare(margin),
         marginPct.toFixed(1),
         ((it.revenue / total) * 100).toFixed(1),
         i + 1,
@@ -2503,7 +2505,8 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
     if (daily.length === 0) return;
     const rows: (string | number)[][] = [[`Day (${appTzTag()})`, 'Gross (INR)', 'Tickets', 'Avg ticket (INR)']];
     for (const d of daily) {
-      rows.push([d.label, d.gross.toFixed(2), d.tickets, d.tickets > 0 ? d.avg.toFixed(2) : '']);
+      /* v5.282.0 — the books' money rides moneyBare. */
+      rows.push([d.label, moneyBare(d.gross), d.tickets, d.tickets > 0 ? moneyBare(d.avg) : '']);
     }
     downloadCsv(`servepoint-daily-sales-${appTodayIso()}.csv`, rows);
   }, [daily]);
@@ -2579,13 +2582,13 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
     // All 24 buckets, zeros included — the gaps ARE the quiet hours; a
     // spreadsheet should see the whole day the chart draws.
     const rows: (string | number)[][] = [[`Hour (${appTzTag()})`, 'Gross (INR)']];
-    for (const h of hourly) rows.push([h.label, h.gross.toFixed(2)]);
+    for (const h of hourly) rows.push([h.label, moneyBare(h.gross)]);
     downloadCsv(`servepoint-sales-by-hour-${appTodayIso()}.csv`, rows);
   }, [hourly]);
 
   const exportPayMix = useCallback(() => {
     const rows: (string | number)[][] = [['Method', 'Payments', 'Total (INR)']];
-    for (const m of payMix.paid) rows.push([m.method, m.count, m.total.toFixed(2)]);
+    for (const m of payMix.paid) rows.push([m.method, m.count, moneyBare(m.total)]);
     if (payMix.splitTickets > 0)
       rows.push([
         `Split tickets — settled in parts`,
@@ -2593,7 +2596,7 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
         '',
       ]);
     if (payMix.unpaid > 0)
-      rows.push(['Unpaid — balance still out', payMix.unpaid, payMix.unpaidAmt.toFixed(2)]);
+      rows.push(['Unpaid — balance still out', payMix.unpaid, moneyBare(payMix.unpaidAmt)]);
     if (rows.length === 1) return;
     downloadCsv(`servepoint-payment-mix-${appTodayIso()}.csv`, rows);
   }, [payMix]);
@@ -2610,11 +2613,12 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
         r.ticket,
         r.service,
         r.method,
-        r.taxable.toFixed(2),
-        r.cgst.toFixed(2),
-        r.sgst.toFixed(2),
-        r.gst.toFixed(2),
-        r.gross.toFixed(2),
+        /* v5.282.0 — the register's paise columns ride moneyBare. */
+        moneyBare(r.taxable),
+        moneyBare(r.cgst),
+        moneyBare(r.sgst),
+        moneyBare(r.gst),
+        moneyBare(r.gross),
       ]),
     ];
     rows.push([
@@ -2622,11 +2626,11 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
       '',
       '',
       '',
-      gstTotals.taxable.toFixed(2),
-      gstTotals.cgst.toFixed(2),
-      gstTotals.sgst.toFixed(2),
-      gstTotals.gst.toFixed(2),
-      gstTotals.gross.toFixed(2),
+      moneyBare(gstTotals.taxable),
+      moneyBare(gstTotals.cgst),
+      moneyBare(gstTotals.sgst),
+      moneyBare(gstTotals.gst),
+      moneyBare(gstTotals.gross),
     ]);
     downloadCsv(`servepoint-gst-register-${appTodayIso()}.csv`, rows);
   }, [gstRegister, gstTotals]);
@@ -2637,9 +2641,11 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
       ['Metric', 'Value'],
       ['Range', rangeLabelOf(range, customWindow)],
       ['Paid tickets', agg.paidCount],
-      ['Paid net (INR)', agg.paidNet.toFixed(2)],
-      ['Ingredient cost (INR)', agg.cogs.toFixed(2)],
-      ['Gross margin (INR)', agg.margin.toFixed(2)],
+      /* v5.282.0 — the margin book rides moneyBare; the rate keeps the
+         percent's own voice. */
+      ['Paid net (INR)', moneyBare(agg.paidNet)],
+      ['Ingredient cost (INR)', moneyBare(agg.cogs)],
+      ['Gross margin (INR)', moneyBare(agg.margin)],
       ['Margin rate (%)', agg.marginPct.toFixed(1)],
       ['', ''],
       ['Note', 'Recipes × current shelf cost — a restock reprices history; variants/add-ons not priced.'],
@@ -2652,7 +2658,7 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
     const rows: (string | number)[][] = [['Service', 'Tickets', 'Total (INR)', 'Share of orders %']];
     for (const [t, v] of typeMix) {
       const share = agg.placed > 0 ? (v.count / agg.placed) * 100 : 0;
-      rows.push([TYPE_LABEL[t] || t, v.count, v.total.toFixed(2), share.toFixed(1)]);
+      rows.push([TYPE_LABEL[t] || t, v.count, moneyBare(v.total), share.toFixed(1)]);
     }
     downloadCsv(`servepoint-service-mix-${appTodayIso()}.csv`, rows);
   }, [typeMix, agg.placed]);
@@ -2671,14 +2677,15 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
       sumCnt += cnt;
       rows.push([
         s.closed_at ? appFormatters().closeLabel.format(new Date(s.closed_at)) : '—',
-        s.expected_cash === null ? '' : exp.toFixed(2),
-        s.counted_cash === null ? '' : cnt.toFixed(2),
-        s.variance === null ? '' : Number(s.variance).toFixed(2),
+        /* v5.282.0 — the drawer's book rides moneyBare (paise-true). */
+        s.expected_cash === null ? '' : moneyBare(exp),
+        s.counted_cash === null ? '' : moneyBare(cnt),
+        s.variance === null ? '' : moneyBare(Number(s.variance)),
         s.closed_by_email || '',
         s.closing_note || '',
       ]);
     }
-    rows.push(['NET', sumExp.toFixed(2), sumCnt.toFixed(2), shiftAgg.net.toFixed(2), '', '']);
+    rows.push(['NET', moneyBare(sumExp), moneyBare(sumCnt), moneyBare(shiftAgg.net), '', '']);
     downloadCsv(`servepoint-drawer-shifts-${appTodayIso()}.csv`, rows);
   }, [shiftsInRange, shiftAgg]);
 

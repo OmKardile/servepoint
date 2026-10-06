@@ -63,3 +63,30 @@ export function signedMoney(amount: number): string {
 export function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }
+
+/* v5.282.0 — the BARE paise voice. A whole-house census found the books'
+ * own shape — `toFixed(2)`, the two-decimal word with no ₹ and no
+ * grouping — rolled by hand in FIVE files beside this lib, forty-three
+ * call sites strong, and the close-out day book speaking NO shape at all (raw
+ * `Number()` cells — a float-dust total could walk straight into the
+ * owner's ledger). The books' words ride moneyBare now: round2 does the
+ * MATH first (paise-true, never a toFixed rounding bias), the formatter
+ * pads second — one truth in two steps, the register's own law. Bare on
+ * purpose: csv.ts's doctrine is that numbers travel naked so the
+ * spreadsheet owns the formatting — the ₹ is the WORD's voice (money),
+ * the grouping is the WORD's shape (moneyNum, en-IN lakhs) — and a comma
+ * inside a CSV money cell is a lie the spreadsheet parses wrong. THE
+ * STANDING REGISTERS (named, deliberately not adopted): tax.ts's
+ * `.toFixed(2)` percent voice (the legal CGST 2.50% label — a percent,
+ * not money); the rating average's one-decimal voice (`.toFixed(1)`,
+ * consistent across every surface that speaks it); the inventory
+ * quantity voice (`toFixed(3)`/`toFixed(4)`, recipe precision, trailing
+ * zeros stripped); the percent voices (each surface's own precision
+ * judgment); and the SVG chart coordinates (geometry, not money). THE
+ * ANTI-JITTER LAW rides the same round: every money render the census
+ * could still catch without `tabular-nums` wears it now — the digits
+ * hold still wherever money holds still. MATH, then voice — never the
+ * two in one hand-rolled line again. */
+export function moneyBare(amount: number): string {
+  return round2(Number(amount)).toFixed(2);
+}

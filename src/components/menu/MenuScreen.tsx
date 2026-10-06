@@ -326,7 +326,9 @@ function VariantsModal({
             {variants.map((v) => (
               <div key={v.id} className="flex items-center gap-2 rounded-xl border border-[#E3E7E0] bg-white px-3 py-2">
                 <span className="min-w-0 flex-1 truncate text-[13.5px] font-medium text-[#1A1A1A]">{v.name}</span>
-                <span className="text-[13px] font-bold" style={{ color: v.price_delta > 0 ? '#B88E2F' : '#2E7D32' }}>
+                {/* v5.282.0 — the delta's digits hold still (tabular-nums), the
+                    same anti-jitter register every money render wears. */}
+                <span className="text-[13px] font-bold tabular-nums" style={{ color: v.price_delta > 0 ? '#B88E2F' : '#2E7D32' }}>
                   {v.price_delta > 0 ? `+${formatMoney(v.price_delta)}` : v.price_delta < 0 ? `−${formatMoney(-v.price_delta)}` : 'no change'}
                 </span>
                 <button
@@ -386,8 +388,9 @@ function VariantsModal({
                     {a.name}
                     {/* 5.139.0 — the row speaks formatMoney like the variant deltas
                         (line 281) and dish prices (863) already do: "₹49.5" was
-                        paise-ambiguous money text inside the file's own grammar. */}
-                    <span className={on ? 'text-[#E7C878]' : 'text-[#B88E2F]'}>+{formatMoney(a.price)}</span>
+                        paise-ambiguous money text inside the file's own grammar.
+                        v5.282.0 — the pill's digits hold still (tabular-nums). */}
+                    <span className={`tabular-nums ${on ? 'text-[#E7C878]' : 'text-[#B88E2F]'}`}>+{formatMoney(a.price)}</span>
                   </button>
                 );
               })}
@@ -1271,7 +1274,8 @@ export function MenuScreen(): React.ReactElement {
               const armed = confirmId === `addon:${a.id}`;
               return (
                 <span key={a.id} className="flex h-9 items-center gap-2 rounded-full bg-[#FDF9F0] pl-3.5 pr-1.5 text-[12.5px] font-semibold text-[#8A5A16]">
-                  {a.name} {formatMoney(a.price)}
+                  {/* v5.282.0 — the money digits hold still inside the chip. */}
+                  <span className="tabular-nums">{a.name} {formatMoney(a.price)}</span>
                   <button
                     type="button"
                     onClick={() => {
@@ -1410,7 +1414,10 @@ export function MenuScreen(): React.ReactElement {
                       </p>
                     </div>
                     <div className="text-right">
-                      <p className="text-[14.5px] font-bold" style={{ color: '#B88E2F' }}>{formatMoney(item.price)}</p>
+                      {/* v5.282.0 — the card's price is the staff app's most-seen
+                          money: its digits hold still now (tabular-nums), like
+                          every other money render in the house. */}
+                      <p className="text-[14.5px] font-bold tabular-nums" style={{ color: '#B88E2F' }}>{formatMoney(item.price)}</p>
                       {cost === undefined ? (
                         <p
                           className="mt-0.5 text-[10.5px] text-[#969696]"

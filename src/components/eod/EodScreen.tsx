@@ -51,7 +51,11 @@ import { formatMoney, subscribePrefs } from '../../lib/prefs';
  * speaks "Late prep", the KDS's own shout — but the number has one home. */
 import { AGE_SLA_MIN } from '../../lib/age';
 /* v5.280.0 — the drawer's open/close floats ride money.ts's round2. */
-import { round2 } from '../../lib/money';
+/* v5.282.0 — the close-out day book rides moneyBare: the ledger's money
+ * cells spoke NO shape at all before (raw Number() — a float-dust total
+ * could walk straight into the owner's books); now the ONE bare paise
+ * voice speaks them, round2-true, always two decimals. */
+import { round2, moneyBare } from '../../lib/money';
 import { guestVoice } from '../../lib/verdict';
 import {
   appTimezone,
@@ -175,10 +179,12 @@ export function dayLedgerCsvRows(o: {
       ord.payment_status || '',
       methodsByOrder.get(ord.id) || ord.payment_method || '',
       ord.customer_name || '',
-      Number(ord.total),
-      Number(ord.tax_amount),
-      ord.status === 'cancelled' ? '' : Number(ord.discount_amount ?? 0),
-      cogsByOrder.get(ord.id) ?? '',
+      /* v5.282.0 — the money columns ride moneyBare (paise-true, two
+         decimals — never float dust in the owner's ledger). */
+      moneyBare(Number(ord.total)),
+      moneyBare(Number(ord.tax_amount)),
+      ord.status === 'cancelled' ? '' : moneyBare(Number(ord.discount_amount ?? 0)),
+      cogsByOrder.get(ord.id) == null ? '' : moneyBare(cogsByOrder.get(ord.id)!),
     ]),
   ];
 }

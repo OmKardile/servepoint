@@ -47,7 +47,7 @@ import { gstPercentWord } from '../../lib/tax';
 /* v5.280.0 — the bill's balance rides money.ts's round2 (the split's own
  * Math.floor stays: each way rounds DOWN so the parts never overpay — a
  * deliberate judgment, not the rounder's twin). */
-import { round2 } from '../../lib/money';
+import { round2, moneyBare } from '../../lib/money';
 import { downloadCsv } from '../../lib/csv';
 import { useCopyAck, ackWord } from '../../lib/useCopyAck';
 import { appStampLabel, appTodayIso, appFormatters, appTzTag, isSameAppDay, isSameAppDayAs } from '../../lib/appday';
@@ -357,14 +357,15 @@ export function billsCsvRows(
   for (const o of rows) {
     const st = STATUS_LABEL[displayStatus(o)] || displayStatus(o);
     const method = o.payment_method ? METHOD_LABEL[o.payment_method as MethodKey] || o.payment_method : '';
-    /* 5.63.0: a partially-split ticket says so — the ledger's honest voice,
-       not a bare 'pending' that hides money already taken. */
+    /* v5.63.0: a partially-split ticket says so — the ledger's honest voice,
+       not a bare 'pending' that hides money already taken. v5.282.0: the
+       cells ride moneyBare — the books' ONE bare paise voice. */
     const partPaid = Number(paidSums.get(o.id) ?? 0);
     const paymentCell =
       String(o.payment_status || '').toLowerCase() === 'completed'
         ? 'completed'
         : partPaid > 0
-          ? `partial (${partPaid.toFixed(2)} of ${Number(o.total ?? 0).toFixed(2)} in)`
+          ? `partial (${moneyBare(partPaid)} of ${moneyBare(Number(o.total ?? 0))} in)`
           : o.payment_status || 'pending';
     /* v5.189.0 — the age cell: the row chip's own rule (5.151), ONE rule,
        two surfaces. chaseAge is THE register (day.ts). */
@@ -375,9 +376,10 @@ export function billsCsvRows(
     const ageCell =
       isActive && !isSameAppDayAs(o.created_at, nowMs) ? chaseAge(o.created_at, nowMs) : '';
     /* v5.189.0 — the open cell: the chase's own math (max(0, total − paid));
-       paid reads '0.00' — the debt closed; cancelled reads silence. */
+       paid reads '0.00' — the debt closed; cancelled reads silence.
+       v5.282.0 — the cell rides moneyBare (round2's math, then the pad). */
     const openCell = isActive
-      ? Math.max(0, Number(o.total ?? 0) - partPaid).toFixed(2)
+      ? moneyBare(Math.max(0, Number(o.total ?? 0) - partPaid))
       : st === 'Paid'
         ? '0.00'
         : '';
@@ -395,10 +397,11 @@ export function billsCsvRows(
       o.customer_name || '',
       o.table_label || '',
       itemsSummary(o),
-      Number(o.subtotal ?? 0).toFixed(2),
-      Number(o.tax_amount ?? 0).toFixed(2),
-      Number(o.discount_amount ?? 0).toFixed(2),
-      Number(o.total ?? 0).toFixed(2),
+      /* v5.282.0 — the paise columns ride moneyBare, the ONE bare voice. */
+      moneyBare(Number(o.subtotal ?? 0)),
+      moneyBare(Number(o.tax_amount ?? 0)),
+      moneyBare(Number(o.discount_amount ?? 0)),
+      moneyBare(Number(o.total ?? 0)),
       openCell,
       o.notes || '',
     ]);
@@ -1970,8 +1973,11 @@ const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRet
                         </p>
                       )}
                     </div>
-                    <span className="shrink-0 text-[13px] font-semibold text-[#1A1A1A]">
-                      {formatMoney(it.item_total ?? it.unit_price * it.qty)}
+                    {/* v5.282.0 — the drawer's line money holds still (tabular-nums)
+                        and its fallback math rides round2 (a unit × qty product
+                        can carry float dust; paise-true before it speaks). */}
+                    <span className="shrink-0 text-[13px] font-semibold tabular-nums text-[#1A1A1A]">
+                      {formatMoney(it.item_total ?? round2(it.unit_price * it.qty))}
                     </span>
                   </div>
                 ))}

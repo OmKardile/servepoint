@@ -55,7 +55,7 @@ import {
 } from '../../lib/api';
 import { formatMoney } from '../../lib/prefs';
 /* v5.280.0 — the offer write path's rounding rides money.ts's round2. */
-import { round2 } from '../../lib/money';
+import { round2, moneyBare } from '../../lib/money';
 import { offerBadgeLabel } from '../../lib/offerLabel';
 import { downloadCsv } from '../../lib/csv';
 import { dayTime, usedAgo } from '../../lib/day';
@@ -536,7 +536,8 @@ export function guestsCsvRows(
       g.phone,
       tier,
       s?.visits ?? 0,
-      Number(s?.total_spent ?? 0).toFixed(2),
+      /* v5.282.0 — the book's paise columns ride moneyBare. */
+      moneyBare(Number(s?.total_spent ?? 0)),
       s?.last_visit_at ? appStampLabel(s.last_visit_at) : '',
       /* v5.274.0 — the book's cells ride the house's own stamp
          (appStampLabel): the device's bare toLocaleString() could not
@@ -550,7 +551,7 @@ export function guestsCsvRows(
        * needs a timestamp to speak — a row without one stays silent too
        * (the 5.190 law: silence, never an invented word). */
       ledger ? (bucket ? bucket.length : 0) : '',
-      ledger ? given.toFixed(2) : '',
+      ledger ? moneyBare(given) : '',
       bucket && bucket[0]?.createdAt ? appStampLabel(bucket[0].createdAt) : '',
     ]);
   }
@@ -1397,7 +1398,8 @@ const GuestsTab: React.FC<{
         <div className="sp-card px-4 py-3.5">
           <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#969696]">Top spender</p>
           <p className="mt-1 truncate text-[15px] font-bold text-[#1A1A1A]">{kpis.topName}</p>
-          {kpis.topSpent > 0 && <p className="text-[12px] font-semibold text-[#B88E2F]">{formatMoney(kpis.topSpent)} paid</p>}
+          {/* v5.282.0 — the card's money holds still (tabular-nums). */}
+          {kpis.topSpent > 0 && <p className="text-[12px] font-semibold tabular-nums text-[#B88E2F]">{formatMoney(kpis.topSpent)} paid</p>}
         </div>
       </div>
 
@@ -1588,7 +1590,7 @@ const GuestsTab: React.FC<{
                     </div>
                     <div className="text-right">
                       <p className="text-[10.5px] font-semibold uppercase tracking-wide text-[#969696]">Paid total</p>
-                      <p className={`text-[14px] font-bold ${spent > 0 ? 'text-[#2E7D32]' : 'text-[#C9CFC9]'}`}>
+                      <p className={`text-[14px] font-bold tabular-nums ${spent > 0 ? 'text-[#2E7D32]' : 'text-[#C9CFC9]'}`}>
                         {formatMoney(spent)}
                       </p>
                     </div>
