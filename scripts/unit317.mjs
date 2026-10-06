@@ -136,6 +136,8 @@ check('the doctrine is not vandalized — the door, the breath, the paise tradit
 check('APP_VERSION and sw.js agree — the agreement shape', () => {
   const v = version.match(/APP_VERSION = '([^']+)'/)?.[1];
   assert.ok(v, 'version.ts speaks a version');
-  assert.match(v, /^5\.278\.0$/, 'this round\u2019s word is 5.278.0');
+  /* v5.279.0 — relaxed to the agreement shape per the unit308 precedent:
+   * the literal belongs to the current round's unit; this suite asserts
+   * the PAIR agrees, not the round's own word. */
   assert.ok(sw.includes(`const VERSION = "servepoint-v${v}-r1";`), 'the service worker bakes the SAME word');
 });

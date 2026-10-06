@@ -94,9 +94,12 @@ const swJs = strip('../public/sw.js');
   assert.equal(platform.split(stamp).length - 1, 2, 'the stamp rides BOTH rooms');
   const core = `className="mt-0.5 text-[11px] text-[#969696]"`;
   assert.equal(platform.split(core).length - 1, 2, 'the stamp\'s class core byte-equal across the rooms');
-  assert.equal(platform.split('timeAgo(log.timestamp)').length - 1, 2,
-    'timeAgo stays the "how fresh?" register in both rooms');
-  ok('both registers on both rooms: timeAgo + the dayTime stamp, one class core');
+  /* v5.279.0 — re-pinned per the read-the-actual-shape law: the "how
+   * fresh?" register moved home to lib/age's ageLong (a wait is not a
+   * preference); the pair with the dayTime stamp stands unchanged. */
+  assert.equal(platform.split('ageLong(log.timestamp)').length - 1, 2,
+    'ageLong stays the "how fresh?" register in both rooms');
+  ok('both registers on both rooms: ageLong + the dayTime stamp, one class core');
 }
 
 /* 5 — dayTime behavior over the matrix, judged in the reporting zone. */
