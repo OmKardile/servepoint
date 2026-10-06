@@ -189,6 +189,29 @@ export function dayLedgerCsvRows(o: {
   ];
 }
 
+/* ── v5.293.0 — the drawer's movements travel too (the parked CSV): the
+ * close-out room's export family completes — the day-ledger CSV, the
+ * Z-report's print, and now the movements out. ONE row per movement, the
+ * same grammar the day ledger speaks: the header names its columns, money
+ * rides moneyBare (paise-true, never float dust in the owner's ledger),
+ * the kind passes through as the row itself speaks it (payout / drop),
+ * the reason travels whole (csvCell owns the quoting), and the by-line
+ * names the hand — an empty one stays empty, never a guess. Extracted
+ * pure (192's own pattern): the suite reads the exact table the CSV
+ * button writes. */
+export function drawerMovementsCsvRows(movements: DrawerMovement[]): unknown[][] {
+  return [
+    [`Time (${appTzTag()})`, 'Kind', 'Amount', 'Reason', 'By'],
+    ...movements.map((m) => [
+      istTime(m.created_at),
+      m.kind,
+      moneyBare(Number(m.amount)),
+      m.reason,
+      m.created_by_email || '',
+    ]),
+  ];
+}
+
 /* ─────────────────────────────── types ─────────────────────────────────── */
 
 interface DayOrder {
@@ -1006,6 +1029,14 @@ const DrawerCard: React.FC<{
   onRecordMovement: () => void;
 }> = ({ active, history, cashIn, cashLoading, movements, onOpenFlow, onCloseFlow, onRecordMovement }) => {
   const [histOpen, setHistOpen] = useState(false);
+  /* v5.293.0 — the movements' own export verb and its ack. The day-ledger
+   * CSV has one; the movements out — the card's own leak ledger — rode
+   * silent. Same hook, same breath: the tap exports, then the chip speaks
+   * its green word for a breath and returns. The file's name carries the
+   * day the export happened (istTodayIso — module scope, no prop drilled).
+   * The rows build through drawerMovementsCsvRows (exported pure) — the
+   * suite reads the exact table this button writes. */
+  const [movSaved, flashMov] = useExportFlash();
   const moveSum = movements.reduce((s, m) => s + Number(m.amount || 0), 0);
   const expected = active ? Number(active.opening_float) + cashIn - moveSum : 0;
   const last = history[0];
@@ -1102,9 +1133,33 @@ const DrawerCard: React.FC<{
           </div>
           {movements.length > 0 ? (
             <div className="mt-2.5">
-              <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-[#8A938C]">
-                Movements out · {formatMoney(moveSum)}
-              </p>
+              {/* v5.293.0 — the header row grew the export verb: the label
+               * keeps its exact classes (min-w-0 flex-1), the verb rides
+               * ml-auto in the house's ONE chip register — the same amber
+               * chip the Reports rooms speak, the same green Saved breath
+               * after. It only ever renders inside this branch: a drawer
+               * with no movements has nothing to travel — no verb, no
+               * empty file. */}
+              <div className="flex items-center gap-2">
+                <p className="min-w-0 flex-1 text-[10px] font-bold uppercase tracking-[0.08em] text-[#8A938C]">
+                  Movements out · {formatMoney(moveSum)}
+                </p>
+                <CsvExportButton
+                  tone="chip"
+                  saved={movSaved}
+                  onExport={() =>
+                    flashMov(() =>
+                      downloadCsv(
+                        `servepoint-drawer-movements-${istTodayIso()}.csv`,
+                        drawerMovementsCsvRows(movements),
+                      ),
+                    )
+                  }
+                  idleAria="Export the drawer's movements as CSV"
+                  savedAria="Movements exported — the CSV file is saved"
+                  title="One row per movement — payouts and safe drops for the spreadsheet"
+                />
+              </div>
               <ul className="mt-1 flex flex-col gap-1">
                 {movements.map((m) => (
                   <li
