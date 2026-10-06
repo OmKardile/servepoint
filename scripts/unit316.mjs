@@ -86,9 +86,13 @@ check('no component declares the ack tri-state — the shape lives once (the lib
 /* ── 3. the census law: the word is spoken once ───────────────────────── */
 check('the ack words live in exactly ONE src file — the lib\u2019s own', () => {
   const offenders = walk('/home/z/my-project/src')
-    .filter((f) => !f.endsWith('lib/useCopyAck.ts'))
+    .filter((f) => !f.endsWith('lib/useCopyAck.ts') && !f.endsWith('lib/guest-i18n.ts'))
     .map((f) => [f, readFileSync(f, 'utf8')])
     .filter(([, src]) => src.includes("'Copy blocked'"));
+  /* v5.278.0 re-pin — lib/guest-i18n.ts joins the exclusion: it is the
+   * guest's TRANSLATED word home (the fail word speaks three languages —
+   * en/hi/kn), a dictionary, not a hand-rolled ack grammar. */
+  assert.ok(read('src/lib/guest-i18n.ts').split('copyBlocked:').length - 1 === 3, 'the guest fail word speaks exactly three languages');
   assert.deepEqual(offenders.map(([f]) => f), [], `local Copy blocked words remain: ${offenders.map(([f]) => f).join(', ')}`);
   for (const [name, src] of [['menu', menu], ['inventory', inventory], ['reports', reports], ['bills', bills], ['eod', eod], ['customers', customers]]) {
     assert.ok(src.includes('ackWord('), `${name} borrows the word`);
@@ -142,13 +146,16 @@ check('the doctrine is not vandalized — the door, the breath, the guest twin s
   assert.equal(walk('/home/z/my-project/src').filter((f) => !f.endsWith('lib/clipboard.ts') && /navigator\.clipboard|execCommand/.test(readFileSync(f, 'utf8'))).length, 0, 'the census law: the raw API is spoken once');
   assert.ok(flag.includes('export function useTransientFlag'), 'the one breath stands — the non-copy flags keep their home');
   assert.ok(settings.includes('useTransientFlag'), 'settings\u2019 non-copy flags (saved/cleared) still ride the breath lib');
-  assert.ok(guest.includes('void copyText(window.location.href).then(setCopied);'), 'the guest twin\u2019s honest shape is untouched');
+  assert.ok(guest.includes('useCopyAck(1600)') && guest.includes('runCopy(window.location.href);') && !guest.includes('setCopied') && guest.includes('aria-live="polite"'), 'the guest twin rides the ack breath (v5.278.0 re-pin: the hand-rolled boolean gone)');
 });
 
 /* ── 8. the version law ───────────────────────────────────────────────── */
 check('APP_VERSION and sw.js agree — the agreement shape', () => {
   const v = version.match(/APP_VERSION = '([^']+)'/)?.[1];
   assert.ok(v, 'version.ts speaks a version');
-  assert.match(v, /^5\.277\.0$/, 'this round\u2019s word is 5.277.0');
+  /* v5.278.0 — the literal belongs to the current round's unit (the
+   * unit308 precedent): this check keeps the AGREEMENT shape — the
+   * two files must speak one word, whichever it is. */
+  assert.ok(v && sw.includes(`const VERSION = "servepoint-v${v}-r1";`), 'the two files speak one word');
   assert.ok(sw.includes(`const VERSION = "servepoint-v${v}-r1";`), 'the service worker bakes the SAME word');
 });

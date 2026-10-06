@@ -125,10 +125,16 @@ check('all seventeen guarded verbs ride the ack home — the fail words stay hon
 
 /* ── 5. the guest lie fixed ────────────────────────────────────────────── */
 check('the guest\u2019s copy-link says Copied only when the copy happened', () => {
-  assert.ok(guest.includes('void copyText(window.location.href).then(setCopied);'), 'the honest boolean drives the word');
+  /* v5.278.0 re-pin — the guest's verb left its hand-rolled boolean for the
+   * ack lib's ONE breath: runCopy sends the text through the same honest
+   * door, the breath re-arms instead of stacking, and a refusal now SPEAKS
+   * (t('copyBlocked'), three languages). The law stands — it just moved in. */
+  assert.ok(guest.includes('runCopy(window.location.href);'), 'the honest door still drives the word');
+  assert.ok(guest.includes('useCopyAck(1600)'), 'the ack rides the ONE breath — the 1600 breath kept');
+  assert.ok(!guest.includes('setCopied'), 'the hand-rolled boolean and its stacked timer are gone');
   assert.ok(guest.includes('the lie is gone'), 'the comment names what changed');
   assert.ok(!guest.includes('navigator.clipboard'), 'the raw API is gone from the guest pages');
-  assert.ok(guest.includes("import { copyText } from '../../lib/clipboard';"), 'the guest pages import the ONE door');
+  assert.ok(guest.includes("from '../../lib/useCopyAck';"), 'the guest pages ride the ack home');
 });
 
 /* ── 6. the floor's verbs speak ────────────────────────────────────────── */

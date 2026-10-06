@@ -125,8 +125,8 @@ assert.ok(
   'the money span wears the line-grey tabular voice'
 );
 assert.ok(
-  dash.includes('₹{(Number(dish.revenue) || 0).toLocaleString(\'en-IN\', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}'),
-  'the money renders ₹ + en-IN 2dp, fail-soft'
+  dash.includes('{money(Number(dish.revenue) || 0)}'),
+  'the money renders through the lib\u2019s ONE register (v5.278.0: \u20b9 + en-IN 2dp via money()), fail-soft'
 );
 assert.ok(
   dash.includes('carried by ${dish.orders} ${dish.orders === 1 ? \'plate\' : \'plates\'}'),
