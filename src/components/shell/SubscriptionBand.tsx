@@ -60,11 +60,15 @@ export const SubscriptionBand: React.FC = () => {
       className={`flex items-center justify-center gap-2 px-6 py-2 text-[12.5px] ${BAND_STYLES[bucket]}`}
     >
       <Hourglass size={13} strokeWidth={2.2} aria-hidden className={ended ? 'opacity-60' : ''} />
+      {/* v5.307.0 — the date strip reads BOTH of the ONE home's prefixes:
+       * "Trial ends …" from the live arm and "Trial ended …" from the tense
+       * law's past arm — the regex takes the bare date either way, so the
+       * band's own sentences never double-speak the tense. */}
       {ended ? (
         <span>
           Your {plan} trial ended on{' '}
           <span className="font-semibold" style={{ fontVariantNumeric: 'tabular-nums' }}>
-            {words.primary.replace('Trial ends ', '')}
+            {words.primary.replace(/^Trial (?:ends|ended) /, '')}
           </span>{' '}
           · no charge was made.
         </span>
@@ -72,7 +76,7 @@ export const SubscriptionBand: React.FC = () => {
         <span>
           Your {plan} trial{' '}
           <span className="font-semibold" style={{ fontVariantNumeric: 'tabular-nums' }}>
-            {d === 0 ? 'ends today' : d === 1 ? 'ends tomorrow' : `ends ${words.primary.replace('Trial ends ', '')}`}
+            {d === 0 ? 'ends today' : d === 1 ? 'ends tomorrow' : `ends ${words.primary.replace(/^Trial (?:ends|ended) /, '')}`}
           </span>
           {d === 1 ? ' — 1 day left' : d === 0 ? '' : ` — ${d} days left`} · no charge yet.
         </span>

@@ -311,6 +311,16 @@ export const ProvisioningWizard: React.FC<ProvisioningWizardProps> = ({
    * option labels' own words ("Trial (14 days)" / "Standard (active)") are
    * the review's words now — one voice, step 1 to step 3. */
   const planLabel = form.plan === 'trial' ? 'Trial (14 days)' : 'Standard (active)';
+  /* v5.307.0 — the plan-price sentence's ONE home: step 1's caption and
+   * step 3's review row speak the SAME words (the 232 law — one phrasing,
+   * no fork). The trial arm names the after-trial rate instead of claiming
+   * a charge that never lands during the trial (5.233's own law), and the
+   * ledger now keeps that promised rate too (api.ts's write law) — wizard,
+   * review and subscriptions room tell one truth. */
+  const priceSentence =
+    form.plan === 'trial'
+      ? `No charge yet — ${pricePreview} / month after the trial ends`
+      : `Charged at ${pricePreview} / month`;
 
   const copyButton = (key: string, text: string, label: string) => {
     const spoke = copiedKey && copiedKey.id === key ? copiedKey.kind : null;
@@ -534,11 +544,11 @@ export const ProvisioningWizard: React.FC<ProvisioningWizardProps> = ({
                    * "no charge yet" grammar — 5.125's clock voice), so the
                    * caption names the after-trial rate instead of claiming
                    * a charge that never lands during the trial. Standard
-                   * keeps its charged-at bytes. */
+                   * keeps its charged-at bytes. v5.307.0 — the sentence
+                   * rides its ONE home (priceSentence); the review row
+                   * below speaks the same words. */
                   <p id="pw-price-preview" className="mt-1 text-xs text-[#969696]">
-                    {form.plan === 'trial'
-                      ? `No charge yet — ${pricePreview} / month after the trial ends`
-                      : `Charged at ${pricePreview} / month`}
+                    {priceSentence}
                   </p>
                 )}
               </div>
@@ -656,7 +666,10 @@ export const ProvisioningWizard: React.FC<ProvisioningWizardProps> = ({
                 ['City', form.city.trim() || '—'],
                 ['Slug', form.slug.trim()],
                 ['Plan', planLabel],
-                ['Monthly price', pricePreview],
+                /* v5.307.0 — the review row speaks the SAME sentence step 1
+                 * spoke (the ONE home): a trial's row can no longer read
+                 * like a charge that never lands during the trial. */
+                ['Monthly price', priceSentence],
                 ['Owner name', form.ownerName.trim()],
                 ['Owner email', form.ownerEmail.trim()],
               ].map(([label, value]) => (

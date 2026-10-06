@@ -106,8 +106,17 @@ export function subscriptionWords(s: Subscription): {
     const bucket = trialBucket(d);
     if (bucket === null) return { primary: '—', urgent: false, bucket: null };
     const rel = trialRelWords(d);
+    /* v5.307.0 — the tense law: a LIVE window says "Trial ends <date>"; a
+     * window already PASSED says "Trial ended <date>" — the future tense
+     * would lie to a dead trial (the tenant band's own afterword — "Your
+     * Growth trial ended on …" — has spoken the past tense since 5.126;
+     * now the ONE home carries it for every projection). The date strip in
+     * SubscriptionBand reads both prefixes. */
     return {
-      primary: `Trial ends ${formatBillingDate(s.trial_end)}`,
+      primary:
+        d >= 0
+          ? `Trial ends ${formatBillingDate(s.trial_end)}`
+          : `Trial ended ${formatBillingDate(s.trial_end)}`,
       secondary: d >= 0 ? `${rel} · no charge yet` : rel,
       urgent: bucket === 'last',
       bucket,

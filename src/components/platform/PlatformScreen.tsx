@@ -534,8 +534,16 @@ export const PlatformScreen: React.FC = () => {
 
   const supabaseConnected = isSupabaseConfigured();
 
+  /* v5.307.0 — the MRR law counts the rows that CHARGE: active only. A
+   * trialing row's own words say "no charge yet", so its rate — the promised
+   * after-trial rate the ledger now keeps (api.ts's write law) — must not
+   * answer the revenue card before the trial converts. The old all-rows
+   * reduce only stayed truthful while trials were written at ₹0. */
   const mrr = useMemo(
-    () => (subs ?? []).reduce((sum, s) => sum + (s.final_monthly_rate || 0), 0),
+    () =>
+      (subs ?? [])
+        .filter((s) => s.status === 'active')
+        .reduce((sum, s) => sum + (s.final_monthly_rate || 0), 0),
     [subs]
   );
   const activeSubscriptions = useMemo(

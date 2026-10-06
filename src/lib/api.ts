@@ -2077,6 +2077,15 @@ export async function provisionBusiness(input: ProvisionInput): Promise<Provisio
       // plan_id MUST satisfy the CHECK (starter|growth|pro|enterprise): the
       // wizard's two-plan model maps Trial→starter(trialing) and
       // Standard→growth(active) until real billing tiers ship.
+      // v5.307.0 — the trial keeps its PROMISED RATE: the wizard's step-1
+      // preview says "No charge yet — ₹X / month after the trial ends", so
+      // the ledger must carry X in monthly_price / final_monthly_rate (the
+      // columns speak the PLAN's price, not "charged so far" — the trialing
+      // status, the trial_end and the null next_billing_at already speak the
+      // no-charge-yet half). The old isTrial ? 0 write threw the promise
+      // away: the subscriptions room answered ₹0.00 to a rate the operator
+      // was told, and the trial had no afterlife to convert to. MRR stays
+      // honest because its own law counts ACTIVE rows only (PlatformScreen).
       const in30Days = new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString();
       const in14Days = new Date(Date.now() + 14 * 24 * 3600 * 1000).toISOString();
       const isTrial = input.planId === 'trial';
@@ -2093,8 +2102,8 @@ export async function provisionBusiness(input: ProvisionInput): Promise<Provisio
         tenant_id: tenant.id,
         plan_id: isTrial ? 'starter' : 'growth',
         billing_cycle: 'monthly',
-        monthly_price: isTrial ? 0 : input.monthlyPrice,
-        final_monthly_rate: isTrial ? 0 : input.monthlyPrice,
+        monthly_price: input.monthlyPrice,
+        final_monthly_rate: input.monthlyPrice,
         status: isTrial ? 'trialing' : 'active', // subscriptions.status_check allows 'trialing'
         trial_end: isTrial ? in14Days : null,
         next_billing_at: isTrial ? null : in30Days,
