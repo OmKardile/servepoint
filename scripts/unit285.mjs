@@ -75,15 +75,22 @@ const swJs = strip('../public/sw.js');
   ok('one read, two derivations: the call site uncapped, the strip\'s slice held');
 }
 
-/* 3 — the census voice: the ledger speaks its size. */
+/* 3 — the census voice: the ledger speaks its size.
+ * v5.288.0 — re-pinned per the read-the-actual-shape law: the census
+ * learned the filtered voice ("N of M events on record" while hunting);
+ * the unfiltered line keeps its exact words, now inside the room's own
+ * template literal. The law stands: pluralized honestly, gated. */
 {
   assert.ok(platform.includes('on record'), 'the census word exists');
   assert.match(platform,
-    /\{logs\.length\} \{logs\.length === 1 \? 'event' : 'events'\} on record/,
-    'the count is the row count, pluralized honestly');
+    /`\$\{logs\.length\} \$\{logs\.length === 1 \? 'event' : 'events'\} on record`/,
+    'the count is the row count, pluralized honestly (the unfiltered line)');
+  assert.match(platform,
+    /`\$\{filteredLogs\.length\} of \$\{logs\.length\} \$\{logs\.length === 1 \? 'event' : 'events'\} on record`/,
+    'the filtered voice: "N of M" while hunting (v5.288.0)');
   assert.match(platform, /logs !== null && logs.length > 0 &&/,
     'the voice is gated: silent while loading, the empty state owns the zero');
-  ok('the census voice: "N events on record", pluralized, gated');
+  ok('the census voice: "N events on record", pluralized, gated — and the filtered "N of M" beside it');
 }
 
 /* 4 — the time word speaks both registers, one stamp language, two rooms. */
@@ -91,7 +98,11 @@ const swJs = strip('../public/sw.js');
   assert.match(platform, /import \{ dayTime \} from '\.\.\/\.\.\/lib\/day';/, 'the day grammar import');
   assert.match(platform, /import \{ appTimezone \} from '\.\.\/\.\.\/lib\/appday';/, 'the zone import — the reporting zone, not the device\'s');
   const stamp = `dayTime(log.timestamp, appTimezone())`;
-  assert.equal(platform.split(stamp).length - 1, 2, 'the stamp rides BOTH rooms');
+  /* v5.288.0 — re-pinned per the read-the-actual-shape law: the stamp
+   * rides THREE rooms now — the dashboard strip, the audit row, and the
+   * row's copy line (auditLineFor carries the whole event for the
+   * support ticket, stamp included). */
+  assert.equal(platform.split(stamp).length - 1, 3, 'the stamp rides THREE rooms');
   const core = `className="mt-0.5 text-[11px] text-[#969696]"`;
   assert.equal(platform.split(core).length - 1, 2, 'the stamp\'s class core byte-equal across the rooms');
   /* v5.279.0 — re-pinned per the read-the-actual-shape law: the "how
@@ -99,7 +110,7 @@ const swJs = strip('../public/sw.js');
    * preference); the pair with the dayTime stamp stands unchanged. */
   assert.equal(platform.split('ageLong(log.timestamp)').length - 1, 2,
     'ageLong stays the "how fresh?" register in both rooms');
-  ok('both registers on both rooms: ageLong + the dayTime stamp, one class core');
+  ok('the registers: ageLong + the dayTime stamp, one class core — three rooms since v5.288.0');
 }
 
 /* 5 — dayTime behavior over the matrix, judged in the reporting zone. */
@@ -126,7 +137,11 @@ const swJs = strip('../public/sw.js');
   assert.match(platform, /\{log\.action\}/, 'the row\'s action word held');
   assert.match(platform, /\{log\.details &&/, 'the row\'s details line held');
   assert.match(platform, /\{log\.actor_email \|\| 'System'\}/, 'the row\'s actor line held');
-  assert.match(platform, /\{logs\.map\(\(log\) => \(/, 'the audit tab still maps the WHOLE read');
+  /* v5.288.0 — re-pinned per the read-the-actual-shape law: the audit tab
+   * maps the FILTERED read now (the hunt's derivation); the whole-ledger
+   * law stands unchanged one room up — the read itself stays uncapped
+   * (check 1) and the filter is a pure client-side derivation of it. */
+  assert.match(platform, /\{filteredLogs\.map\(\(log\) => \(/, 'the audit tab maps the filtered derivation of the WHOLE read');
   ok('no other room moved: tenants/subscriptions bytes, the row grammar\'s shape');
 }
 
