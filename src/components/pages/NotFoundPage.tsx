@@ -1,7 +1,8 @@
 import React, { useEffect } from 'react';
-import { ArrowLeft, ArrowRight, LifeBuoy, MapPin } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Check, Copy, LifeBuoy, MapPin } from 'lucide-react';
 import brandMark from '../../assets/brand/mark.png';
 import { APP_VERSION } from '../../version';
+import { ackWord, useCopyAck } from '../../lib/useCopyAck';
 
 /**
  * NotFoundPage (v5.141.0) — the honest 404.
@@ -24,6 +25,15 @@ const NotFoundPage: React.FC<{ path?: string }> = ({ path }) => {
     document.title = 'Not found · ServePoint';
   }, []);
 
+  /* v5.285.0 — the echo learned to travel: the address chip is now a copy
+   * verb riding the house's ONE breath (useCopyAck — v5.277.0's home),
+   * because the person it exists for is the one PASTING the rotted link
+   * into a ticket or a message. The FULL url travels (origin + path — the
+   * exact string a reader needs), the word rides ackWord's one home, and
+   * the chip's border names the outcome: gold-warm on hover, green when
+   * the copy happened, the honest red when the device refused. */
+  const [copyAck, runCopy] = useCopyAck();
+
   return (
     <div className="flex min-h-screen flex-col bg-[#F6F5F2]">
       {/* ── Nav — the porch's own header voice ── */}
@@ -37,14 +47,20 @@ const NotFoundPage: React.FC<{ path?: string }> = ({ path }) => {
             smartPOS
           </span>
           <nav className="ml-auto flex items-center gap-2" aria-label="Primary">
+            {/* v5.285.0 — the narrow door: below sm the Help pill stands down
+                (IndexHelpPage's own grammar — its Showcase pill has hidden
+                below sm since 5.2.1) and the footer keeps the door; the
+                pills also wear shrink-0 whitespace-nowrap, because at 320px
+                the crush wrapped "Open the app" into three clipped lines —
+                a header must never have to choose between its words. */}
             <a
               href="/index-help"
-              className="flex h-9 items-center rounded-full border border-[#E3E7E0] bg-white px-4 text-[13px] font-semibold text-[#0F3D3E] transition hover:border-[#C9CFC9]"
+              className="hidden h-9 shrink-0 items-center whitespace-nowrap rounded-full border border-[#E3E7E0] bg-white px-4 text-[13px] font-semibold text-[#0F3D3E] transition hover:border-[#C9CFC9] sm:flex"
             >
               <LifeBuoy size={14} className="mr-1.5" aria-hidden />
               Help
             </a>
-            <a href="/" className="sp-cta flex h-9 items-center rounded-full px-4 text-[13px]">
+            <a href="/" className="sp-cta flex h-9 shrink-0 items-center whitespace-nowrap rounded-full px-4 text-[13px]">
               Open the app
               <ArrowRight size={14} className="ml-1.5" aria-hidden />
             </a>
@@ -79,14 +95,37 @@ const NotFoundPage: React.FC<{ path?: string }> = ({ path }) => {
           </p>
 
           {/* The exact address, echoed back — a lost visitor (or the person they
-              call for help) sees precisely what was asked, not a vague shrug. */}
+              call for help) sees precisely what was asked, not a vague shrug.
+              v5.285.0 — and one tap hands them the exact string to pass on. */}
           {path && path !== '/' && (
-            <p className="mt-6 inline-flex max-w-full items-center gap-2 rounded-full border border-[#E3E7E0] bg-white px-4 py-2 text-[12.5px] text-[#5B6B63]">
+            <button
+              type="button"
+              onClick={() => runCopy(window.location.href)}
+              aria-label={`Copy this address — ${window.location.href}`}
+              aria-live="polite"
+              title={ackWord(copyAck, 'Copy this address')}
+              className={`mt-6 inline-flex max-w-full items-center gap-2 rounded-full border bg-white px-4 py-2 text-[12.5px] text-[#5B6B63] transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#B88E2F] ${
+                copyAck === 'fail'
+                  ? 'border-[#B4483C]/50'
+                  : copyAck === 'ok'
+                    ? 'border-[#2E7D32]/40'
+                    : 'border-[#E3E7E0] hover:border-[#B88E2F]'
+              }`}
+            >
               <MapPin size={14} className="shrink-0 text-[#969696]" aria-hidden />
               <span className="truncate">
                 You followed <span className="font-mono text-[#0F3D3E]">{path}</span>
               </span>
-            </p>
+              {copyAck === 'ok' ? (
+                <Check size={13} className="shrink-0 text-[#2E7D32]" aria-hidden />
+              ) : (
+                <Copy
+                  size={13}
+                  className={`shrink-0 ${copyAck === 'fail' ? 'text-[#B4483C]' : 'text-[#969696]'}`}
+                  aria-hidden
+                />
+              )}
+            </button>
           )}
 
           <div className="mt-8 flex flex-wrap items-center justify-center gap-3">

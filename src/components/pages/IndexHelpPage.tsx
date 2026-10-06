@@ -184,13 +184,17 @@ const IndexHelpPage: React.FC = () => {
             Help
           </span>
           <nav className="ml-auto flex items-center gap-2" aria-label="Primary">
+            {/* v5.285.0 — the pills wear shrink-0 whitespace-nowrap (the porch
+                family's one narrow voice): the Showcase pill has hidden
+                below sm since 5.2.1, and now NO width can wrap a pill's
+                words into a clipped stack. */}
             <a
               href="/showcase"
-              className="hidden h-9 items-center rounded-full border border-[#E3E7E0] bg-white px-4 text-[13px] font-semibold text-[#0F3D3E] transition hover:border-[#C9CFC9] sm:flex"
+              className="hidden h-9 shrink-0 items-center whitespace-nowrap rounded-full border border-[#E3E7E0] bg-white px-4 text-[13px] font-semibold text-[#0F3D3E] transition hover:border-[#C9CFC9] sm:flex"
             >
               Showcase
             </a>
-            <a href="/" className="sp-cta flex h-9 items-center rounded-full px-4 text-[13px]">
+            <a href="/" className="sp-cta flex h-9 shrink-0 items-center whitespace-nowrap rounded-full px-4 text-[13px]">
               Open the app
               <ArrowRight size={14} className="ml-1.5" aria-hidden />
             </a>

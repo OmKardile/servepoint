@@ -100,14 +100,19 @@ const ShowcasePage: React.FC = () => {
             smartPOS
           </span>
           <nav className="ml-auto flex items-center gap-2" aria-label="Primary">
+            {/* v5.285.0 — the narrow door rides the porch family's ONE grammar
+                (IndexHelpPage's own): below sm the secondary pill stands down
+                and the footer keeps the door, and the pills wear shrink-0
+                whitespace-nowrap — at 320px the crush wrapped "Open the app"
+                into three clipped lines. One header, one narrow voice. */}
             <a
               href="/index-help"
-              className="flex h-9 items-center rounded-full border border-[#E3E7E0] bg-white px-4 text-[13px] font-semibold text-[#0F3D3E] transition hover:border-[#C9CFC9]"
+              className="hidden h-9 shrink-0 items-center whitespace-nowrap rounded-full border border-[#E3E7E0] bg-white px-4 text-[13px] font-semibold text-[#0F3D3E] transition hover:border-[#C9CFC9] sm:flex"
             >
               <LifeBuoy size={14} className="mr-1.5" aria-hidden />
               Help
             </a>
-            <a href="/" className="sp-cta flex h-9 items-center rounded-full px-4 text-[13px]">
+            <a href="/" className="sp-cta flex h-9 shrink-0 items-center whitespace-nowrap rounded-full px-4 text-[13px]">
               Open the app
               <ArrowRight size={14} className="ml-1.5" aria-hidden />
             </a>
