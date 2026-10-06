@@ -824,6 +824,10 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
     }
   });
   const [query, setQuery] = useState('');
+  /* v5.284.0 — the field's own handle: the one-tap clear empties the query
+     and hands the keyboard back to the same field (no blind backspacing on
+     a phone keyboard, no scroll hunt for a field that moved rows). */
+  const searchInputRef = useRef<HTMLInputElement>(null);
   /* Veg-only (v5.53.0) — India's dietary identity is a filter, not a footnote.
      Guests scanning the table QR decide with it; the mark grammar below is
      the same square-and-dot the rows already speak. */
@@ -1349,17 +1353,48 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
           </button>
         </div>
 
-        <div className="mx-auto mt-4 flex max-w-xl items-center gap-2">
-          <div className="relative flex-1">
+        {/* v5.284.0 — the search learns the phone. The row held search + Veg
+            + languages in ONE flex line, and at 390px — the QR menu's own
+            device — the two shrink-0 neighbours squeezed the field to a
+            seven-pixel whisper: "Se" was all the placeholder could say.
+            Now the field takes its OWN row on narrow screens (w-full + wrap,
+            the filters follow below) and returns to the single line at sm+
+            — the desktop look untouched; sm:min-w-0 keeps it honest at every
+            width between. And the field learned to let go: a non-empty query
+            grows a one-tap clear ✕ (32px hit, the guest's word in all three
+            languages) that empties AND refocuses — the house's own ✕ grammar
+            (the webkit cancel hidden, the custom button speaking), the same
+            register Header/Notifications/Inventory/Messages already wear. */}
+        <div className="mx-auto mt-4 flex max-w-xl flex-wrap items-center gap-2">
+          <div className="relative w-full sm:w-auto sm:flex-1 sm:min-w-0">
             <Search size={16} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[#6B6B6B]" aria-hidden />
             <input
+              ref={searchInputRef}
               type="search"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder={t('searchPh')}
               aria-label={t('searchAria')}
-              className="h-12 w-full rounded-full border border-white/15 bg-white pl-10 pr-4 text-[14px] text-[#1A1A1A] shadow-sm placeholder:text-[#9A9A9A] focus:outline focus:outline-2 focus:outline-[#B88E2F]"
+              className={`h-12 w-full rounded-full border border-white/15 bg-white pl-10 text-[14px] text-[#1A1A1A] shadow-sm placeholder:text-[#9A9A9A] focus:outline focus:outline-2 focus:outline-[#B88E2F] [&::-webkit-search-cancel-button]:hidden [&::-webkit-search-decoration]:hidden ${
+                /* the ✕ rents the room only while it speaks — the text never
+                   runs under it, and an empty field keeps its tight pr-4. */
+                query.length > 0 ? 'pr-11' : 'pr-4'
+              }`}
             />
+            {query.length > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  setQuery('');
+                  searchInputRef.current?.focus();
+                }}
+                aria-label={t('searchClear')}
+                title={t('searchClear')}
+                className="absolute right-2 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full text-[#6B6B6B] transition-colors hover:bg-[#F0F2EE] hover:text-[#0F3D3E] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#B88E2F]"
+              >
+                <X size={15} aria-hidden />
+              </button>
+            )}
           </div>
           {/* Veg-only (v5.53.0): the FSSAI square-and-dot as a filter — ON
               fills the green tint; the count chip only ever shows dishes the
