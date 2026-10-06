@@ -2004,8 +2004,23 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
             </div>
 
             {lines.length > 0 && (
-              <div className="border-t border-[#E3E7E0] px-5 py-4">
-                <div className="space-y-1 text-[13px] text-[#6B6B6B]">
+              /* v5.294.0 — the drawer's footer learns the stick: at a squat
+               * viewport (a phone rotated landscape at the table — 390px)
+               * the footer's natural height overflowed the drawer's own
+               * rounded bottom — the rows' scroll region collapsed and
+               * Place order sat clipped below the fold with no scroll law
+               * to reach it (the v5.289 wizard's disease, one drawer
+               * later — the guest family's own turn). THE LAW, the
+               * family's own: the footer shrinks (min-h-0 flex-col), the
+               * money and every alert hold their seat (shrink-0 — the
+               * bill, the error, the window's words: a guest must always
+               * see the total and the reason a verb is gated), the
+               * optional words scroll (min-h-0 flex-1 overflow-y-auto —
+               * the pay note and the kitchen note), and the verb holds
+               * the drawer's own bottom edge (shrink-0) — Place order
+               * reachable at ANY height. */
+              <div className="flex min-h-0 flex-col border-t border-[#E3E7E0] px-5 py-4">
+                <div className="shrink-0 space-y-1 text-[13px] text-[#6B6B6B]">
                   <div className="flex justify-between">
                     <span>{t('subtotal')}</span>
                     <span className="tabular-nums">{money(cartSubtotal)}</span>
@@ -2037,7 +2052,7 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
                   </div>
                 </div>
                 {placeError && (
-                  <p className="mt-2 rounded-xl bg-[#FDF3F2] px-3 py-2 text-[12.5px] text-[#B4483C]" role="alert">
+                  <p className="mt-2 shrink-0 rounded-xl bg-[#FDF3F2] px-3 py-2 text-[12.5px] text-[#B4483C]" role="alert">
                     {placeError}
                   </p>
                 )}
@@ -2056,45 +2071,50 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
                     announced once on arrival, the clock ticks silently beside
                     it (an aria-live region must never inherit a 1s ticker). */}
                 {windowWarmMs !== null && (
-                  <div className="mt-3 flex items-center justify-between gap-2 rounded-xl border border-[#F0E4C8] border-l-4 border-l-[#B45309] bg-[#FBF6EA] px-3 py-2 text-[12.5px] font-medium text-[#8A5A00]">
+                  <div className="mt-3 flex shrink-0 items-center justify-between gap-2 rounded-xl border border-[#F0E4C8] border-l-4 border-l-[#B45309] bg-[#FBF6EA] px-3 py-2 text-[12.5px] font-medium text-[#8A5A00]">
                     <span role="status">{t('windowWarmNote')}</span>
                     <span className="shrink-0 font-mono tabular-nums">{formatWindowLeft(windowWarmMs)}</span>
                   </div>
                 )}
                 {windowEnded && (
-                  <p role="status" className="mt-3 rounded-xl border border-[#F0E4C8] border-l-4 border-l-[#B45309] bg-[#FBF6EA] px-3 py-2 text-[12.5px] font-medium text-[#8A5A00]">
+                  <p role="status" className="mt-3 shrink-0 rounded-xl border border-[#F0E4C8] border-l-4 border-l-[#B45309] bg-[#FBF6EA] px-3 py-2 text-[12.5px] font-medium text-[#8A5A00]">
                     {t('windowEndedNote')}
                   </p>
                 )}
-                <p className="mt-2 flex items-center gap-1.5 text-[11.5px] text-[#6B6B6B]">
-                  <Wallet size={13} aria-hidden /> {t('payNote')}
-                </p>
-                {/* v5.254.0 — the kitchen's ears: an optional word rides the
-                    whole order (allergies, spice, timing). The feedback
-                    card's textarea language — one input shape across the
-                    guest's surfaces. */}
-                <div className="mt-3">
-                  <label htmlFor="drawer-note" className="text-[11.5px] font-semibold text-[#6B6B6B]">
-                    {t('drawerNoteLabel')}
-                  </label>
-                  <textarea
-                    id="drawer-note"
-                    rows={2}
-                    maxLength={ORDER_NOTE_MAX}
-                    value={orderNote}
-                    onChange={(e) => changeNote(e.target.value)}
-                    placeholder={t('drawerNotePh')}
-                    className="mt-1.5 w-full resize-none rounded-2xl border border-[#E3E7E0] bg-[#FBF9F4] px-3.5 py-2.5 text-[13px] text-[#1A1A1A] placeholder:text-[#9A9A9A] focus:border-[#B88E2F] focus:outline-none focus:ring-2 focus:ring-[#B88E2F]/25"
-                  />
-                  <p className="mt-1 text-right text-[10.5px] tabular-nums text-[#9A9A9A]" aria-hidden>
-                    {orderNote.length}/{ORDER_NOTE_MAX}
+                {/* the scroll body: the optional words — the pay note and
+                 * the kitchen note ride it at squat heights while the
+                 * money, the alerts and the verb hold their seats. */}
+                <div className="min-h-0 flex-1 overflow-y-auto">
+                  <p className="mt-2 flex items-center gap-1.5 text-[11.5px] text-[#6B6B6B]">
+                    <Wallet size={13} aria-hidden /> {t('payNote')}
                   </p>
+                  {/* v5.254.0 — the kitchen's ears: an optional word rides the
+                   * whole order (allergies, spice, timing). The feedback
+                   * card's textarea language — one input shape across the
+                   * guest's surfaces. */}
+                  <div className="mt-3">
+                    <label htmlFor="drawer-note" className="text-[11.5px] font-semibold text-[#6B6B6B]">
+                      {t('drawerNoteLabel')}
+                    </label>
+                    <textarea
+                      id="drawer-note"
+                      rows={2}
+                      maxLength={ORDER_NOTE_MAX}
+                      value={orderNote}
+                      onChange={(e) => changeNote(e.target.value)}
+                      placeholder={t('drawerNotePh')}
+                      className="mt-1.5 w-full resize-none rounded-2xl border border-[#E3E7E0] bg-[#FBF9F4] px-3.5 py-2.5 text-[13px] text-[#1A1A1A] placeholder:text-[#9A9A9A] focus:border-[#B88E2F] focus:outline-none focus:ring-2 focus:ring-[#B88E2F]/25"
+                    />
+                    <p className="mt-1 text-right text-[10.5px] tabular-nums text-[#9A9A9A]" aria-hidden>
+                      {orderNote.length}/{ORDER_NOTE_MAX}
+                    </p>
+                  </div>
                 </div>
                 <button
                   type="button"
                   onClick={() => void placeOrder()}
                   disabled={placing || windowEnded}
-                  className="mt-3 flex h-12 w-full items-center justify-center gap-2 rounded-full text-[14px] font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#B88E2F]"
+                  className="mt-3 flex h-12 w-full shrink-0 items-center justify-center gap-2 rounded-full text-[14px] font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#B88E2F]"
                   style={{ background: brand.teal }}
                 >
                   {placing ? t('sending') : windowEnded ? t('windowEndedCta') : t('placeOrder', { amt: money(cartTotal) })}

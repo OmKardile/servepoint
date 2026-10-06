@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useReducer, useRef, useState } 
 import {
   BellRing,
   CalendarDays,
+  CheckCheck,
   ChevronDown,
   CircleSlash,
   History,
@@ -272,6 +273,24 @@ export function CounterInbox(): React.ReactElement | null {
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
+  /* v5.294.0 — the counter learns to clear the rush (the parked bulk verb):
+   * a lunch-time QR wave lands N tickets at once and the cashier tapped Ok
+   * N times — the band's own door existed per ticket, never for the queue.
+   * THE VERB: "Ok all · N" rides the band header beside the bell, only
+   * when TWO or more tickets hold (one ticket is the card's own verb — a
+   * bulk verb for one would be a lie of scale). THE DOOR: the decline
+   * verb's own two-tap grammar — the first tap arms (the word names the
+   * consequence: "Fire all 3?"), the second fires; any refresh disarms
+   * (the queue changed, the armed count would be a stale promise). THE
+   * FIRE: one ticket at a time through the SAME advanceOrder door the
+   * cards speak — the kitchen's gate sees identical events, oldest
+   * first (the list's own order); a mid-rush failure stops honestly
+   * ("Cleared 2 of 4 — …") and the refresh re-reads what survived.
+   * THE BUSY: while firing, the bulk chip speaks "Firing…" and every
+   * card's verbs stand down (busy rides the band now) — no double-fire
+   * through a per-card tap mid-loop. */
+  const [bulkArmed, setBulkArmed] = useState(false);
+  const [bulkBusy, setBulkBusy] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const [rt, setRt] = useState<RealtimeState>('connecting');
   const [nowMs, setNowMs] = useState(() => Date.now());
@@ -443,6 +462,45 @@ export function CounterInbox(): React.ReactElement | null {
     [tenantId, load]
   );
 
+  /* v5.294.0 — the bulk fire: every ticket in the band, oldest first (the
+   * list's own order), one at a time through the SAME advanceOrder door
+   * the cards speak. A mid-rush failure stops the loop and names the
+   * honest score ("Cleared 2 of 4 — …"); a clean run just reloads. The
+   * armed seat always stands down after — fired or failed, the promise
+   * expired with the tap. */
+  const actAll = useCallback(
+    async () => {
+      if (!tenantId || tickets.length === 0) return;
+      setBulkBusy(true);
+      setError(null);
+      const total = tickets.length;
+      let cleared = 0;
+      let firstErr: string | null = null;
+      for (const t of tickets) {
+        try {
+          await advanceOrder(t.id, tenantId, 'pending');
+          cleared += 1;
+        } catch (e) {
+          firstErr = e instanceof Error ? e.message : 'Could not update the ticket';
+          break;
+        }
+      }
+      if (firstErr) {
+        setError(cleared > 0 ? `Cleared ${cleared} of ${total} — ${firstErr}` : firstErr);
+      }
+      setBulkArmed(false);
+      setBulkBusy(false);
+      await load();
+    },
+    [tenantId, tickets, load]
+  );
+
+  /* the armed seat disarms on any refresh — the queue changed, the armed
+   * count would be a stale promise. */
+  useEffect(() => {
+    setBulkArmed(false);
+  }, [tickets]);
+
   /* 5.102.0 — the counter's own bell switch. Mirrors the KDS chime toggle:
    * persist, then ring once as audible confirmation — which also unlocks the
    * AudioContext on a user gesture (autoplay policies). */
@@ -541,6 +599,45 @@ export function CounterInbox(): React.ReactElement | null {
           {!soundOn ? <VolumeX size={14} aria-hidden /> : <Volume2 size={14} aria-hidden />}
           {!soundOn ? 'Muted' : quietNow ? 'Bell on · quiet' : 'Bell on'}
         </button>
+        {/* v5.294.0 — the rush door: "Ok all · N" beside the bell, only when
+         * two or more tickets hold (a bulk verb for one would be a lie of
+         * scale). The chip wears the band's own geometry (h-8 rounded-full)
+         * and the two registers the band already speaks: the Ok verb's teal
+         * while idle, the confirm red once armed — the word always naming
+         * what the NEXT tap does. */}
+        {tickets.length >= 2 ? (
+          <button
+            type="button"
+            onClick={() => (bulkArmed ? void actAll() : setBulkArmed(true))}
+            disabled={bulkBusy}
+            title={
+              bulkBusy
+                ? 'Firing every ticket to the kitchen — one breath'
+                : bulkArmed
+                  ? `Tap again to confirm firing all ${tickets.length} tickets to the kitchen`
+                  : 'Ok every ticket in the band at once — each fires to the kitchen'
+            }
+            aria-label={
+              bulkBusy
+                ? 'Firing all tickets to the kitchen'
+                : bulkArmed
+                  ? `Tap again to confirm firing all ${tickets.length} tickets to the kitchen`
+                  : `Ok all ${tickets.length} tickets at once`
+            }
+            className={`flex h-8 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-[12px] font-semibold text-white transition active:scale-[0.98] disabled:opacity-60 ${
+              bulkArmed || bulkBusy ? 'bg-[#B3261E] hover:bg-[#9C211A]' : 'bg-[#0F3D3E] hover:bg-[#0C3233]'
+            }`}
+          >
+            <CheckCheck size={14} aria-hidden />
+            {bulkBusy ? (
+              <span className="tabular-nums">Firing…</span>
+            ) : bulkArmed ? (
+              <span className="tabular-nums">Fire all {tickets.length}?</span>
+            ) : (
+              <span className="tabular-nums">Ok all · {tickets.length}</span>
+            )}
+          </button>
+        ) : null}
         <span
           className="flex shrink-0 items-center gap-1.5 text-[11px] font-bold"
           title={rt === 'live' ? 'Realtime connected' : rt === 'connecting' ? 'Connecting…' : 'Realtime offline — polling, and the moment you look back'}
@@ -611,7 +708,7 @@ export function CounterInbox(): React.ReactElement | null {
                   order={t}
                   tableLabel={tableLabelFor(t.table_id)}
                   nowMs={nowMs}
-                  busy={busyId === t.id}
+                  busy={bulkBusy || busyId === t.id}
                   confirming={confirmingId === t.id}
                   onOk={() => void act(t, 'pending')}
                   onDecline={() => {
