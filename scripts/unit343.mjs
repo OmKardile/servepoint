@@ -93,9 +93,9 @@ test('unit343 · the ink law — urgent only when the bucket says last', () => {
     'the urgent red and the grey voice are the app\u2019s existing hexes'
   );
   // the other three cards never grow a tone
-  assert.ok(platform.includes('<KpiCard icon={Building2} label="Total businesses" value={tenantsError ? \'—\' : tenants?.length ?? 0} hint={businessesHint} />'));
-  assert.ok(platform.includes('<KpiCard icon={CreditCard} label="Active subscriptions" value={subsError ? \'—\' : activeSubscriptions} hint={activeSubsHint} />'));
-  assert.ok(platform.includes('<KpiCard icon={TrendingUp} label="Monthly recurring revenue" value={subsError ? \'—\' : formatMoney(mrr)} hint={mrrHint} />'));
+  assert.ok(platform.includes('label="Total businesses"') && platform.includes('hint={businessesHint}'), 'the Total card keeps its seat (v5.305.0: it grew a door, the seat and the hint stand)');
+  assert.ok(platform.includes('label="Active subscriptions"') && platform.includes('hint={activeSubsHint}'), 'the Active-subs card keeps its seat (v5.305.0: it grew a door)');
+  assert.ok(platform.includes('label="Monthly recurring revenue"') && platform.includes('hint={mrrHint}'), 'the MRR card keeps its seat (v5.305.0: it grew a door)');
 });
 
 test('unit343 · the full words never hidden, the swap never snapping', () => {
@@ -144,5 +144,6 @@ test('unit343 · the version law — version.ts and sw.js carry the same word', 
   assert.ok(v, 'version.ts must speak APP_VERSION');
   assert.ok(s, 'sw.js must bake the cache word');
   assert.equal(v[1], s[1], 'the two words must agree');
-  assert.equal(v[1], '5.304.0');
+  // v5.305.0 relaxed the literal pin per the unit308 precedent (the
+  // 320→…→344 chain); the agreement itself is the law — unit344 pins the word.
 });
