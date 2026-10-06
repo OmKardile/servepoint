@@ -626,12 +626,20 @@ function expiryRel(iso: string): string {
   return diffMs >= 0 ? `${span} left` : `${span} ago`;
 }
 
+/* v5.290.0 — the stick, the floor's byte-twin of MenuScreen's
+ * OVERLAY_FOOT_STICK (the wizard's v5.289.0 grammar at the p-5 house): the
+ * dialogs' verbs hold the panel's own bottom edge while the content scrolls
+ * beneath. unit329 pins the twins EQUAL so the two can never drift. */
+const FLOOR_FOOT_STICK =
+  'sticky bottom-0 -mx-5 -mb-5 rounded-b-3xl border-t border-[#E3E7E0] bg-white px-5 pb-4 pt-2.5';
+
 function AddTableDialog({
   busy,
   error,
   onAdd,
   onClose,
   initial,
+  knownSections,
 }: {
   busy: boolean;
   error: string | null;
@@ -639,6 +647,10 @@ function AddTableDialog({
   onClose: () => void;
   /** When present the dialog edits an existing table instead of adding one. */
   initial?: { number: string; capacity: number; section: string };
+  /** v5.290.0 — the house's own section words (read from the tables on the
+   *  board, never invented) speak as the section field's datalist, so
+   *  "Patio" is picked, not re-typed into a near-twin. */
+  knownSections: string[];
 }) {
   const [number, setNumber] = useState(initial?.number ?? '');
   const [capacity, setCapacity] = useState(String(initial?.capacity ?? 4));
@@ -650,7 +662,10 @@ function AddTableDialog({
   return (
     <div ref={dlgRef} className="fixed inset-0 z-50" style={{ animation: 'spFadeIn 160ms ease-out' }} role="dialog" aria-modal="true" aria-label={initial ? 'Edit table' : 'Add table'}>
       <button type="button" aria-label="Close dialog" onClick={onClose} className="absolute inset-0 h-full w-full cursor-default bg-[#0F3D3E]/45 focus-visible:outline-none" />
-      <div className="absolute inset-x-2 top-1/2 mx-auto max-w-[420px] -translate-y-1/2 rounded-3xl bg-white p-5 shadow-2xl sm:inset-x-0">
+      {/* v5.290.0 — the panel learns the scroll law (the old shape had NONE:
+          at a squat viewport the whole card overflowed BOTH edges — header
+          and verbs alike unreachable) and the verbs learn the stick. */}
+      <div className="absolute inset-x-2 top-1/2 mx-auto max-h-[92vh] max-w-[420px] -translate-y-1/2 overflow-y-auto rounded-3xl bg-white p-5 shadow-2xl sm:inset-x-0">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-[15px] font-bold text-[#1A1A1A]">{initial ? `Edit table ${initial.number}` : 'Add a table'}</h2>
           <button
@@ -683,28 +698,34 @@ function AddTableDialog({
             </div>
             <div>
               <label htmlFor="ft-sec" className="mb-1 block text-[12px] font-medium text-[#6B6B6B]">Section</label>
-              <input id="ft-sec" type="text" value={section} maxLength={24} onChange={(e) => setSection(e.target.value)} placeholder="Main Floor" className="sp-input h-11 w-full px-3 text-[13.5px]" />
+              <input id="ft-sec" type="text" value={section} maxLength={24} onChange={(e) => setSection(e.target.value)} placeholder="Main Floor" list="ft-sections" className="sp-input h-11 w-full px-3 text-[13.5px]" />
+              {/* v5.290.0 — the board's own section census, as suggestions */}
+              <datalist id="ft-sections">
+                {knownSections.map((s) => (
+                  <option key={s} value={s} />
+                ))}
+              </datalist>
             </div>
           </div>
           <p className="text-[11.5px] leading-relaxed text-[#6B6B6B]">
             Each table gets a permanent QR token — copy the guest link from the card and print it as the table sticker.
           </p>
           {error && <p className="rounded-xl bg-[#FDF3F2] px-3 py-2 text-[12.5px] text-[#B4483C]" role="alert">{error}</p>}
-          <div className="flex justify-end gap-2 pt-1">
-            <button type="button" onClick={onClose} className="h-11 rounded-full border border-[#E3E7E0] px-4 text-[13px] font-semibold text-[#6B6B6B] hover:bg-[#F6F5F2]">
-              Cancel
-            </button>
-            <button
-              type="button"
-              disabled={!number.trim() || !Number.isFinite(capNum) || capNum < 1 || busy}
-              onClick={() => onAdd(number.trim(), capNum, section.trim() || 'Main Floor')}
-              className="flex h-11 items-center gap-2 rounded-full px-5 text-[13px] font-semibold text-white disabled:opacity-50"
-              style={{ background: '#0F3D3E' }}
-            >
-              {busy && <Loader2 size={14} className="animate-spin" aria-hidden />}
-              {initial ? 'Save changes' : 'Add table'}
-            </button>
-          </div>
+        </div>
+        <div className={`mt-3 flex justify-end gap-2 ${FLOOR_FOOT_STICK}`}>
+          <button type="button" onClick={onClose} className="h-11 rounded-full border border-[#E3E7E0] px-4 text-[13px] font-semibold text-[#6B6B6B] hover:bg-[#F6F5F2]">
+            Cancel
+          </button>
+          <button
+            type="button"
+            disabled={!number.trim() || !Number.isFinite(capNum) || capNum < 1 || busy}
+            onClick={() => onAdd(number.trim(), capNum, section.trim() || 'Main Floor')}
+            className="flex h-11 items-center gap-2 rounded-full px-5 text-[13px] font-semibold text-white disabled:opacity-50"
+            style={{ background: '#0F3D3E' }}
+          >
+            {busy && <Loader2 size={14} className="animate-spin" aria-hidden />}
+            {initial ? 'Save changes' : 'Add table'}
+          </button>
         </div>
       </div>
     </div>
@@ -890,30 +911,32 @@ function BookingDialog({
             <p className="mt-1 text-right text-[10.5px] tabular-nums text-[#6B6B6B]">{note.length}/280</p>
           </div>
           {error && <p className="rounded-xl bg-[#FDF3F2] px-3 py-2 text-[12.5px] text-[#B4483C]" role="alert">{error}</p>}
-          <div className="flex justify-end gap-2 pt-1">
-            <button type="button" onClick={onClose} className="h-11 rounded-full border border-[#E3E7E0] px-4 text-[13px] font-semibold text-[#6B6B6B] hover:bg-[#F6F5F2]">
-              Cancel
-            </button>
-            <button
-              type="button"
-              disabled={!name.trim() || !Number.isFinite(partyNum) || partyNum < 1 || partyNum > 40 || Number.isNaN(slotMs) || busy}
-              onClick={() =>
-                onTake({
-                  guestName: name.trim(),
-                  phone: phone.trim(),
-                  partySize: partyNum,
-                  tableId: tableId || null,
-                  slotAt: new Date(slotMs).toISOString(),
-                  note: note.trim(),
-                })
-              }
-              className="flex h-11 items-center gap-2 rounded-full px-5 text-[13px] font-semibold text-white disabled:opacity-50"
-              style={{ background: '#0F3D3E' }}
-            >
-              {busy && <Loader2 size={14} className="animate-spin" aria-hidden />}
-              Write it in the book
-            </button>
-          </div>
+        </div>
+        {/* v5.290.0 — the verbs ride the stick (the wizard's grammar, the
+            floor's byte-twin): reachable at any height. */}
+        <div className={`mt-3 flex justify-end gap-2 ${FLOOR_FOOT_STICK}`}>
+          <button type="button" onClick={onClose} className="h-11 rounded-full border border-[#E3E7E0] px-4 text-[13px] font-semibold text-[#6B6B6B] hover:bg-[#F6F5F2]">
+            Cancel
+          </button>
+          <button
+            type="button"
+            disabled={!name.trim() || !Number.isFinite(partyNum) || partyNum < 1 || partyNum > 40 || Number.isNaN(slotMs) || busy}
+            onClick={() =>
+              onTake({
+                guestName: name.trim(),
+                phone: phone.trim(),
+                partySize: partyNum,
+                tableId: tableId || null,
+                slotAt: new Date(slotMs).toISOString(),
+                note: note.trim(),
+              })
+            }
+            className="flex h-11 items-center gap-2 rounded-full px-5 text-[13px] font-semibold text-white disabled:opacity-50"
+            style={{ background: '#0F3D3E' }}
+          >
+            {busy && <Loader2 size={14} className="animate-spin" aria-hidden />}
+            Write it in the book
+          </button>
         </div>
       </div>
     </div>
@@ -2423,6 +2446,15 @@ export function FloorScreen(): React.ReactElement {
   }, [tables, filter, q]);
   const matchedCount = useMemo(() => sections.reduce((n, [, list]) => n + list.length, 0), [sections]);
 
+  /* v5.290.0 — the section census, the datalist's voice: every distinct
+   * section word the board already speaks (the board's own "Main Floor"
+   * default included), alphabetical. No filter, no query narrowing — the
+   * suggestions name the WHOLE house, whatever the board is showing. */
+  const knownSections = useMemo(
+    () => [...new Set((tables || []).map((t) => t.section || 'Main Floor'))].sort((a, b) => a.localeCompare(b)),
+    [tables]
+  );
+
   /* v5.128.0 — the miss says why: the search's word, the tile's word, or
    * both — the same either-can-miss grammar the ledger (5.121.0) and the
    * book (5.123.0) already speak. The floor's truth state ("No tables
@@ -3863,6 +3895,7 @@ export function FloorScreen(): React.ReactElement {
         <AddTableDialog
           busy={busyId === 'creating'}
           error={actionError}
+          knownSections={knownSections}
           onClose={() => {
             setAddOpen(false);
             setActionError(null);
@@ -3888,6 +3921,7 @@ export function FloorScreen(): React.ReactElement {
         <AddTableDialog
           busy={busyId === 'editing'}
           error={actionError}
+          knownSections={knownSections}
           initial={{
             number: editTable.table_number,
             capacity: editTable.capacity,

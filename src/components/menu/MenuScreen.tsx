@@ -166,7 +166,22 @@ const HealthChip: React.FC<{
 
 /* ── modals ─────────────────────────────────────────────────────────────── */
 
-function Overlay({ title, onClose, children, wide }: { title: string; onClose: () => void; children: React.ReactNode; wide?: boolean }) {
+function Overlay({
+  title,
+  onClose,
+  children,
+  foot,
+  wide,
+}: {
+  title: string;
+  onClose: () => void;
+  children: React.ReactNode;
+  /** v5.290.0 — the modal's verbs ride the stick (OVERLAY_FOOT_STICK) as a
+   *  direct child of the scroll panel, so Cancel/Save stay reachable at any
+   *  height; bodies hold fields and state, never verbs. */
+  foot?: React.ReactNode;
+  wide?: boolean;
+}) {
   /* v5.110.0 — the overlay holds the door (replaces the hand-rolled Escape listener). */
   const panelRef = React.useRef<HTMLDivElement>(null);
   const dlgRef = useDialogA11y<HTMLDivElement>(onClose, true, panelRef);
@@ -187,6 +202,7 @@ function Overlay({ title, onClose, children, wide }: { title: string; onClose: (
             </button>
           </div>
           {children}
+          {foot && <div className={`mt-3 flex justify-end gap-2 ${OVERLAY_FOOT_STICK}`}>{foot}</div>}
         </div>
       </div>
     </div>
@@ -195,6 +211,17 @@ function Overlay({ title, onClose, children, wide }: { title: string; onClose: (
 
 const fieldLabel = 'mb-1 block text-[12px] font-medium text-[#6B6B6B]';
 const fieldInput = 'sp-input h-11 w-full px-3 text-[13.5px]';
+
+/* v5.290.0 — the overlays learn the stick. The wizard taught the Platform
+ * (v5.289.0) that a modal's verb rows must hold the panel's own bottom
+ * edge while the content scrolls beneath — this family's panels wear the
+ * p-5 house, so the same grammar rides at those measures: full-bleed
+ * through the panel's own padding, the house's hairline above, the
+ * rounded corners kept. FloorScreen carries the byte-twin (FLOOR_FOOT_STICK)
+ * for its hand-rolled dialogs; unit329 pins the twins EQUAL so the two
+ * can never drift. */
+const OVERLAY_FOOT_STICK =
+  'sticky bottom-0 -mx-5 -mb-5 rounded-b-3xl border-t border-[#E3E7E0] bg-white px-5 pb-4 pt-2.5';
 
 /* ── item add/edit modal ────────────────────────────────────────────────── */
 
@@ -229,7 +256,27 @@ function ItemModal({
   const valid = d.name.trim().length > 0 && Number.isFinite(priceNum) && priceNum >= 0;
 
   return (
-    <Overlay title={initial ? 'Edit item' : 'New menu item'} onClose={onClose}>
+    <Overlay
+      title={initial ? 'Edit item' : 'New menu item'}
+      onClose={onClose}
+      foot={
+        <>
+          <button type="button" onClick={onClose} className="h-11 rounded-full border border-[#E3E7E0] px-4 text-[13px] font-semibold text-[#6B6B6B] hover:bg-[#F6F5F2]">
+            Cancel
+          </button>
+          <button
+            type="button"
+            disabled={!valid || busy}
+            onClick={() => onSave({ ...d, price: String(round2(priceNum)) })}
+            className="flex h-11 items-center gap-2 rounded-full px-5 text-[13px] font-semibold text-white disabled:opacity-50"
+            style={{ background: '#0F3D3E' }}
+          >
+            {busy && <Loader2 size={14} className="animate-spin" aria-hidden />}
+            {initial ? 'Save changes' : 'Add item'}
+          </button>
+        </>
+      }
+    >
       <div className="space-y-3">
         <div>
           <label htmlFor="mi-name" className={fieldLabel}>Name *</label>
@@ -265,21 +312,6 @@ function ItemModal({
           </label>
         </div>
         {error && <p className="rounded-xl bg-[#FDF3F2] px-3 py-2 text-[12.5px] text-[#B4483C]" role="alert">{error}</p>}
-        <div className="flex justify-end gap-2 pt-1">
-          <button type="button" onClick={onClose} className="h-11 rounded-full border border-[#E3E7E0] px-4 text-[13px] font-semibold text-[#6B6B6B] hover:bg-[#F6F5F2]">
-            Cancel
-          </button>
-          <button
-            type="button"
-            disabled={!valid || busy}
-            onClick={() => onSave({ ...d, price: String(round2(priceNum)) })}
-            className="flex h-11 items-center gap-2 rounded-full px-5 text-[13px] font-semibold text-white disabled:opacity-50"
-            style={{ background: '#0F3D3E' }}
-          >
-            {busy && <Loader2 size={14} className="animate-spin" aria-hidden />}
-            {initial ? 'Save changes' : 'Add item'}
-          </button>
-        </div>
       </div>
     </Overlay>
   );
@@ -792,6 +824,13 @@ export function MenuScreen(): React.ReactElement {
   const [variantsModalFor, setVariantsModalFor] = useState<string | null>(null);
   const [catModalOpen, setCatModalOpen] = useState(false);
   const [catName, setCatName] = useState('');
+  /* v5.290.0 — the duplicate door: the shelf's own census (case-insensitive)
+   * speaks BEFORE the write, so a twin category is stopped with a word
+   * instead of growing on the board and in the guest menu's nav. */
+  const catDuplicate = useMemo(
+    () => categories.some((c) => c.name.trim().toLowerCase() === catName.trim().toLowerCase()),
+    [categories, catName]
+  );
   const [addonFormOpen, setAddonFormOpen] = useState(false);
   const [addonName, setAddonName] = useState('');
   const [addonPrice, setAddonPrice] = useState('');
@@ -1483,22 +1522,21 @@ export function MenuScreen(): React.ReactElement {
         ))
       )}
 
-      {/* category modal */}
+      {/* category modal — v5.290.0: the name field learns the shelf's own
+          census (a duplicate is stopped at the door with the honest word,
+          before the shelf grows a twin) and the verbs ride the stick */}
       {catModalOpen && (
-        <Overlay title="New category" onClose={() => setCatModalOpen(false)}>
-          <div className="space-y-3">
-            <div>
-              <label htmlFor="cat-name" className={fieldLabel}>Name *</label>
-              <input id="cat-name" type="text" value={catName} maxLength={40} onChange={(e) => setCatName(e.target.value)} placeholder="e.g. Coffee" className={fieldInput} autoFocus />
-            </div>
-            {actionError && <p className="rounded-xl bg-[#FDF3F2] px-3 py-2 text-[12.5px] text-[#B4483C]" role="alert">{actionError}</p>}
-            <div className="flex justify-end gap-2">
+        <Overlay
+          title="New category"
+          onClose={() => setCatModalOpen(false)}
+          foot={
+            <>
               <button type="button" onClick={() => setCatModalOpen(false)} className="h-11 rounded-full border border-[#E3E7E0] px-4 text-[13px] font-semibold text-[#6B6B6B]">
                 Cancel
               </button>
               <button
                 type="button"
-                disabled={!catName.trim() || busy}
+                disabled={!catName.trim() || catDuplicate || busy}
                 onClick={() => {
                   void runAction(() => createCategory(tenantId, catName), 'Saved').then((ok) => {
                     if (ok) {
@@ -1512,7 +1550,20 @@ export function MenuScreen(): React.ReactElement {
               >
                 {busy && <Loader2 size={14} className="animate-spin" aria-hidden />} Add category
               </button>
+            </>
+          }
+        >
+          <div className="space-y-3">
+            <div>
+              <label htmlFor="cat-name" className={fieldLabel}>Name *</label>
+              <input id="cat-name" type="text" value={catName} maxLength={40} onChange={(e) => setCatName(e.target.value)} placeholder="e.g. Coffee" className={fieldInput} autoFocus />
             </div>
+            {catDuplicate && (
+              <p className="rounded-xl bg-[#FDF3F2] px-3 py-2 text-[12.5px] text-[#B4483C]" role="alert">
+                A category named “{catName.trim()}” is already on the shelf — pick a different name.
+              </p>
+            )}
+            {actionError && <p className="rounded-xl bg-[#FDF3F2] px-3 py-2 text-[12.5px] text-[#B4483C]" role="alert">{actionError}</p>}
           </div>
         </Overlay>
       )}
