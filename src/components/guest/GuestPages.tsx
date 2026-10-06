@@ -427,6 +427,24 @@ function readOrderNote(token: string): string {
   }
   return '';
 }
+/* v5.299.0 — the drawer remembers the guest's name: the cart and the note
+ * each found their per-tab home (5.254's law), but the NAME — the guest's
+ * own word, not the order's — started empty on every mount, so a guest
+ * ordering a second round retyped it. The name persists per-tab beside the
+ * cart (a reload keeps it with the food; a fresh or reopened link claims
+ * nothing), rides every checkout, and STAYS at checkout — the same person
+ * is ordering again; only the token's death takes the name with it. */
+const NAME_KEY = (token: string) => `sp.guest.name.${token}`;
+
+function readGuestName(token: string): string {
+  try {
+    const raw = sessionStorage.getItem(NAME_KEY(token));
+    return typeof raw === 'string' ? raw : '';
+  } catch {
+    /* private mode — the field just starts empty */
+  }
+  return '';
+}
 /* v5.253.0 — the ticket's word reaches the menu: the loop 5.252.0 opened
  * (ticket → "Order more" → menu) closes here. The menu page remembers the
  * guest's latest ticket FROM THEIR OWN CHECKOUT (the id + number the server
@@ -820,6 +838,17 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
       /* private mode — the word just lives in the field */
     }
   };
+  /* v5.299.0 — the name's writer rides the same shape: every keystroke keeps
+   * the per-tab home current, so a reload or a checkout round-trip never
+   * asks the guest to say it twice. */
+  const changeName = (v: string) => {
+    setCustomerName(v);
+    try {
+      sessionStorage.setItem(NAME_KEY(qrToken), v); // kept with the guest
+    } catch {
+      /* private mode — the name just lives in the field */
+    }
+  };
   const [lockTone, setLockTone] = useState<'clock' | 'cut'>('clock');
   /* 5.216.0 — the ribbon's freshest SERVER verdict: { when it landed, seconds
      it said were left }. The 30s re-verify tick writes it; the 1s ribbon tick
@@ -865,7 +894,9 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
   /* v5.110.0 — the guest's cart holds the door too: desktop QR users get
      Escape, a trapped Tab, and focus returned to the bar that opened it. */
   const cartDlgRef = useDialogA11y<HTMLDivElement>(() => setDrawerOpen(false), drawerOpen && phase === 'ready');
-  const [customerName, setCustomerName] = useState('');
+  /* v5.299.0 — the name reads its per-tab home at mount (the same law the
+   * note speaks at 5.254): same tab, same guest — the second round knows. */
+  const [customerName, setCustomerName] = useState(() => readGuestName(qrToken));
   const [placing, setPlacing] = useState(false);
   const [placeError, setPlaceError] = useState<string | null>(null);
   /* v5.58.0 — the stale line owns its fault. After the server bounces the
@@ -1353,12 +1384,15 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
         sessionStorage.removeItem(CART_KEY(qrToken));
         sessionStorage.removeItem(ORDER_NOTE_KEY(qrToken)); // the note goes with the cart
         sessionStorage.removeItem(LAST_ORDER_KEY(qrToken)); // the token died — the memory goes with it
+        sessionStorage.removeItem(NAME_KEY(qrToken)); // the name is the guest's — it goes with the token
         window.location.assign(`/t/${encodeURIComponent(qrToken)}`);
       }
       return;
     }
     sessionStorage.removeItem(CART_KEY(qrToken));
     sessionStorage.removeItem(ORDER_NOTE_KEY(qrToken)); // the note rode to the server — the field starts fresh
+    // the NAME stays (v5.299.0): the same person is ordering again — the per-tab
+    // name rides into the next round, and a fresh link still claims nothing
     try {
       sessionStorage.setItem(LAST_ORDER_KEY(qrToken), JSON.stringify({ id: res.order.id, n: res.order.order_number }));
     } catch {
@@ -2026,9 +2060,10 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
                     id="g-name"
                     type="text"
                     value={customerName}
-                    onChange={(e) => setCustomerName(e.target.value)}
+                    onChange={(e) => changeName(e.target.value)}
                     maxLength={60}
                     placeholder={t('namePh')}
+                    title={t('nameWhisper')}
                     className="sp-input h-11 w-full px-3 text-[13.5px]"
                   />
                 </div>
