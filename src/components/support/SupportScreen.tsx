@@ -74,6 +74,26 @@ interface ReportDraft {
 const DIAG_BEGIN = '— ServePoint diagnostics —';
 const DIAG_END = '— end diagnostics —';
 
+/* v5.281.0 — the diagnostics speak a PINNED SHAPE on the DEVICE'S OWN
+ * clock. The doctrine stands: support's wall clock belongs to the device
+ * it diagnoses (the bills/KDS family — "a cashier's wall clock belongs to
+ * the device they hold"), so NO timeZone is pinned here — but the SHAPE
+ * is: toString() printed whatever the engine felt like ("Mon Oct 06 2026…"
+ * on one tablet, another grammar on the next), so a screenshot pasted
+ * into a ticket read differently on every device. en-IN · hour12:false is
+ * the house's own 24h shape, and the ISO line under it is the
+ * machine-readable twin — zero ambiguity for either reader. */
+const DIAG_CLOCK = new Intl.DateTimeFormat('en-IN', {
+  weekday: 'short',
+  year: 'numeric',
+  month: 'short',
+  day: 'numeric',
+  hour: '2-digit',
+  minute: '2-digit',
+  second: '2-digit',
+  hour12: false,
+});
+
 const ReportForm: React.FC = () => {
   const session = useSession((s) => s.session);
   const { tenant } = useTenant();
@@ -106,8 +126,10 @@ const ReportForm: React.FC = () => {
       `release: ${release}`,
       `workspace: ${tenant?.name || 'unknown'}`,
       `reported by: ${session?.name || 'unknown'} (${session?.email || 'unknown'})`,
-      `screen: Support`,
-      `when: ${new Date().toString()}`,
+      `route: ${window.location.pathname}`,
+      `when: ${DIAG_CLOCK.format(new Date())} (device clock)`,
+      `when-utc: ${new Date().toISOString()}`,
+      `language: ${navigator.language}`,
       `online: ${navigator.onLine ? 'yes' : 'no'}`,
       `device: ${navigator.userAgent}`,
       DIAG_END,
@@ -257,7 +279,11 @@ const ReportForm: React.FC = () => {
               placeholder="Steps to reproduce, what you expected, and what happened instead."
               rows={4}
               maxLength={2000}
-              className="sp-input w-full resize-y px-4 py-3 text-[13.5px]"
+              /* v5.281.0 — once the diagnostics land, the surface speaks
+               * their language: the block becomes monospace (technical
+               * content's own glyph) with a taller line, while the bare
+               * form stays a plain writing surface. */
+              className={`sp-input w-full resize-y px-4 py-3 text-[13.5px] ${diagAttached ? 'font-mono text-[12.5px] leading-relaxed tabular-nums' : ''}`}
             />
           </div>
           {session?.name && (
