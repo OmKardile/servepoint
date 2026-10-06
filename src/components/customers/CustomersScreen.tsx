@@ -1036,12 +1036,24 @@ const GuestsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry })
 
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase();
+    /* v5.295.0 — the search learns the book's own digit language: the book
+     * keys its ledger buckets, its merges and its offer registers through
+     * phoneDigits ("98765 43210" and "9876543210" are the same guest —
+     * the 483 law), but THIS filter read the phone as raw substring: a
+     * needle typed without the stored spaces found nothing, and the
+     * honest-miss card LIED — claiming no match while the guest stood on
+     * the books. The digit needle rides beside the raw one: any query
+     * carrying digits also matches through the digits-only form; a needle
+     * with no digits behaves exactly as before. Empty stays empty — an
+     * empty phone never matches, the 483 law's own word. */
+    const qDigits = q.replace(/\D/g, '');
     return guests
       .filter((g) => {
         if (!q) return true;
         return (
           g.name.toLowerCase().includes(q) ||
           g.phone.toLowerCase().includes(q) ||
+          (qDigits.length > 0 && phoneDigits(g.phone).includes(qDigits)) ||
           (g.email || '').toLowerCase().includes(q) ||
           (g.notes || '').toLowerCase().includes(q)
         );
@@ -1412,6 +1424,7 @@ const GuestsTab: React.FC<{
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search name, phone, email, notes…"
           aria-label="Search guests"
+          title="A phone matches however it's written — spaces and dashes never hide a guest"
           className="sp-input h-11 w-full pl-10 pr-3 text-[13.5px]"
         />
       </div>
@@ -1452,7 +1465,8 @@ const GuestsTab: React.FC<{
               body={
                 <>
                   Search reads names, phones, notes, and emails — an email match keeps its row
-                  without a gold mark; open the guest to see the address.
+                  without a gold mark; open the guest to see the address. A phone matches
+                  however it's written — spaces and dashes never hide a guest.
                   {tier && (
                     <> The {TIER_META[tier].label} tile is also in play — either can miss.</>
                   )}
