@@ -93,5 +93,8 @@ test('unit320 · the version law — version.ts and sw.js carry the same word', 
   assert.ok(v, 'version.ts must speak APP_VERSION');
   assert.ok(s, 'sw.js must bake the cache word');
   assert.equal(v[1], s[1], 'the two words must agree');
-  assert.equal(v[1], '5.281.0');
+  // v5.282.0 — the literal belongs to the current round's unit (the unit308
+  // precedent): this suite pins the AGREEMENT, the next round's suite pins
+  // the word
+  assert.match(v[1], /^\d+\.\d+\.\d+$/, 'the word must be a semver');
 });

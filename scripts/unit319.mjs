@@ -104,8 +104,10 @@ test('unit319 · the adopters ride the lib — no private twins left (nineteen s
   // the EOD drawer's open/close floats
   assert.match(eod, /openDrawerSession\(round2\(amount\)\)/);
   assert.match(eod, /closeDrawerSession\(drawerActive\.id, round2\(amount\), note\)/);
-  // the waste card's quantities and rupees
-  assert.match(reports, /import \{ round2 \} from '\.\.\/\.\.\/lib\/money';/);
+  // the waste card's quantities and rupees — v5.282.0: the edge grew to
+  // carry moneyBare (the books' bare paise voice joined the same import),
+  // the round2 math and its voice ride ONE edge now
+  assert.match(reports, /import \{ round2, moneyBare \} from '\.\.\/\.\.\/lib\/money';/);
   assert.match(reports, /formatMoney\(round2\(wasteAgg\.total\)\)/);
   assert.match(reports, /formatMoney\(round2\(wasteAgg\.reasons\[r\]\.rupees\)\)/);
   assert.match(reports, /\{round2\(it\.qty\)\} \{it\.unit\}/);
@@ -116,7 +118,8 @@ test('unit319 · the adopters ride the lib — no private twins left (nineteen s
   // the EOD drawer's variance
   assert.match(eod, /round2\(parsed! - expected\)/);
   // the bill's balance (the ways-split's Math.floor stays — its own judgment)
-  assert.match(bills, /import \{ round2 \} from '\.\.\/\.\.\/lib\/money';/);
+  // v5.282.0: the edge grew to carry moneyBare alongside round2
+  assert.match(bills, /import \{ round2, moneyBare \} from '\.\.\/\.\.\/lib\/money';/);
   assert.match(bills, /Math\.max\(0, round2\(selectedTotal - paidSum\)\)/);
   // the addon snapshot's base price
   assert.match(customers, /round2\(addonSnap\.reduce\(\(s, a\) => s \+ a\.price, 0\)\)/);

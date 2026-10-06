@@ -117,15 +117,20 @@ const rows = dayLedgerCsvRows({ orders, payments, cogsRows });
 assert.equal(rows[0].length, 11, 'the header grows to 11 columns');
 assert.deepEqual(rows[0].slice(7, 10), ['Total', 'Tax', 'Discount'], 'Discount sits after Tax, before COGS');
 const discIdx = rows[0].indexOf('Discount');
-assert.equal(rows[1][discIdx], 55, 'the discounted ticket speaks its own rupees');
-assert.equal(rows[2][discIdx], 0, 'a legacy-null discount reads 0 — a true zero, never an unknown');
+/* v5.282.0 — the ledger's money cells ride moneyBare: the raw Number()
+ * shape (55 / 445 / 36) is retired — the day book speaks paise-true
+ * strings now ("55.00", always two decimals, never float dust). The
+ * assertions follow the cells' new intended shape (the read-the-
+ * actual-shape law); the silences stay silent ('' on cancelled). */
+assert.equal(rows[1][discIdx], '55.00', 'the discounted ticket speaks its own rupees — paise-true now');
+assert.equal(rows[2][discIdx], '0.00', 'a legacy-null discount reads 0.00 — a true zero, never an unknown');
 assert.equal(rows[3][discIdx], '', 'a cancelled ticket says nothing (never happened)');
-assert.equal(rows[1][7], 445, 'Total column untouched');
-assert.equal(rows[1][10], 36, 'COGS column untouched');
-ok('CSV: Discount column between Tax and COGS, the three silences honest');
+assert.equal(rows[1][7], '445.00', 'Total column rides the ONE bare voice');
+assert.equal(rows[1][10], '36.00', 'COGS column rides the ONE bare voice');
+ok('CSV: Discount column between Tax and COGS, the three silences honest, the money paise-true');
 
 /* ── 5. the ONE-rule reconciliation: CSV SUM === the Z's rupees ─────── */
-const csvSum = rows.slice(1).reduce((s, r) => s + (typeof r[discIdx] === 'number' ? r[discIdx] : 0), 0);
+const csvSum = rows.slice(1).reduce((s, r) => s + (isNaN(Number(r[discIdx])) ? 0 : Number(r[discIdx])), 0);
 assert.equal(csvSum, 55, 'SUM(Discount over live rows) = ₹55');
 assert.equal(csvSum, 55, 'the Z\'s offers.rupees on the same fixture = ₹55 — ONE discount truth, two surfaces');
 ok('reconciliation: the CSV column sums to the Z\'s Offers-given rupees');
