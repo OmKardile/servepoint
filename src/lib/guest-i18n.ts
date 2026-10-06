@@ -99,6 +99,8 @@ const EN: Dict = {
   nonveg: 'Non-vegetarian',
   nOptions: '{n} option{s}',
   nAddons: '{n} add-on{s}',
+  // v5.297.0 — the room's favourite chip (the guest's own last ticket)
+  onLastTicket: 'On your last ticket',
   // customizer
   chooseOne: 'Choose one',
   addons: 'Add-ons',
@@ -287,6 +289,7 @@ const HI: Dict = {
   nonveg: 'मांसाहारी',
   nOptions: '{n} विकल्प',
   nAddons: '{n} ऐड-ऑन',
+  onLastTicket: 'आपकी पिछली टिकट पर',
   chooseOne: 'एक चुनें',
   addons: 'ऐड-ऑन',
   cookNotePh: 'रसोइये के लिए नोट (जैसे कम तीखा) — वैकल्पिक',
@@ -464,6 +467,7 @@ const KN: Dict = {
   nonveg: 'ಮಾಂಸಾಹಾರಿ',
   nOptions: '{n} ಆಯ್ಕೆಗಳು',
   nAddons: '{n} ಆಡ್-ಆನ್‌ಗಳು',
+  onLastTicket: 'ನಿಮ್ಮ ಕೊನೆಯ ಟಿಕೆಟ್‌ನಲ್ಲಿ',
   chooseOne: 'ಒಂದನ್ನು ಆರಿಸಿ',
   addons: 'ಆಡ್-ಆನ್‌ಗಳು',
   cookNotePh: 'ಅಡುಗೆಯವರಿಗೆ ಟಿಪ್ಪಣಿ (ಉದಾ. ಕಡಿಮೆ ಖಾರ) — ಐಚ್ಛಿಕ',

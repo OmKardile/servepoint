@@ -10,6 +10,7 @@ import {
   Clock,
   CloudOff,
   Copy,
+  Heart,
   HeartHandshake,
   History,
   Loader2,
@@ -857,6 +858,17 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
      what was honestly dropped. One word per landing (the payload is
      consumed read-once); the X is the only eraser. */
   const [reorderNote, setReorderNote] = useState<{ orderNumber: number; matched: number; dropped: number } | null>(null);
+  /* v5.297.0 — the room remembers the guest's plates: the guest's OWN last
+     ticket (per-tab sessionStorage — their own checkout, the 5.253.0 law; a
+     fresh or reopened link claims nothing) is fetched once per ticket id
+     through the same public RPC the ticket page speaks, and every dish whose
+     NAME answers lands a soft gold chip on its row. Names only, matched at
+     the reorder manifest's own grammar (case-insensitive, whitespace-
+     tolerant — the payload predates ids, and prices are the menu's truth,
+     never the memory's). Fail-soft at the offers banner's own law: a failed
+     fetch is simply no chip — the menu never blocks on a nicety. */
+  const [lastTicketDishes, setLastTicketDishes] = useState<ReadonlySet<string>>(new Set());
+  const fetchedTicketId = useRef<string | null>(null);
   const [offers, setOffers] = useState<PublicOffer[]>([]);
   const [selectedOfferId, setSelectedOfferId] = useState<string | null>(() => {
     try {
@@ -979,6 +991,32 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
   }, [qrToken, t]);
 
   useEffect(() => run(), [run]);
+
+  /* v5.297.0 — the memory effect: one fetch per ticket id (the ref guard
+     makes a re-render or a re-run free), the set holds NAMES so the row's
+     check stays O(1), and the alive flag makes an unmount a no-op. The
+     ticket id comes from the guest's own checkout — the same key the
+     ticket chip reads — so the chip and the memory can never disagree
+     about whose plates these are. */
+  useEffect(() => {
+    if (phase !== 'ready') return;
+    const ticket = readLastTicket(qrToken);
+    if (!ticket || fetchedTicketId.current === ticket.id) return;
+    fetchedTicketId.current = ticket.id;
+    let alive = true;
+    fetchPublicOrder(ticket.id)
+      .then((r) => {
+        if (!alive) return;
+        if (!r.is_valid || !r.order?.items?.length) return;
+        setLastTicketDishes(new Set(r.order.items.map((it) => it.name.trim().toLowerCase())));
+      })
+      .catch(() => {
+        /* fail-soft: a failed fetch is simply no chip */
+      });
+    return () => {
+      alive = false;
+    };
+  }, [phase, qrToken]);
 
   // cart survives refresh (identity only — the server re-prices everything)
   useEffect(() => {
@@ -1715,6 +1753,20 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
                           {item.addons.length > 0 && (
                             <span className="rounded-full bg-[#FDF9F0] px-2 py-0.5 text-[10.5px] font-medium text-[#8A5A16]">
                               {t('nAddons', { n: item.addons.length, s: item.addons.length > 1 ? 's' : '' })}
+                            </span>
+                          )}
+                          {/* v5.297.0 — the room's favourite chip: the dish the
+                              guest's own last ticket carried. The warm band's
+                              palette (bg tint + ink) — zero new colors; the
+                              heart rides the fill so the word stays the loudest
+                              thing in the chip. */}
+                          {lastTicketDishes.has(item.name.trim().toLowerCase()) && (
+                            <span
+                              className="inline-flex items-center gap-1 rounded-full bg-[#FBF3E4] px-2 py-0.5 text-[10.5px] font-semibold text-[#8A5A16]"
+                              title={t('onLastTicket')}
+                            >
+                              <Heart size={10} aria-hidden className="fill-current" />
+                              {t('onLastTicket')}
                             </span>
                           )}
                         </span>
