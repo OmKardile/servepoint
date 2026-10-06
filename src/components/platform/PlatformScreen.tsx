@@ -373,9 +373,16 @@ const RowSkeletons: React.FC<{ rows?: number }> = ({ rows = 5 }) => (
 
 /* ─────────────────────── dashboard sub-views ─────────────────────── */
 
-const RecentBusinessRow: React.FC<{ tenant: Tenant; sub?: Subscription | null }> = ({
+const RecentBusinessRow: React.FC<{
+  tenant: Tenant;
+  sub?: Subscription | null;
+  /* v5.306.0 — the row door: when carried, the whole row is a button that
+   * opens the businesses room at this very business, expanded. */
+  door?: { onClick: () => void; aria: string };
+}> = ({
   tenant,
   sub,
+  door,
 }) => {
   /* v5.232.0 — the strip hears the clock: a trialing business names its own
    * end date in the line it already speaks, the EXACT words the clock
@@ -383,30 +390,46 @@ const RecentBusinessRow: React.FC<{ tenant: Tenant; sub?: Subscription | null }>
    * stay calm — renewal urgency is not a thing the strip raises. */
   const cell = sub ? billingCell(sub) : null;
   const trialClause = cell && (sub?.status === 'trialing' || sub?.status === 'trial') && cell.primary !== '—' ? cell.primary : null;
-  return (
-  <div className="flex items-center gap-3 py-3.5">
-    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#D9E2DD] text-sm font-bold text-[#0F3D3E]">
-      {(tenant.name || '?').charAt(0).toUpperCase()}
-    </span>
-    <div className="min-w-0 flex-1">
-      <div className="flex flex-wrap items-center gap-2">
-        <p className="truncate text-sm font-semibold text-[#1A1A1A]">{tenant.name}</p>
-        <SlugChip slug={tenant.slug} />
+  const body = (
+    <>
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#D9E2DD] text-sm font-bold text-[#0F3D3E]">
+        {(tenant.name || '?').charAt(0).toUpperCase()}
+      </span>
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="truncate text-sm font-semibold text-[#1A1A1A]">{tenant.name}</p>
+          <SlugChip slug={tenant.slug} />
+        </div>
+        <p className="mt-0.5 truncate text-xs text-[#969696]">
+          {tenant.business_type ? tenant.business_type.charAt(0).toUpperCase() + tenant.business_type.slice(1) : 'Business'}
+          {' · '}
+          {formatDate(tenant.created_at)}
+          {trialClause && (
+            <>
+              {' · '}
+              <span className={cell?.urgent ? 'font-semibold text-[#B42318]' : 'font-medium text-[#6B6B6B]'}>{trialClause}</span>
+            </>
+          )}
+        </p>
       </div>
-      <p className="mt-0.5 truncate text-xs text-[#969696]">
-        {tenant.business_type ? tenant.business_type.charAt(0).toUpperCase() + tenant.business_type.slice(1) : 'Business'}
-        {' · '}
-        {formatDate(tenant.created_at)}
-        {trialClause && (
-          <>
-            {' · '}
-            <span className={cell?.urgent ? 'font-semibold text-[#B42318]' : 'font-medium text-[#6B6B6B]'}>{trialClause}</span>
-          </>
-        )}
-      </p>
-    </div>
-    <StatusChip status={tenant.status} />
-  </div>
+      <StatusChip status={tenant.status} />
+    </>
+  );
+  if (!door) return <div className="flex items-center gap-3 py-3.5">{body}</div>;
+  /* v5.306.0 — the door's own grammar: the row keeps its anatomy and its
+   * seat; the hover warms to the house's own soft row tone (#F6F5F2 — the
+   * wizard's row hover, zero new colors) with the tint bleeding a breath
+   * past the text so the whole row reads as one target; the global focus
+   * ring answers the Tab key. */
+  return (
+    <button
+      type="button"
+      onClick={door.onClick}
+      aria-label={door.aria}
+      className="-mx-2 flex w-[calc(100%+16px)] items-center gap-3 rounded-lg px-2 py-3.5 text-left transition-colors duration-150 hover:bg-[#F6F5F2]"
+    >
+      {body}
+    </button>
   );
 };
 
@@ -773,7 +796,25 @@ export const PlatformScreen: React.FC = () => {
               ) : (
                 <div className="divide-y divide-[#E3E7E0]">
                   {recentTenants.map((t) => (
-                    <RecentBusinessRow key={t.id} tenant={t} sub={subByTenantId.get(t.id)} />
+                    <RecentBusinessRow
+                      key={t.id}
+                      tenant={t}
+                      sub={subByTenantId.get(t.id)}
+                      /* v5.306.0 — the row door lands the room in the state
+                       * that makes the row true: the named business VISIBLE
+                       * (the hunt reset — a filtered room could hide the very
+                       * row the operator clicked) and EXPANDED, then the
+                       * room's own setTab carries the URL sync. */
+                      door={{
+                        onClick: () => {
+                          setBusinessQuery('');
+                          setBusinessStatus(null);
+                          setExpandedTenantId(t.id);
+                          setTab('businesses');
+                        },
+                        aria: `Open ${t.name || 'business'} in the businesses room`,
+                      }}
+                    />
                   ))}
                 </div>
               )}
