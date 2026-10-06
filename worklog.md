@@ -9027,3 +9027,17 @@ Work Log:
 Stage Summary:
 - 5.298.0 — the ticket learns its own honesty: the note section speaks only when the guest wrote a word, the body speaks the guest's word verbatim with no operational tail, and the silence is the proof (#133 quiet, #134 loud, both live). The window learns its shape: the ribbon's 2px drain bar walks the same msLeft the clock speaks, full at birth, empty at the wire. The 1366×768 lens — the world's most common laptop — walked clean end to end.
 - Commit + push: feat = this round's first commit (bd7d9d0), chore(qa) = the second (b70a117), chore(worklog) = this commit. Push: ATTEMPTED (first per the standing instruction, and again post-commit) — failed honestly, no token (addendum below).
+
+---
+Task ID: 337-PUSH-ADDENDUM (same round, post-commit)
+Agent: glm-5.3
+Task: Record the round's push outcome honestly.
+
+Work Log:
+- Push ATTEMPTED this round (FIRST, before its own work; attempted AGAIN post-commit): failed — "fatal: could not read Username for 'https://github.com': No such device or address". NO GitHub write token in the round environment.
+- State: remote unchanged (ecc6365 = Task 266's worklog commit, an ANCESTOR of local HEAD). Measured (git rev-list --count ecc6365..HEAD, after the feat bd7d9d0 + qa b70a117 + worklog d15cf99 commits): 213 riding. The next token-bearing round pushes a clean fast-forward.
+- Remote config untouched: nothing to scrub.
+- Standing instruction stands: the next token-bearing round pushes the whole pile FIRST, before its own work.
+
+Stage Summary:
+- Work committed and gated (battery 143/143, tsc, build, the silence + verbatim + drain-bar laws verified LIVE on the public surfaces — the round's family needing no auth-wall protocol) but NOT on origin — the push ran and failed for lack of credentials, not for lack of trying. The honesty rule holds: no push claimed that did not run.
