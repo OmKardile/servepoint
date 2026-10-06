@@ -3,6 +3,7 @@ import { CircleOff, Clock, Minus, Pencil, Plus, RotateCcw, UtensilsCrossed, X } 
 import type { MenuItem, MenuItemAddon } from '../../types';
 import { lineKey, useCart } from '../../store/cart';
 import { formatMoney } from '../../lib/prefs';
+import { signedMoney } from '../../lib/money';
 import { useDialogA11y } from '../../lib/useDialogA11y';
 import { VegMark } from '../shell/VegMark';
 import { counterShelfLine, shelfDaysClause, type ShelfCoverage } from '../../lib/shelf';
@@ -342,15 +343,19 @@ export const ItemDetailModal: React.FC<ItemDetailModalProps> = ({
                       }`}
                     >
                       {v.name}
-                      <span
-                        className={`text-[11px] font-bold tabular-nums ${active ? 'text-white/85' : 'text-[#967221]'}`}
-                      >
-                        {v.price_delta > 0
-                          ? `+₹${Number(v.price_delta) % 1 === 0 ? Number(v.price_delta) : Number(v.price_delta).toFixed(2)}`
-                          : v.price_delta < 0
-                            ? `−₹${Number(-v.price_delta) % 1 === 0 ? Number(-v.price_delta) : Number(-v.price_delta).toFixed(2)}`
-                            : '±₹0'}
-                      </span>
+                      {v.price_delta !== 0 && (
+                        <span
+                          className={`text-[11px] font-bold tabular-nums ${active ? 'text-white/85' : 'text-[#967221]'}`}
+                        >
+                          {/* v5.278.0 — the ONE delta register (signedMoney):
+                              the paise voice holds on whole-rupee deltas
+                              ("+₹15.00", not "+₹15" — the old `% 1 === 0`
+                              grammar dropped it), and the ±₹0 pill the guest's
+                              twin never showed is retired — a free variant
+                              reads its name alone. */}
+                          {signedMoney(Number(v.price_delta))}
+                        </span>
+                      )}
                     </button>
                   );
                 })}

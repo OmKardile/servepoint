@@ -1,4 +1,5 @@
 import { useSession } from '../store/session';
+import { moneyNum } from './money';
 
 /**
  * Production preferences (v5.0.0) — real, persisted UI settings that other
@@ -170,8 +171,12 @@ export function isQuietNow(prefs?: SpPrefs): boolean {
 }
 
 export function formatMoney(amount: number, currency?: string): string {
+  /* v5.278.0 — the digits ride the money lib's ONE shape (the census byte
+   * lives in lib/money.ts and nowhere else); this door keeps only the
+   * staff's configured symbol, which the guest-safe ₹-pinned word cannot
+   * know. */
   const sym = currency || getPrefs().currency;
-  return `${sym}${amount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  return `${sym}${moneyNum(amount)}`;
 }
 
 /** Relative "x minutes ago" label used by Notifications/Messages (Figma). */

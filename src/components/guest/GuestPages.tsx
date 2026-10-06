@@ -83,7 +83,8 @@ import { offerDiscount } from '../../store/cart';
    dialects). The bar's own total already includes the discount when one
    is applied — '₹40.00 off applied' explains why the number moved. */
 import { offerFit, offerFitVoice } from '../../lib/offerFit';
-import { copyText } from '../../lib/clipboard';
+import { money, signedMoney } from '../../lib/money';
+import { useCopyAck } from '../../lib/useCopyAck';
 import { appTimezone, formatWindowLeft, WARM_WINDOW_MS } from '../../lib/appday';
 
 /**
@@ -104,7 +105,11 @@ const brand = {
 };
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
-const money = (n: number) => `₹${round2(n).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+/* v5.278.0 — the guest's own money helper is retired: its one shape (the
+ * en-IN two-decimal digit run, re-rolled here because prefs are a staff
+ * surface) lives in lib/money.ts now, whose ₹-pinned word needs NO prefs
+ * to speak — the guest rides the house's one register. round2 stays: it
+ * is MATH (line-total arithmetic), not voice. */
 
 function twoToneChime(): void {
   try {
@@ -641,9 +646,11 @@ function Customizer({
                   {v.name}
                   {v.price_delta !== 0 && (
                     <span className={active ? 'text-[#E7C878]' : 'text-[#B88E2F]'}>
-                      {/* 5.139.0 — money() like every other price the guest file
-                          renders: "+₹10.5" was paise-ambiguous money text. */}
-                      {v.price_delta > 0 ? `+${money(v.price_delta)}` : `−${money(-v.price_delta)}`}
+                      {/* 5.139.0 — the paise voice ("+₹10.5" was ambiguous
+                          money text); v5.278.0 — the signed ternary rides the
+                          lib's ONE delta register (signedMoney), the same
+                          word the staff modal's pills now speak. */}
+                      {signedMoney(v.price_delta)}
                     </span>
                   )}
                 </button>
@@ -2359,7 +2366,11 @@ export function GuestTrackPage({ orderId }: { orderId: string }): React.ReactEle
   useEffect(() => setLogoBroken(false), [tenant?.logo_url]);
   const [state, setState] = useState<'loading' | 'ready' | 'bad' | 'net'>('loading');
   const [muted, setMuted] = useState(() => localStorage.getItem('sp.guest.chime') === 'off');
-  const [copied, setCopied] = useState(false);
+  /* v5.278.0 — the copy ack rides the house's ONE breath (useCopyAck): the
+   * re-tap re-arms instead of stacking a second timer, the timer is
+   * cleaned up on unmount, and a REFUSAL now speaks — the guest's own
+   * word, three languages. The last hand-rolled ack outside the lib. */
+  const [copyAck, runCopy] = useCopyAck(1600);
   /* v5.252.0 — read once at mount: sessionStorage is per-tab, no other tab can
    * gain a key into this one while the ticket is on screen. */
   const [moreToken] = useState(() => recoverGuestSessionToken());
@@ -2636,7 +2647,7 @@ export function GuestTrackPage({ orderId }: { orderId: string }): React.ReactEle
                       </p>
                       <p className="shrink-0 text-[13.5px] font-bold tabular-nums">{money(it.item_total)}</p>
                     </div>
-                    {it.addons.length > 0 && <p className="text-[12px] text-[#6B6B6B]">+ {it.addons.map((a) => `${a.name} ₹${round2(a.price)}`).join(', ')}</p>}
+                    {it.addons.length > 0 && <p className="text-[12px] tabular-nums text-[#6B6B6B]">+ {it.addons.map((a) => `${a.name} ${money(a.price)}`).join(', ')}</p>}
                     {it.notes && <p className="text-[12px] italic text-[#8A5A16]">↳ {it.notes}</p>}
                   </div>
                 ))}
@@ -2732,17 +2743,20 @@ export function GuestTrackPage({ orderId }: { orderId: string }): React.ReactEle
               <button
                 type="button"
                 onClick={() => {
-                  /* v5.276.0 — the lie is gone: the old optional-chain fired
-                   * and forgot, so the button said "Copied" even where the
-                   * Clipboard API is absent (a plain-HTTP tablet). The lib's
-                   * honest boolean decides — Copied only when the copy
-                   * happened; a refusal keeps the link's own word. */
-                  void copyText(window.location.href).then(setCopied);
-                  window.setTimeout(() => setCopied(false), 1600);
+                  /* v5.276.0 — the lie is gone: the honest boolean decides —
+                   * Copied only when the copy happened. v5.278.0 — the ack
+                   * rides the one breath, and a refusal speaks its word. */
+                  runCopy(window.location.href);
                 }}
-                className="inline-flex items-center gap-1.5 rounded-full border border-[#E3E7E0] bg-white px-3 py-1.5 font-medium hover:border-[#B88E2F]"
+                aria-live="polite"
+                className={`inline-flex items-center gap-1.5 rounded-full border bg-white px-3 py-1.5 font-medium transition-colors ${
+                  copyAck === 'fail'
+                    ? 'border-[#8A5A00]/50 text-[#8A5A00]'
+                    : 'border-[#E3E7E0] hover:border-[#B88E2F]'
+                }`}
               >
-                <Copy size={12} aria-hidden /> {copied ? t('copied') : t('copyLink')}
+                <Copy size={12} aria-hidden />{' '}
+                {copyAck === 'ok' ? t('copied') : copyAck === 'fail' ? t('copyBlocked') : t('copyLink')}
               </button>
               <button type="button" onClick={() => window.location.assign('/')} className="inline-flex items-center gap-1.5 rounded-full border border-[#E3E7E0] bg-white px-3 py-1.5 font-medium hover:border-[#B88E2F]">
                 {t('goHome')}

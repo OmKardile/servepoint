@@ -182,6 +182,7 @@ const EN: Dict = {
   autoUpdate: 'This page updates itself every 10 seconds — and the moment you come back.',
   copyLink: 'Copy tracking link',
   copied: 'Copied!',
+  copyBlocked: 'Copy blocked',
   goHome: 'ServePoint home',
   // v5.252.0 — the ticket's way back: the forward action and the paid word
   orderMore: 'Order more',
@@ -356,6 +357,7 @@ const HI: Dict = {
   autoUpdate: 'यह पेज हर 10 सेकंड में अपने आप अपडेट होता है — और आपके लौटते ही भी।',
   copyLink: 'ट्रैकिंग लिंक कॉपी करें',
   copied: 'कॉपी हो गया!',
+  copyBlocked: 'कॉपी नहीं हो सका',
   goHome: 'ServePoint होम',
   // v5.252.0 — the ticket's way back: the forward action and the paid word
   orderMore: 'और ऑर्डर करें',
@@ -529,6 +531,7 @@ const KN: Dict = {
   autoUpdate: 'ಈ ಪುಟ ಪ್ರತಿ 10 ಸೆಕೆಂಡುಗಳಲ್ಲಿ ಸ್ವಯಂ ಅಪ್ಡೇಟ್ ಆಗುತ್ತದೆ — ಮತ್ತು ನೀವು ಹಿಂತಿರುಗಿದ ಕ್ಷಣವೇ.',
   copyLink: 'ಟ್ರ್ಯಾಕಿಂಗ್ ಲಿಂಕ್ ನಕಲಿಸಿ',
   copied: 'ನಕಲಾಗಿದೆ!',
+  copyBlocked: 'ನಕಲಿಸಲು ಸಾಧ್ಯವಿಲ್ಲ',
   goHome: 'ServePoint ಮುಖಪುಟ',
   // v5.252.0 — the ticket's way back: the forward action and the paid word
   orderMore: 'ಮತ್ತಷ್ಟು ಆರ್ಡರ್ ಮಾಡಿ',

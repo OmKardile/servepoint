@@ -42,6 +42,7 @@ import {
 import { fetchDashboard, fetchFeedbackStats, fetchInventory, fetchMenuItems, fetchOfferRedemptions, fetchOffers, fetchOffTodayCount, fetchOpenPaymentSums, fetchOrders, fetchReservations, fetchTableSessions, fetchTables, fetchTodayCostMargin, type DiningTable, type FeedbackStats, type InventoryItem, type OfferRedemptionRow, type Reservation, type TableSession, type TodayCostMargin } from '../../lib/api';
 import { liveWindows, youngestLiveMs, youngestLiveWindow } from '../../lib/tableSession';
 import { formatMoney } from '../../lib/prefs';
+import { money } from '../../lib/money';
 /* v5.175.0 — the morning paper borrows the booking clock for its book (the
    database's word, lib/bookingday — the same lib the floor's book, the bell
    and the guest drawer speak). 5.204.0 — the CLOSE-OUT door no longer keeps
@@ -701,9 +702,9 @@ const TrendingDishesCard: React.FC<{ data: DashboardData }> = ({ data }) => {
                   </span>
                   <span
                     className="mt-[2px] block text-[11.5px] font-medium tabular-nums text-[#969696]"
-                    title={`₹${(Number(dish.revenue) || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} carried by ${dish.orders} ${dish.orders === 1 ? 'plate' : 'plates'}`}
+                    title={`${money(Number(dish.revenue) || 0)} carried by ${dish.orders} ${dish.orders === 1 ? 'plate' : 'plates'}`}
                   >
-                    ₹{(Number(dish.revenue) || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    {money(Number(dish.revenue) || 0)}
                   </span>
                 </div>
               </li>
@@ -722,7 +723,7 @@ const TrendingDishesCard: React.FC<{ data: DashboardData }> = ({ data }) => {
               <>
                 {' · '}
                 <span className="font-semibold tabular-nums text-[#1A1A1A]">
-                  ₹{weekRevenue.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  {money(weekRevenue)}
                 </span>{' '}
                 on the top four shown
               </>
