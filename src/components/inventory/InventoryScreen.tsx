@@ -8,7 +8,6 @@ import {
   ClipboardList,
   Clock,
   Copy,
-  Download,
   History,
   Layers,
   Loader2,
@@ -54,6 +53,8 @@ import { computePaceByItem, computeTopMovers, MOVER_WINDOW_DAYS, type Mover } fr
 import { formatMoney } from '../../lib/prefs';
 import { LOW_COVER, computeBurnByIngredient, shelfCoverage, shelfDays, shelfDaysClause, shelfTouch } from '../../lib/shelf';
 import { downloadCsv } from '../../lib/csv';
+import { useExportFlash } from '../../lib/useExportFlash';
+import { CsvExportButton } from '../common/CsvExportButton';
 import { appTodayIso, appFormatters, appTzTag } from '../../lib/appday';
 import { useDialogA11y } from '../../lib/useDialogA11y';
 import { useTenant } from '../../lib/tenant';
@@ -1636,6 +1637,9 @@ const RecipeBoard: React.FC<{
    * = not read — both voices stay silent, never an invented number. */
   pace: Map<string, number> | null;
 }> = ({ items, menuItems, recipes, onSave, onCover, storeName, pace }) => {
+  /* v5.275.0 — the production sheet's verb speaks its own ack (the 5.274.0
+   * grammar reaching the whole house via the ONE component). */
+  const [sheetSaved, flashSheet] = useExportFlash();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [draft, setDraft] = useState<{ inventory_item_id: string; qty_per_serve: number }[]>([]);
   const [dirty, setDirty] = useState(false);
@@ -2143,15 +2147,15 @@ const RecipeBoard: React.FC<{
                   )}
                   {copyState === 'ok' ? 'Copied' : copyState === 'fail' ? 'Copy blocked' : 'Copy'}
                 </button>
-                <button
-                  onClick={exportSheet}
-                  aria-label="Download the production plan as a CSV spreadsheet"
+                <CsvExportButton
+                  saved={sheetSaved}
+                  onExport={() => flashSheet(exportSheet)}
+                  idleAria="Download the production plan as a CSV spreadsheet"
+                  savedAria="Production plan exported — the CSV file is saved"
                   title="Opens in Excel or Sheets — the same plan the Copy button speaks"
-                  className="flex h-8 items-center gap-1.5 rounded-lg border border-[#E3E7E0] bg-white px-2.5 text-[11px] font-bold text-[#0F3D3E] transition hover:border-[#B88E2F] hover:text-[#B88E2F] disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  <Download size={12} aria-hidden />
-                  CSV
-                </button>
+                  geometry="flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-[11px] font-bold"
+                  earSize={12}
+                />
               </div>
             </>
           )}
@@ -2882,6 +2886,9 @@ const ReorderBoard: React.FC<{
   onRestock: (item: InventoryItem, suggested: number) => void;
   storeName: string;
 }> = ({ items, recipes, pace, onRestock, storeName }) => {
+  /* v5.275.0 — the shopping list's verb speaks its own ack (the 5.274.0
+   * grammar reaching the whole house via the ONE component). */
+  const [listSaved, flashList] = useExportFlash();
   /* 5.177.0 — the list reads the ONE burn: the same computeBurnByIngredient
    * map the Stock tab's clock reads — the two tabs can never disagree. */
   const burnWeekly = useMemo(() => computeBurnByIngredient(recipes, pace), [recipes, pace]);
@@ -3021,16 +3028,16 @@ const ReorderBoard: React.FC<{
               <MessageCircle size={14} aria-hidden />
               WhatsApp
             </a>
-            <button
-              onClick={exportList}
+            <CsvExportButton
+              saved={listSaved}
+              onExport={() => flashList(exportList)}
               disabled={buyRows.length === 0}
-              aria-label="Export shopping list as CSV"
+              idleAria="Export shopping list as CSV"
+              savedAria="Shopping list exported — the CSV file is saved"
               title="Export the shopping list as CSV (opens in Excel / Sheets)"
-              className="flex h-11 items-center gap-1.5 rounded-xl border border-[#E3E7E0] bg-white px-3 text-[12.5px] font-bold text-[#0F3D3E] transition hover:border-[#B88E2F] hover:text-[#B88E2F] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#B88E2F] disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              <Download size={15} aria-hidden />
-              CSV
-            </button>
+              geometry="flex h-11 items-center gap-1.5 rounded-xl border px-3 text-[12.5px] font-bold"
+              earSize={15}
+            />
           </div>
         </div>
 

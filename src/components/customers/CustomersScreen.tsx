@@ -7,7 +7,6 @@ import {
   ChevronUp,
   Copy,
   Crown,
-  Download,
   Gift,
   History,
   Loader2,
@@ -67,6 +66,7 @@ import { computeUsual, isPaidTicket, USUAL_WINDOW } from '../../lib/usual';
 import { guestVoice } from '../../lib/verdict';
 import { useDialogA11y } from '../../lib/useDialogA11y';
 import { useExportFlash } from '../../lib/useExportFlash';
+import { CsvExportButton } from '../common/CsvExportButton';
 import { useCart } from '../../store/cart';
 import { useUi } from '../../store/session';
 import { MarkHit } from '../shell/MarkHit';
@@ -1143,22 +1143,20 @@ const GuestsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry })
                   v5.274.0 — the verb's own ack: after the export the button
                   wears the tier chip's green register (#2E7D32 on the ghost)
                   and speaks "Saved" with the Check ear for a breath, then
-                  returns; the aria flips with the word. */}
-              <button
-                type="button"
-                onClick={() => exportBook(() => exportGuestsCsv(rows, ledgerByPhone))}
+                  returns; the aria flips with the word. v5.275.0 — the
+                  grammar moved into the ONE component (CsvExportButton);
+                  this verb rides it like every other export verb in the
+                  house — same register, same word. */}
+              <CsvExportButton
+                saved={bookSaved}
+                onExport={() => exportBook(() => exportGuestsCsv(rows, ledgerByPhone))}
                 disabled={rows.length === 0}
-                aria-label={bookSaved ? 'Guests exported — the CSV file is saved' : 'Export guests as CSV'}
+                idleAria="Export guests as CSV"
+                savedAria="Guests exported — the CSV file is saved"
                 title="Export the filtered list as CSV (opens in Excel / Sheets)"
-                className={
-                  bookSaved
-                    ? 'flex h-9 items-center gap-1.5 rounded-xl border border-[#2E7D32] bg-[#E8F5EC] px-3 text-[12px] font-bold text-[#2E7D32] transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#2E7D32] disabled:cursor-not-allowed disabled:opacity-40'
-                    : 'flex h-9 items-center gap-1.5 rounded-xl border border-[#E3E7E0] bg-white px-3 text-[12px] font-bold text-[#0F3D3E] transition hover:border-[#B88E2F] hover:text-[#B88E2F] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#B88E2F] disabled:cursor-not-allowed disabled:opacity-40'
-                }
-              >
-                {bookSaved ? <Check size={14} aria-hidden /> : <Download size={14} aria-hidden />}
-                {bookSaved ? 'Saved' : 'CSV'}
-              </button>
+                geometry="flex h-9 items-center gap-1.5 rounded-xl border px-3 text-[12px] font-bold"
+                earSize={14}
+              />
               <button
                 type="button"
                 onClick={() => setGuestForm({ mode: 'new', customer: null, open: true })}

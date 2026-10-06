@@ -26,7 +26,6 @@ import {
   Clock,
   Coins,
   Copy,
-  Download,
   Flame,
   HandCoins,
   HeartHandshake,
@@ -87,6 +86,8 @@ import {
   subscribePrefs,
 } from '../../lib/prefs';
 import { downloadCsv } from '../../lib/csv';
+import { useExportFlash } from '../../lib/useExportFlash';
+import { CsvExportButton } from '../common/CsvExportButton';
 import { printHiddenFrame } from '../../lib/printFrame';
 import { CHART_TOOLTIP_LABEL, CHART_TOOLTIP_STYLE } from '../../lib/chartvoice';
 import {
@@ -1519,6 +1520,22 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
   const { tenantId, loading: tenantLoading, error: tenantError, tenant } = useTenant();
   const goSection = useUi((s) => s.goSection);
   const [range, setRange] = useState<RangeKey>('7d');
+  /* v5.275.0 — every CSV verb in the section speaks its own ack (the
+   * 5.274.0 grammar reaching the whole house): one hook pair per verb, so
+   * a tap makes ONLY the tapped verb say "Saved" — its ten siblings keep
+   * their own silence until they are tapped themselves. */
+  const [rankSaved, flashRanking] = useExportFlash();
+  const [dailySaved, flashDaily] = useExportFlash();
+  const [hourlySaved, flashHourly] = useExportFlash();
+  const [paySaved, flashPayMix] = useExportFlash();
+  const [gstSaved, flashGst] = useExportFlash();
+  const [offersSaved, flashOffers] = useExportFlash();
+  const [marginSaved, flashMargin] = useExportFlash();
+  const [mixSaved, flashTypeMix] = useExportFlash();
+  const [kitchenSaved, flashKitchen] = useExportFlash();
+  const [turnSaved, flashTurnover] = useExportFlash();
+  const [ratingsSaved, flashRatings] = useExportFlash();
+  const [shiftsSaved, flashShifts] = useExportFlash();
   /* v5.236.0 — the custom range's own calendar: it arms pre-filled with the
    *  last 7 days (the SAME window the 7d chip spoke), so Custom is never an
    *  empty or invalid state — the owner adjusts from a truth they can see. */
@@ -3038,14 +3055,14 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
                 <h2 className="text-[15px] font-bold text-[#1A1A1A]">Day by day</h2>
                 <div className="flex shrink-0 items-center gap-2">
                   {daily.length > 0 && (
-                    <button
-                      onClick={exportDaily}
-                      aria-label="Export daily sales as CSV"
+                    <CsvExportButton
+                      tone="chip"
+                      saved={dailySaved}
+                      onExport={() => flashDaily(exportDaily)}
+                      idleAria="Export daily sales as CSV"
+                      savedAria="Daily sales exported — the CSV file is saved"
                       title="Export the day-by-day gross as CSV"
-                      className="inline-flex h-7 items-center rounded-lg border border-[#B88E2F]/45 bg-[#FDF9F0] px-2.5 text-[11px] font-bold text-[#8A5A00] transition hover:bg-[#B88E2F] hover:text-white active:scale-[0.97]"
-                    >
-                      CSV
-                    </button>
+                    />
                   )}
                   <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#6B6B6B]">
                     <CalendarRange size={11} aria-hidden /> {appTzTag()} days ·{' '}
@@ -3261,14 +3278,14 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
               <div className="mb-1 flex items-center justify-between gap-2">
                 <h2 className="text-[15px] font-bold text-[#1A1A1A]">Sales by hour</h2>
                 <div className="flex shrink-0 items-center gap-2">
-                  <button
-                    onClick={exportHourly}
-                    aria-label="Export sales by hour as CSV"
+                  <CsvExportButton
+                    tone="chip"
+                    saved={hourlySaved}
+                    onExport={() => flashHourly(exportHourly)}
+                    idleAria="Export sales by hour as CSV"
+                    savedAria="Sales by hour exported — the CSV file is saved"
                     title="Export the hour-by-hour gross as CSV"
-                    className="inline-flex h-7 items-center rounded-lg border border-[#B88E2F]/45 bg-[#FDF9F0] px-2.5 text-[11px] font-bold text-[#8A5A00] transition hover:bg-[#B88E2F] hover:text-white active:scale-[0.97]"
-                  >
-                    CSV
-                  </button>
+                  />
                   <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#6B6B6B]">
                     <Clock size={11} aria-hidden /> {appTzTag()} hours · {rangeLabelOf(range, customWindow).toLowerCase()}
                   </span>
@@ -3320,14 +3337,14 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
               <div className="mb-1 flex items-center justify-between gap-2">
                 <h2 className="text-[15px] font-bold text-[#1A1A1A]">How money arrived</h2>
                 {payMix.paid.length > 0 && (
-                  <button
-                    onClick={exportPayMix}
-                    aria-label="Export payment mix as CSV"
+                  <CsvExportButton
+                    tone="chip"
+                    saved={paySaved}
+                    onExport={() => flashPayMix(exportPayMix)}
+                    idleAria="Export payment mix as CSV"
+                    savedAria="Payment mix exported — the CSV file is saved"
                     title="Export the method split — including money still out — as CSV"
-                    className="inline-flex h-7 items-center rounded-lg border border-[#B88E2F]/45 bg-[#FDF9F0] px-2.5 text-[11px] font-bold text-[#8A5A00] transition hover:bg-[#B88E2F] hover:text-white active:scale-[0.97]"
-                  >
-                    CSV
-                  </button>
+                  />
                 )}
               </div>
               <p className="mb-2 text-[11.5px] text-[#969696]">
@@ -3439,14 +3456,14 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
             <div className="mb-1 flex items-center justify-between gap-2">
               <h2 className="text-[15px] font-bold text-[#1A1A1A]">GST register</h2>
               {gstRegister.length > 0 && (
-                <button
-                  onClick={exportGstRegister}
-                  aria-label="Export the GST register as CSV"
+                <CsvExportButton
+                  tone="chip"
+                  saved={gstSaved}
+                  onExport={() => flashGst(exportGstRegister)}
+                  idleAria="Export the GST register as CSV"
+                  savedAria="GST register exported — the CSV file is saved"
                   title="One row per paid ticket — taxable, CGST, SGST, GST, gross — with a totals row"
-                  className="inline-flex h-7 items-center rounded-lg border border-[#B88E2F]/45 bg-[#FDF9F0] px-2.5 text-[11px] font-bold text-[#8A5A00] transition hover:bg-[#B88E2F] hover:text-white active:scale-[0.97]"
-                >
-                  CSV
-                </button>
+                />
               )}
             </div>
             <p className="mb-2 text-[11.5px] text-[#969696]">
@@ -3510,14 +3527,14 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
                     <MessageCircle size={12} aria-hidden />
                     WhatsApp
                   </a>
-                  <button
-                    onClick={exportOffers}
-                    aria-label="Export offer scorecard as CSV"
+                  <CsvExportButton
+                    tone="chip"
+                    saved={offersSaved}
+                    onExport={() => flashOffers(exportOffers)}
+                    idleAria="Export offer scorecard as CSV"
+                    savedAria="Offer scorecard exported — the CSV file is saved"
                     title="Export how each offer performed — tickets, money in, discount cost — as CSV"
-                    className="inline-flex h-7 items-center rounded-lg border border-[#B88E2F]/45 bg-[#FDF9F0] px-2.5 text-[11px] font-bold text-[#8A5A00] transition hover:bg-[#B88E2F] hover:text-white active:scale-[0.97]"
-                  >
-                    CSV
-                  </button>
+                  />
                 </div>
               )}
             </div>
@@ -3714,14 +3731,14 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
               <h2 className="text-[15px] font-bold text-[#1A1A1A]">Cost &amp; margin</h2>
               <div className="flex shrink-0 items-center gap-2">
                 {agg.paidCount > 0 && (
-                  <button
-                    onClick={exportMargin}
-                    aria-label="Export cost and margin as CSV"
+                  <CsvExportButton
+                    tone="chip"
+                    saved={marginSaved}
+                    onExport={() => flashMargin(exportMargin)}
+                    idleAria="Export cost and margin as CSV"
+                    savedAria="Cost and margin exported — the CSV file is saved"
                     title="Export the range's margin summary as CSV"
-                    className="inline-flex h-7 items-center rounded-lg border border-[#B88E2F]/45 bg-[#FDF9F0] px-2.5 text-[11px] font-bold text-[#8A5A00] transition hover:bg-[#B88E2F] hover:text-white active:scale-[0.97]"
-                  >
-                    CSV
-                  </button>
+                  />
                 )}
                 <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#6B6B6B]">
                   <Coins size={11} aria-hidden /> paid tickets only
@@ -3847,16 +3864,14 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
                       </a>
                     </>
                   )}
-                  <button
-                    onClick={exportRanking}
+                  <CsvExportButton
+                    saved={rankSaved}
+                    onExport={() => flashRanking(exportRanking)}
                     disabled={topItems.length === 0}
-                    aria-label="Export item ranking as CSV"
+                    idleAria="Export item ranking as CSV"
+                    savedAria="Item ranking exported — the CSV file is saved"
                     title="Export the item ranking as CSV"
-                    className="flex h-11 shrink-0 items-center gap-1.5 rounded-xl border border-[#E3E7E0] bg-white px-3 text-[12.5px] font-bold text-[#0F3D3E] transition hover:border-[#B88E2F] hover:text-[#B88E2F] disabled:cursor-not-allowed disabled:opacity-40"
-                  >
-                    <Download size={14} aria-hidden />
-                    CSV
-                  </button>
+                  />
                 </div>
               </div>
               {topItems.length === 0 ? (
@@ -4116,14 +4131,14 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
               <div className="mb-1 flex items-center justify-between gap-2">
                 <h2 className="text-[15px] font-bold text-[#1A1A1A]">Service mix</h2>
                 {typeMix.length > 0 && (
-                  <button
-                    onClick={exportTypeMix}
-                    aria-label="Export service mix as CSV"
+                  <CsvExportButton
+                    tone="chip"
+                    saved={mixSaved}
+                    onExport={() => flashTypeMix(exportTypeMix)}
+                    idleAria="Export service mix as CSV"
+                    savedAria="Service mix exported — the CSV file is saved"
                     title="Export the order-type split as CSV"
-                    className="inline-flex h-7 items-center rounded-lg border border-[#B88E2F]/45 bg-[#FDF9F0] px-2.5 text-[11px] font-bold text-[#8A5A00] transition hover:bg-[#B88E2F] hover:text-white active:scale-[0.97]"
-                  >
-                    CSV
-                  </button>
+                  />
                 )}
               </div>
               <p className="mb-4 text-[11.5px] text-[#969696]">
@@ -4216,15 +4231,15 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
                     <MessageCircle size={12} aria-hidden />
                     WhatsApp
                   </a>
-                  <button
-                    onClick={exportKitchenSpeed}
+                  <CsvExportButton
+                    tone="chip"
+                    saved={kitchenSaved}
+                    onExport={() => flashKitchen(exportKitchenSpeed)}
                     disabled={kitchen.sample.length === 0}
-                    aria-label="Export kitchen speed as CSV"
+                    idleAria="Export kitchen speed as CSV"
+                    savedAria="Kitchen speed exported — the CSV file is saved"
                     title="Export the range's fire-to-ready timings as CSV"
-                    className="inline-flex h-7 items-center rounded-lg border border-[#B88E2F]/45 bg-[#FDF9F0] px-2.5 text-[11px] font-bold text-[#8A5A00] transition hover:bg-[#B88E2F] hover:text-white active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-40"
-                  >
-                    CSV
-                  </button>
+                  />
                 </div>
               )}
             </div>
@@ -4446,14 +4461,14 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
                 Table turnover
               </h2>
               {turnover.tickets > 0 && (
-                <button
-                  onClick={exportTurnover}
-                  aria-label="Export table turnover as CSV"
+                <CsvExportButton
+                  tone="chip"
+                  saved={turnSaved}
+                  onExport={() => flashTurnover(exportTurnover)}
+                  idleAria="Export table turnover as CSV"
+                  savedAria="Table turnover exported — the CSV file is saved"
                   title="Export the range's turns and seated spans as CSV"
-                  className="inline-flex h-7 items-center rounded-lg border border-[#B88E2F]/45 bg-[#FDF9F0] px-2.5 text-[11px] font-bold text-[#8A5A00] transition hover:bg-[#B88E2F] hover:text-white active:scale-[0.97]"
-                >
-                  CSV
-                </button>
+                />
               )}
             </div>
             <p className="mb-4 text-[11.5px] text-[#969696]">
@@ -4829,16 +4844,14 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
                       <MessageCircle size={14} aria-hidden />
                       WhatsApp
                     </a>
-                    <button
-                      onClick={exportRatings}
+                    <CsvExportButton
+                      saved={ratingsSaved}
+                      onExport={() => flashRatings(exportRatings)}
                       disabled={fbAgg.count === 0}
-                      aria-label="Export guest ratings as CSV"
+                      idleAria="Export guest ratings as CSV"
+                      savedAria="Guest ratings exported — the CSV file is saved"
                       title="Export the range's guest ratings as CSV"
-                      className="flex h-11 shrink-0 items-center gap-1.5 rounded-xl border border-[#E3E7E0] bg-white px-3 text-[12.5px] font-bold text-[#0F3D3E] transition hover:border-[#B88E2F] hover:text-[#B88E2F] disabled:cursor-not-allowed disabled:opacity-40"
-                    >
-                      <Download size={14} aria-hidden />
-                      CSV
-                    </button>
+                    />
                   </div>
                 )}
               </div>
@@ -5083,14 +5096,14 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
                       <MessageCircle size={12} aria-hidden />
                       WhatsApp
                     </a>
-                    <button
-                      onClick={exportShifts}
-                      aria-label="Export drawer shifts as CSV"
+                    <CsvExportButton
+                      tone="chip"
+                      saved={shiftsSaved}
+                      onExport={() => flashShifts(exportShifts)}
+                      idleAria="Export drawer shifts as CSV"
+                      savedAria="Drawer shifts exported — the CSV file is saved"
                       title="Export the sealed shifts — expected, counted, variance — as CSV"
-                      className="inline-flex h-7 items-center rounded-lg border border-[#B88E2F]/45 bg-[#FDF9F0] px-2.5 text-[11px] font-bold text-[#8A5A00] transition hover:bg-[#B88E2F] hover:text-white active:scale-[0.97]"
-                    >
-                      CSV
-                    </button>
+                    />
                   </div>
                 )}
               </div>

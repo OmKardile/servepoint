@@ -4,7 +4,6 @@ import {
   ChevronDown,
   Clock,
   Copy,
-  Download,
   History,
   Loader2,
   MessageCircle,
@@ -43,6 +42,7 @@ import { formatMoney, getPrefs } from '../../lib/prefs';
 import { downloadCsv } from '../../lib/csv';
 import { appStampLabel, appTodayIso, appFormatters, appTzTag, isSameAppDay, isSameAppDayAs } from '../../lib/appday';
 import { useExportFlash } from '../../lib/useExportFlash';
+import { CsvExportButton } from '../common/CsvExportButton';
 /* v5.238.0 — the chase borrows the window grammar's ONE home (5.236): the
  * custom pair's bounds and its spoken span come from lib/reportWindow —
  * orderedCustom inside, the same swap and the same fallback Reports asks.
@@ -1338,21 +1338,20 @@ const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRet
                 wears the paid chip's green register (#2E7D32 on its ghost
                 #E8F5EC) and speaks "Saved" with the Check ear for a breath,
                 then returns — the file landed, and the button said so. The
-                aria flips with the word so a screen reader hears it too. */}
-            <button
-              onClick={() => exportBills(() => exportBillsCsv(sorted, paidSums))}
+                aria flips with the word so a screen reader hears it too.
+                v5.275.0 — the grammar moved into the ONE component
+                (CsvExportButton); this verb rides it like every other
+                export verb in the house — same register, same word. */}
+            <CsvExportButton
+              saved={billsSaved}
+              onExport={() => exportBills(() => exportBillsCsv(sorted, paidSums))}
               disabled={sorted.length === 0}
-              aria-label={billsSaved ? 'Bills exported — the CSV file is saved' : 'Export filtered bills as CSV — chase ages and open money included'}
+              idleAria="Export filtered bills as CSV — chase ages and open money included"
+              savedAria="Bills exported — the CSV file is saved"
               title="Export the filtered list as CSV (opens in Excel / Sheets) — every unpaid ticket's age rides the Age column, and Open (INR) sums to the strip's out"
-              className={
-                billsSaved
-                  ? 'flex h-11 items-center gap-1.5 rounded-xl border border-[#2E7D32] bg-[#E8F5EC] px-3 text-[12.5px] font-bold text-[#2E7D32] transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#2E7D32] disabled:cursor-not-allowed disabled:opacity-40'
-                  : 'flex h-11 items-center gap-1.5 rounded-xl border border-[#E3E7E0] bg-white px-3 text-[12.5px] font-bold text-[#0F3D3E] transition hover:border-[#B88E2F] hover:text-[#B88E2F] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#B88E2F] disabled:cursor-not-allowed disabled:opacity-40'
-              }
-            >
-              {billsSaved ? <Check size={15} aria-hidden /> : <Download size={15} aria-hidden />}
-              {billsSaved ? 'Saved' : 'CSV'}
-            </button>
+              geometry="flex h-11 items-center gap-1.5 rounded-xl border px-3 text-[12.5px] font-bold"
+              earSize={15}
+            />
             <button
               onClick={goFood}
               aria-label="New order"

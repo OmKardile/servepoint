@@ -11,7 +11,6 @@ import {
   Clock,
   Coins,
   Copy,
-  Download,
   Flame,
   HandCoins,
   History,
@@ -59,6 +58,8 @@ import { daySpan, dayTime } from '../../lib/day';
 import { isOnRail } from '../kitchen/KitchenScreen';
 import { printHiddenFrame } from '../../lib/printFrame';
 import { downloadCsv } from '../../lib/csv';
+import { useExportFlash } from '../../lib/useExportFlash';
+import { CsvExportButton } from '../common/CsvExportButton';
 import { useDialogA11y } from '../../lib/useDialogA11y';
 import { useTenant } from '../../lib/tenant';
 import { useSession, useUi } from '../../store/session';
@@ -1186,6 +1187,9 @@ const EodScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
   const { loading: tenantLoading, error: tenantError, tenantId, tenant } = useTenant();
   const session = useSession((s) => s.session);
   const goSection = useUi((s) => s.goSection);
+  /* v5.275.0 — the closeout's verb speaks its own ack (the 5.274.0
+   * grammar reaching the whole house via the ONE component). */
+  const [closeSaved, flashClose] = useExportFlash();
   /* 5.96.0 — the day door: Reports' day-by-day bars open a day's counted
      book straight onto that reporting day. The initializer only PEEKS at the
      section hint (a read is render-safe); the consume — the only store
@@ -1965,15 +1969,16 @@ const EodScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
           >
             <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
           </button>
-          <button
-            onClick={exportDayCsv}
+          <CsvExportButton
+            saved={closeSaved}
+            onExport={() => flashClose(exportDayCsv)}
             disabled={loading || orders.length === 0}
+            idleAria="Export the day's ledger as CSV"
+            savedAria="Closeout exported — the CSV file is saved"
             title="One row per ticket — the day's ledger for the spreadsheet"
-            className="flex min-h-[44px] items-center gap-2 rounded-xl border border-[#E3E7E0] bg-white px-4 text-[13px] font-extrabold text-[#0F3D3E] transition-colors hover:bg-[#F0F2EF] disabled:opacity-40"
-          >
-            <Download size={15} aria-hidden />
-            CSV
-          </button>
+            geometry="flex min-h-[44px] items-center gap-2 rounded-xl border px-4 text-[13px] font-extrabold"
+            earSize={15}
+          />
           <button
             onClick={printReport}
             disabled={loading || orders.length === 0}

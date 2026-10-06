@@ -8,7 +8,6 @@ import {
   CircleOff,
   Clock,
   Copy,
-  FileSpreadsheet,
   ImagePlus,
   Layers,
   Loader2,
@@ -57,6 +56,8 @@ import { appFormatters, appTzTag, appTodayIso } from '../../lib/appday';
 import { useTenant } from '../../lib/tenant';
 import { formatMoney } from '../../lib/prefs';
 import { downloadCsv } from '../../lib/csv';
+import { useExportFlash } from '../../lib/useExportFlash';
+import { CsvExportButton } from '../common/CsvExportButton';
 import { useDialogA11y } from '../../lib/useDialogA11y';
 import { MarkHit } from '../shell/MarkHit';
 import type { MenuItem } from '../../types';
@@ -768,6 +769,9 @@ export function MenuScreen(): React.ReactElement {
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [saved, fireSaved] = useTransientFlag(2200);
+  /* v5.275.0 — the catalog's own verb speaks its own ack (the 5.274.0
+   * grammar reaching the whole house via the ONE component). */
+  const [catalogSaved, flashCatalog] = useExportFlash();
 
   const [categories, setCategories] = useState<Category[]>([]);
   const [items, setItems] = useState<MenuItem[]>([]);
@@ -1204,14 +1208,17 @@ export function MenuScreen(): React.ReactElement {
               >
                 <MessageCircle size={15} aria-hidden /> WhatsApp
               </a>
-              <button
-                type="button"
-                onClick={downloadCatalog}
-                aria-label="Download the menu catalog as CSV — the house's own copy, with costs and margins"
-                className="flex h-11 items-center gap-1.5 rounded-full border border-[#E3E7E0] bg-white px-4 text-[13px] font-semibold text-[#0F3D3E] hover:border-[#B88E2F]"
-              >
-                <FileSpreadsheet size={15} aria-hidden /> Catalog CSV
-              </button>
+              <CsvExportButton
+                saved={catalogSaved}
+                onExport={() => flashCatalog(downloadCatalog)}
+                idleAria="Download the menu catalog as CSV — the house's own copy, with costs and margins"
+                savedAria="Menu catalog exported — the CSV file is saved"
+                title="The house's own copy, with costs and margins (opens in Excel / Sheets)"
+                geometry="flex h-11 items-center gap-1.5 rounded-full border px-4 text-[13px] font-semibold"
+                earSize={15}
+                idleEar="sheet"
+                idleWord="Catalog CSV"
+              />
             </>
           )}
           <button
