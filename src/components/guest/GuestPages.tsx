@@ -90,7 +90,7 @@ import { money, signedMoney, round2 } from '../../lib/money';
  * through the guest's own {var} grammar — three languages, one truth. */
 import { gstPercent, gstTax } from '../../lib/tax';
 import { useCopyAck } from '../../lib/useCopyAck';
-import { appTimezone, formatWindowLeft, WARM_WINDOW_MS } from '../../lib/appday';
+import { appTimezone, formatWindowLeft, WARM_WINDOW_MS, WINDOW_TOTAL_MS } from '../../lib/appday';
 
 /**
  * Guest QR surfaces (v5.3.0) — the customer side of the main flow.
@@ -504,7 +504,7 @@ function SessionRibbon({
   const left = formatWindowLeft(msLeft);
   return (
     <div
-      className="flex flex-wrap items-center justify-center gap-2 px-4 py-2 text-center text-[12.5px] font-semibold"
+      className="relative flex flex-wrap items-center justify-center gap-2 px-4 py-2 text-center text-[12.5px] font-semibold"
       style={{ background: ended ? '#F1F4F1' : warm ? '#FBF3E4' : brand.teal, color: ended ? '#6B6B6B' : warm ? '#8A5A16' : '#FFFFFF' }}
       role="status"
       aria-label={t('ariaEnds', { t: left })}
@@ -515,6 +515,25 @@ function SessionRibbon({
         <span className="font-mono tabular-nums">{left}</span>
       )}
       <span className="text-[11.5px] font-medium opacity-90">{ended ? t('windowEndedHint') : t('rescanHint')}</span>
+      {/* v5.298.0 — the window's SHAPE rides the ribbon: a 2px drain bar,
+          aria-hidden (the sentence and the aria-label already speak the time;
+          the bar is for the eye that scans, not the ear that listens). The
+          width is presentation of the handed msLeft against the issue RPC's
+          own 10-minute law (appday's WINDOW_TOTAL_MS) — one window
+          arithmetic, never two. The 1s linear ease walks the drain in step
+          with the tick; the clamp keeps a server-corrected spike honest; the
+          ended band keeps its silence (no clock, no bar). */}
+      {!ended && (
+        <span aria-hidden className="pointer-events-none absolute inset-x-0 bottom-0 h-[2px] overflow-hidden">
+          <span
+            className="block h-full transition-[width] duration-1000 ease-linear"
+            style={{
+              width: `${Math.max(0, Math.min(100, (msLeft / WINDOW_TOTAL_MS) * 100))}%`,
+              background: warm ? 'rgba(138, 90, 22, 0.35)' : 'rgba(255, 255, 255, 0.6)',
+            }}
+          />
+        </span>
+      )}
     </div>
   );
 }
@@ -2210,6 +2229,22 @@ const FLOW: { key: string; labelKey: string; hintKey: string }[] = [
   { key: 'completed', labelKey: 'flowServed', hintKey: 'flowServedHint' },
 ];
 
+/* v5.298.0 — the ticket's honest note: the notes column carries the house's
+ * operational suffix on EVERY QR order (the RPC has composed
+ * `concat_ws(' · ', p_notes, 'via QR · Table ' || table_number)` since
+ * migration 012), so a guest who wrote NOTHING still saw the ticket claim
+ * "your note" over the house's own words — and a guest who wrote SOMETHING
+ * had the operational tail ride after their word. The strip reads the
+ * composition's exact grammar (the tail anchors the string's end; the word
+ * rides before it) and hands back only what the guest wrote. The ticket
+ * speaks the guest's word verbatim — or keeps its silence. Non-QR channels
+ * carry no suffix, so their notes render whole, exactly as before. */
+function guestWordFromNotes(notes: string | null | undefined): string {
+  return (notes ?? '')
+    .replace(/(?:^|\s·\s)via QR · Table [^·]*$/, '')
+    .trim();
+}
+
 function statusIndex(status: string): number {
   const i = FLOW.findIndex((f) => f.key === status);
   return i < 0 ? 0 : i;
@@ -2589,6 +2624,9 @@ export function GuestTrackPage({ orderId }: { orderId: string }): React.ReactEle
   const step = order ? statusIndex(order.status) : 0;
   const cancelled = order?.status === 'cancelled';
   const paid = order?.payment_status === 'completed';
+  /* v5.298.0 — the guest's own word, once per render: the honest-note law's
+   * seat beside the ticket's other derived truths (step, cancelled, paid). */
+  const guestNote = guestWordFromNotes(order?.notes);
 
   /* 5.248.0 — the ticket's clock. The stamp speaks the café's wall clock in
    * the reporting zone (appTimezone() named HERE, at the call site — the
@@ -2783,14 +2821,17 @@ export function GuestTrackPage({ orderId }: { orderId: string }): React.ReactEle
                 {/* v5.254.0 — the note comes home: the order-level word the
                     guest wrote at checkout, spoken verbatim on the ticket in
                     the waiting ink (the straggler family — the guest's word
-                    sits on the bill where the counter reads it too). An
-                    empty/blank note renders nothing. */}
-                {order.notes && order.notes.trim().length > 0 && (
+                    sits on the bill where the counter reads it too).
+                    v5.298.0 — the honest note: the section speaks only when
+                    a guest word exists (the operational suffix alone keeps
+                    its silence), and the body speaks the guest's word, not
+                    the house's tail. */}
+                {guestNote.length > 0 && (
                   <div className="mt-2 rounded-xl border border-[#F0E4C8] border-l-4 border-l-[#B45309] bg-[#FBF6EA] px-3 py-2.5">
                     <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-[#8A5A00]">
                       <StickyNote size={11} aria-hidden /> {t('trackNoteLabel')}
                     </p>
-                    <p className="mt-1 break-words text-[12.5px] leading-relaxed text-[#6B4A0E]">{order.notes}</p>
+                    <p className="mt-1 break-words text-[12.5px] leading-relaxed text-[#6B4A0E]">{guestNote}</p>
                   </div>
                 )}
                 <div className="space-y-1 pt-2 text-[13px] text-[#6B6B6B]">

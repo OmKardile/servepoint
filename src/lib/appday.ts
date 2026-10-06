@@ -265,6 +265,14 @@ export function appTzTag(tz: string = appTimezone()): string {
  *  voice is unit257's byte-truth; it can re-home here in a later round.) */
 export const WARM_WINDOW_MS = 180_000;
 
+/** The window's whole length — the drain bar's denominator (v5.298.0). The
+ *  issue RPC has hard-coded the session's TTL since migration 002
+ *  (`now() + INTERVAL '10 minutes'`), so the ribbon can speak the window's
+ *  SHAPE from the handed msLeft alone: full width at birth, empty at the
+ *  wire. One window arithmetic, never two — the number lives beside the warm
+ *  band and the countdown grammar it already sits with. */
+export const WINDOW_TOTAL_MS = 10 * 60 * 1000;
+
 /** The ONE window countdown grammar (5.218.0) — guest ribbon and the owner's
  *  Floor drill speak the same voice: "9:57", minutes unpadded, seconds padded,
  *  floored at 0:00. `msLeft` may be negative (a drifted clock, a stale tick) —
