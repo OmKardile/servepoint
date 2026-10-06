@@ -8596,9 +8596,22 @@ Task: Record the round's push outcome honestly.
 
 Work Log:
 - Push ATTEMPTED this round (FIRST, per the standing instruction, before its own work; attempted AGAIN post-commit): failed — "fatal: could not read Username for 'https://github.com': No such device or address". NO GitHub write token in the round environment (0 GH_* matches).
-- State: remote unchanged (ecc6365 = Task 266's worklog commit, an ANCESTOR of local HEAD); 172 commits ride past it at this addendum's writing (Tasks 267–324's pairs + the sweeper's ce4f858 + the inherited cron commit cff088e + this round's feat and qa); the worklog commit below makes one hundred and seventy-three. The next token-bearing round pushes a clean fast-forward.
+- State: remote unchanged (ecc6365 = Task 266's worklog commit, an ANCESTOR of local HEAD). [CORRECTED below — the first spelling of this line over-counted by one.] The next token-bearing round pushes a clean fast-forward.
 - Remote config untouched: nothing to scrub.
 - Standing instruction stands: the next token-bearing round pushes the whole pile FIRST, before its own work.
 
 Stage Summary:
 - Work committed and gated (battery 131/131, tsc ×2, build, the four slug bytes + the writer byte + the ring grammar in the dist) but NOT on origin — the push ran and failed for lack of credentials, not for lack of trying. The honesty rule holds: no push claimed that did not run.
+
+---
+Task ID: 325-ADDENDUM-CORRECTION (same round, post-worklog)
+Agent: glm-5.3
+Task: Correct the push addendum's ride count \u2014 the honesty rule counts true.
+
+Work Log:
+- The 325-PUSH-ADDENDUM above wrote "172 commits ride past it at this addendum's writing \u2026 the worklog commit below makes one hundred and seventy-three." Ground truth (git rev-list --count ecc6365..HEAD, measured after the worklog commit): the addendum's moment was 171 riding (324's pile of 169 + this round's feat c9bfd2f + qa 78efdb8), and the worklog commit 766a925 makes ONE HUNDRED AND SEVENTY-TWO \u2014 the number the rev-list speaks right now, before this correction commit.
+- The slip: 324's own addendum over-counted by one (wrote 168/169 for a true 167/168), and this round carried the inherited figure forward instead of measuring. The law is measure, not inherit \u2014 the same read-the-actual-shape rule that governs the unit pins governs the arithmetic.
+- With this correction commit appended, the pile riding past ecc6365 becomes one hundred and seventy-three \u2014 the next token-bearing round pushes a clean fast-forward, whatever the exact figure (the rev-list is the truth, the prose only reports it).
+
+Stage Summary:
+- The addendum's arithmetic corrected and its cause named (an inherited, unmeasured figure). No source, gate, or deliverable affected \u2014 the tree, the version, and the battery stand exactly as committed.
