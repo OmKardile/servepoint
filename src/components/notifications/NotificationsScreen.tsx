@@ -25,7 +25,8 @@ import {
   type RealtimeState,
 } from '../../lib/api';
 import { dbErrorHint } from '../../lib/dbErrors';
-import { getPrefs, subscribePrefs, timeAgo } from '../../lib/prefs';
+import { getPrefs, subscribePrefs } from '../../lib/prefs';
+import { ageLong } from '../../lib/age';
 import { bookingSlotLabel, bookingDayKey, bookingTodayKey, bookingDayTag } from '../../lib/bookingday';
 import { useTenant } from '../../lib/tenant';
 import { useUi, type Section } from '../../store/session';
@@ -400,7 +401,7 @@ const NotificationCard: React.FC<{
                 </span>
               )}
               <Clock size={13} aria-hidden />
-              {timeAgo(n.created_at)}
+              {ageLong(n.created_at)}
             </p>
             {(unread || door) && (
               <div className="flex items-center gap-2">

@@ -30,7 +30,7 @@ import {
   type TeamMemberRow,
 } from '../../lib/api';
 import { dbErrorHint } from '../../lib/dbErrors';
-import { timeAgo } from '../../lib/prefs';
+import { ageLong } from '../../lib/age';
 import { useSession, useUi } from '../../store/session';
 import { useChatUnread } from '../../store/chatUnread';
 import { useTenant } from '../../lib/tenant';
@@ -296,7 +296,7 @@ const LineStrip: React.FC<{
           const detail = e.fresh
             ? 'online now'
             : e.seen
-              ? `last seen ${timeAgo(e.seen)}`
+              ? `last seen ${ageLong(e.seen)}`
               : 'not seen yet';
           return (
             <li
@@ -951,7 +951,7 @@ const MessagesContent: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetr
                               </span>
                               {cv.last_message_at && (
                                 <span className="shrink-0 text-[10.5px] tabular-nums text-[#969696]">
-                                  {timeAgo(cv.last_message_at)}
+                                  {ageLong(cv.last_message_at)}
                                 </span>
                               )}
                             </span>

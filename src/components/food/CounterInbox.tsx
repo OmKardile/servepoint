@@ -40,6 +40,11 @@ import { useUi } from '../../store/session';
  * lib's one census (staleNewTickets), so the counter and the Dashboard's
  * whisper derive one number from one home — never a second derivation. */
 import { isSameAppDay, staleNewTickets, appFormatters } from '../../lib/appday';
+/* v5.279.0 — the wait's ONE register: the pill's words and the SLA strip's
+ * arithmetic ride lib/age (ageCompact / ageMinutes / AGE_SLA_MIN). The
+ * hand-rolled twins are gone — the counter said "5 min" where the floor's
+ * TimeAgo said "5m" for the same ticket's age; one wait, one voice now. */
+import { ageCompact, ageMinutes, AGE_SLA_MIN } from '../../lib/age';
 
 /**
  * CounterInbox (v5.3.0 — "the counter is the gate", NOVA rule #1).
@@ -113,17 +118,11 @@ function doorbell(): void {
   }
 }
 
-function ageMinutes(createdIso: string, nowMs: number): number {
-  return Math.max(0, (nowMs - new Date(createdIso).getTime()) / 60_000);
-}
-
-function ageLabel(createdIso: string, nowMs: number): string {
-  const m = Math.floor(ageMinutes(createdIso, nowMs));
-  if (m < 1) return 'just now';
-  if (m < 60) return `${m} min`;
-  const h = Math.floor(m / 60);
-  return `${h}h ${m % 60}m`;
-}
+/* v5.279.0 — the local ageMinutes/ageLabel twins retired: the math and the
+ * words live in lib/age (ONE register house-wide). The 5-minute warn line
+ * stays the counter's own judgment (a surface's tone, not the house's SLA) —
+ * named here so its one opinion is legible. */
+const WARN_MIN = 5;
 
 /* ───────────────────────────── ticket card ────────────────────────────── */
 
@@ -137,8 +136,13 @@ const TicketCard: React.FC<{
   onDecline: () => void;
 }> = ({ order, tableLabel, nowMs, busy, confirming, onOk, onDecline }) => {
   const mins = ageMinutes(order.created_at, nowMs);
+  const late = mins >= AGE_SLA_MIN;
   const ageTone =
-    mins >= 10 ? 'text-[#B3261E] bg-[#FCEBEA]' : mins >= 5 ? 'text-[#8A5A00] bg-[#FFF4DB]' : 'text-[#5F6B63] bg-[#F0F2EF]';
+    late
+      ? 'text-[#B3261E] bg-[#FCEBEA]'
+      : mins >= WARN_MIN
+        ? 'text-[#8A5A00] bg-[#FFF4DB]'
+        : 'text-[#5F6B63] bg-[#F0F2EF]';
   // Guest QR tickets carry a real dining-table FK (sp_create_public_order
   // resolves the scanned table). Counter walk-ins have none. (The type's
   // table_session_id is never populated — orders don't link sessions yet.)
@@ -168,10 +172,11 @@ const TicketCard: React.FC<{
         </div>
         <span
           className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-bold tabular-nums ${ageTone}`}
-          title="Waiting at the counter"
+          title={late ? `Past the ${AGE_SLA_MIN}-minute SLA — waiting at the counter` : 'Waiting at the counter'}
         >
           <Timer size={11} aria-hidden />
-          {ageLabel(order.created_at, nowMs)}
+          {ageCompact(order.created_at, nowMs)}
+          {late ? <span className="uppercase tracking-wide">· late</span> : null}
         </span>
       </header>
 
@@ -373,6 +378,18 @@ export function CounterInbox(): React.ReactElement | null {
    * and Decline would kill money from a room that can't see the ledger —
    * so the band only names them and doors to Bills (the chase's home). */
   const stragglers = useMemo(() => staleNewTickets(orders), [orders]);
+
+  /* v5.279.0 — the wait's live strip: the queue's SLA state, said out loud
+   * where the tickets are. The cards' pills tint one ticket at a time; this
+   * line is the row's own breath — how many are past the house's line, how
+   * long the oldest has waited, and the one action that clears it. Derived
+   * from the SAME list the cards render (tickets, oldest first — the sort
+   * is the census), refreshed by the same 30s breath that re-ages the
+   * pills, and GATED: nothing to say, nothing spoken (no zero-band lie). */
+  const lateTickets = useMemo(
+    () => tickets.filter((t) => ageMinutes(t.created_at, nowMs) >= AGE_SLA_MIN),
+    [tickets, nowMs]
+  );
   /* 5.243.0 — the band speaks the WHOLE BOOK's word: the server head-count
    * when it landed, the page census only when the count read failed (the
    * fail-soft dimming — the loaded page's own truth, never a silent zero).
@@ -546,6 +563,18 @@ export function CounterInbox(): React.ReactElement | null {
 
       {!collapsed ? (
         <div className="border-t border-[#E3E7E0] px-4 py-3">
+          {lateTickets.length > 0 && tickets.length > 0 ? (
+            <p
+              className="mb-3 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border-l-[3px] border-[#B45309] bg-[#FFF4DB] px-3 py-2 text-[12px] font-semibold text-[#8A5A00]"
+              aria-label={`${lateTickets.length} ${lateTickets.length === 1 ? 'ticket has' : 'tickets have'} waited past the ${AGE_SLA_MIN}-minute SLA; the oldest has waited ${ageCompact(tickets[0].created_at, nowMs)}. Ok the oldest first.`}
+            >
+              <TriangleAlert size={14} aria-hidden />
+              <span className="tabular-nums">
+                {lateTickets.length} past the {AGE_SLA_MIN}-min SLA · oldest {ageCompact(tickets[0].created_at, nowMs)}
+              </span>
+              <span className="text-[#B45309]">Ok the oldest first</span>
+            </p>
+          ) : null}
           {error ? (
             <p className="mb-3 flex items-center gap-2 rounded-xl border border-[#F3C7C4] bg-[#FCEBEA] px-3 py-2 text-[12px] font-semibold text-[#B3261E]">
               <TriangleAlert size={14} aria-hidden />

@@ -23,7 +23,10 @@ import { formatBillingDate as formatDate } from '../../lib/billing';
 import { isSupabaseConfigured } from '../../lib/supabase';
 import { useCopyAck, ackWord } from '../../lib/useCopyAck';
 import { authService } from '../../lib/authService';
-import { formatMoney, timeAgo } from '../../lib/prefs';
+import { formatMoney } from '../../lib/prefs';
+/* v5.279.0 — the "how fresh?" register rides lib/age's ageLong (timeAgo's
+ * new home — a wait is not a preference); the stamp pair stands. */
+import { ageLong } from '../../lib/age';
 import { dayTime } from '../../lib/day';
 import { appTimezone } from '../../lib/appday';
 import { useSession } from '../../store/session';
@@ -316,7 +319,7 @@ const RecentBusinessRow: React.FC<{ tenant: Tenant; sub?: Subscription | null }>
 };
 
 /* v5.246.0 — the time word speaks BOTH registers (the drawer-card grammar,
- * 5.179): timeAgo answers "how fresh?" while dayTime(appTimezone()) stamps
+ * 5.179): the age lib's ageLong answers "how fresh?" while dayTime(appTimezone()) stamps
  * the record's absolute when ("2 Oct · 10:14") — a stored sentence
  * re-rendered later re-derives its time-truth at the render boundary, so a
  * row ages from "3 hours ago · 17:28" into "3 days ago · 2 Oct · 10:14"
@@ -330,7 +333,7 @@ const ActivityRow: React.FC<{ log: AuditLogEntry }> = ({ log }) => (
     </div>
     <div className="shrink-0 text-right">
       <p className="text-xs font-medium text-[#6B6B6B]">{log.actor_email || 'System'}</p>
-      <p className="mt-0.5 text-xs text-[#969696]">{timeAgo(log.timestamp)}</p>
+      <p className="mt-0.5 text-xs text-[#969696]">{ageLong(log.timestamp)}</p>
       <p className="mt-0.5 text-[11px] text-[#969696]">{dayTime(log.timestamp, appTimezone())}</p>
     </div>
   </div>
@@ -1006,7 +1009,7 @@ export const PlatformScreen: React.FC = () => {
               </div>
               <div className="shrink-0 text-right">
                 <p className="text-xs font-medium text-[#6B6B6B]">{log.actor_email || 'System'}</p>
-                <p className="mt-0.5 text-xs text-[#969696]">{timeAgo(log.timestamp)}</p>
+                <p className="mt-0.5 text-xs text-[#969696]">{ageLong(log.timestamp)}</p>
                 <p className="mt-0.5 text-[11px] text-[#969696]">{dayTime(log.timestamp, appTimezone())}</p>
               </div>
             </div>

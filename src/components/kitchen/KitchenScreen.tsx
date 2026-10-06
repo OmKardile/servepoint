@@ -35,6 +35,10 @@ import { hhmm } from '../../lib/day';
  * lastRailTicketAt still takes it, suites still own now. */
 import { isSameAppDay, appFormatters } from '../../lib/appday';
 import { isQuietNow, subscribePrefs } from '../../lib/prefs';
+/* v5.279.0 — the amber escalation rides the ONE constant (lib/age's
+ * AGE_SLA_MIN — the same 10 the EOD strip mirrors and Reports counts);
+ * the RED line (20m) stays the kitchen's own judgment below. */
+import { AGE_SLA_MIN } from '../../lib/age';
 import type { Order } from '../../types';
 
 /**
@@ -170,12 +174,12 @@ function elapsed(createdIso: string, nowMs: number): string {
   return `${m}:${String(sec).padStart(2, '0')}`;
 }
 
-/** Waiting too long? Escalate the timer color: green → amber (10m) → red (20m). */
+/** Waiting too long? Escalate the timer color: green → amber (the house's SLA) → red (20m). */
 function waitTone(createdIso: string, nowMs: number, terminal: boolean): string {
   if (terminal) return '#969696';
   const mins = (nowMs - new Date(createdIso).getTime()) / 60000;
   if (mins >= 20) return '#B42318';
-  if (mins >= 10) return '#B88E2F';
+  if (mins >= AGE_SLA_MIN) return '#B88E2F';
   return '#2E7D32';
 }
 

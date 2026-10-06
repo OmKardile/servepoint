@@ -111,6 +111,11 @@ import { useCart } from '../../store/cart';
 import type { Order, OrderItem } from '../../types';
 import { seatSpanLabel, computeTurnCensus, namedBreachList, tableTicketDays, tableTicketsOnDay, tableWeekSplit } from '../../lib/turn';
 import type { TableTurnStats } from '../../lib/turn';
+/* v5.279.0 — the wait's ONE register: TimeAgo's words and expiryRel's span
+ * ride lib/age (ageCompact / ageSpan) — the hand-rolled third grammar is
+ * gone, and the floor now speaks the same minute words the counter's pills
+ * speak. The 30s self-breath stays: unit258's four-interval law counts it. */
+import { ageCompact, ageSpan } from '../../lib/age';
 
 /**
  * Floor (v5.26.0) — the counter's table cockpit. dining_tables stream over
@@ -585,8 +590,16 @@ function TimeAgo({ iso }: { iso: string }): React.ReactElement {
     const t = window.setInterval(() => force((n) => n + 1), 30000);
     return () => window.clearInterval(t);
   }, []);
-  const mins = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 60000));
-  return <span>{mins < 1 ? 'just now' : mins < 60 ? `${mins}m` : `${Math.floor(mins / 60)}h ${mins % 60}m`}</span>;
+  /* v5.279.0 — the words ride lib/age's ONE register (byte-identical to the
+   * hand-roll at every duration: "just now" / "5m" / "1h 12m"); the span
+   * grammar lives in exactly one src file now. tabular-nums keeps the
+   * minutes' tick from jittering the row's width; the title says what the
+   * number means. */
+  return (
+    <span className="tabular-nums" title="Time since the ticket was placed">
+      {ageCompact(iso, Date.now())}
+    </span>
+  );
 }
 
 /* ── Guest session trail (v5.23.0) — migration 002's ephemeral 10-minute
@@ -604,7 +617,11 @@ function istHM(iso: string): string {
 function expiryRel(iso: string): string {
   const diffMs = new Date(iso).getTime() - Date.now();
   const mins = Math.round(Math.abs(diffMs) / 60000);
-  const span = mins < 60 ? `${Math.max(1, mins)}m` : `${Math.floor(mins / 60)}h ${mins % 60}m`;
+  /* v5.279.0 — the span words ride lib/age's ageSpan (the ONE grammar);
+   * this fn keeps only its own edge: the countdown speaks a whole minute
+   * minimum ("1m left", never "just now" — an expiry is a span, not a
+   * state) and its future-vs-past word ("left" / "ago"). */
+  const span = ageSpan(mins);
   return diffMs >= 0 ? `${span} left` : `${span} ago`;
 }
 

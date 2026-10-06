@@ -179,17 +179,10 @@ export function formatMoney(amount: number, currency?: string): string {
   return `${sym}${moneyNum(amount)}`;
 }
 
-/** Relative "x minutes ago" label used by Notifications/Messages (Figma). */
-export function timeAgo(iso: string): string {
-  const diff = Date.now() - new Date(iso).getTime();
-  const m = Math.floor(diff / 60000);
-  if (m < 1) return 'Just now';
-  if (m < 60) return `${m} minute${m === 1 ? '' : 's'} ago`;
-  const h = Math.floor(m / 60);
-  if (h < 24) return `${h} hour${h === 1 ? '' : 's'} ago`;
-  const d = Math.floor(h / 24);
-  return `${d} day${d === 1 ? '' : 's'} ago`;
-}
+/* v5.279.0 — timeAgo has LEFT the prefs lib: the long age register ("Just
+ * now / 3 minutes ago / …") lives in lib/age as ageLong, beside the compact
+ * register and the ONE SLA constant. A wait is not a preference — the age
+ * family keeps one home. Importers: lib/age's ageLong, same words. */
 
 export function useSessionUser() {
   return useSession((s) => s.session);

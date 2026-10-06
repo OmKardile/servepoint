@@ -45,6 +45,11 @@ import {
   type WasteMove,
 } from '../../lib/api';
 import { formatMoney, subscribePrefs } from '../../lib/prefs';
+/* v5.279.0 — the mirror rides the ONE constant: lib/age's AGE_SLA_MIN is
+ * the house's 10-minute attention line (the kitchen board's amber, Reports'
+ * breach count, the counter's red line). The local name stays — this strip
+ * speaks "Late prep", the KDS's own shout — but the number has one home. */
+import { AGE_SLA_MIN } from '../../lib/age';
 import { guestVoice } from '../../lib/verdict';
 import {
   appTimezone,
@@ -214,7 +219,7 @@ interface DayCogs {
   cogs: number;
 }
 
-const LATE_PREP_MIN = 10; // KDS amber SLA — the EOD strip mirrors it
+const LATE_PREP_MIN = AGE_SLA_MIN;
 
 /** Section-mix bar tones — same family as the payment-mix palette (teal/blue/
  *  gold/green/amber), cycling if a cafe ever runs more sections than colors. */

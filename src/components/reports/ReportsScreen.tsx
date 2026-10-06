@@ -86,6 +86,10 @@ import {
   getPrefs,
   subscribePrefs,
 } from '../../lib/prefs';
+/* v5.279.0 — the breach line rides the ONE constant (lib/age's
+ * AGE_SLA_MIN): the 10 the kitchen board shouts, the EOD mirrors and the
+ * counter's red pill tints — one home for the house's attention line. */
+import { AGE_SLA_MIN } from '../../lib/age';
 import { downloadCsv } from '../../lib/csv';
 import { useCopyAck, ackWord } from '../../lib/useCopyAck';
 import { useExportFlash } from '../../lib/useExportFlash';
@@ -1130,8 +1134,9 @@ function kitchenSpeed(rows: Order[], hopRows: StatusHop[]): SpeedAgg {
   const avgMin = n > 0 ? sample.reduce((s, t) => s + t.minutes, 0) / n : null;
   const medianMin = n > 0 ? sample[Math.floor((n - 1) / 2)].minutes : null;
   const slowest = n > 0 ? sample[n - 1] : null;
-  // the 10-minute SLA the kitchen board already shouts about (LATE PREP)
-  const breaches = sample.filter((t) => t.minutes > 10);
+  // the SLA the kitchen board already shouts about (LATE PREP) — the ONE
+  // constant's line (v5.279.0: lib/age's AGE_SLA_MIN, one home for the 10)
+  const breaches = sample.filter((t) => t.minutes > AGE_SLA_MIN);
   // 5.68.0 — the slow dish: each timed ticket donates its fire→ready span to
   // every dish on it (one sample per DISH per ticket — a ×2 line is one
   // opinion, not two). The dish the pass waits for floats up on its own.
@@ -2304,7 +2309,7 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
         appFormatters().dt.format(t.firedAt),
         appFormatters().dt.format(t.readyAt),
         fmtDuration(t.minutes),
-        t.minutes > 10 ? 'over' : 'ok',
+        t.minutes > AGE_SLA_MIN ? 'over' : 'ok',
       ]);
     }
     if (kitchen.items.length > 0) {
@@ -2351,7 +2356,7 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
         orderNumber: t.orderNumber,
         minutes: t.minutes,
         firedAt: appFormatters().dt.format(t.firedAt),
-        over: t.minutes > 10,
+        over: t.minutes > AGE_SLA_MIN,
       })),
     dishes: kitchen.items.slice(0, 5).map((d, i) => ({
       name: d.name,
@@ -4379,7 +4384,7 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
                       >
                         <span className="flex items-center gap-1.5 text-[12.5px] font-bold text-[#1A1A1A]">
                           #{t.orderNumber}
-                          {t.minutes > 10 ? (
+                          {t.minutes > AGE_SLA_MIN ? (
                             <span className="inline-flex items-center rounded-full bg-[#FCEBEA] px-1.5 py-0.5 text-[10px] font-bold text-[#B3261E]">
                               over SLA
                             </span>
@@ -4389,7 +4394,7 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
                           fired {appFormatters().dt.format(t.firedAt)} → ready {appFormatters().dt.format(t.readyAt)}
                         </span>
                         <span
-                          className={`text-[12.5px] font-extrabold tabular-nums ${t.minutes > 10 ? 'text-[#B3261E]' : 'text-[#0F3D3E]'}`}
+                          className={`text-[12.5px] font-extrabold tabular-nums ${t.minutes > AGE_SLA_MIN ? 'text-[#B3261E]' : 'text-[#0F3D3E]'}`}
                         >
                           {fmtDuration(t.minutes)}
                         </span>
