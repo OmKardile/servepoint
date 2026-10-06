@@ -58,8 +58,13 @@ const swJs = readFileSync('public/sw.js', 'utf8');
 
 /* 3 — kept with the food, per-tab, read once. */
 {
+  /* v5.300.0 honest re-anchor — the name reader (v5.299.0) and the veg lens
+     reader (v5.300.0, localStorage by its own device law) were born between
+     the note reader and the v5.253.0 marker; the slice now ends at the name
+     reader's comment so the pin keeps its intent: the NOTE reader alone
+     touches sessionStorage, never localStorage. */
   const helperStart = page.indexOf('function readOrderNote');
-  const helperEnd = page.indexOf('/* v5.253.0 — the ticket\'s word reaches the menu');
+  const helperEnd = page.indexOf('/* v5.299.0 — the drawer remembers the guest\'s name');
   const helper = page.slice(helperStart, helperEnd);
   assert.ok(helper.includes('sessionStorage'), 'the read touches sessionStorage');
   assert.ok(!helper.includes('localStorage'), 'the read never touches localStorage');
