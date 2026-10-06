@@ -119,8 +119,11 @@ check('NO device-locale render anywhere in src/ — the last one retired', () =>
 /* ── 7. the two-clock doctrine is not vandalized ─────────────────────── */
 check('the doctrine stands: messages/customers keep their deliberate device day', () => {
   assert.ok(appday.includes('the DEVICE day (src/lib/day.ts) — bills, KDS, counter, strip'), 'the doctrine docstring stands in appday');
-  assert.ok(messages.includes("toLocaleTimeString('en-IN',"), 'messages keeps its pinned device-day word (deliberate)');
-  assert.ok(customers.includes("toLocaleTimeString('en-IN',"), 'customers keeps its pinned device-day word (deliberate)');
+  // v5.283.0 re-pin (the read-the-actual-shape law): the hand-spelled
+  // byte moved INTO the lib's deviceClockWord — the deliberate device-day
+  // word now rides the ONE import edge; the clock it names is unchanged
+  assert.ok(messages.includes("deviceClockWord, deviceDayFullTag, deviceDayTag } from '../../lib/appday'"), 'messages rides the device-day lib voices (the pinned word, one spelling now)');
+  assert.ok(customers.includes('deviceClockWord'), 'customers rides the device-day lib voices (deliberate)');
   assert.ok(bookingLib.includes('THE BOOKING CLOCK IS THE DATABASE'), 'the booking lib founding word stands');
 });
 
