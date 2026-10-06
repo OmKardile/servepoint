@@ -39,8 +39,14 @@ test('unit343 · the relative words have ONE home and the row grammar borrows it
     'the inline ternary in subscriptionWords moved out'
   );
   assert.ok(billing.includes('const rel = trialRelWords(d);'), 'the row grammar borrows the ONE home');
-  // the grammar around it is byte-still: same primary, same no-charge suffix
-  assert.ok(billing.includes('primary: `Trial ends ${formatBillingDate(s.trial_end)}`'));
+  // the grammar around it is byte-still: same no-charge suffix; the primary
+  // keeps its live-arm bytes inside the 5.307 tense law's ternary (the read-
+  // the-actual-shape re-pin: "Trial ended <date>" now speaks for passed
+  // windows, the live arm's words unchanged)
+  assert.ok(
+    billing.includes('? `Trial ends ${formatBillingDate(s.trial_end)}`\n          : `Trial ended ${formatBillingDate(s.trial_end)}`'),
+    'the tense law\u2019s two arms \u2014 the live arm byte-still, the past arm honest'
+  );
   assert.ok(billing.includes('secondary: d >= 0 ? `${rel} · no charge yet` : rel,'));
 });
 
