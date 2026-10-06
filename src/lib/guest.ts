@@ -373,6 +373,58 @@ export async function fetchPublicOffers(slug: string): Promise<PublicOffer[]> {
   }
 }
 
+/* ── v5.301.0 — the table's live tickets ───────────────────────────────────
+ * A table QR seat is SHARED — family-style dining means the table's tickets
+ * belong to more than one phone. Until now the menu only remembered the
+ * guest's OWN last ticket (5.253.0, per-tab), so a tablemate ordering a
+ * second round never saw the round already flying in the kitchen. The
+ * panel reads the TABLE's open tickets (orders carry table_id since 001)
+ * — the respectful slice only: ticket number, kitchen state, item count,
+ * total. Never a name, never a note — the sibling's words stay theirs.
+ * The liveness law: open kitchen statuses only, the last 12 hours (a
+ * zombie 'new' from a dead shift never lingers), newest first, six at
+ * most — a panel, not a ledger. Fail-soft at the offers banner's own
+ * law: a failed fetch is simply no panel — the menu never blocks on a
+ * nicety. */
+export interface TableLiveTicket {
+  id: string;
+  order_number: number;
+  status: string;
+  total: number;
+  items_count: number;
+  created_at: string;
+}
+
+export async function fetchTableLiveTickets(tableId: string): Promise<TableLiveTicket[]> {
+  try {
+    const since = new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString();
+    const { data, error } = await supabase
+      .from('orders')
+      .select('id, order_number, status, total, created_at, order_items(qty)')
+      .eq('table_id', tableId)
+      .in('status', ['new', 'pending', 'preparing', 'ready'])
+      .gte('created_at', since)
+      .order('created_at', { ascending: false })
+      .limit(6);
+    if (error || !data) return [];
+    return data.map((row) => ({
+      id: row.id,
+      order_number: row.order_number,
+      status: row.status,
+      total: Number(row.total),
+      /* the PIECES ride the embedded rows — one read, no N+1. A line's qty
+       * is what the guest calls "items": 2 sandwiches is 2 items, never 1
+       * line wearing the word. */
+      items_count: Array.isArray(row.order_items)
+        ? row.order_items.reduce((s, li) => s + (Number(li?.qty) || 0), 0)
+        : 0,
+      created_at: row.created_at,
+    }));
+  } catch {
+    return [];
+  }
+}
+
 /**
  * Place the order. Prices are computed server-side; the payload carries
  * identity only. `clientOperationId` makes retries safe — same intent,

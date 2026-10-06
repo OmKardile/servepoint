@@ -36,6 +36,7 @@ import {
   fetchPublicMenu,
   fetchPublicOffers,
   fetchPublicOrder,
+  fetchTableLiveTickets,
   openTableSession,
   resolveTableQr,
   submitPublicFeedback,
@@ -51,6 +52,7 @@ import {
   type GuestVariant,
   type PublicMenu,
   type PublicOffer,
+  type TableLiveTicket,
   type TableSession,
 } from '../../lib/guest';
 import { GUEST_LANGS, useGuestLang } from '../../lib/guest-i18n';
@@ -838,7 +840,7 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
   const { t } = useGuestLang();
   const [phase, setPhase] = useState<'loading' | 'ready' | 'locked' | 'error'>('loading');
   const [errorBody, setErrorBody] = useState('');
-  const [resolved, setResolved] = useState<{ tenantName: string; slug: string; tableNumber: string; capacity: number } | null>(null);
+  const [resolved, setResolved] = useState<{ tenantName: string; slug: string; tableId: string; tableNumber: string; capacity: number } | null>(null);
   const [menu, setMenu] = useState<PublicMenu | null>(null);
   const [sessionToken, setSessionToken] = useState<TableSession | null>(null);
   /* v5.253.0 — the guest's latest ticket from THIS tab's own checkout, read
@@ -947,6 +949,27 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
       return null;
     }
   });
+  /* v5.301.0 — the table's live tickets: the SHARED table's open tickets,
+   * read the moment the menu is ready and refreshed on the house's 30s
+   * cadence while it stays ready. The panel speaks only the respectful
+   * slice (number, state, count, total — never a name, never a note);
+   * a failed fetch is simply no panel (the offers banner's own law). */
+  const [tableTickets, setTableTickets] = useState<TableLiveTicket[]>([]);
+  useEffect(() => {
+    const tableId = resolved?.tableId;
+    if (!tableId || phase !== 'ready') return;
+    let alive = true;
+    const load = async () => {
+      const rows = await fetchTableLiveTickets(tableId);
+      if (alive) setTableTickets(rows);
+    };
+    void load();
+    const iv = window.setInterval(() => void load(), 30_000);
+    return () => {
+      alive = false;
+      window.clearInterval(iv);
+    };
+  }, [resolved?.tableId, phase]);
 
   /* 5.249.0 — the load chain is ONE runnable: the effect calls it, and the
      error card's Try again calls it again. The menu used to dead-end on a
@@ -967,7 +990,7 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
           setErrorBody(r.message || t('invalidCode'));
           return;
         }
-        setResolved({ tenantName: r.tenant.name, slug: r.tenant.slug, tableNumber: r.table.table_number, capacity: r.table.capacity });
+        setResolved({ tenantName: r.tenant.name, slug: r.tenant.slug, tableId: r.table.id, tableNumber: r.table.table_number, capacity: r.table.capacity });
         const opened = await openTableSession({ slug: r.tenant.slug, tableNumber: r.table.table_number, qrToken });
         if (!alive) return;
         if (!opened.ok || !opened.session) {
@@ -1628,6 +1651,85 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
             </span>
             <ChevronRight size={16} className="shrink-0 text-[#9A9A9A]" aria-hidden />
           </button>
+        )}
+        {/* v5.301.0 — the table's live tickets: the SHARED table's open
+            tickets, on the guest's own phone. Family-style dining means one
+            table's tickets live on more than one device — until now the menu
+            only pointed back at the tab's OWN checkout (the 5.253.0 chip
+            above), so a tablemate ordering the next round never saw the
+            round already flying in the kitchen. The panel speaks the
+            respectful slice only — number, kitchen state, item count, total;
+            never a name, never a note (the sibling's words stay theirs).
+            The rows walk in on the fade's own family, staggered, and a
+            ready ticket pulses its dot — the eye goes to the food. The
+            colors are the house's own (the green the ready word speaks,
+            the warm amber the 337 note card wears, the page's own grey). */}
+        {phase === 'ready' && tableTickets.length > 0 && (
+          <section
+            aria-label={t('tableLiveAria')}
+            title={t('tableLiveWhisper')}
+            className="mb-4 rounded-2xl border border-[#E3E7E0] bg-white px-4 py-3 shadow-sm"
+          >
+            <h2 className="mb-2 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.14em] text-[#6B6B6B]">
+              <UtensilsCrossed size={13} className="shrink-0 text-[#B88E2F]" aria-hidden />
+              {t('tableLiveTitle')}
+            </h2>
+            <ul className="flex flex-col">
+              {tableTickets.map((tk, i) => {
+                const mine = lastTicket?.id === tk.id;
+                const isReady = tk.status === 'ready';
+                const kitchen = tk.status === 'preparing';
+                const statusWord = isReady ? t('flowReady') : kitchen ? t('flowKitchen') : t('flowPlaced');
+                return (
+                  <li key={tk.id}>
+                    <button
+                      type="button"
+                      onClick={() => window.location.assign(`/track/${tk.id}`)}
+                      aria-label={t('tableLiveRowAria', { n: String(tk.order_number) })}
+                      style={{ animation: 'spFadeIn 240ms ease-out both', animationDelay: `${i * 40}ms` }}
+                      className="flex w-full items-center gap-2.5 rounded-xl px-2 py-2 text-left transition-colors hover:bg-[#F6F5F2] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#B88E2F]"
+                    >
+                      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full" style={{ background: '#FBF3E4' }}>
+                        <ReceiptText size={13} className="text-[#8A5A16]" aria-hidden />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="flex items-center gap-1.5">
+                          <span className="truncate text-[13px] font-bold text-[#1A1A1A]">#{tk.order_number}</span>
+                          {mine && (
+                            <span
+                              className="shrink-0 rounded-full px-1.5 py-0.5 text-[9.5px] font-bold uppercase tracking-wide text-[#8A5A16]"
+                              style={{ background: '#FBF3E4' }}
+                            >
+                              {t('tableLiveMine')}
+                            </span>
+                          )}
+                        </span>
+                        <span className="block text-[11px] text-[#6B6B6B]">
+                          {t('tableLiveItems', { n: String(tk.items_count), s: tk.items_count === 1 ? '' : 's' })}
+                        </span>
+                      </span>
+                      {isReady && (
+                        <span aria-hidden className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full" style={{ background: '#2E7D32' }} />
+                      )}
+                      <span
+                        className={`shrink-0 rounded-full px-2 py-0.5 text-[10.5px] font-bold ${
+                          isReady
+                            ? 'bg-[#EAF4EC] text-[#2E7D32]'
+                            : kitchen
+                              ? 'bg-[#FBF6EA] text-[#B45309]'
+                              : 'bg-[#F6F5F2] text-[#6B6B6B]'
+                        }`}
+                      >
+                        {statusWord}
+                      </span>
+                      <span className="shrink-0 text-[12px] font-semibold text-[#1A1A1A]">{money(tk.total)}</span>
+                      <ChevronRight size={14} className="shrink-0 text-[#9A9A9A]" aria-hidden />
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
         )}
         {/* sticky category rail — thumb-friendly jumps, scroll-spy highlight */}
         {phase === 'ready' && filtered.length > 0 && (

@@ -210,6 +210,16 @@ const EN: Dict = {
   lastTicketTitle: 'Your ticket #{n}',
   lastTicketSub: 'Placed from this table — tap to follow it',
   lastTicketAria: 'Follow your ticket #{n}',
+  // v5.301.0 — the table's live tickets: the panel answers the SHARED table —
+  // family-style dining, one table's tickets on more than one phone. The
+  // respectful slice only: number, state, count, total — never a name,
+  // never a note. The whisper keeps the hover convention.
+  tableLiveTitle: 'Live at this table',
+  tableLiveAria: 'Live tickets placed from this table',
+  tableLiveItems: '{n} item{s}',
+  tableLiveMine: 'Yours',
+  tableLiveWhisper: "The table's open tickets — tap one to follow it",
+  tableLiveRowAria: 'Follow ticket #{n} at this table',
   // v5.254.0 — the kitchen's ears: the order-level note, offered and spoken back
   drawerNoteLabel: 'Anything we should know? (optional)',
   drawerNotePh: 'Allergies, spice level, timing…',
@@ -390,6 +400,12 @@ const HI: Dict = {
   lastTicketTitle: 'आपका टिकट #{n}',
   lastTicketSub: 'इसी टेबल से लगा — देखने के लिए टैप करें',
   lastTicketAria: 'अपना टिकट #{n} देखें',
+  tableLiveTitle: 'इस टेबल के चालू टिकट',
+  tableLiveAria: 'इस टेबल से लगे चालू टिकट',
+  tableLiveItems: '{n} आइटम',
+  tableLiveMine: 'आपका',
+  tableLiveWhisper: 'टेबल के चालू टिकट — किसी पर टैप करके देखें',
+  tableLiveRowAria: 'इस टेबल का टिकट #{n} देखें',
   // v5.254.0 — the kitchen's ears: the order-level note, offered and spoken back
   drawerNoteLabel: 'हमें कुछ बताना है? (वैकल्पिक)',
   drawerNotePh: 'एलर्जी, तीखापन, समय…',
@@ -570,6 +586,12 @@ const KN: Dict = {
   lastTicketTitle: 'ನಿಮ್ಮ ಟಿಕೆಟ್ #{n}',
   lastTicketSub: 'ಇದೇ ಟೇಬಲ್‌ನಿಂದ ಆರ್ಡರ್ — ನೋಡಲು ಟ್ಯಾಪ್ ಮಾಡಿ',
   lastTicketAria: 'ನಿಮ್ಮ ಟಿಕೆಟ್ #{n} ನೋಡಿ',
+  tableLiveTitle: 'ಈ ಟೇಬಲ್‌ನ ಚಾಲ್ತಿ ಟಿಕೆಟ್‌ಗಳು',
+  tableLiveAria: 'ಈ ಟೇಬಲ್‌ನಿಂದ ಬಂದ ಚಾಲ್ತಿ ಟಿಕೆಟ್‌ಗಳು',
+  tableLiveItems: '{n} ಐಟಂ',
+  tableLiveMine: 'ನಿಮ್ಮದು',
+  tableLiveWhisper: 'ಟೇಬಲ್‌ನ ಚಾಲ್ತಿ ಟಿಕೆಟ್‌ಗಳು — ನೋಡಲು ಒಂದನ್ನು ಟ್ಯಾಪ್ ಮಾಡಿ',
+  tableLiveRowAria: 'ಈ ಟೇಬಲ್‌ನ ಟಿಕೆಟ್ #{n} ನೋಡಿ',
   // v5.254.0 — the kitchen's ears: the order-level note, offered and spoken back
   drawerNoteLabel: 'ಏನಾದರೂ ಹೇಳಬೇಕೆ? (ಐಚ್ಛಿಕ)',
   drawerNotePh: 'ಅಲರ್ಜಿ, ಖಾರ, ಸಮಯ…',
