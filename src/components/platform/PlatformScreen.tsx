@@ -430,6 +430,10 @@ export const PlatformScreen: React.FC = () => {
    * verb chip it is standing on (null = All). Two filters that compose. */
   const [auditQuery, setAuditQuery] = useState('');
   const [auditVerb, setAuditVerb] = useState<string | null>(null);
+  /* v5.289.0 — the businesses room joins the hunt: its own status census
+   * chip (null = All), composing with the search exactly as the audit
+   * room's verb chip composes. */
+  const [businessStatus, setBusinessStatus] = useState<string | null>(null);
   const [expandedTenantId, setExpandedTenantId] = useState<string | null>(null);
   const [wizardOpen, setWizardOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
@@ -482,16 +486,27 @@ export const PlatformScreen: React.FC = () => {
     [subs]
   );
 
+  /* v5.289.0 — the status census read from the tenants themselves (the
+   * hunt's own law: no invented values), loudest first, ties alphabetical. */
+  const businessStatuses = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const t of tenants ?? [])
+      counts.set(t.status || 'unknown', (counts.get(t.status || 'unknown') || 0) + 1);
+    return [...counts.entries()]
+      .map(([status, count]) => ({ status, count }))
+      .sort((a, b) => b.count - a.count || a.status.localeCompare(b.status));
+  }, [tenants]);
+
   const filteredTenants = useMemo(() => {
     const q = businessQuery.trim().toLowerCase();
-    if (!q) return tenants ?? [];
     return (tenants ?? []).filter(
       (t) =>
-        t.name.toLowerCase().includes(q) ||
-        t.slug.toLowerCase().includes(q) ||
-        (t.city || '').toLowerCase().includes(q)
+        (businessStatus === null || t.status === businessStatus) &&
+        (t.name.toLowerCase().includes(q) ||
+          t.slug.toLowerCase().includes(q) ||
+          (t.city || '').toLowerCase().includes(q))
     );
-  }, [tenants, businessQuery]);
+  }, [tenants, businessQuery, businessStatus]);
 
   const recentTenants = useMemo(() => (tenants ?? []).slice(0, 5), [tenants]);
   const recentLogs = useMemo(() => (logs ?? []).slice(0, 10), [logs]);
@@ -725,13 +740,28 @@ export const PlatformScreen: React.FC = () => {
     );
   };
 
-  const renderBusinesses = () => (
+  const renderBusinesses = () => {
+    /* v5.289.0 — the hunt's words for this room: the no-match card names
+     * what was actually hunted (status chip, query, or both). */
+    const needle = businessQuery.trim();
+    const businessHuntWords = [
+      businessStatus !== null ? `the status “${businessStatus}”` : '',
+      needle ? `“${needle}”` : '',
+    ]
+      .filter(Boolean)
+      .join(' and ');
+    const filtering = businessStatus !== null || needle !== '';
+    return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-lg font-semibold text-[#1A1A1A]">
           Businesses
           {tenants !== null && !tenantsError && (
-            <span className="ml-2 text-sm font-medium text-[#969696]">{tenants.length}</span>
+            /* v5.289.0 — the census answers from its own count: while the
+             * room is filtered, "N of M"; the whole count when not. */
+            <span className="ml-2 text-sm font-medium text-[#969696]">
+              {filtering ? `${filteredTenants.length} of ${tenants.length}` : tenants.length}
+            </span>
           )}
         </h2>
         <div className="flex flex-wrap items-center gap-3">
@@ -761,6 +791,35 @@ export const PlatformScreen: React.FC = () => {
           </button>
         </div>
       </div>
+      {/* v5.289.0 — the status census: the hunt's own chip grammar riding
+       * the SAME two voices the audit room speaks (one constant, zero
+       * drift). "All" owns the null; a status chip toggles itself off on
+       * the second tap; aria-pressed speaks the state. */}
+      {tenants !== null && tenants.length > 0 && businessStatuses.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Filter the businesses by status">
+          <button
+            type="button"
+            onClick={() => setBusinessStatus(null)}
+            aria-pressed={businessStatus === null}
+            className={businessStatus === null ? HUNT_CHIP_ACTIVE : HUNT_CHIP_IDLE}
+          >
+            All
+            <span className="ml-1.5 text-[11px] opacity-70 tabular-nums">{tenants.length}</span>
+          </button>
+          {businessStatuses.map(({ status, count }) => (
+            <button
+              key={status}
+              type="button"
+              onClick={() => setBusinessStatus(businessStatus === status ? null : status)}
+              aria-pressed={businessStatus === status}
+              className={businessStatus === status ? HUNT_CHIP_ACTIVE : HUNT_CHIP_IDLE}
+            >
+              {status}
+              <span className="ml-1.5 text-[11px] opacity-70 tabular-nums">{count}</span>
+            </button>
+          ))}
+        </div>
+      )}
 
       {tenantsError ? (
         <ErrorCard
@@ -786,7 +845,7 @@ export const PlatformScreen: React.FC = () => {
           <EmptyState
             icon={Search}
             title="No matches"
-            body={`No businesses match “${businessQuery.trim()}”. Try a different name, slug or city.`}
+            body={`No businesses match ${businessHuntWords}. Try a different name, slug or city.`}
           />
         </div>
       ) : (
@@ -985,7 +1044,8 @@ export const PlatformScreen: React.FC = () => {
         </>
       )}
     </div>
-  );
+    );
+  };
 
   const renderSubscriptions = () => {
     const rows = subs ?? [];

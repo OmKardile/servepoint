@@ -63,6 +63,18 @@ const STEP_LABELS = ['Business', 'Owner account', 'Review'] as const;
 const SLUG_PATTERN = /^[a-z0-9-]+$/;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+/* v5.289.0 — the verbs learn to stick: the wizard's panel scrolls
+ * (max-h-[92vh] overflow-y-auto, byte-still) but its verb rows used to
+ * live at the content's end — at a squat viewport (1280×600 measured) the
+ * primary verb sat 54px past the fold with no affordance naming the
+ * scroll. EVERY step's footer now sticks to the panel's own bottom edge
+ * (full-bleed through the panel's p-6, the house's hairline above, the
+ * rounded corners kept) so Back/Continue/Provision are reachable at ANY
+ * height, and the content scrolls beneath them. One constant, three
+ * readers — the geometry can never drift between steps. */
+const WIZARD_FOOT_STICK =
+  'sticky bottom-0 -mx-6 -mb-6 rounded-b-3xl border-t border-[#E3E7E0] bg-white px-6 pb-5 pt-3';
+
 /* ─────────────────────────── helpers ─────────────────────────── */
 
 const PW_POOLS = [
@@ -373,7 +385,7 @@ export const ProvisioningWizard: React.FC<ProvisioningWizardProps> = ({
               const current = step === idx;
               const done = step > idx;
               return (
-                <li key={label} className="flex items-center gap-2">
+                <li key={label} className="flex items-center gap-2" aria-current={current ? 'step' : undefined}>
                   <span
                     aria-hidden
                     className={`h-2.5 w-2.5 rounded-full ${
@@ -532,7 +544,7 @@ export const ProvisioningWizard: React.FC<ProvisioningWizardProps> = ({
               </div>
             </div>
 
-            <div className="flex items-center justify-end gap-3 pt-2">
+            <div className={`flex items-center justify-end gap-3 ${WIZARD_FOOT_STICK}`}>
               <button type="submit" className="sp-cta h-11 rounded-xl px-5 text-[13px]">
                 Continue
               </button>
@@ -618,7 +630,7 @@ export const ProvisioningWizard: React.FC<ProvisioningWizardProps> = ({
               )}
             </div>
 
-            <div className="flex items-center justify-between gap-3 pt-2">
+            <div className={`flex items-center justify-between gap-3 ${WIZARD_FOOT_STICK}`}>
               <button
                 type="button"
                 onClick={goBack}
@@ -686,7 +698,7 @@ export const ProvisioningWizard: React.FC<ProvisioningWizardProps> = ({
               </div>
             )}
 
-            <div className="flex items-center justify-between gap-3 pt-1">
+            <div className={`flex items-center justify-between gap-3 ${WIZARD_FOOT_STICK}`}>
               <button
                 type="button"
                 onClick={goBack}
