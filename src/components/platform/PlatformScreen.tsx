@@ -18,7 +18,7 @@ import {
   Search,
   TrendingUp,
 } from 'lucide-react';
-import { fetchAuditLogs, fetchSubscriptions, fetchTenants } from '../../lib/api';
+import { convertTrialToPaid, fetchAuditLogs, fetchSubscriptions, fetchTenants } from '../../lib/api';
 import { daysUntil, planLabel, subscriptionWords, trialBucket, trialRelWords } from '../../lib/billing';
 import { formatBillingDate as formatDate } from '../../lib/billing';
 import { isSupabaseConfigured } from '../../lib/supabase';
@@ -531,6 +531,56 @@ export const PlatformScreen: React.FC = () => {
   useEffect(() => {
     void load();
   }, [load]);
+
+  /* v5.308.0 — the conversion door's hands: the row mid-write (busy), the row
+   * whose door is ARMED (the two-click law — the first click asks, the second
+   * answers), and the door's own honest error line. */
+  const [convertingIds, setConvertingIds] = useState<Set<string>>(new Set());
+  const [armedConvertId, setArmedConvertId] = useState<string | null>(null);
+  const [convertError, setConvertError] = useState<string | null>(null);
+
+  /**
+   * v5.308.0 — the conversion door. The two-click law: arm, then confirm —
+   * no dialogs, counter-tablet hands. The api write is guarded to trialing
+   * rows, so a double-convert answers nothing; the room reloads so the row,
+   * its words and the MRR card all retell the same truth. Arming another
+   * row disarms the last — one armed door at a time.
+   */
+  const handleConvert = useCallback(
+    async (sub: Subscription, businessName: string) => {
+      if (!sub.trial_end) return; // a date-less trial cannot promise a charge date
+      if (armedConvertId !== sub.id) {
+        setArmedConvertId(sub.id);
+        return;
+      }
+      setArmedConvertId(null);
+      setConvertError(null);
+      setConvertingIds((prev) => new Set(prev).add(sub.id));
+      try {
+        await convertTrialToPaid(
+          {
+            id: sub.id,
+            tenant_id: sub.tenant_id,
+            plan_id: sub.plan_id,
+            monthly_price: sub.monthly_price,
+            final_monthly_rate: sub.final_monthly_rate,
+            trial_end: sub.trial_end,
+          },
+          businessName
+        );
+        await load();
+      } catch (err) {
+        setConvertError(errorMessage(err));
+      } finally {
+        setConvertingIds((prev) => {
+          const next = new Set(prev);
+          next.delete(sub.id);
+          return next;
+        });
+      }
+    },
+    [armedConvertId, load]
+  );
 
   const supabaseConnected = isSupabaseConfigured();
 
@@ -1243,6 +1293,14 @@ export const PlatformScreen: React.FC = () => {
           </span>
         </div>
 
+        {/* v5.308.0 — the door's own honest error line: a failed conversion
+            never disguises itself as success — the room says what happened. */}
+        {convertError && (
+          <p role="alert" className="text-sm text-[#B42318]">
+            {convertError}
+          </p>
+        )}
+
         {subsError ? (
           <ErrorCard
             title="Subscriptions could not be loaded"
@@ -1297,6 +1355,35 @@ export const PlatformScreen: React.FC = () => {
                       </td>
                       <td className="px-4 py-3.5">
                         <StatusChip status={s.status} />
+                        {/* v5.308.0 — the trial's door, in the status cell
+                            itself: only a trialing row WITH a window may open
+                            it (a date-less trial cannot promise a charge
+                            date). Two clicks — arm, confirm — and the gold
+                            whisper ink marks the armed state. Zero new
+                            colors: the teal, the house border, the house row
+                            tone, the 5.305 gold. */}
+                        {s.status === 'trialing' && s.trial_end && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              void handleConvert(s, tenantNameById.get(s.tenant_id) || '—')
+                            }
+                            disabled={convertingIds.has(s.id)}
+                            title={`Charges begin ${formatDate(s.trial_end)} — the promised rate stands`}
+                            aria-label={`Convert ${tenantNameById.get(s.tenant_id) || 'this business'} trial to paid`}
+                            className={
+                              armedConvertId === s.id
+                                ? 'mt-1.5 inline-flex h-7 items-center rounded-full border border-[#967221] bg-white px-3 text-xs font-medium text-[#967221] transition-colors duration-150 hover:bg-[#F6F5F2] disabled:opacity-50'
+                                : 'mt-1.5 inline-flex h-7 items-center rounded-full border border-[#E3E7E0] bg-white px-3 text-xs font-medium text-[#0F3D3E] transition-colors duration-150 hover:bg-[#F6F5F2] disabled:opacity-50'
+                            }
+                          >
+                            {convertingIds.has(s.id)
+                              ? 'Converting…'
+                              : armedConvertId === s.id
+                                ? `Confirm — bill from ${formatDate(s.trial_end)}`
+                                : 'Convert to paid'}
+                          </button>
+                        )}
                       </td>
                       <td className="whitespace-nowrap px-4 py-3.5 text-right align-top">
                         <BillingWords cell={billingCell(s)} />
@@ -1345,6 +1432,29 @@ export const PlatformScreen: React.FC = () => {
                       </dd>
                     </div>
                   </dl>
+                  {/* v5.308.0 — the card carries the same door (the 232 law:
+                      both shapes speak one truth). Full-width on the card,
+                      the same arm/confirm/busy words. */}
+                  {s.status === 'trialing' && s.trial_end && (
+                    <button
+                      type="button"
+                      onClick={() => void handleConvert(s, tenantNameById.get(s.tenant_id) || '—')}
+                      disabled={convertingIds.has(s.id)}
+                      title={`Charges begin ${formatDate(s.trial_end)} — the promised rate stands`}
+                      aria-label={`Convert ${tenantNameById.get(s.tenant_id) || 'this business'} trial to paid`}
+                      className={
+                        armedConvertId === s.id
+                          ? 'mt-3 inline-flex h-8 w-full items-center justify-center rounded-full border border-[#967221] bg-white px-3 text-xs font-medium text-[#967221] transition-colors duration-150 hover:bg-[#F6F5F2] disabled:opacity-50'
+                          : 'mt-3 inline-flex h-8 w-full items-center justify-center rounded-full border border-[#E3E7E0] bg-white px-3 text-xs font-medium text-[#0F3D3E] transition-colors duration-150 hover:bg-[#F6F5F2] disabled:opacity-50'
+                      }
+                    >
+                      {convertingIds.has(s.id)
+                        ? 'Converting…'
+                        : armedConvertId === s.id
+                          ? `Confirm — bill from ${formatDate(s.trial_end)}`
+                          : 'Convert to paid'}
+                    </button>
+                  )}
                 </div>
               ))}
             </div>

@@ -6,7 +6,7 @@ import { moverWindow } from './movers';
  * guest cart's preview speak the same lib, so a preview can never
  * disagree with its own written order. */
 import { gstTax } from './tax';
-import { round2 } from './money';
+import { moneyBare, round2 } from './money';
 import type {
   AppNotification,
   AuditLogEntry,
@@ -2148,6 +2148,53 @@ export async function provisionBusiness(input: ProvisionInput): Promise<Provisio
   }
 
   return { tenant, cloudError };
+}
+
+/**
+ * Convert a trialing subscription to paid (v5.308.0) — the door the trial's
+ * own words promised. The row keeps 5.307's promise (both price columns are
+ * untouched — the rate the operator was told is the rate that starts),
+ * status flips to 'active', and the first charge lands at the trial window's
+ * OWN end — never a mid-window double-bill. The write is guarded to trialing
+ * rows only: a row that already moved answers nothing to a second click.
+ * A best-effort platform audit row rides along (the provision trail's own
+ * shape) so the audit room can retell the conversion.
+ */
+export async function convertTrialToPaid(
+  sub: {
+    id: string;
+    tenant_id: string;
+    plan_id: string;
+    monthly_price: number;
+    final_monthly_rate: number | null;
+    trial_end: string;
+  },
+  businessName: string
+): Promise<void> {
+  requireCloud();
+  const { error } = await supabase
+    .from('subscriptions')
+    .update({ status: 'active', next_billing_at: sub.trial_end })
+    .eq('id', sub.id)
+    .eq('tenant_id', sub.tenant_id)
+    .eq('status', 'trialing');
+  if (error) throw error;
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const { error: auditErr } = await supabase.from('platform_audit_logs').insert({
+    tenant_id: sub.tenant_id,
+    actor_email: user?.email || 'platform@servepoint.app',
+    action: 'subscription.trial_converted',
+    details: `${businessName} · plan ${sub.plan_id} · ₹${moneyBare(sub.final_monthly_rate ?? sub.monthly_price)}/mo from the trial's end`,
+    metadata: {
+      subscription_id: sub.id,
+      plan: sub.plan_id,
+      next_billing_at: sub.trial_end,
+    },
+  });
+  if (auditErr) console.warn('[convert] audit insert failed:', auditErr.message);
 }
 
 /* ── Inventory + recipes (v5.4.0 — migration 015 engine) ────────────────────
