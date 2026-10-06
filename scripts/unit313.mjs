@@ -35,6 +35,7 @@ const bills = readFileSync('/home/z/my-project/src/components/bills/BillsScreen.
 const customers = readFileSync('/home/z/my-project/src/components/customers/CustomersScreen.tsx', 'utf8');
 const flash = readFileSync('/home/z/my-project/src/lib/useExportFlash.ts', 'utf8');
 const button = readFileSync('/home/z/my-project/src/components/common/CsvExportButton.tsx', 'utf8');
+const flag = readFileSync('/home/z/my-project/src/lib/useTransientFlag.ts', 'utf8');
 const versionTs = readFileSync('/home/z/my-project/src/version.ts', 'utf8');
 const swJs = readFileSync('/home/z/my-project/public/sw.js', 'utf8');
 
@@ -141,8 +142,8 @@ check('the book\u2019s CSV verb rides the ONE component — one hook, one compon
   assert.ok(button.includes("idleEar?: 'download' | 'sheet';"), 'the resting ear has its own word (the catalog\u2019s spreadsheet ear)');
   // the hook's own discipline
   assert.ok(flash.includes('const FLASH_MS = 2200;'), 'a breath, not a flag — the word returns');
-  assert.ok(flash.includes('if (timer.current !== null) window.clearTimeout(timer.current);'), 'a re-tap re-arms — a second honest export still exports');
-  assert.ok(flash.match(/useEffect\(\s*\(\) => \(\) => \{[\s\S]*?clearTimeout\(timer\.current\);[\s\S]*?\},\s*\[\],?\s*\)/), 'the timer is cleaned up on unmount');
+  assert.ok(flag.includes('if (timer.current !== null) window.clearTimeout(timer.current);'), 'a re-fire re-arms — the word never stacks a second timer (the ONE breath, lib/useTransientFlag since v5.276.0)');
+  assert.ok(flag.match(/useEffect\(\s*\(\) => \(\) => \{[\s\S]*?clearTimeout\(timer\.current\);[\s\S]*?\},\s*\[\],?\s*\)/), 'the timer is cleaned up on unmount (in the flag lib \u2014 the breath\u2019s one home)');
   assert.ok(flash.includes('reads the silence as a missed tap and taps again: two identical files'), 'the hook says why it exists');
 });
 

@@ -157,7 +157,7 @@ check('the saved register trio lives in exactly ONE file — a retint is one edi
 /* ── 8. the version law ───────────────────────────────────────────────── */
 check('APP_VERSION and sw.js agree — the agreement shape', () => {
   const v = versionTs.match(/APP_VERSION = '([^']+)'/)?.[1] ?? '';
-  assert.equal(v, '5.275.0', 'the version word is this round\u2019s');
+  assert.ok(/^5\.\d+\.\d+$/.test(v), 'the version word is a semver word (the literal belongs to the current round\u2019s unit — unit308\u2019s precedent)');
   assert.ok(swJs.includes(`const VERSION = "servepoint-v${v}-r1";`), `sw.js carries the same word (${v})`);
 });
 

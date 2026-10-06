@@ -45,7 +45,7 @@ const swJs = readFileSync('public/sw.js', 'utf8');
   const rowIdx = page.indexOf('the forward action takes the first seat');
   assert.ok(rowIdx > 0, 'the pill carries the first-seat comment');
   const pillIdx = page.indexOf("{moreToken && (");
-  const copyIdx = page.indexOf("void navigator.clipboard?.writeText(window.location.href);");
+  const copyIdx = page.indexOf("void copyText(window.location.href).then(setCopied);");
   assert.ok(pillIdx > 0 && copyIdx > pillIdx, 'the pill sits BEFORE copy-link in the row (the forward seat)');
   ok('the forward action exists and takes the first seat');
 }
