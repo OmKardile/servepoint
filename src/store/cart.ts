@@ -81,7 +81,12 @@ interface CartState {
   clear: () => void;
 }
 
-const lineKey = (menuItemId: string, addonNames: string[], variantName?: string | null) =>
+/** v5.272.0 — exported: the edit room must know the key the new choices
+ *  will land on BEFORE the old line leaves (the note-survival clause reads
+ *  it to ask whether a sibling already holds that key). ONE key grammar,
+ *  one speaker — computed here, read everywhere; a second builder would
+ *  mean two truths about what "the same plate twice" is (the 5.269 law). */
+export const lineKey = (menuItemId: string, addonNames: string[], variantName?: string | null) =>
   `${menuItemId}::${variantName || 'base'}::${[...addonNames].sort().join('|')}`;
 
 export const useCart = create<CartState>((set, get) => ({

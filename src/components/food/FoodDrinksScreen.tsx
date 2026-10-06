@@ -12,6 +12,7 @@ import {
   MessageSquarePlus,
   Minus,
   PackageOpen,
+  Pencil,
   Pizza,
   Plus,
   Search,
@@ -39,7 +40,7 @@ import { formatMoney } from '../../lib/prefs';
 import { offerFit, offerFitVoice } from '../../lib/offerFit';
 import { computeUsual, USUAL_WINDOW } from '../../lib/usual';
 import { useUi } from '../../store/session';
-import { cartTotal, offerDiscount, useCart } from '../../store/cart';
+import { cartTotal, offerDiscount, useCart, type CartLine } from '../../store/cart';
 import { ItemDetailModal } from './ItemDetailModal';
 import { VegMark } from '../shell/VegMark';
 import { MarkHit } from '../shell/MarkHit';
@@ -485,9 +486,14 @@ const OrderDrawer: React.FC<{
   /** Variant-bearing usuals open the item modal — the drawer can't reach the
    *  parent's modal state, so the parent hands down the gesture. */
   onChooseItem: (item: MenuItem) => void;
+  /** v5.272.0 — the line's Edit verb (5.271's law, one cart later): the
+   *  drawer hands the line AND its live dish to the parent, which closes the
+   *  drawer and opens the dish's own room PRE-FILLED. A stale line never
+   *  reaches here — the verb is dead before the hand. */
+  onEditLine: (line: CartLine, item: MenuItem) => void;
   onClose: () => void;
   onPlaced: (orderNumber: number) => void;
-}> = ({ open, tenantId, items, offers, onChooseItem, onClose, onPlaced }) => {
+}> = ({ open, tenantId, items, offers, onChooseItem, onEditLine, onClose, onPlaced }) => {
   const cart = useCart();
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -897,7 +903,14 @@ const OrderDrawer: React.FC<{
               </p>
             ) : (
               <ul className="divide-y divide-[#E3E7E0]">
-                {cart.lines.map((l) => (
+                {cart.lines.map((l) => {
+                  /* v5.272.0 — the edit verb reads the LIVE menu: the dish the
+                     line was sold as must still be on it (and not pulled) for
+                     its choices to be re-said — the stale law (308's, two
+                     verbs later). The minus and the note pencil stay live. */
+                  const lineItem = items.find((m) => m.id === l.menuItemId) || null;
+                  const stale = !lineItem || lineItem.is_available === false;
+                  return (
                   <li key={l.key} className="flex items-start justify-between gap-3 py-3">
                     <div className="min-w-0">
                       <p className="flex items-center gap-1.5 truncate text-[13.5px] font-semibold text-[#1A1A1A]">
@@ -1003,13 +1016,46 @@ const OrderDrawer: React.FC<{
                         >
                           <MessageSquarePlus size={15} aria-hidden />
                         </button>
+                        {/* v5.272.0 — the line's SECOND pencil: Edit, deep-green
+                            ink reading "make it right" (5.271's own ink) beside
+                            the note pencil's amber-when-armed. THE STALE LAW
+                            EXTENDS (308's law, two verbs later): a pulled or
+                            vanished dish's line can shrink or leave, but its
+                            choices can never be re-said — the verb is dead. */}
+                        <span aria-hidden className="mx-0.5 h-6 w-px bg-[#E3E7E0]" />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (lineItem && !stale) onEditLine(l, lineItem);
+                          }}
+                          disabled={stale}
+                          aria-disabled={stale}
+                          aria-label={
+                            stale
+                              ? `${l.name} is sold out — this line can shrink or leave, but not be re-said`
+                              : `Edit ${l.name} — change options or quantity`
+                          }
+                          title={
+                            stale
+                              ? 'Sold out — this line cannot be re-said'
+                              : 'Change this line\u2019s options or quantity'
+                          }
+                          className={`flex h-11 w-11 items-center justify-center rounded-xl border transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#967221] ${
+                            stale
+                              ? 'cursor-not-allowed border-[#E3E7E0] bg-white text-[#0F3D3E]/35 disabled:hover:bg-white'
+                              : 'border-[#E3E7E0] bg-white text-[#0F3D3E] hover:bg-[#F1F5F4]'
+                          }`}
+                        >
+                          <Pencil size={15} aria-hidden />
+                        </button>
                       </span>
                     </div>
                     <p className="pt-0.5 text-[13.5px] font-semibold text-[#1A1A1A]">
                       {formatMoney(round2(l.qty * l.unitPrice))}
                     </p>
                   </li>
-                ))}
+                  );
+                })}
               </ul>
             )}
           </div>
@@ -1168,13 +1214,19 @@ const FoodDrinksInner: React.FC<{ onRetry: () => void }> = ({ onRetry }) => {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detailItem, setDetailItem] = useState<MenuItem | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  /* v5.272.0 — the edit room's tenant: the cart line being re-said. Set by
+     the drawer's Edit verb, cleared on EVERY way out of the room (close,
+     cancel) and on EVERY fresh-add path (a stale line must never pre-fill
+     a room the cashier opened for a new plate — the remount law carries
+     the rest via the render site's key). */
+  const [editingLine, setEditingLine] = useState<CartLine | null>(null);
   useEffect(() => {
     // every drawer open re-reads: the picker is the applying surface, it
     // deserves the freshest register the cloud holds.
     if (drawerOpen) setOffersTick((t) => t + 1);
   }, [drawerOpen]);
   const [toast, setToast] = useState<{
-    kind: 'added' | 'placed' | 'repeated' | 'pulled' | 'returned' | 'failed';
+    kind: 'added' | 'placed' | 'repeated' | 'pulled' | 'returned' | 'failed' | 'updated';
     message: string;
     orderNumber?: number;
   } | null>(null);
@@ -1246,6 +1298,7 @@ const FoodDrinksInner: React.FC<{ onRetry: () => void }> = ({ onRetry }) => {
      where the put-back toggle lives. */
   const tapMover = useCallback((e: MoverEntry) => {
     if (e.item.is_available === false) {
+      setEditingLine(null); // a fresh room — never an edit pre-fill (5.272.0)
       setDetailItem(e.item);
       return;
     }
@@ -1467,8 +1520,10 @@ const FoodDrinksInner: React.FC<{ onRetry: () => void }> = ({ onRetry }) => {
 
   const onSelectItem = useCallback(
     (item: MenuItem) => {
-      if (selectedId === item.id) setDetailItem(item);
-      else setSelectedId(item.id);
+      if (selectedId === item.id) {
+        setEditingLine(null); // a fresh room — never an edit pre-fill (5.272.0)
+        setDetailItem(item);
+      } else setSelectedId(item.id);
     },
     [selectedId]
   );
@@ -1803,7 +1858,10 @@ const FoodDrinksInner: React.FC<{ onRetry: () => void }> = ({ onRetry }) => {
                   selected={selectedId === it.id}
                   query={q}
                   onSelect={onSelectItem}
-                  onAdd={setDetailItem}
+                  onAdd={(item) => {
+                    setEditingLine(null); // a fresh room — never an edit pre-fill (5.272.0)
+                    setDetailItem(item);
+                  }}
                 />
               ))}
             </div>
@@ -1811,16 +1869,35 @@ const FoodDrinksInner: React.FC<{ onRetry: () => void }> = ({ onRetry }) => {
         </>
       )}
 
-      {/* Item detail modal (Frame_30) */}
+      {/* Item detail modal (Frame_30) — v5.272.0: the remount law carries
+          the edit register in the KEY (edit-<line key> vs add-<dish id>):
+          useState initializers only run on mount, so Edit must never meet a
+          room that kept someone else's half-choices — and a fresh add must
+          never inherit a line's answers. */}
       {detailItem && (
         <ItemDetailModal
+          key={editingLine ? `edit-${editingLine.key}` : `add-${detailItem.id}`}
           item={detailItem}
           coverage={detailItem ? (shelfByItem.get(detailItem.id) ?? null) : null}
           pace={detailItem ? (pace?.get(detailItem.id) ?? null) : null}
-          onClose={() => setDetailItem(null)}
+          onClose={() => {
+            setDetailItem(null);
+            setEditingLine(null);
+          }}
+          editing={
+            editingLine
+              ? {
+                  key: editingLine.key,
+                  qty: editingLine.qty,
+                  variantName: editingLine.variantName ?? null,
+                  addonNames: editingLine.addonNames,
+                }
+              : null
+          }
           onAdded={({ name, qty }) =>
             setToast({ kind: 'added', message: `${qty}× ${name} added to order` })
           }
+          onUpdated={() => setToast({ kind: 'updated', message: 'Order line updated' })}
           onToggleAvailability={(available) => handleToggleAvailability(detailItem, available)}
         />
       )}
@@ -1869,6 +1946,16 @@ const FoodDrinksInner: React.FC<{ onRetry: () => void }> = ({ onRetry }) => {
         onChooseItem={(item) => {
           setDrawerOpen(false);
           setSelectedId(item.id);
+          setEditingLine(null); // a fresh room — never an edit pre-fill (5.272.0)
+          setDetailItem(item);
+        }}
+        onEditLine={(line, item) => {
+          /* v5.272.0 — Edit's front door (5.271's own shape, one cart later):
+             close the drawer so the room is visible, open the dish's room,
+             remember the line being re-said. */
+          setDrawerOpen(false);
+          setSelectedId(item.id);
+          setEditingLine(line);
           setDetailItem(item);
         }}
         onClose={() => setDrawerOpen(false)}
@@ -1896,6 +1983,8 @@ const FoodDrinksInner: React.FC<{ onRetry: () => void }> = ({ onRetry }) => {
               <RotateCcw size={14} />
             ) : toast.kind === 'failed' ? (
               <CircleAlert size={14} />
+            ) : toast.kind === 'updated' ? (
+              <Pencil size={14} />
             ) : (
               <Plus size={14} />
             )}

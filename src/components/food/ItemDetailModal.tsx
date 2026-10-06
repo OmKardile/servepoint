@@ -1,7 +1,7 @@
 import React, { useRef, useState } from 'react';
-import { CircleOff, Clock, Minus, Plus, RotateCcw, UtensilsCrossed, X } from 'lucide-react';
+import { CircleOff, Clock, Minus, Pencil, Plus, RotateCcw, UtensilsCrossed, X } from 'lucide-react';
 import type { MenuItem, MenuItemAddon } from '../../types';
-import { useCart } from '../../store/cart';
+import { lineKey, useCart } from '../../store/cart';
 import { formatMoney } from '../../lib/prefs';
 import { useDialogA11y } from '../../lib/useDialogA11y';
 import { VegMark } from '../shell/VegMark';
@@ -30,6 +30,22 @@ interface ItemDetailModalProps {
   /** v5.57.0 — the counter pulls the dish. Resolves true when the menu write
    * landed (the parent owns the optimistic flip, the revert and the toast). */
   onToggleAvailability?: (available: boolean) => Promise<boolean>;
+  /** v5.272.0 — edit mode: the cart line being re-said. Present = the room
+   * reopens PRE-FILLED with the line's own answers (the guest's 5.271 law,
+   * one cart later — the staff never re-answers what the line knows); the
+   * CTA updates instead of adding, and the pull section rests (this room is
+   * for re-saying a line, not for pulling dishes). Absent = the fresh add
+   * room, byte-unchanged. Resolution is BY NAME against the live menu: a
+   * variant or extra the menu no longer sells is remembered only as far as
+   * the menu still knows it. */
+  editing?: {
+    key: string;
+    qty: number;
+    variantName: string | null;
+    addonNames: string[];
+  } | null;
+  /** v5.272.0 — fired after the update lands (for the toast). */
+  onUpdated?: () => void;
 }
 
 const MAX_QTY = 99;
@@ -41,24 +57,46 @@ export const ItemDetailModal: React.FC<ItemDetailModalProps> = ({
   onClose,
   onAdded,
   onToggleAvailability,
+  editing = null,
+  onUpdated,
 }) => {
-  const [qty, setQty] = useState(1);
+  const isEdit = !!editing;
+  /* v5.272.0 — useState initializers only (the remount law, 5.271): the key
+     carries the editing line's own key at the render site, so Edit never
+     meets a room that kept someone else's half-choices. The room remembers
+     what the menu still knows — resolved by name against the live dish. */
+  const [qty, setQty] = useState(() => editing?.qty ?? 1);
   /* v5.55.0 — add-ons rest at 0x. The old "Frame shows every add-on row
      resting at 1x" initializer was never live (the POS never loaded addons,
      so this section never rendered); enabling the section now must not
      silently reprice every ticket — the guest customizer starts at 0 too,
-     and one grammar across both ends beats a dormant mockup. */
+     and one grammar across both ends beats a dormant mockup.
+     v5.272.0 — the edit room counts the line's own extras back in (by
+     name — the live menu's ids are the keys, the line's names the truth). */
   const [addonQty, setAddonQty] = useState<Record<string, number>>(() => {
     const init: Record<string, number> = {};
     (item.addons || []).forEach((a) => {
       init[a.id] = 0;
     });
+    if (editing) {
+      const lineCounts: Record<string, number> = {};
+      editing.addonNames.forEach((n) => {
+        lineCounts[n] = (lineCounts[n] || 0) + 1;
+      });
+      (item.addons || []).forEach((a) => {
+        if (lineCounts[a.name]) init[a.id] = lineCounts[a.name];
+      });
+    }
     return init;
   });
   const [imgFailed, setImgFailed] = useState(false);
   /* v5.55.0 — the chosen size/option. null = "As served" (base price), the
-     same optional-pick rule the guest customizer has always spoken. */
-  const [variantId, setVariantId] = useState<string | null>(null);
+     same optional-pick rule the guest customizer has always spoken.
+     v5.272.0 — the edit room re-presses the line's own chip (by name). */
+  const [variantId, setVariantId] = useState<string | null>(() => {
+    if (!editing?.variantName) return null;
+    return (item.variants || []).find((v) => v.name === editing.variantName)?.id ?? null;
+  });
   const variant = (item.variants || []).find((v) => v.id === variantId) || null;
   const panelRef = useRef<HTMLDivElement>(null);
   /* v5.57.0 — sold-out flip in flight (double-tap guard, mirror of the Menu
@@ -101,7 +139,47 @@ export const ItemDetailModal: React.FC<ItemDetailModalProps> = ({
     onClose();
   };
 
+  /* v5.272.0 — THE UPDATE LAW (5.271's own law, one cart later): the old key
+     LEAVES first, the new choices ARRIVE through the ONE merge grammar — a
+     key collision with a sibling grows ONE row, never a duplicate.
+     THE WORD SURVIVES THE RE-SAYING: the kitchen note is an instruction to
+     the cook, not a property of the size — it rides the edit home (via
+     setLineNote, the drawer's own 5.76 door) UNLESS the new key lands on a
+     sibling that already holds its own word: add()'s merge keeps the
+     EARLIER line's note (the first voice in the room wins — the store's
+     own clause), and the edit never steals a sibling's word. */
+  const handleUpdate = () => {
+    if (!editing) return;
+    const selected: MenuItemAddon[] = [];
+    (item.addons || []).forEach((a) => {
+      const n = addonQty[a.id] || 0;
+      for (let i = 0; i < n; i += 1) selected.push(a);
+    });
+    const chosen = (item.variants || []).find((v) => v.id === variantId) || null;
+    const c = useCart.getState();
+    const newKey = lineKey(
+      item.id,
+      selected.map((a) => a.name),
+      chosen ? chosen.name : null,
+    );
+    const siblingHolds = c.lines.some((l) => l.key === newKey && l.key !== editing.key);
+    const oldNote = c.lines.find((l) => l.key === editing.key)?.note;
+    c.remove(editing.key);
+    c.add(item, qty, selected, chosen ? { name: chosen.name, priceDelta: Number(chosen.price_delta) } : null);
+    if (!siblingHolds && oldNote) useCart.getState().setLineNote(newKey, oldNote);
+    onUpdated?.();
+    onClose();
+  };
+
   const detail = (item.description || '').trim();
+  /* v5.272.0 — the running unit, extracted so the Update CTA can speak the
+     line's whole money (unit × qty) at every keystroke — the guest CTA's
+     own honesty, one cart later. */
+  const runningUnit = round2(
+    item.price +
+      (variant ? Number(variant.price_delta) : 0) +
+      (item.addons || []).reduce((s, a) => s + (addonQty[a.id] || 0) * Number(a.price), 0),
+  );
 
   return (
     <div
@@ -119,6 +197,30 @@ export const ItemDetailModal: React.FC<ItemDetailModalProps> = ({
         onClick={(e) => e.stopPropagation()}
         className="relative flex max-h-[92vh] w-full max-w-sm flex-col overflow-hidden rounded-[24px] border border-[#E3E7E0] bg-white shadow-2xl outline-none"
       >
+        {/* v5.272.0 — the room announces itself (the guest's 5.271 banner,
+            one cart later): amber register, role=status, Cancel one tap
+            away. The staff word is "the order", not "your order" — this
+            room speaks for the counter, not the guest. */}
+        {isEdit && (
+          <div
+            role="status"
+            className="flex items-center justify-between gap-2 bg-[#FDF9F0] px-5 py-2.5"
+            style={{ borderBottom: '1px solid #EAD9BE' }}
+          >
+            <span className="flex min-w-0 items-center gap-1.5 text-[11.5px] font-bold uppercase tracking-[0.06em] text-[#8A5A16]">
+              <Pencil size={12} aria-hidden className="shrink-0" />
+              Editing this line from the order
+            </span>
+            <button
+              type="button"
+              onClick={onClose}
+              className="shrink-0 text-[11.5px] font-bold text-[#8A5A16] underline-offset-2 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#967221]"
+            >
+              Cancel
+            </button>
+          </div>
+        )}
+
         {/* Close */}
         <button
           type="button"
@@ -171,13 +273,7 @@ export const ItemDetailModal: React.FC<ItemDetailModalProps> = ({
                 v5.57.0: rests while the dish is pulled — nothing is being
                 sold right now, so nothing is being priced. */}
             <p className={`mt-1.5 text-xl font-bold ${unavailable ? 'text-[#969696]' : 'text-[#B88E2F]'}`}>
-              {formatMoney(
-                round2(
-                  item.price +
-                    (variant ? Number(variant.price_delta) : 0) +
-                    (item.addons || []).reduce((s, a) => s + (addonQty[a.id] || 0) * Number(a.price), 0),
-                ),
-              )}
+              {formatMoney(runningUnit)}
             </p>
 
             {/* Main quantity stepper — order-building only; a pulled dish has
@@ -310,7 +406,7 @@ export const ItemDetailModal: React.FC<ItemDetailModalProps> = ({
               mistakable for order-building. The write hits the same menu
               row the Menu screen owns; the guest menu follows on its next
               load because the RPC serves available items only. */}
-          {!unavailable && onToggleAvailability && (
+          {!unavailable && onToggleAvailability && !isEdit && (
             <div className="mt-4 border-t border-[#E3E7E0] px-5 py-4">
               <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#6B6B6B]">
                 Counter
@@ -379,6 +475,13 @@ export const ItemDetailModal: React.FC<ItemDetailModalProps> = ({
                 Sold out — bring it back from the Menu screen.
               </p>
             )
+          ) : isEdit ? (
+            /* v5.272.0 — the CTA speaks Update, with the line's whole money
+               live at every keystroke (the guest 5.271 grammar verbatim);
+               the fresh room byte-keeps "Add to Order". */
+            <button type="button" onClick={handleUpdate} className="sp-cta h-12 w-full text-[15px]">
+              Update · {formatMoney(round2(runningUnit * qty))}
+            </button>
           ) : (
             <button type="button" onClick={handleAdd} className="sp-cta h-12 w-full text-[15px]">
               Add to Order
