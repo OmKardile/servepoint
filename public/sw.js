@@ -15,7 +15,7 @@
  * Release discipline: bump VERSION on every shell-changing deploy so old
  * caches are evicted on activate.
  */
-const VERSION = "servepoint-v5.308.0-r1";
+const VERSION = "servepoint-v5.308.1-r1";
 const SHELL_CACHE = `${VERSION}-shell`;
 const ASSET_CACHE = `${VERSION}-assets`;
 const FONT_CACHE = `${VERSION}-fonts`;
@@ -127,11 +127,19 @@ async function cacheFirst(cacheName, request) {
   // strict Vary match would miss a perfectly good cached script offline.
   const hit = await cache.match(request, { ignoreVary: true });
   if (hit) return hit;
-  const fresh = await fetch(request);
-  if (fresh && (fresh.ok || fresh.type === 'opaque')) {
-    cachePutClean(cache, request, fresh.clone()).catch(() => {});
+  try {
+    const fresh = await fetch(request);
+    if (fresh && (fresh.ok || fresh.type === 'opaque')) {
+      cachePutClean(cache, request, fresh.clone()).catch(() => {});
+    }
+    return fresh;
+  } catch {
+    // v5.308.1 — a network failure on a cache-miss used to reject unhandled
+    // ("Uncaught (in promise) TypeError: Failed to fetch at cacheFirst" was
+    // console noise during the Oct 2026 production incident). Fail honestly
+    // instead: a quiet 503 with no cache write, nothing unhandled.
+    return new Response('offline', { status: 503, statusText: 'offline' });
   }
-  return fresh;
 }
 
 /**

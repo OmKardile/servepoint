@@ -46,7 +46,17 @@ export default defineConfig(() => {
       rollupOptions: {
         output: {
           manualChunks(id) {
-            if (id.includes('node_modules/react') || id.includes('node_modules/react-dom')) {
+            // Every third-party module gets an EXPLICIT home (the trailing
+            // `return 'vendor'` catch-all matters). Without it, Rolldown
+            // auto-groups unmatched node_modules modules (and interop helpers
+            // they carry) into the shared APP chunks it names after lib files
+            // (appday/tax/day) — vendor chunks then import those helpers back
+            // across chunks, the evaluation order became unsatisfiable, and
+            // production white-screened with "t is not a function" in
+            // vendor-charts (live incident, Oct 2026). Vendor chunks may only
+            // ever import other vendor chunks — never an app chunk.
+            if (!id.includes('node_modules')) return undefined;
+            if (id.includes('node_modules/react') || id.includes('node_modules/react-dom') || id.includes('node_modules/scheduler')) {
               return 'vendor-react';
             }
             if (id.includes('node_modules/recharts')) {
@@ -58,9 +68,10 @@ export default defineConfig(() => {
             if (id.includes('node_modules/lucide-react') || id.includes('node_modules/canvas-confetti')) {
               return 'vendor-icons';
             }
-            if (id.includes('node_modules/zustand') || id.includes('node_modules/motion')) {
+            if (id.includes('node_modules/zustand') || id.includes('node_modules/motion') || id.includes('node_modules/framer-motion')) {
               return 'vendor-lib';
             }
+            return 'vendor';
           },
         },
       },
