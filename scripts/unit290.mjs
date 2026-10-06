@@ -43,7 +43,10 @@ const swJs = strip('../public/sw.js');
 {
   assert.ok(appday.includes('export const WARM_WINDOW_MS = 180_000;'), 'the band is ONE exported constant in appday (the window-arithmetic module)');
   assert.ok(appday.indexOf('WARM_WINDOW_MS') < appday.indexOf('export function formatWindowLeft'), 'the constant sits beside formatWindowLeft');
-  assert.ok(pages.includes("import { appTimezone, formatWindowLeft, WARM_WINDOW_MS } from '../../lib/appday';"), 'the page imports the constant (no private copy)');
+  /* v5.298.0 honest re-anchor — WINDOW_TOTAL_MS (the drain bar's denominator)
+     joined the same line; the LAW's shape is unchanged: one import from the
+     lib home, no private copy. */
+  assert.ok(pages.includes("import { appTimezone, formatWindowLeft, WARM_WINDOW_MS, WINDOW_TOTAL_MS } from '../../lib/appday';"), 'the page imports the constants (no private copy)');
   const ribbonIdx = pages.indexOf('function SessionRibbon(');
   const ribbonBody = pages.slice(ribbonIdx, pages.indexOf('function DishPhoto('));
   assert.ok(!ribbonBody.includes('180'), 'the ribbon carries NO private threshold — the band rides the page\u0027s verdict');

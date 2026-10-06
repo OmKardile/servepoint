@@ -81,15 +81,22 @@ const swJs = readFileSync('public/sw.js', 'utf8');
 
 /* 5 — the note comes home. */
 {
-  const noteIdx = page.indexOf('{order.notes && order.notes.trim().length > 0 && (');
-  assert.ok(noteIdx > 0, 'the ticket gates the note row on a non-blank word');
+  /* v5.298.0 honest re-anchor — the honest-note law evolved this gate: the
+     operational suffix alone (a QR order with no guest word) keeps the
+     section's silence, and the body speaks the GUEST'S word, stripped of the
+     house's 'via QR · Table n' tail. The law's shape is unchanged: the row
+     stands in the bill card before the totals, the waiting ink carries the
+     word, the word is verbatim (never rewritten — more so now: only what the
+     guest wrote). */
+  const noteIdx = page.indexOf('{guestNote.length > 0 && (');
+  assert.ok(noteIdx > 0, 'the ticket gates the note row on a guest word (the suffix alone keeps its silence)');
   const billIdx = page.indexOf('{/* v5.254.0 — the note comes home');
   const trackStart = page.indexOf('export function GuestTrackPage');
   const totalsIdx = page.indexOf("{t('subtotal')}", trackStart); // the BILL card's totals — the drawer's own appear earlier
   assert.ok(billIdx > 0 && totalsIdx > billIdx, 'the note row stands in the bill card, before the totals');
   const rowSlice = page.slice(billIdx, noteIdx + 800);
   assert.ok(rowSlice.includes('border-l-[#B45309]') && rowSlice.includes('bg-[#FBF6EA]'), 'the waiting ink (the straggler family) carries the guest\'s word');
-  assert.ok(rowSlice.includes('{order.notes}'), 'the word is spoken VERBATIM (never rewritten)');
+  assert.ok(rowSlice.includes('{guestNote}'), 'the word is spoken VERBATIM (never rewritten)');
   ok('the note comes home on the ticket, verbatim, in the waiting ink');
 }
 

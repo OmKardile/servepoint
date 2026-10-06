@@ -167,7 +167,10 @@ ok('the guest ribbon imports the lib grammar');
 const rbIdx = guest.indexOf('function SessionRibbon(');
 assert.ok(rbIdx > 0, 'SessionRibbon exists');
 const rbSlice = guest.slice(rbIdx, guest.indexOf('function DishPhoto', rbIdx));
-assert.ok(rbSlice.length > 500 && rbSlice.length < 2600, 'ribbon slice resolved (code anchors only)');
+/* v5.298.0 honest re-anchor — the ribbon grew the 2px drain bar (the window's
+   SHAPE, presentation of the handed msLeft); the upper bound rides the body's
+   new reality, the law's shape is unchanged (code anchors only). */
+assert.ok(rbSlice.length > 500 && rbSlice.length < 3600, 'ribbon slice resolved (code anchors only)');
 
 assert.ok(rbSlice.includes('const left = formatWindowLeft(msLeft);'),
   'the ribbon composes its voice through the shared helper');
