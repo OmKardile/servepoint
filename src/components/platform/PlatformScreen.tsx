@@ -29,6 +29,15 @@ import { formatMoney } from '../../lib/prefs';
 import { ageLong } from '../../lib/age';
 import { dayTime } from '../../lib/day';
 import { appTimezone } from '../../lib/appday';
+/* v5.286.0 — the console learned its address: the tab union lives in
+ * lib/sectionPath beside the slugs it names (the ONE grammar home — the
+ * slugs and the tab words can never drift). */
+import {
+  platformTabFromPath,
+  platformPathForTab,
+  PLATFORM_SLUGS,
+  type PlatformTab,
+} from '../../lib/sectionPath';
 import { useSession } from '../../store/session';
 import type { AuditLogEntry, Subscription, Tenant } from '../../types';
 import { ProvisioningWizard } from './ProvisioningWizard';
@@ -41,7 +50,8 @@ import brandMark from '../../assets/brand/mark.png';
  * fetchSubscriptions, fetchAuditLogs); tables legitimately start empty.
  */
 
-type PlatformTab = 'dashboard' | 'businesses' | 'subscriptions' | 'audit';
+/* v5.286.0 — PlatformTab's union moved to lib/sectionPath (the slugs and
+ * the tab words share ONE home); the NAV still spells the rail's words. */
 
 const NAV: { id: PlatformTab; label: string; icon: React.ElementType }[] = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutGrid },
@@ -344,7 +354,39 @@ const ActivityRow: React.FC<{ log: AuditLogEntry }> = ({ log }) => (
 export const PlatformScreen: React.FC = () => {
   const session = useSession((s) => s.session);
 
-  const [tab, setTab] = useState<PlatformTab>('dashboard');
+  /* v5.286.0 — the console learned its address (the walk found the rail's
+   * four pills speaking pure state: /businesses fell to the 404 door, a
+   * bookmark was impossible, a mid-session refresh threw the operator back
+   * to Dashboard). THREE changes, ONE grammar:
+   *   (1) the boot reads the address — a deep link (/businesses,
+   *       /audit-log) or a mid-session refresh lands the operator in the
+   *       room the path names (the same deep-link law the staff shell
+   *       has spoken since v5.32.0); the bare root and unknown words
+   *       keep Dashboard's throne (the boot default, not a path claim).
+   *   (2) the ONE writer — every navigation act (rail pill, dashboard
+   *       "View all") claims the address with replaceState, v5.235.0's
+   *       doctrine byte-for-byte: no history pile, the Back key keeps
+   *       its device-level meaning. The bare root keeps its throne —
+   *       Dashboard writes '/' , never '/dashboard' — and a path that
+   *       already names the running room keeps its own word (a deep
+   *       link at /audit is not silently rewritten to /audit-log).
+   * The reader and the writer ask the same closure (lib/sectionPath) —
+   * three platform readers (the door in App.tsx, this boot read, the
+   * write-back), one grammar. */
+  const [tab, setTabState] = useState<PlatformTab>(
+    () => platformTabFromPath(window.location.pathname) ?? 'dashboard'
+  );
+  const setTab = useCallback((next: PlatformTab) => {
+    setTabState(next);
+    if (typeof window !== 'undefined' && typeof history !== 'undefined') {
+      const path = window.location.pathname;
+      const seg = path.split('/').filter(Boolean)[0];
+      const alreadyNamesRoom = seg ? PLATFORM_SLUGS[seg] === next : next === 'dashboard';
+      if (!alreadyNamesRoom) {
+        history.replaceState(null, '', platformPathForTab(next));
+      }
+    }
+  }, []);
   const [tenants, setTenants] = useState<Tenant[] | null>(null);
   const [tenantsError, setTenantsError] = useState<string | null>(null);
   const [subs, setSubs] = useState<Subscription[] | null>(null);
@@ -1055,7 +1097,7 @@ export const PlatformScreen: React.FC = () => {
                 onClick={() => setTab(item.id)}
                 aria-current={active ? 'page' : undefined}
                 title={item.label}
-                className={`sp-nav-pill flex h-11 w-full items-center justify-center gap-3 rounded-xl px-0 text-[13.5px] font-medium md:justify-start md:px-4 ${
+                className={`sp-nav-pill relative flex h-11 w-full items-center justify-center gap-3 rounded-xl px-0 text-[13.5px] font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B88E2F]/70 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0B2E2F] md:justify-start md:px-4 ${
                   active
                     ? 'bg-[#B88E2F] text-white shadow-sm'
                     : 'text-white/70 hover:bg-white/10 hover:text-white'

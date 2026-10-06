@@ -5,7 +5,7 @@ import { normalizeRole } from './lib/rbac';
 import { useTenant } from './lib/tenant';
 import { useSession, useUi, type Section } from './store/session';
 import { SECTION_LABELS } from './components/shell/Sidebar';
-import { SECTION_SLUGS, sectionFromPath } from './lib/sectionPath';
+import { SECTION_SLUGS, sectionFromPath, platformTabFromPath } from './lib/sectionPath';
 import { AuthScreen } from './components/auth/AuthScreen';
 import { AppShell } from './components/shell/AppShell';
 import { NoWorkspaceScreen } from './components/shell/NoWorkspaceScreen';
@@ -249,8 +249,16 @@ const AppRoutes: React.FC = () => {
    *  safety net, but the door itself now answers.
    *  v5.235.0 — the door's slug ask rides the ONE closure too: three readers
    *  (the 404 door, the boot deep-link, the write-back), one grammar. */
+  /* v5.286.0 — the door learns the platform's words: /businesses,
+   * /subscriptions and /audit-log (the rail's spoken name) resolve like
+   * any staff slug — anonymous visitors still get the login gate (the
+   * house's own law for known doors), and after sign-in the superadmin
+   * boots straight into the bookmarked room (PlatformScreen reads the
+   * same grammar). Unknown words keep falling to the honest 404. */
   const knownDoor =
-    pathname === '/' || sectionFromPath(SECTION_SLUGS, pathname) !== undefined;
+    pathname === '/' ||
+    sectionFromPath(SECTION_SLUGS, pathname) !== undefined ||
+    platformTabFromPath(pathname) !== undefined;
   if (!knownDoor) return <NotFoundPage path={pathname} />;
 
   if (!session) {
