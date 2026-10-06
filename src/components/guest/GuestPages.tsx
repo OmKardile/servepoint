@@ -1165,7 +1165,17 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
     }
     if (!q) return cats;
     return cats
-      .map((c) => ({ ...c, items: c.items.filter((i) => `${i.name} ${i.description || ''}`.toLowerCase().includes(q)) }))
+      /* v5.296.0 — the shelf answers to its name: a query matching the
+         category keeps the WHOLE shelf (the staff shelf's clause's
+         guest-side kin — the guest's shelf speaks its dishes where the
+         staff's spoke an empty header). "desserts" now finds Gulab Jamun
+         though no dish carries the word; a query matching only dish names
+         or descriptions behaves exactly as before. */
+      .map((c) =>
+        c.name.toLowerCase().includes(q)
+          ? c
+          : { ...c, items: c.items.filter((i) => `${i.name} ${i.description || ''}`.toLowerCase().includes(q)) },
+      )
       .filter((c) => c.items.length > 0);
   }, [menu, query, vegOnly]);
 
@@ -1375,6 +1385,9 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
               onChange={(e) => setQuery(e.target.value)}
               placeholder={t('searchPh')}
               aria-label={t('searchAria')}
+              /* v5.296.0 — the field whispers its convention on hover, the
+                 334 book-field's register: the shelf law's own word. */
+              title={t('searchShelfHint')}
               className={`h-12 w-full rounded-full border border-white/15 bg-white pl-10 text-[14px] text-[#1A1A1A] shadow-sm placeholder:text-[#9A9A9A] focus:outline focus:outline-2 focus:outline-[#B88E2F] [&::-webkit-search-cancel-button]:hidden [&::-webkit-search-decoration]:hidden ${
                 /* the ✕ rents the room only while it speaks — the text never
                    runs under it, and an empty field keeps its tight pr-4. */
@@ -1633,13 +1646,19 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
         )}
 
         {phase === 'ready' && filtered.length === 0 && (
-          <p className="mt-10 text-center text-[13.5px] text-[#6B6B6B]">
-            {vegOnly
-              ? query.trim()
-                ? t('nothingMatchesVeg', { q: query })
-                : t('vegEmpty')
-              : t('nothingMatches', { q: query })}
-          </p>
+          /* v5.296.0 — the miss that IS true teaches the convention that
+             could forgive it: the hint line speaks the shelf law below the
+             miss word (the 334 miss-card's register, three languages). */
+          <div className="mt-10 text-center">
+            <p className="text-[13.5px] text-[#6B6B6B]">
+              {vegOnly
+                ? query.trim()
+                  ? t('nothingMatchesVeg', { q: query })
+                  : t('vegEmpty')
+                : t('nothingMatches', { q: query })}
+            </p>
+            {query.trim() && <p className="mt-1.5 text-[12px] text-[#9A9A9A]">{t('nothingHint')}</p>}
+          </div>
         )}
 
         {filtered.map((cat) => (

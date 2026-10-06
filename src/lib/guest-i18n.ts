@@ -70,6 +70,10 @@ const EN: Dict = {
   searchPh: 'Search the menu…',
   searchAria: 'Search the menu',
   searchClear: 'Clear search',
+  // v5.296.0 — the shelf law's words: the field whispers the convention on
+  // hover; the miss card speaks it below the miss word.
+  searchShelfHint: 'Dishes and shelves both answer — try “desserts”',
+  nothingHint: 'A shelf answers to its name too — try “desserts” or “starters”.',
   categoriesAria: 'Menu categories',
   offersAria: "Today's offers",
   offer: 'Offer',
@@ -257,6 +261,8 @@ const HI: Dict = {
   searchPh: 'मेन्यू खोजें…',
   searchAria: 'मेन्यू खोजें',
   searchClear: 'खोज साफ़ करें',
+  searchShelfHint: 'व्यंजन और श्रेणियाँ दोनों जवाब देते हैं — "डेज़र्ट्स" आज़माएँ',
+  nothingHint: 'श्रेणी अपने नाम से भी जवाब देती है — "डेज़र्ट्स" या "स्टार्टर्स" आज़माएँ।',
   categoriesAria: 'मेन्यू श्रेणियाँ',
   offersAria: 'आज के ऑफ़र',
   offer: 'ऑफ़र',
@@ -432,6 +438,8 @@ const KN: Dict = {
   searchPh: 'ಮೆನು ಹುಡುಕಿ…',
   searchAria: 'ಮೆನು ಹುಡುಕಿ',
   searchClear: 'ಹುಡುಕಾಟ ತೆರವುಗೊಳಿಸಿ',
+  searchShelfHint: 'ಖಾದ್ಯ ಮತ್ತು ವಿಭಾಗ ಎರಡೂ ಉತ್ತರಿಸುತ್ತವೆ — "ಡೆಸರ್ಟ್‌ಗಳು" ಪ್ರಯತ್ನಿಸಿ',
+  nothingHint: 'ವಿಭಾಗವು ಅದರ ಹೆಸರಿಗೂ ಉತ್ತರಿಸುತ್ತದೆ — "ಡೆಸರ್ಟ್‌ಗಳು" ಅಥವಾ "ಸ್ಟಾರ್ಟರ್‌ಗಳು" ಪ್ರಯತ್ನಿಸಿ.',
   categoriesAria: 'ಮೆನು ವಿಭಾಗಗಳು',
   offersAria: 'ಇಂದಿನ ಆಫರ್‌ಗಳು',
   offer: 'ಆಫರ್',
