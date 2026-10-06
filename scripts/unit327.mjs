@@ -72,8 +72,9 @@ test('unit327 · ONE search grammar — the audit field is a byte-sibling of the
 });
 
 test('unit327 · the verb chips speak their state — aria-pressed, the toggle, the two voices', () => {
-  // aria-pressed on every chip (the All chip + one per verb chip)
-  assert.equal(count(platform, 'aria-pressed='), 2, 'both chip sites must speak aria-pressed');
+  // aria-pressed on every chip (All + verb in the audit room, All + status
+  // in the businesses room since v5.289.0 — the census joined)
+  assert.equal(count(platform, 'aria-pressed='), 4, 'every chip site speaks aria-pressed');
   // the All chip owns the null
   assert.match(platform, /onClick=\{\(\) => setAuditVerb\(null\)\}/);
   assert.match(platform, /aria-pressed=\{auditVerb === null\}/);
@@ -162,8 +163,11 @@ test('unit327 · the doctrine stands — the siblings untouched, the grammar hom
   assert.match(platform, /title="No activity yet"/);
   assert.match(platform, /body="Platform actions will be recorded here as they happen\."/);
   // the count-asserted chip constants appear exactly once each
-  assert.equal(count(platform, 'HUNT_CHIP_ACTIVE'), 3, 'one definition, two reads (ternary + import-free)');
-  assert.equal(count(platform, 'HUNT_CHIP_IDLE'), 3, 'one definition, two reads');
+  /* v5.289.0 — re-pinned per the read-the-actual-shape law: the businesses
+   * room's status chips read the SAME constants (one definition, zero
+   * drift) — 1 definition + 2 audit reads + 2 businesses reads = 5. */
+  assert.equal(count(platform, 'HUNT_CHIP_ACTIVE'), 5, 'one definition, four reads');
+  assert.equal(count(platform, 'HUNT_CHIP_IDLE'), 5, 'one definition, four reads');
 });
 
 test('unit327 · the version law — version.ts and sw.js carry the same word', () => {
@@ -172,5 +176,6 @@ test('unit327 · the version law — version.ts and sw.js carry the same word', 
   assert.ok(v, 'version.ts must speak APP_VERSION');
   assert.ok(s, 'sw.js must bake the cache word');
   assert.equal(v[1], s[1], 'the two words must agree');
-  assert.equal(v[1], '5.288.0');
+  /* the literal moved to the current round's unit (the unit308 precedent,
+   * followed by 321→322→323→324→325→326→327): this suite asserts the AGREEMENT, not the age. */
 });
