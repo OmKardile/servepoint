@@ -3,6 +3,7 @@ import {
   Armchair,
   ArrowLeftRight,
   BadgeCheck,
+  AlertTriangle,
   BookOpen,
   CalendarClock,
   CircleAlert,
@@ -66,7 +67,7 @@ import {
 } from '../../lib/api';
 import { useTenant } from '../../lib/tenant';
 import { printHiddenFrame, preloadPrintImage } from '../../lib/printFrame';
-import { copyText } from '../../lib/clipboard';
+import { useKeyedCopyAck, ackWord } from '../../lib/useCopyAck';
 import { formatMoney, subscribePrefs, getPrefs, DEFAULT_TURN_AFTER_MIN } from '../../lib/prefs';
 import { CHART_TOOLTIP_LABEL, CHART_TOOLTIP_STYLE } from '../../lib/chartvoice';
 import { useDialogA11y } from '../../lib/useDialogA11y';
@@ -1053,7 +1054,10 @@ function TableDrill({
 }): React.ReactElement {
   const meta = STATUS_META[table.status];
   const [qr, setQr] = useState<string | null>(null);
-  const [copied, setCopied] = useState<'link' | 'token' | null>(null);
+  /* v5.277.0 — the dialog's two copy verbs ride the keyed ack (one home,
+   * lib/useCopyAck); the old "a refused copy stays silent" is retired —
+   * the raw text being on screen never excused the silence. */
+  const [copied, runDlgCopy] = useKeyedCopyAck();
   const [shown, setShown] = useState(false);
   const [bulkArm, setBulkArm] = useState(false);
   /* 5.219.0 — the trail remembers its days: the drill showed the six most
@@ -1127,12 +1131,7 @@ function TableDrill({
     };
   }, [url]);
 
-  const copy = useCallback(async (text: string, kind: 'link' | 'token') => {
-    if (!(await copyText(text))) return;
-    /* a refused copy stays silent — the raw link/token is visible on screen anyway */
-    setCopied(kind);
-    window.setTimeout(() => setCopied(null), 2000);
-  }, []);
+  const copy = (text: string, kind: 'link' | 'token') => runDlgCopy(kind, text);
 
   const items = order?.items || [];
   const discount = Number(order?.discount_amount ?? 0);
@@ -1805,16 +1804,28 @@ function TableDrill({
                 onClick={() => void copy(url, 'link')}
                 className="flex h-9 items-center gap-1.5 rounded-full border border-[#E3E7E0] px-3 text-[11.5px] font-bold text-[#0F3D3E] hover:border-[#B88E2F]"
               >
-                {copied === 'link' ? <BadgeCheck size={13} className="text-[#2E7D32]" aria-hidden /> : <Link2 size={13} aria-hidden />}
-                {copied === 'link' ? 'Copied' : 'Copy link'}
+                {copied && copied.id === 'link' && copied.kind === 'ok' ? (
+                  <BadgeCheck size={13} className="text-[#2E7D32]" aria-hidden />
+                ) : copied && copied.id === 'link' && copied.kind === 'fail' ? (
+                  <AlertTriangle size={13} className="text-[#8A5A00]" aria-hidden />
+                ) : (
+                  <Link2 size={13} aria-hidden />
+                )}
+                {ackWord(copied && copied.id === 'link' ? copied.kind : null, 'Copy link')}
               </button>
               <button
                 type="button"
                 onClick={() => void copy(table.qr_token, 'token')}
                 className="flex h-9 items-center gap-1.5 rounded-full border border-[#E3E7E0] px-3 text-[11.5px] font-bold text-[#6B6B6B] hover:border-[#B88E2F]"
               >
-                {copied === 'token' ? <BadgeCheck size={13} className="text-[#2E7D32]" aria-hidden /> : <Copy size={13} aria-hidden />}
-                {copied === 'token' ? 'Copied' : 'Copy token'}
+                {copied && copied.id === 'token' && copied.kind === 'ok' ? (
+                  <BadgeCheck size={13} className="text-[#2E7D32]" aria-hidden />
+                ) : copied && copied.id === 'token' && copied.kind === 'fail' ? (
+                  <AlertTriangle size={13} className="text-[#8A5A00]" aria-hidden />
+                ) : (
+                  <Copy size={13} aria-hidden />
+                )}
+                {ackWord(copied && copied.id === 'token' ? copied.kind : null, 'Copy token')}
               </button>
             </div>
           </div>
@@ -1954,11 +1965,13 @@ export function FloorScreen(): React.ReactElement {
   const [cutArmId, setCutArmId] = useState<string | null>(null);
   const [cutBusyId, setCutBusyId] = useState<string | null>(null);
   const [bulkCutBusy, setBulkCutBusy] = useState<string | null>(null);
-  const [copiedId, setCopiedId] = useState<string | null>(null);
-  /* the raw-token copy's OWN word — sharing copiedId would flip the LINK
-   * button's word when the TOKEN was the thing copied (a lie); its own
-   * breath keeps each verb honest about what IT said. */
-  const [copiedTokenId, setCopiedTokenId] = useState<string | null>(null);
+  /* v5.277.0 — the cards' two copy verbs ride the keyed ack (one home,
+   * lib/useCopyAck): each verb keeps its OWN word — sharing one state
+   * would flip the LINK button's word when the TOKEN was the thing
+   * copied (a lie) — and a refused copy now speaks on the button that
+   * was tapped, not in the global action strip. */
+  const [linkAck, runLinkAck] = useKeyedCopyAck();
+  const [tokenAck, runTokenAck] = useKeyedCopyAck();
   const [drillId, setDrillId] = useState<string | null>(null);
   const [filter, setFilter] = useState<TableStatus | null>(null);
   /* v5.128.0 — the floor joins the shell-search contract: the box says what
@@ -2198,14 +2211,7 @@ export function FloorScreen(): React.ReactElement {
     [runAction, tenantId],
   );
 
-  const copyLink = useCallback(async (t: DiningTable) => {
-    if (!(await copyText(guestUrlOf(t)))) {
-      setActionError('Copy failed — long-press the link text instead.');
-      return;
-    }
-    setCopiedId(t.id);
-    window.setTimeout(() => setCopiedId((c) => (c === t.id ? null : c)), 2000);
-  }, []);
+  const copyLink = (t: DiningTable) => runLinkAck(t.id, guestUrlOf(t));
 
   /** Render every table's QR into one A4 cut-line sheet (hidden-iframe print). */
   const printStickers = useCallback(async () => {
@@ -3633,25 +3639,50 @@ export function FloorScreen(): React.ReactElement {
                         e.stopPropagation();
                         void copyLink(t);
                       }}
+                      aria-live="polite"
                       className="flex h-9 shrink-0 items-center gap-1 rounded-full px-2.5 text-[11px] font-bold text-[#0F3D3E] hover:bg-[#F1F4F1]"
                       aria-label={`Copy guest link for table ${t.table_number}`}
+                      title={linkAck && linkAck.id === t.id && linkAck.kind === 'fail' ? 'Long-press the link text instead' : undefined}
                     >
-                      {copiedId === t.id ? <BadgeCheck size={13} className="text-[#2E7D32]" aria-hidden /> : <Link2 size={13} aria-hidden />}
-                      {copiedId === t.id ? 'Copied' : 'Link'}
+                      {linkAck && linkAck.id === t.id && linkAck.kind === 'ok' ? (
+                        <BadgeCheck size={13} className="text-[#2E7D32]" aria-hidden />
+                      ) : linkAck && linkAck.id === t.id && linkAck.kind === 'fail' ? (
+                        <AlertTriangle size={13} className="text-[#8A5A00]" aria-hidden />
+                      ) : (
+                        <Link2 size={13} aria-hidden />
+                      )}
+                      {ackWord(linkAck && linkAck.id === t.id ? linkAck.kind : null, 'Link')}
                     </button>
                     <button
                       type="button"
-                      onClick={async (e) => {
+                      onClick={(e) => {
                         e.stopPropagation();
-                        if (!(await copyText(t.qr_token))) return;
-                        setCopiedTokenId(t.id);
-                        window.setTimeout(() => setCopiedTokenId((c) => (c === t.id ? null : c)), 2000);
+                        runTokenAck(t.id, t.qr_token);
                       }}
+                      aria-live="polite"
                       className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[#6B6B6B] hover:bg-[#F1F4F1]"
-                      aria-label={copiedTokenId === t.id ? `QR token for table ${t.table_number} copied` : `Copy raw QR token for table ${t.table_number}`}
-                      title={copiedTokenId === t.id ? 'The raw token is on your clipboard' : 'Copy the raw QR token'}
+                      aria-label={
+                        tokenAck && tokenAck.id === t.id
+                          ? tokenAck.kind === 'ok'
+                            ? `QR token for table ${t.table_number} copied`
+                            : `Copy blocked — the raw QR token for table ${t.table_number} stays on screen`
+                          : `Copy raw QR token for table ${t.table_number}`
+                      }
+                      title={
+                        tokenAck && tokenAck.id === t.id
+                          ? tokenAck.kind === 'ok'
+                            ? 'The raw token is on your clipboard'
+                            : 'The copy was refused — the token stays on screen'
+                          : 'Copy the raw QR token'
+                      }
                     >
-                      {copiedTokenId === t.id ? <BadgeCheck size={13} className="text-[#2E7D32]" aria-hidden /> : <Copy size={13} aria-hidden />}
+                      {tokenAck && tokenAck.id === t.id && tokenAck.kind === 'ok' ? (
+                        <BadgeCheck size={13} className="text-[#2E7D32]" aria-hidden />
+                      ) : tokenAck && tokenAck.id === t.id && tokenAck.kind === 'fail' ? (
+                        <AlertTriangle size={13} className="text-[#8A5A00]" aria-hidden />
+                      ) : (
+                        <Copy size={13} aria-hidden />
+                      )}
                     </button>
                   </div>
 

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   AlertTriangle,
   ArrowLeft,
@@ -13,7 +13,7 @@ import { provisionBusiness } from '../../lib/api';
 import { authService } from '../../lib/authService';
 import { supabase } from '../../lib/supabase';
 import { formatMoney } from '../../lib/prefs';
-import { copyText } from '../../lib/clipboard';
+import { useKeyedCopyAck, ackWord } from '../../lib/useCopyAck';
 import { useDialogA11y } from '../../lib/useDialogA11y';
 import type { Tenant } from '../../types';
 
@@ -154,8 +154,10 @@ export const ProvisioningWizard: React.FC<ProvisioningWizardProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [cloudAuthed, setCloudAuthed] = useState(true);
   const [outcome, setOutcome] = useState<ProvisionOutcome | null>(null);
-  const [copiedKey, setCopiedKey] = useState<string | null>(null);
-  const copyTimer = useRef<number | null>(null);
+  /* v5.277.0 — the ack rides the one home (lib/useCopyAck): the timer,
+   * the re-arm and the unmount cleanup live there now; a refused copy
+   * says "Copy blocked" instead of nothing. */
+  const [copiedKey, runKeyedCopy] = useKeyedCopyAck();
 
   // Cloud writes need a JWT-backed Supabase session; a registry-only sign-in
   // would be rejected by row-level security. Detect it up front so the
@@ -197,12 +199,6 @@ export const ProvisioningWizard: React.FC<ProvisioningWizardProps> = ({
      listener; Escape stands down while a provision run is in flight). */
   const dlgRef = useDialogA11y<HTMLDivElement>(() => { if (!submitting) onClose(); }, open);
 
-  useEffect(() => {
-    return () => {
-      if (copyTimer.current !== null) window.clearTimeout(copyTimer.current);
-    };
-  }, []);
-
   const patch = (changes: Partial<WizardForm>) => setForm((f) => ({ ...f, ...changes }));
 
   const handleNameChange = (name: string) => {
@@ -214,13 +210,7 @@ export const ProvisioningWizard: React.FC<ProvisioningWizardProps> = ({
     setForm((f) => ({ ...f, slug: slug.toLowerCase() }));
   };
 
-  const handleCopy = useCallback(async (key: string, text: string) => {
-    const ok = await copyText(text);
-    if (!ok) return;
-    setCopiedKey(key);
-    if (copyTimer.current !== null) window.clearTimeout(copyTimer.current);
-    copyTimer.current = window.setTimeout(() => setCopiedKey(null), 2000);
-  }, []);
+  const handleCopy = (key: string, text: string) => runKeyedCopy(key, text);
 
   const validateStep = (target: WizardStep | 4): boolean => {
     const errors: Record<string, string> = {};
@@ -310,26 +300,27 @@ export const ProvisioningWizard: React.FC<ProvisioningWizardProps> = ({
    * the review's words now — one voice, step 1 to step 3. */
   const planLabel = form.plan === 'trial' ? 'Trial (14 days)' : 'Standard (active)';
 
-  const copyButton = (key: string, text: string, label: string) => (
-    <button
-      type="button"
-      onClick={() => void handleCopy(key, text)}
-      aria-label={`Copy ${label}`}
-      className="inline-flex h-11 shrink-0 items-center gap-1.5 rounded-xl border border-[#E3E7E0] bg-white px-3 text-xs font-semibold text-[#0F3D3E] transition-colors hover:bg-[#F6F5F2]"
-    >
-      {copiedKey === key ? (
-        <>
+  const copyButton = (key: string, text: string, label: string) => {
+    const spoke = copiedKey && copiedKey.id === key ? copiedKey.kind : null;
+    return (
+      <button
+        type="button"
+        onClick={() => handleCopy(key, text)}
+        aria-live="polite"
+        aria-label={`Copy ${label}`}
+        className="inline-flex h-11 shrink-0 items-center gap-1.5 rounded-xl border border-[#E3E7E0] bg-white px-3 text-xs font-semibold text-[#0F3D3E] transition-colors hover:bg-[#F6F5F2]"
+      >
+        {spoke === 'ok' ? (
           <Check size={14} className="text-[#2E7D32]" aria-hidden />
-          Copied
-        </>
-      ) : (
-        <>
+        ) : spoke === 'fail' ? (
+          <AlertTriangle size={14} className="text-[#8A5A00]" aria-hidden />
+        ) : (
           <Copy size={14} aria-hidden />
-          Copy
-        </>
-      )}
-    </button>
-  );
+        )}
+        {ackWord(spoke, 'Copy')}
+      </button>
+    );
+  };
 
   return (
     <div ref={dlgRef} className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ animation: 'spFadeIn 160ms ease-out' }}>

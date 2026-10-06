@@ -15,7 +15,7 @@ import {
   Send,
 } from 'lucide-react';
 import { useTenant } from '../../lib/tenant';
-import { copyText } from '../../lib/clipboard';
+import { useCopyAck, ackWord } from '../../lib/useCopyAck';
 import { useSession, useUi } from '../../store/session';
 
 /**
@@ -81,7 +81,9 @@ const ReportForm: React.FC = () => {
   const [draft, setDraft] = useState<ReportDraft>({ subject: '', message: '' });
   const [sending, setSending] = useState(false);
   const [submitted, setSubmitted] = useState<ReportDraft | null>(null);
-  const [copied, setCopied] = useState(false);
+  /* v5.277.0 — the ack rides the one home (lib/useCopyAck): a refused
+   * copy now says so on the button, not in silence. */
+  const [copied, runCopy] = useCopyAck();
   const [diagAttached, setDiagAttached] = useState(false);
 
   const canSend = draft.subject.trim().length > 0 && draft.message.trim().length > 0;
@@ -147,11 +149,7 @@ const ReportForm: React.FC = () => {
 
   const onCopyReport = () => {
     if (!submitted) return;
-    void copyText(`Subject: ${submitted.subject}\n\n${submitted.message}`).then((ok) => {
-      if (!ok) return;
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 2000);
-    });
+    runCopy(`Subject: ${submitted.subject}\n\n${submitted.message}`);
   };
 
   if (submitted) {
@@ -176,11 +174,24 @@ const ReportForm: React.FC = () => {
               <button
                 type="button"
                 onClick={onCopyReport}
-                aria-label={copied ? 'Report copied to clipboard' : 'Copy the full report to the clipboard'}
+                aria-live="polite"
+                aria-label={
+                  copied === 'ok'
+                    ? 'Report copied to clipboard'
+                    : copied === 'fail'
+                      ? 'Copy blocked — the clipboard refused'
+                      : 'Copy the full report to the clipboard'
+                }
                 className="flex h-10 items-center gap-2 rounded-xl border border-[#E3E7E0] bg-white px-4 text-[13px] font-semibold text-[#0F3D3E] transition hover:bg-[#F6F5F2] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#967221]"
               >
-                {copied ? <Check size={15} className="text-[#2E7D32]" aria-hidden /> : <Copy size={15} aria-hidden />}
-                {copied ? 'Copied' : 'Copy report'}
+                {copied === 'ok' ? (
+                  <Check size={15} className="text-[#2E7D32]" aria-hidden />
+                ) : copied === 'fail' ? (
+                  <AlertTriangle size={15} className="text-[#8A5A00]" aria-hidden />
+                ) : (
+                  <Copy size={15} aria-hidden />
+                )}
+                {ackWord(copied, 'Copy report')}
               </button>
               <button
                 type="button"
@@ -286,17 +297,10 @@ const ReportForm: React.FC = () => {
 
 const SupportContent: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }) => {
   const tenant = useTenant();
-  const [copied, setCopied] = useState(false);
+  /* v5.277.0 — the ack rides the one home (lib/useCopyAck). */
+  const [copied, runCopy] = useCopyAck();
 
-  const onCopy = () => {
-    const finish = () => {
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 2000);
-    };
-    void copyText(SUPPORT_EMAIL).then((ok) => {
-      if (ok) finish();
-    });
-  };
+  const onCopy = () => runCopy(SUPPORT_EMAIL);
 
   if (tenant.loading) {
     return (
@@ -354,11 +358,24 @@ const SupportContent: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
             </div>
             <button
               onClick={onCopy}
-              aria-label={copied ? 'Email copied to clipboard' : `Copy ${SUPPORT_EMAIL} to clipboard`}
+              aria-live="polite"
+              aria-label={
+                copied === 'ok'
+                  ? 'Email copied to clipboard'
+                  : copied === 'fail'
+                    ? 'Copy blocked — the clipboard refused'
+                    : `Copy ${SUPPORT_EMAIL} to clipboard`
+              }
               className="flex h-11 items-center gap-2 rounded-xl border border-[#E3E7E0] bg-white px-4 text-[13px] font-semibold text-[#0F3D3E] transition hover:bg-[#F6F5F2] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#967221]"
             >
-              {copied ? <Check size={15} className="text-[#2E7D32]" aria-hidden /> : <Copy size={15} aria-hidden />}
-              {copied ? 'Copied' : 'Copy'}
+              {copied === 'ok' ? (
+                <Check size={15} className="text-[#2E7D32]" aria-hidden />
+              ) : copied === 'fail' ? (
+                <AlertTriangle size={15} className="text-[#8A5A00]" aria-hidden />
+              ) : (
+                <Copy size={15} aria-hidden />
+              )}
+              {ackWord(copied, 'Copy')}
             </button>
           </div>
         </section>

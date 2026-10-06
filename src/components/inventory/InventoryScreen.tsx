@@ -53,9 +53,9 @@ import { computePaceByItem, computeTopMovers, MOVER_WINDOW_DAYS, type Mover } fr
 import { formatMoney } from '../../lib/prefs';
 import { LOW_COVER, computeBurnByIngredient, shelfCoverage, shelfDays, shelfDaysClause, shelfTouch } from '../../lib/shelf';
 import { downloadCsv } from '../../lib/csv';
-import { copyText } from '../../lib/clipboard';
-import { useExportFlash } from '../../lib/useExportFlash';
 import { CsvExportButton } from '../common/CsvExportButton';
+import { useExportFlash } from '../../lib/useExportFlash';
+import { useCopyAck, ackWord } from '../../lib/useCopyAck';
 import { appTodayIso, appFormatters, appTzTag } from '../../lib/appday';
 import { useDialogA11y } from '../../lib/useDialogA11y';
 import { useTenant } from '../../lib/tenant';
@@ -1715,7 +1715,9 @@ const RecipeBoard: React.FC<{
    * (the 5.146.0 rule, batch edition) — the words and the cells read the
    * same numbers the screen renders, and the verdict is THE sentence
    * (batchVerdictText), so the paper can never disagree with the plan. */
-  const [copyState, setCopyState] = useState<'idle' | 'ok' | 'fail'>('idle');
+  /* v5.277.0 — the ack rides the one home (lib/useCopyAck): the honest
+   * boolean decides the kind, the breath re-arms, the word is ackWord's. */
+  const [copyState, runSheetCopy] = useCopyAck();
   const sheetOpts = useMemo<ProductionSheetOpts>(
     () => ({
       storeName,
@@ -1737,15 +1739,7 @@ const RecipeBoard: React.FC<{
     }),
     [storeName, selected, batch, batchPlan, batchFits, shelfRead, costRead],
   );
-  const copySheet = async () => {
-    try {
-      if (!(await copyText(buildProductionSheetText(sheetOpts)))) throw new Error('clipboard unavailable');
-      setCopyState('ok');
-    } catch {
-      setCopyState('fail');
-    }
-    window.setTimeout(() => setCopyState('idle'), 1800);
-  };
+  const copySheet = () => runSheetCopy(buildProductionSheetText(sheetOpts));
   const exportSheet = () => {
     if ((batchPlan ?? []).length === 0) return;
     downloadCsv(`servepoint-production-sheet-${appTodayIso()}.csv`, productionSheetRows(sheetOpts));
@@ -2142,10 +2136,12 @@ const RecipeBoard: React.FC<{
                 >
                   {copyState === 'ok' ? (
                     <Check size={12} className="text-[#2E7D32]" aria-hidden />
+                  ) : copyState === 'fail' ? (
+                    <AlertTriangle size={12} className="text-[#8A5A00]" aria-hidden />
                   ) : (
                     <Copy size={12} aria-hidden />
                   )}
-                  {copyState === 'ok' ? 'Copied' : copyState === 'fail' ? 'Copy blocked' : 'Copy'}
+                  {ackWord(copyState, 'Copy')}
                 </button>
                 <CsvExportButton
                   saved={sheetSaved}
@@ -2896,8 +2892,9 @@ const ReorderBoard: React.FC<{
   const [edits, setEdits] = useState<Record<string, string>>({});
   /* v5.150.0 — the copy button joins the arc's honest tri-state: ok/fail
    * said out loud (aria-live), the 1.8s reset the bill taught (5.145.0);
-   * the old silent catch is gone. */
-  const [copyState, setCopyState] = useState<'idle' | 'ok' | 'fail'>('idle');
+   * the old silent catch is gone. v5.277.0 — the ack rides the one home
+   * (lib/useCopyAck); the word is ackWord's, the breath re-arms. */
+  const [copyState, runListCopy] = useCopyAck();
 
   const buyRows = rows.filter((r) => r.needsBuy);
   const watchRows = rows.filter((r) => !r.needsBuy && r.burnPerDay > 0);
@@ -2934,15 +2931,7 @@ const ReorderBoard: React.FC<{
   });
   const shareable = buyRows.length > 0 || watchRows.length > 0;
 
-  const copyList = async () => {
-    try {
-      if (!(await copyText(buildReorderText(buildOpts())))) throw new Error('clipboard unavailable');
-      setCopyState('ok');
-    } catch {
-      setCopyState('fail');
-    }
-    window.setTimeout(() => setCopyState('idle'), 1800);
-  };
+  const copyList = () => runListCopy(buildReorderText(buildOpts()));
 
   const exportList = useCallback(() => {
     if (buyRows.length === 0) return;
@@ -3007,10 +2996,12 @@ const ReorderBoard: React.FC<{
             >
               {copyState === 'ok' ? (
                 <Check size={14} className="text-[#2E7D32]" aria-hidden />
+              ) : copyState === 'fail' ? (
+                <AlertTriangle size={14} className="text-[#8A5A00]" aria-hidden />
               ) : (
                 <Copy size={14} aria-hidden />
               )}
-              {copyState === 'ok' ? 'Copied' : copyState === 'fail' ? 'Copy blocked' : 'Copy'}
+              {ackWord(copyState, 'Copy')}
             </button>
             {/* v5.150.0 — the list's chat voice: the house PICKER, the owner
                 decides which chat (supplier, partner, own notes). Same ghost

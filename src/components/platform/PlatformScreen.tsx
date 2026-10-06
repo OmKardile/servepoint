@@ -21,7 +21,7 @@ import { fetchAuditLogs, fetchSubscriptions, fetchTenants } from '../../lib/api'
 import { planLabel, subscriptionWords } from '../../lib/billing';
 import { formatBillingDate as formatDate } from '../../lib/billing';
 import { isSupabaseConfigured } from '../../lib/supabase';
-import { copyText } from '../../lib/clipboard';
+import { useCopyAck, ackWord } from '../../lib/useCopyAck';
 import { authService } from '../../lib/authService';
 import { formatMoney, timeAgo } from '../../lib/prefs';
 import { dayTime } from '../../lib/day';
@@ -75,28 +75,26 @@ function shortId(id: string): string {
  * clipboard helpers. */
 
 const CopyValueButton: React.FC<{ value: string; label: string }> = ({ value, label }) => {
-  const [copied, setCopied] = useState(false);
-  const timer = React.useRef<number | null>(null);
-  useEffect(() => () => {
-    if (timer.current !== null) window.clearTimeout(timer.current);
-  }, []);
+  /* v5.277.0 — the ack rides the one home (lib/useCopyAck): the timer,
+   * the re-arm and the cleanup live there now; a refused copy says so. */
+  const [copied, runCopy] = useCopyAck();
   return (
     <button
       type="button"
-      onClick={async () => {
-        const ok = await copyText(value);
-        if (!ok) return;
-        setCopied(true);
-        if (timer.current !== null) window.clearTimeout(timer.current);
-        timer.current = window.setTimeout(() => setCopied(false), 2000);
-      }}
+      onClick={() => runCopy(value)}
+      aria-live="polite"
       aria-label={`${label} — copy to clipboard`}
       className="inline-flex h-6 items-center gap-1 rounded-md px-1.5 text-[11px] font-semibold text-[#0F3D3E] transition-colors hover:bg-[#E3E7E0]"
     >
-      {copied ? (
+      {copied === 'ok' ? (
         <>
           <Check size={12} aria-hidden className="text-[#2E7D32]" />
-          <span className="text-[#2E7D32]">Copied</span>
+          <span className="text-[#2E7D32]">{ackWord(copied, 'Copy')}</span>
+        </>
+      ) : copied === 'fail' ? (
+        <>
+          <AlertTriangle size={12} aria-hidden className="text-[#8A5A00]" />
+          <span className="text-[#8A5A00]">{ackWord(copied, 'Copy')}</span>
         </>
       ) : (
         <>

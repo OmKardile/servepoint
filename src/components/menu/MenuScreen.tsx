@@ -8,6 +8,7 @@ import {
   CircleOff,
   Clock,
   Copy,
+  AlertTriangle,
   ImagePlus,
   Layers,
   Loader2,
@@ -58,7 +59,7 @@ import { formatMoney } from '../../lib/prefs';
 import { downloadCsv } from '../../lib/csv';
 import { useExportFlash } from '../../lib/useExportFlash';
 import { useTransientFlag } from '../../lib/useTransientFlag';
-import { copyText } from '../../lib/clipboard';
+import { useCopyAck, ackWord } from '../../lib/useCopyAck';
 import { CsvExportButton } from '../common/CsvExportButton';
 import { useDialogA11y } from '../../lib/useDialogA11y';
 import { MarkHit } from '../shell/MarkHit';
@@ -999,16 +1000,11 @@ export function MenuScreen(): React.ReactElement {
     ],
   }), [tenant?.name, categories, items, variants]);
   const menuText = items.length > 0 ? buildMenuText(menuOpts) : '';
-  const [menuCopyState, setMenuCopyState] = useState<'idle' | 'ok' | 'fail'>('idle');
-  const copyMenu = async () => {
-    try {
-      if (!(await copyText(menuText))) throw new Error('clipboard unavailable');
-      setMenuCopyState('ok');
-    } catch {
-      setMenuCopyState('fail');
-    }
-    window.setTimeout(() => setMenuCopyState('idle'), 1800);
-  };
+  /* v5.277.0 — the ack rides the one home (lib/useCopyAck): the honest
+   * boolean from the one door decides the kind, the breath re-arms
+   * instead of stacking, and the word comes from ackWord. */
+  const [menuCopyState, runMenuCopy] = useCopyAck();
+  const copyMenu = () => runMenuCopy(menuText);
 
   /* v5.171.0 — the house catalog: the same menu state the screen renders,
    * projected for the owner's spreadsheet (5.146.0 rule, menu edition —
@@ -1180,10 +1176,12 @@ export function MenuScreen(): React.ReactElement {
               >
                 {menuCopyState === 'ok' ? (
                   <Check size={15} className="text-[#2E7D32]" aria-hidden />
+                ) : menuCopyState === 'fail' ? (
+                  <AlertTriangle size={15} className="text-[#8A5A00]" aria-hidden />
                 ) : (
                   <Copy size={15} aria-hidden />
                 )}
-                {menuCopyState === 'ok' ? 'Copied' : menuCopyState === 'fail' ? 'Copy blocked' : 'Copy'}
+                {ackWord(menuCopyState, 'Copy')}
               </button>
               <a
                 href={`https://wa.me/?text=${encodeURIComponent(menuText)}`}

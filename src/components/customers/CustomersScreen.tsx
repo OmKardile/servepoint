@@ -6,6 +6,7 @@ import {
   ChevronDown,
   ChevronUp,
   Copy,
+  AlertTriangle,
   Crown,
   Gift,
   History,
@@ -66,7 +67,7 @@ import { computeUsual, isPaidTicket, USUAL_WINDOW } from '../../lib/usual';
 import { guestVoice } from '../../lib/verdict';
 import { useDialogA11y } from '../../lib/useDialogA11y';
 import { useExportFlash } from '../../lib/useExportFlash';
-import { copyText } from '../../lib/clipboard';
+import { useKeyedCopyAck, ackWord } from '../../lib/useCopyAck';
 import { CsvExportButton } from '../common/CsvExportButton';
 import { useCart } from '../../store/cart';
 import { useUi } from '../../store/session';
@@ -1657,8 +1658,9 @@ const OffersTab: React.FC<{
 }> = ({ offers, loading, onEdit, onToggle, onDelete, deleteArm, setDeleteArm, busyId, activeOffers, storeName, lastUsed, givenAway, ledgerByOffer, weekTally }) => {
   /* v5.149.0 — per-card copy feedback: one state cell keyed by offer id,
    * ok/fail honest (headless and denied-permission browsers say so), the
-   * 1.8s reset the bill's copy button taught (5.145.0). */
-  const [offerCopy, setOfferCopy] = useState<{ id: string; ok: boolean } | null>(null);
+   * 1.8s reset the bill's copy button taught (5.145.0). v5.277.0 — the
+   * keyed ack rides the one home (lib/useCopyAck); the word is ackWord's. */
+  const [offerCopy, runOfferCopy] = useKeyedCopyAck(1800);
   /* v5.206.0 — which ledger drawers stand open: a Set of offer ids, one
    * honest toggle per card (open many, compare freely; the chevron says
    * which way each door faces). */
@@ -1671,18 +1673,11 @@ const OffersTab: React.FC<{
       return next;
     });
   };
-  const copyOffer = async (o: Offer) => {
-    try {
-      const ok = await copyText(
-        buildOfferText(o, storeName, lastUsed?.get(o.id) ?? null, Date.now(), givenAway?.get(o.id) ?? null)
-      );
-      if (!ok) throw new Error('clipboard unavailable');
-      setOfferCopy({ id: o.id, ok: true });
-    } catch {
-      setOfferCopy({ id: o.id, ok: false });
-    }
-    window.setTimeout(() => setOfferCopy(null), 1800);
-  };
+  const copyOffer = (o: Offer) =>
+    runOfferCopy(
+      o.id,
+      buildOfferText(o, storeName, lastUsed?.get(o.id) ?? null, Date.now(), givenAway?.get(o.id) ?? null),
+    );
   if (loading) {
     return (
       <div className="grid grid-cols-1 gap-3 px-6 py-5 md:grid-cols-2 xl:grid-cols-3">
@@ -1994,16 +1989,14 @@ const OffersTab: React.FC<{
                       aria-label={`Copy the ${o.title} offer as text`}
                       className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-[#E3E7E0] bg-white px-2.5 text-[11.5px] font-semibold text-[#0F3D3E] transition hover:border-[#0F3D3E]/40 hover:bg-[#F6F5F2] active:scale-[0.99]"
                     >
-                      {offerCopy && offerCopy.id === o.id && offerCopy.ok ? (
+                      {offerCopy && offerCopy.id === o.id && offerCopy.kind === 'ok' ? (
                         <Check size={13} className="text-[#2E7D32]" aria-hidden />
+                      ) : offerCopy && offerCopy.id === o.id && offerCopy.kind === 'fail' ? (
+                        <AlertTriangle size={13} className="text-[#8A5A00]" aria-hidden />
                       ) : (
                         <Copy size={13} aria-hidden />
                       )}
-                      {offerCopy && offerCopy.id === o.id
-                        ? offerCopy.ok
-                          ? 'Copied'
-                          : 'Copy blocked'
-                        : 'Copy'}
+                      {ackWord(offerCopy && offerCopy.id === o.id ? offerCopy.kind : null, 'Copy')}
                     </button>
                     <a
                       href={`https://wa.me/?text=${encodeURIComponent(

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
   Armchair,
+  AlertTriangle,
   Bell,
   Building2,
   Check,
@@ -34,7 +35,7 @@ import { getPrefs, inQuietWindowAt, setPrefs, subscribePrefs } from '../../lib/p
 import type { SpPrefs } from '../../lib/prefs';
 import { useTenant } from '../../lib/tenant';
 import { useTransientFlag } from '../../lib/useTransientFlag';
-import { copyText } from '../../lib/clipboard';
+import { useCopyAck, ackWord } from '../../lib/useCopyAck';
 import { useSession, useUi } from '../../store/session';
 import { useCart } from '../../store/cart';
 import { BillingSection } from './BillingSection';
@@ -199,20 +200,26 @@ const Note: React.FC<{ tone: 'amber' | 'error' | 'success'; children: React.Reac
 };
 
 const CopyButton: React.FC<{ value: string; label: string }> = ({ value, label }) => {
-  const [copied, fireCopied] = useTransientFlag(1600);
-  const onCopy = async () => {
-    const ok = await copyText(value);
-    if (ok) fireCopied();
-  };
+  /* v5.277.0 — the ack rides the one home (lib/useCopyAck): the 1600ms
+   * breath stays, and a refused copy now says "Copy blocked" instead of
+   * leaving the word untouched. */
+  const [copied, runCopy] = useCopyAck(1600);
   return (
     <button
       type="button"
-      onClick={onCopy}
+      onClick={() => runCopy(value)}
+      aria-live="polite"
       aria-label={`Copy ${label}`}
       className="inline-flex h-11 shrink-0 items-center gap-1.5 rounded-xl border border-[#E3E7E0] bg-white px-3.5 text-[12.5px] font-semibold text-[#0F3D3E] transition-colors hover:bg-[#F6F5F2] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#967221]"
     >
-      {copied ? <Check size={14} aria-hidden /> : <Copy size={14} aria-hidden />}
-      {copied ? 'Copied' : 'Copy'}
+      {copied === 'ok' ? (
+        <Check size={14} className="text-[#2E7D32]" aria-hidden />
+      ) : copied === 'fail' ? (
+        <AlertTriangle size={14} className="text-[#8A5A00]" aria-hidden />
+      ) : (
+        <Copy size={14} aria-hidden />
+      )}
+      {ackWord(copied, 'Copy')}
     </button>
   );
 };

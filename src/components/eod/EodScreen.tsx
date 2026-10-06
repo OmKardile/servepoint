@@ -58,7 +58,7 @@ import { daySpan, dayTime } from '../../lib/day';
 import { isOnRail } from '../kitchen/KitchenScreen';
 import { printHiddenFrame } from '../../lib/printFrame';
 import { downloadCsv } from '../../lib/csv';
-import { copyText } from '../../lib/clipboard';
+import { useCopyAck, ackWord } from '../../lib/useCopyAck';
 import { useExportFlash } from '../../lib/useExportFlash';
 import { CsvExportButton } from '../common/CsvExportButton';
 import { useDialogA11y } from '../../lib/useDialogA11y';
@@ -1834,17 +1834,10 @@ const EodScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
   /* v5.146.0 — the Z's chat voice: the SAME opts the thermal print consumes,
    * rendered by buildZReportText for Copy / WhatsApp. Inline honest feedback
    * (no toast system in the house): "Copied" for a breath, "Copy blocked"
-   * when the clipboard refuses (insecure context / permission denial). */
-  const [zCopyState, setZCopyState] = useState<'idle' | 'ok' | 'fail'>('idle');
-  const copyZReport = async () => {
-    try {
-      if (!(await copyText(buildZReportText(buildZOpts())))) throw new Error('clipboard unavailable');
-      setZCopyState('ok');
-    } catch {
-      setZCopyState('fail');
-    }
-    window.setTimeout(() => setZCopyState('idle'), 1800);
-  };
+   * when the clipboard refuses (insecure context / permission denial).
+   * v5.277.0 — the ack rides the one home (lib/useCopyAck). */
+  const [zCopyState, runZCopy] = useCopyAck();
+  const copyZReport = () => runZCopy(buildZReportText(buildZOpts()));
 
   /* ── day-ledger CSV — the accountant's twin of the printed z-report.
      One row per ticket, exactly the loaded day's orders (nothing fetched,
@@ -2002,10 +1995,12 @@ const EodScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
             >
               {zCopyState === 'ok' ? (
                 <Check size={14} className="text-[#2E7D32]" aria-hidden />
+              ) : zCopyState === 'fail' ? (
+                <AlertTriangle size={14} className="text-[#8A5A00]" aria-hidden />
               ) : (
                 <Copy size={14} aria-hidden />
               )}
-              {zCopyState === 'ok' ? 'Copied' : zCopyState === 'fail' ? 'Copy blocked' : 'Copy report'}
+              {ackWord(zCopyState, 'Copy report')}
             </button>
             <a
               href={`https://wa.me/?text=${encodeURIComponent(buildZReportText(buildZOpts()))}`}

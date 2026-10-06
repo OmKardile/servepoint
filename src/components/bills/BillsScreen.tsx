@@ -4,6 +4,7 @@ import {
   ChevronDown,
   Clock,
   Copy,
+  AlertTriangle,
   History,
   Loader2,
   MessageCircle,
@@ -40,7 +41,7 @@ import { buildReceiptText, printReceipt, type ReceiptOpts } from './ReceiptPrint
 import { preloadPrintImage } from '../../lib/printFrame';
 import { formatMoney, getPrefs } from '../../lib/prefs';
 import { downloadCsv } from '../../lib/csv';
-import { copyText } from '../../lib/clipboard';
+import { useCopyAck, ackWord } from '../../lib/useCopyAck';
 import { appStampLabel, appTodayIso, appFormatters, appTzTag, isSameAppDay, isSameAppDayAs } from '../../lib/appday';
 import { useExportFlash } from '../../lib/useExportFlash';
 import { CsvExportButton } from '../common/CsvExportButton';
@@ -870,23 +871,17 @@ const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRet
   const chaseAgeTitle = chaseOldest
     ? `oldest ${chaseOldest.num} owes ${formatMoney(chaseOldest.open)}, ${chaseOldest.age}`
     : null;
-  const [chaseCopyState, setChaseCopyState] = useState<'idle' | 'ok' | 'fail'>('idle');
-  const copyChase = async () => {
-    try {
-      if (!(await copyText(
-        buildChaseText({
-          storeName: tenant?.name || 'ServePoint store',
-          tickets: chaseTickets,
-          total: chaseTotal,
-          oldestAge: chaseOldest?.age ?? null,
-        })
-      ))) throw new Error('clipboard unavailable');
-      setChaseCopyState('ok');
-    } catch {
-      setChaseCopyState('fail');
-    }
-    window.setTimeout(() => setChaseCopyState('idle'), 1800);
-  };
+  /* v5.277.0 — the ack rides the one home (lib/useCopyAck). */
+  const [chaseCopyState, runChaseCopy] = useCopyAck();
+  const copyChase = () =>
+    runChaseCopy(
+      buildChaseText({
+        storeName: tenant?.name || 'ServePoint store',
+        tickets: chaseTickets,
+        total: chaseTotal,
+        oldestAge: chaseOldest?.age ?? null,
+      }),
+    );
 
   /* Keep a valid selection (auto-select the most urgent bill on load / after
      a filter change — top of the sorted list, i.e. oldest unpaid first).
@@ -907,7 +902,8 @@ const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRet
    * inline (the app keeps no toast system): the button flips to "Copied"
    * for a breath, or honestly says "Copy blocked" when the clipboard is
    * unavailable (insecure context / permission denial). */
-  const [billCopyState, setBillCopyState] = useState<'idle' | 'ok' | 'fail'>('idle');
+  /* v5.277.0 — the ack rides the one home (lib/useCopyAck). */
+  const [billCopyState, runBillCopy] = useCopyAck();
   const receiptOpts = (): ReceiptOpts | null => {
     if (!selected) return null;
     return {
@@ -964,16 +960,10 @@ const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRet
       logoUrl: tenant?.logo_url || null,
     };
   };
-  const copyBillText = async () => {
+  const copyBillText = () => {
     const opts = receiptOpts();
     if (!opts) return;
-    try {
-      if (!(await copyText(buildReceiptText(opts)))) throw new Error('clipboard unavailable');
-      setBillCopyState('ok');
-    } catch {
-      setBillCopyState('fail');
-    }
-    window.setTimeout(() => setBillCopyState('idle'), 1800);
+    runBillCopy(buildReceiptText(opts));
   };
 
   /* ── Split math (5.63.0) — paise-exact, ledger-derived ──────────────────
@@ -1393,10 +1383,12 @@ const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRet
             >
               {chaseCopyState === 'ok' ? (
                 <Check size={14} className="text-[#2E7D32]" aria-hidden />
+              ) : chaseCopyState === 'fail' ? (
+                <AlertTriangle size={14} className="text-[#8A5A00]" aria-hidden />
               ) : (
                 <Copy size={14} aria-hidden />
               )}
-              {chaseCopyState === 'ok' ? 'Copied' : chaseCopyState === 'fail' ? 'Copy blocked' : 'Copy'}
+              {ackWord(chaseCopyState, 'Copy')}
             </button>
             <a
               href={`https://wa.me/?text=${encodeURIComponent(
@@ -2262,10 +2254,12 @@ const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRet
                         >
                           {billCopyState === 'ok' ? (
                             <Check size={15} className="text-[#2E7D32]" aria-hidden />
+                          ) : billCopyState === 'fail' ? (
+                            <AlertTriangle size={15} className="text-[#8A5A00]" aria-hidden />
                           ) : (
                             <Copy size={15} aria-hidden />
                           )}
-                          {billCopyState === 'ok' ? 'Copied' : billCopyState === 'fail' ? 'Copy blocked' : 'Copy bill'}
+                          {ackWord(billCopyState, 'Copy bill')}
                         </button>
                         <a
                           href={waHref}

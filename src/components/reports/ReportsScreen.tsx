@@ -17,6 +17,7 @@ import {
 } from 'recharts';
 import {
   ArrowRight,
+  AlertTriangle,
   BadgePercent,
   CalendarRange,
   Check,
@@ -86,7 +87,7 @@ import {
   subscribePrefs,
 } from '../../lib/prefs';
 import { downloadCsv } from '../../lib/csv';
-import { copyText } from '../../lib/clipboard';
+import { useCopyAck, ackWord } from '../../lib/useCopyAck';
 import { useExportFlash } from '../../lib/useExportFlash';
 import { CsvExportButton } from '../common/CsvExportButton';
 import { printHiddenFrame } from '../../lib/printFrame';
@@ -1929,16 +1930,8 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
     };
   }, [tenant?.name, range, topItems, topUnits, sellsRank]);
   const topText = topItems.length > 0 ? buildTopText(topShareOpts) : '';
-  const [topCopyState, setTopCopyState] = useState<'idle' | 'ok' | 'fail'>('idle');
-  const copyTop = async () => {
-    try {
-      if (!(await copyText(topText))) throw new Error('clipboard unavailable');
-      setTopCopyState('ok');
-    } catch {
-      setTopCopyState('fail');
-    }
-    window.setTimeout(() => setTopCopyState('idle'), 1800);
-  };
+  const [topCopyState, runTopCopy] = useCopyAck();
+  const copyTop = () => runTopCopy(topText);
 
   /* ── guest satisfaction (019) — range-scoped reads, fail-soft data ── */
 
@@ -2002,16 +1995,8 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
     lowTotal: fbInRange.filter((f) => f.rating <= 3).length,
   }), [tenant?.name, range, fbAgg, fbInRange]);
   const ratingsText = fbAgg.count > 0 ? buildRatingsText(ratingsShareOpts) : '';
-  const [ratingsCopyState, setRatingsCopyState] = useState<'idle' | 'ok' | 'fail'>('idle');
-  const copyRatings = async () => {
-    try {
-      if (!(await copyText(ratingsText))) throw new Error('clipboard unavailable');
-      setRatingsCopyState('ok');
-    } catch {
-      setRatingsCopyState('fail');
-    }
-    window.setTimeout(() => setRatingsCopyState('idle'), 1800);
-  };
+  const [ratingsCopyState, runRatingsCopy] = useCopyAck();
+  const copyRatings = () => runRatingsCopy(ratingsText);
 
   /* ── 5.77.0 — the bin's bill: what the shelf threw away, in rupees ── */
 
@@ -2203,16 +2188,8 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
     totalRevenue: offerAgg.totalRevenue,
   }), [tenant?.name, range, offerAgg]);
   const offerScoreText = offerAgg.list.length > 0 ? buildOfferScoreText(offerScoreOpts) : '';
-  const [scoreCopyState, setScoreCopyState] = useState<'idle' | 'ok' | 'fail'>('idle');
-  const copyScore = async () => {
-    try {
-      if (!(await copyText(offerScoreText))) throw new Error('clipboard unavailable');
-      setScoreCopyState('ok');
-    } catch {
-      setScoreCopyState('fail');
-    }
-    window.setTimeout(() => setScoreCopyState('idle'), 1800);
-  };
+  const [scoreCopyState, runScoreCopy] = useCopyAck();
+  const copyScore = () => runScoreCopy(offerScoreText);
 
   const exportRatings = useCallback(() => {
     if (fbAgg.count === 0) return;
@@ -2386,16 +2363,8 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
     })),
   }), [tenant?.name, range, kitchen]);
   const kitchenSpeedText = kitchen.sample.length > 0 ? buildKitchenSpeedText(kitchenShareOpts) : '';
-  const [kitchenCopyState, setKitchenCopyState] = useState<'idle' | 'ok' | 'fail'>('idle');
-  const copyKitchenSpeed = async () => {
-    try {
-      if (!(await copyText(kitchenSpeedText))) throw new Error('clipboard unavailable');
-      setKitchenCopyState('ok');
-    } catch {
-      setKitchenCopyState('fail');
-    }
-    window.setTimeout(() => setKitchenCopyState('idle'), 1800);
-  };
+  const [kitchenCopyState, runKitchenCopy] = useCopyAck();
+  const copyKitchenSpeed = () => runKitchenCopy(kitchenSpeedText);
 
   /* ── drawer honesty (020) — sealed shifts only, variance is STORED truth ── */
 
@@ -2450,16 +2419,8 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
     shiftTotal: shiftsInRange.length,
   }), [tenant?.name, range, shiftAgg, shiftsInRange]);
   const drawerText = shiftAgg.count > 0 ? buildDrawerText(drawerShareOpts) : '';
-  const [drawerCopyState, setDrawerCopyState] = useState<'idle' | 'ok' | 'fail'>('idle');
-  const copyDrawer = async () => {
-    try {
-      if (!(await copyText(drawerText))) throw new Error('clipboard unavailable');
-      setDrawerCopyState('ok');
-    } catch {
-      setDrawerCopyState('fail');
-    }
-    window.setTimeout(() => setDrawerCopyState('idle'), 1800);
-  };
+  const [drawerCopyState, runDrawerCopy] = useCopyAck();
+  const copyDrawer = () => runDrawerCopy(drawerText);
 
   /* ── trends — the shape of the range, IST day by day (2.0 section) ─────── */
 
@@ -2592,16 +2553,8 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
       peakHour: peak,
     };
   };
-  const [repCopyState, setRepCopyState] = useState<'idle' | 'ok' | 'fail'>('idle');
-  const copyReport = async () => {
-    try {
-      if (!(await copyText(buildReportText(buildRepOpts())))) throw new Error('clipboard unavailable');
-      setRepCopyState('ok');
-    } catch {
-      setRepCopyState('fail');
-    }
-    window.setTimeout(() => setRepCopyState('idle'), 1800);
-  };
+  const [repCopyState, runRepCopy] = useCopyAck();
+  const copyReport = () => runRepCopy(buildReportText(buildRepOpts()));
   const printRange = () => {
     printRangeReport(buildRepOpts());
   };
@@ -3006,10 +2959,12 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
           >
             {repCopyState === 'ok' ? (
               <Check size={14} className="text-[#2E7D32]" aria-hidden />
+            ) : repCopyState === 'fail' ? (
+              <AlertTriangle size={14} className="text-[#8A5A00]" aria-hidden />
             ) : (
               <Copy size={14} aria-hidden />
             )}
-            {repCopyState === 'ok' ? 'Copied' : repCopyState === 'fail' ? 'Copy blocked' : 'Copy report'}
+            {ackWord(repCopyState, 'Copy report')}
           </button>
           <a
             href={`https://wa.me/?text=${encodeURIComponent(buildReportText(buildRepOpts()))}`}
@@ -3505,11 +3460,13 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
                     className="inline-flex h-7 items-center gap-1 rounded-lg border border-[#B88E2F]/45 bg-[#FDF9F0] px-2.5 text-[11px] font-bold text-[#8A5A00] transition hover:bg-[#B88E2F] hover:text-white active:scale-[0.97]"
                   >
                     {scoreCopyState === 'ok' ? (
-                      <Check size={12} aria-hidden />
+                      <Check size={12} className="text-[#2E7D32]" aria-hidden />
+                    ) : scoreCopyState === 'fail' ? (
+                      <AlertTriangle size={12} className="text-[#8A5A00]" aria-hidden />
                     ) : (
                       <Copy size={12} aria-hidden />
                     )}
-                    {scoreCopyState === 'ok' ? 'Copied' : scoreCopyState === 'fail' ? 'Copy blocked' : 'Copy'}
+                    {ackWord(scoreCopyState, 'Copy')}
                   </button>
                   <a
                     href={`https://wa.me/?text=${encodeURIComponent(offerScoreText)}`}
@@ -3841,10 +3798,12 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
                       >
                         {topCopyState === 'ok' ? (
                           <Check size={14} className="text-[#2E7D32]" aria-hidden />
+                        ) : topCopyState === 'fail' ? (
+                          <AlertTriangle size={14} className="text-[#8A5A00]" aria-hidden />
                         ) : (
                           <Copy size={14} aria-hidden />
                         )}
-                        {topCopyState === 'ok' ? 'Copied' : topCopyState === 'fail' ? 'Copy blocked' : 'Copy'}
+                        {ackWord(topCopyState, 'Copy')}
                       </button>
                       <a
                         href={`https://wa.me/?text=${encodeURIComponent(topText)}`}
@@ -4205,15 +4164,13 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
                     className="inline-flex h-7 items-center gap-1 rounded-lg border border-[#B88E2F]/45 bg-[#FDF9F0] px-2.5 text-[11px] font-bold text-[#8A5A00] transition hover:bg-[#B88E2F] hover:text-white active:scale-[0.97]"
                   >
                     {kitchenCopyState === 'ok' ? (
-                      <Check size={12} aria-hidden />
+                      <Check size={12} className="text-[#2E7D32]" aria-hidden />
+                    ) : kitchenCopyState === 'fail' ? (
+                      <AlertTriangle size={12} className="text-[#8A5A00]" aria-hidden />
                     ) : (
                       <Copy size={12} aria-hidden />
                     )}
-                    {kitchenCopyState === 'ok'
-                      ? 'Copied'
-                      : kitchenCopyState === 'fail'
-                        ? 'Copy blocked'
-                        : 'Copy'}
+                    {ackWord(kitchenCopyState, 'Copy')}
                   </button>
                   <a
                     href={`https://wa.me/?text=${encodeURIComponent(kitchenSpeedText)}`}
@@ -4818,15 +4775,13 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
                       className="inline-flex h-11 shrink-0 items-center gap-1.5 rounded-xl border border-[#E3E7E0] bg-white px-3 text-[12.5px] font-bold text-[#0F3D3E] transition hover:border-[#B88E2F] hover:text-[#B88E2F] active:scale-[0.97]"
                     >
                       {ratingsCopyState === 'ok' ? (
-                        <Check size={14} aria-hidden />
+                        <Check size={14} className="text-[#2E7D32]" aria-hidden />
+                      ) : ratingsCopyState === 'fail' ? (
+                        <AlertTriangle size={14} className="text-[#8A5A00]" aria-hidden />
                       ) : (
                         <Copy size={14} aria-hidden />
                       )}
-                      {ratingsCopyState === 'ok'
-                        ? 'Copied'
-                        : ratingsCopyState === 'fail'
-                          ? 'Copy blocked'
-                          : 'Copy'}
+                      {ackWord(ratingsCopyState, 'Copy')}
                     </button>
                     <a
                       href={`https://wa.me/?text=${encodeURIComponent(ratingsText)}`}
@@ -5070,15 +5025,13 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
                       className="inline-flex h-7 items-center gap-1 rounded-lg border border-[#B88E2F]/45 bg-[#FDF9F0] px-2.5 text-[11px] font-bold text-[#8A5A00] transition hover:bg-[#B88E2F] hover:text-white active:scale-[0.97]"
                     >
                       {drawerCopyState === 'ok' ? (
-                        <Check size={12} aria-hidden />
+                        <Check size={12} className="text-[#2E7D32]" aria-hidden />
+                      ) : drawerCopyState === 'fail' ? (
+                        <AlertTriangle size={12} className="text-[#8A5A00]" aria-hidden />
                       ) : (
                         <Copy size={12} aria-hidden />
                       )}
-                      {drawerCopyState === 'ok'
-                        ? 'Copied'
-                        : drawerCopyState === 'fail'
-                          ? 'Copy blocked'
-                          : 'Copy'}
+                      {ackWord(drawerCopyState, 'Copy')}
                     </button>
                     <a
                       href={`https://wa.me/?text=${encodeURIComponent(drawerText)}`}
