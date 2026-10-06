@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle,
+  ArrowUpRight,
   Building2,
   Check,
   ChevronDown,
@@ -230,41 +231,75 @@ const SageChipIcon: React.FC<{ icon: React.ElementType }> = ({ icon: Icon }) => 
   </span>
 );
 
-const KpiCard: React.FC<{ icon: React.ElementType; label: string; value: string | number; hint?: string; hintTone?: 'urgent' }> = ({
+const KpiCard: React.FC<{
+  icon: React.ElementType;
+  label: string;
+  value: string | number;
+  hint?: string;
+  hintTone?: 'urgent';
+  /* v5.305.0 — the door: when a card carries one, the whole card is a
+   * button that opens the room its number speaks for. */
+  door?: { onClick: () => void; aria: string };
+}> = ({
   icon,
   label,
   value,
   hint,
   hintTone,
-}) => (
-  <div className="sp-card p-5">
-    <div className="flex items-center gap-3">
-      <SageChipIcon icon={icon} />
-      <p className="text-[13px] font-medium text-[#6B6B6B]">{label}</p>
-    </div>
-    <p className="mt-4 text-3xl font-bold tracking-tight text-[#1A1A1A]" aria-label={label}>
-      {value}
-    </p>
-    {/* v5.232.0 — the walking question answered beside the number: who
-        carries the MRR, when the nearest trial ends. The line's grey voice,
-        honest silence when there is nothing to name.
-        v5.304.0 — the tone slot: the urgent ink only when a card's story is
-        genuinely last-days (the bucket's own law, the cell's own colors),
-        the grey voice otherwise; the tooltip carries the full sentence so a
-        truncated line never hides its own words, and the tone swap repaints
-        on the house's transition instead of snapping. */}
-    {hint && (
-      <p
-        title={hint}
-        className={`mt-1.5 truncate text-[11.5px] transition-colors duration-300 ${
-          hintTone === 'urgent' ? 'font-semibold text-[#B42318]' : 'font-medium text-[#969696]'
-        }`}
-      >
-        {hint}
+  door,
+}) => {
+  const body = (
+    <>
+      <div className="flex items-center gap-3">
+        <SageChipIcon icon={icon} />
+        <p className="text-[13px] font-medium text-[#6B6B6B]">{label}</p>
+      </div>
+      <p className="mt-4 text-3xl font-bold tracking-tight text-[#1A1A1A]" aria-label={label}>
+        {value}
       </p>
-    )}
-  </div>
-);
+      {/* v5.232.0 — the walking question answered beside the number: who
+          carries the MRR, when the nearest trial ends. The line's grey voice,
+          honest silence when there is nothing to name.
+          v5.304.0 — the tone slot: the urgent ink only when a card's story is
+          genuinely last-days (the bucket's own law, the cell's own colors),
+          the grey voice otherwise; the tooltip carries the full sentence so a
+          truncated line never hides its own words, and the tone swap repaints
+          on the house's transition instead of snapping. */}
+      {hint && (
+        <p
+          title={hint}
+          className={`mt-1.5 truncate text-[11.5px] transition-colors duration-300 ${
+            hintTone === 'urgent' ? 'font-semibold text-[#B42318]' : 'font-medium text-[#969696]'
+          }`}
+        >
+          {hint}
+        </p>
+      )}
+    </>
+  );
+  if (!door) return <div className="sp-card p-5">{body}</div>;
+  /* v5.305.0 — the door's own grammar: the card keeps its seat and its
+   * look; the hairline warms to the sage hover tone, and the gold whisper
+   * (the "View all" ink — the room's own affordance color) appears at the
+   * top-right on hover AND keyboard focus, so a mouse user and a Tab user
+   * see the same door open. The global focus ring answers the Tab key;
+   * zero new colors. */
+  return (
+    <button
+      type="button"
+      onClick={door.onClick}
+      aria-label={door.aria}
+      className="sp-card group relative block w-full cursor-pointer p-5 text-left transition-colors duration-200 hover:border-[#D9E2DD]"
+    >
+      <ArrowUpRight
+        size={16}
+        aria-hidden
+        className="absolute right-4 top-4 text-[#967221] opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-focus-visible:opacity-100"
+      />
+      {body}
+    </button>
+  );
+};
 
 const KpiSkeleton: React.FC = () => (
   <div className="sp-card p-5" role="status" aria-label="Loading">
@@ -608,6 +643,12 @@ export const PlatformScreen: React.FC = () => {
       ? `${tenantNameById.get(nearestTrial.sub.tenant_id) || '—'} · ${trialRelWords(nearestTrial.d)} · ${formatDate(nearestTrial.end)}`
       : undefined;
     const trialsUrgent = nearestTrial ? trialBucket(nearestTrial.d) === 'last' : false;
+    /* v5.305.0 — the Trials door's filter word: the value the room's OWN
+     * census chip would carry for trials (the chips derive from the
+     * tenants' statuses — 'trial' or 'trialing' — never an invented word),
+     * null when no trial exists so the door forgets the filter honestly. */
+    const trialChipStatus =
+      businessStatuses.find((b) => b.status === 'trial' || b.status === 'trialing')?.status ?? null;
     const cities = [...new Set((tenants ?? []).map((t) => (t.city || '').trim()).filter(Boolean))];
     const businessesHint =
       cities.length === 1 ? cities[0] : cities.length > 1 ? cities.join(' · ') : undefined;
@@ -635,15 +676,70 @@ export const PlatformScreen: React.FC = () => {
             </>
           ) : (
             <>
-              <KpiCard icon={Building2} label="Total businesses" value={tenantsError ? '—' : tenants?.length ?? 0} hint={businessesHint} />
-              <KpiCard icon={CreditCard} label="Active subscriptions" value={subsError ? '—' : activeSubscriptions} hint={activeSubsHint} />
-              <KpiCard icon={TrendingUp} label="Monthly recurring revenue" value={subsError ? '—' : formatMoney(mrr)} hint={mrrHint} />
+              {/* v5.305.0 — the cards become doors: each KPI opens the room
+               * its number speaks for, landed in the state that makes its
+               * own number TRUE — Total businesses opens the businesses
+               * room with the census reset to All; the money cards open
+               * the subscriptions room; Trials opens the businesses room
+               * at the trial chip the census itself derives (and without
+               * any trial in the data, the door honestly forgets the
+               * filter). The room's own setTab carries the URL sync. */}
+              <KpiCard
+                icon={Building2}
+                label="Total businesses"
+                value={tenantsError ? '—' : tenants?.length ?? 0}
+                hint={businessesHint}
+                door={{
+                  onClick: () => {
+                    setBusinessStatus(null);
+                    setTab('businesses');
+                  },
+                  aria: 'Open the businesses room — all businesses',
+                }}
+              />
+              <KpiCard
+                icon={CreditCard}
+                label="Active subscriptions"
+                value={subsError ? '—' : activeSubscriptions}
+                hint={activeSubsHint}
+                door={{
+                  onClick: () => setTab('subscriptions'),
+                  aria: 'Open the subscriptions room',
+                }}
+              />
+              <KpiCard
+                icon={TrendingUp}
+                label="Monthly recurring revenue"
+                value={subsError ? '—' : formatMoney(mrr)}
+                hint={mrrHint}
+                door={{
+                  onClick: () => setTab('subscriptions'),
+                  aria: 'Open the subscriptions room',
+                }}
+              />
               <KpiCard
                 icon={Hourglass}
                 label="Trials"
                 value={tenantsError ? '—' : trialTenants}
                 hint={trialsHint}
                 hintTone={trialsUrgent ? 'urgent' : undefined}
+                door={
+                  trialChipStatus
+                    ? {
+                        onClick: () => {
+                          setBusinessStatus(trialChipStatus);
+                          setTab('businesses');
+                        },
+                        aria: 'Open the businesses room filtered to trials',
+                      }
+                    : {
+                        onClick: () => {
+                          setBusinessStatus(null);
+                          setTab('businesses');
+                        },
+                        aria: 'Open the businesses room',
+                      }
+                }
               />
             </>
           )}
