@@ -16,7 +16,12 @@ import { appDayKey, appTodayIso, appTimezone } from './appday';
  * day (the "documented device-day seam" the QA logs kept noting). Billing
  * is an owner surface — the reporting day (Settings › Language & Region)
  * is its truth, the same word Reports and Close-out read. On every Indian
- * device both truths say IST and nothing moves; elsewhere the lie stops. */
+ * device both truths say IST and nothing moves; elsewhere the lie stops.
+ *
+ * v5.304.0 — the clock gains its relative words as a public voice
+ * (trialRelWords): the dashboard's Trials card now composes the same
+ * sentence the rows speak, so the landing glance and the ledger can never
+ * drift into two dialects. */
 
 const DAY_MS = 86400000;
 
@@ -76,6 +81,15 @@ export function planLabel(planId: string): string {
   }
 }
 
+/** v5.304.0 — the trial clock's relative words, ONE phrasing everywhere the
+ *  clock speaks (the 232 lesson: a borrower takes words.primary rather than
+ *  phrase a third sentence — now the exporter itself, so even the borrower's
+ *  source has no second copy). d === 0 is the last day; d < 0 is a window
+ *  already passed. */
+export function trialRelWords(d: number): string {
+  return d === 0 ? 'ends today' : d === 1 ? '1 day left' : d > 1 ? `${d} days left` : 'window passed';
+}
+
 /** The words the subscription row speaks, one grammar for both surfaces.
  * Platform's cell renders {primary, secondary, urgent}; the tenant band adds
  * the bucket for its color ramp. A trialing row without a trial_end stays
@@ -91,8 +105,7 @@ export function subscriptionWords(s: Subscription): {
     const d = daysUntil(s.trial_end);
     const bucket = trialBucket(d);
     if (bucket === null) return { primary: '—', urgent: false, bucket: null };
-    const rel =
-      d === 0 ? 'ends today' : d === 1 ? '1 day left' : d > 1 ? `${d} days left` : 'window passed';
+    const rel = trialRelWords(d);
     return {
       primary: `Trial ends ${formatBillingDate(s.trial_end)}`,
       secondary: d >= 0 ? `${rel} · no charge yet` : rel,

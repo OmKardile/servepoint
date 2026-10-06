@@ -18,7 +18,7 @@ import {
   TrendingUp,
 } from 'lucide-react';
 import { fetchAuditLogs, fetchSubscriptions, fetchTenants } from '../../lib/api';
-import { planLabel, subscriptionWords } from '../../lib/billing';
+import { daysUntil, planLabel, subscriptionWords, trialBucket, trialRelWords } from '../../lib/billing';
 import { formatBillingDate as formatDate } from '../../lib/billing';
 import { isSupabaseConfigured } from '../../lib/supabase';
 import { useCopyAck, ackWord } from '../../lib/useCopyAck';
@@ -230,11 +230,12 @@ const SageChipIcon: React.FC<{ icon: React.ElementType }> = ({ icon: Icon }) => 
   </span>
 );
 
-const KpiCard: React.FC<{ icon: React.ElementType; label: string; value: string | number; hint?: string }> = ({
+const KpiCard: React.FC<{ icon: React.ElementType; label: string; value: string | number; hint?: string; hintTone?: 'urgent' }> = ({
   icon,
   label,
   value,
   hint,
+  hintTone,
 }) => (
   <div className="sp-card p-5">
     <div className="flex items-center gap-3">
@@ -246,8 +247,22 @@ const KpiCard: React.FC<{ icon: React.ElementType; label: string; value: string 
     </p>
     {/* v5.232.0 — the walking question answered beside the number: who
         carries the MRR, when the nearest trial ends. The line's grey voice,
-        honest silence when there is nothing to name. */}
-    {hint && <p className="mt-1.5 truncate text-[11.5px] font-medium text-[#969696]">{hint}</p>}
+        honest silence when there is nothing to name.
+        v5.304.0 — the tone slot: the urgent ink only when a card's story is
+        genuinely last-days (the bucket's own law, the cell's own colors),
+        the grey voice otherwise; the tooltip carries the full sentence so a
+        truncated line never hides its own words, and the tone swap repaints
+        on the house's transition instead of snapping. */}
+    {hint && (
+      <p
+        title={hint}
+        className={`mt-1.5 truncate text-[11.5px] transition-colors duration-300 ${
+          hintTone === 'urgent' ? 'font-semibold text-[#B42318]' : 'font-medium text-[#969696]'
+        }`}
+      >
+        {hint}
+      </p>
+    )}
   </div>
 );
 
@@ -574,12 +589,25 @@ export const PlatformScreen: React.FC = () => {
       .sort();
     const activeSubsHint =
       nextCharges.length > 0 ? `next charge ${formatDate(nextCharges[0])}` : undefined;
-    const trialEnds = (subs ?? [])
-      .filter((s) => s.status === 'trialing' || s.status === 'trial')
-      .map((s) => s.trial_end)
-      .filter((d): d is string => !!d)
-      .sort();
-    const trialsHint = trialEnds.length > 0 ? `nearest ends ${formatDate(trialEnds[0])}` : undefined;
+    /* v5.304.0 — the Trials card hears the clock's WHOLE sentence: which
+     * business carries the nearest end, the same relative words the rows
+     * speak (trialRelWords — no third phrasing), the date in the owner's
+     * grammar, and the urgent ink only when the shared bucket law says
+     * 'last' (≤3 days — the cell's own threshold, zero new colors). The
+     * nearest is the nearest LIVE window when one exists; a passed window
+     * is named only when every window has passed, and the words still say
+     * "window passed" — the sentence never lies about a dead trial. */
+    const trialClocks = (subs ?? [])
+      .filter((s) => (s.status === 'trialing' || s.status === 'trial') && !!s.trial_end)
+      .map((s) => ({ sub: s, end: s.trial_end as string, d: daysUntil(s.trial_end as string) }))
+      .filter((t) => !Number.isNaN(t.d));
+    const liveTrials = trialClocks.filter((t) => t.d >= 0).sort((a, b) => a.end.localeCompare(b.end));
+    const passedTrials = trialClocks.filter((t) => t.d < 0).sort((a, b) => b.end.localeCompare(a.end));
+    const nearestTrial = liveTrials[0] ?? passedTrials[0];
+    const trialsHint = nearestTrial
+      ? `${tenantNameById.get(nearestTrial.sub.tenant_id) || '—'} · ${trialRelWords(nearestTrial.d)} · ${formatDate(nearestTrial.end)}`
+      : undefined;
+    const trialsUrgent = nearestTrial ? trialBucket(nearestTrial.d) === 'last' : false;
     const cities = [...new Set((tenants ?? []).map((t) => (t.city || '').trim()).filter(Boolean))];
     const businessesHint =
       cities.length === 1 ? cities[0] : cities.length > 1 ? cities.join(' · ') : undefined;
@@ -610,7 +638,13 @@ export const PlatformScreen: React.FC = () => {
               <KpiCard icon={Building2} label="Total businesses" value={tenantsError ? '—' : tenants?.length ?? 0} hint={businessesHint} />
               <KpiCard icon={CreditCard} label="Active subscriptions" value={subsError ? '—' : activeSubscriptions} hint={activeSubsHint} />
               <KpiCard icon={TrendingUp} label="Monthly recurring revenue" value={subsError ? '—' : formatMoney(mrr)} hint={mrrHint} />
-              <KpiCard icon={Hourglass} label="Trials" value={tenantsError ? '—' : trialTenants} hint={trialsHint} />
+              <KpiCard
+                icon={Hourglass}
+                label="Trials"
+                value={tenantsError ? '—' : trialTenants}
+                hint={trialsHint}
+                hintTone={trialsUrgent ? 'urgent' : undefined}
+              />
             </>
           )}
         </div>
