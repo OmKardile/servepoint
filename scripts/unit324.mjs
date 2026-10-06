@@ -113,5 +113,6 @@ test('unit324 · the version law — version.ts and sw.js carry the same word', 
   assert.ok(v, 'version.ts must speak APP_VERSION');
   assert.ok(s, 'sw.js must bake the cache word');
   assert.equal(v[1], s[1], 'the two words must agree');
-  assert.equal(v[1], '5.285.0');
+  /* the literal moved to the current round's unit (the unit308 precedent,
+   * followed by 321→322→323→324): this suite asserts the AGREEMENT, not the age. */
 });

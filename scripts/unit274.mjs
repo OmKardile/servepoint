@@ -100,8 +100,8 @@ ok('the shipped SECTION_SLUGS resolves plain ids and spoken aliases alike');
 /* ── 9–11: the ONE-derivation law ── */
 
 assert.ok(
-  appSrc.includes("import { SECTION_SLUGS, sectionFromPath } from './lib/sectionPath';"),
-  'App imports the one path grammar'
+  appSrc.includes("import { SECTION_SLUGS, sectionFromPath, platformTabFromPath } from './lib/sectionPath';"),
+  'App imports the one path grammar (v5.286.0: the platform reader rides the same edge)'
 );
 assert.equal(
   appSrc.includes('.length >= 2 ? parts[1] : parts[0]'),
