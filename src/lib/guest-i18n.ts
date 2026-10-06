@@ -117,6 +117,15 @@ const EN: Dict = {
   qtyDec: 'Reduce {name}',
   qtyInc: 'Add one more {name}',
   justSoldOut: 'Just sold out',
+  // v5.271.0 — the line remembers its choices: Edit reopens the dish's own
+  // customizer pre-filled with what the guest already chose; the banner says
+  // which room they're in, the CTA says Update (not Add), and Cancel walks
+  // it back. A stale line cannot open the room (it cannot grow — 308's law).
+  editLine: 'Edit',
+  editLineAria: 'Edit {name} — change options, note, or quantity',
+  editingLine: 'Editing this line from your order',
+  cancelEdit: 'Cancel',
+  updateLine: 'Update · {amt}',
   nameLabel: 'Your name (so we can find you) — optional',
   namePh: 'e.g. Aarav',
   subtotal: 'Subtotal',
@@ -287,6 +296,12 @@ const HI: Dict = {
   qtyDec: '{name} कम करें',
   qtyInc: 'एक और {name} जोड़ें',
   justSoldOut: 'अभी समाप्त हो गया',
+  // v5.271.0 — the line remembers its choices
+  editLine: 'संपादित करें',
+  editLineAria: '{name} संपादित करें — विकल्प, नोट या मात्रा बदलें',
+  editingLine: 'आपके ऑर्डर की यह लाइन संपादित हो रही है',
+  cancelEdit: 'रद्द करें',
+  updateLine: 'अपडेट · {amt}',
   nameLabel: 'आपका नाम (ताकि हम आपको ढूँढ सकें) — वैकल्पिक',
   namePh: 'जैसे आरव',
   subtotal: 'उप-योग',
@@ -454,6 +469,12 @@ const KN: Dict = {
   qtyDec: '{name} ಕಡಿಮೆ ಮಾಡಿ',
   qtyInc: 'ಇನ್ನೊಂದು {name} ಸೇರಿಸಿ',
   justSoldOut: 'ಈಗ ಇಲ್ಲ',
+  // v5.271.0 — the line remembers its choices
+  editLine: 'ಸಂಪಾದಿಸಿ',
+  editLineAria: '{name} ಸಂಪಾದಿಸಿ — ಆಯ್ಕೆ, ಟಿಪ್ಪಣಿ ಅಥವಾ ಪ್ರಮಾಣ ಬದಲಿಸಿ',
+  editingLine: 'ನಿಮ್ಮ ಆರ್ಡರ್‌ನ ಈ ಸಾಲು ಸಂಪಾದಿಸಲಾಗುತ್ತಿದೆ',
+  cancelEdit: 'ರದ್ದುಮಾಡಿ',
+  updateLine: 'ಅಪ್‌ಡೇಟ್ · {amt}',
   nameLabel: 'ನಿಮ್ಮ ಹೆಸರು (ನಿಮ್ಮನ್ನು ಹುಡುಕಲು) — ಐಚ್ಛಿಕ',
   namePh: 'ಉದಾ. ಆರವ್',
   subtotal: 'ಉಪಮೊತ್ತ',

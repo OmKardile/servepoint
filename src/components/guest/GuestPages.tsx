@@ -14,6 +14,7 @@ import {
   History,
   Loader2,
   Minus,
+  Pencil,
   Plus,
   QrCode,
   ReceiptText,
@@ -549,19 +550,67 @@ function DishPhoto({ url, alt, shape }: { url: string; alt: string; shape: 'thum
   );
 }
 
-function Customizer({ item, onAdd, locked, lockedLabel }: { item: GuestMenuItem; onAdd: (l: Omit<CartLine, 'key'>) => void; locked?: boolean; lockedLabel?: string }): React.ReactElement {
+/* v5.271.0 — the customizer learns to REOPEN: the same room that adds a line
+ * now edits one. `initial` pre-fills the guest's own choices (variant,
+ * add-ons, note, quantity) so Edit never makes them re-answer what the line
+ * already knows; `editing` flips the room's register (the gold banner says
+ * which room they're in, the CTA says Update instead of Add, Cancel walks it
+ * back). The submit hands the SAME payload shape to onAdd (fresh line) or
+ * onUpdate (the parent swaps the old key out and the ONE merge grammar in). */
+function Customizer({
+  item,
+  onAdd,
+  locked,
+  lockedLabel,
+  initial,
+  editing,
+  onUpdate,
+  onCancelEdit,
+}: {
+  item: GuestMenuItem;
+  onAdd: (l: Omit<CartLine, 'key'>) => void;
+  locked?: boolean;
+  lockedLabel?: string;
+  initial?: { variantId: string | null; addonIds: string[]; notes: string; qty: number };
+  editing?: boolean;
+  onUpdate?: (l: Omit<CartLine, 'key'>) => void;
+  onCancelEdit?: () => void;
+}): React.ReactElement {
   const { t } = useGuestLang();
-  const [variantId, setVariantId] = useState<string | null>(null);
-  const [addonIds, setAddonIds] = useState<string[]>([]);
-  const [qty, setQty] = useState(1);
-  const [notes, setNotes] = useState('');
+  const [variantId, setVariantId] = useState<string | null>(initial?.variantId ?? null);
+  const [addonIds, setAddonIds] = useState<string[]>(initial?.addonIds ?? []);
+  const [qty, setQty] = useState(initial?.qty ?? 1);
+  const [notes, setNotes] = useState(initial?.notes ?? '');
 
   const variant = item.variants.find((v) => v.id === variantId) || null;
   const addons = item.addons.filter((a) => addonIds.includes(a.id));
   const unit = round2(item.price + (variant?.price_delta || 0) + addons.reduce((s, a) => s + a.price, 0));
 
   return (
-    <div className="mt-3 rounded-2xl border border-[#E3E7E0] bg-[#FBFBF9] p-3">
+    <div className="mt-3 rounded-2xl border border-[#E3E7E0] bg-[#FBFBF9] p-3" id={editing ? 'customizer-editing' : undefined}>
+      {/* v5.271.0 — the edit banner: while the room holds a line from the
+          order, it says so in the house's amber register (the sold-out and
+          warm-window family). The guest always knows whether this room is
+          adding a plate or re-saying one, and Cancel is one tap away. */}
+      {editing && (
+        <div
+          className="mb-3 flex items-center justify-between gap-2 rounded-xl border border-[#EAD9BE] bg-[#FDF9F0] px-3 py-2"
+          role="status"
+          style={{ animation: 'spFadeIn 200ms ease-out' }}
+        >
+          <span className="flex min-w-0 items-center gap-1.5 text-[11.5px] font-semibold text-[#8A5A16]">
+            <Pencil size={12} aria-hidden />
+            <span className="truncate">{t('editingLine')}</span>
+          </span>
+          <button
+            type="button"
+            onClick={onCancelEdit}
+            className="shrink-0 text-[11.5px] font-semibold text-[#8A5A16] underline decoration-[#EAD9BE] underline-offset-2 hover:decoration-[#8A5A16] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#B88E2F]"
+          >
+            {t('cancelEdit')}
+          </button>
+        </div>
+      )}
       {item.image_url && <DishPhoto url={item.image_url} alt={item.name} shape="banner" />}
       {/* v5.270.0 — the dish speaks its WHOLE description. The row keeps its
           one-line truncate (a menu stays scannable), but the open card was
@@ -669,14 +718,20 @@ function Customizer({ item, onAdd, locked, lockedLabel }: { item: GuestMenuItem;
           type="button"
           disabled={locked}
           onClick={() => {
-            onAdd({ item, variant, addons, qty, notes });
-            setQty(1);
-            setNotes('');
+            const payload = { item, variant, addons, qty, notes };
+            if (editing && onUpdate) {
+              onUpdate(payload); // the parent swaps the old key out — room state survives till then
+            } else {
+              onAdd(payload);
+              setQty(1);
+              setNotes('');
+            }
           }}
           className="flex h-11 flex-1 items-center justify-center gap-2 rounded-full text-[13.5px] font-semibold text-white transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#B88E2F] disabled:cursor-not-allowed disabled:opacity-45"
           style={{ background: brand.teal }}
         >
-          <Plus size={15} aria-hidden /> {locked ? (lockedLabel ?? t('orderingPaused')) : t('addToOrder', { amt: money(unit * qty) })}
+          {editing ? <Pencil size={15} aria-hidden /> : <Plus size={15} aria-hidden />}{' '}
+          {locked ? (lockedLabel ?? t('orderingPaused')) : editing ? t('updateLine', { amt: money(unit * qty) }) : t('addToOrder', { amt: money(unit * qty) })}
         </button>
       </div>
     </div>
@@ -764,6 +819,14 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
   const [vegOnly, setVegOnly] = useState(false);
   const [openItemId, setOpenItemId] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  /* v5.271.0 — the line remembers its choices: Edit on a drawer line reopens
+     the dish's own customizer pre-filled with the line's variant, add-ons,
+     note and quantity. The state holds the LINE being edited (its key is the
+     one the update swaps out); the drawer closes so the room is visible, the
+     row opens, and the scroll effect lands the guest in the dish's own space.
+     A stale line can never reach here — its Edit is disabled at the drawer
+     (a sold-out dish may be taken OFF the order, never re-said — 308's law). */
+  const [editing, setEditing] = useState<CartLine | null>(null);
   /* v5.110.0 — the guest's cart holds the door too: desktop QR users get
      Escape, a trapped Tab, and focus returned to the bar that opened it. */
   const cartDlgRef = useDialogA11y<HTMLDivElement>(() => setDrawerOpen(false), drawerOpen && phase === 'ready');
@@ -1018,6 +1081,54 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
     },
     [phase, windowEnded],
   );
+
+  /* v5.271.0 — the update law: an edit is the old line LEAVING and the new
+   * choices ARRIVING through the ONE merge grammar (5.269's own arithmetic —
+   * two grammars would mean two truths about what "the same plate twice"
+   * is). Filter the edited key out first, then merge the payload in: if the
+   * new key collides with a sibling line (same dish, same choices, same
+   * note), the quantities grow into one row — the honest answer — instead of
+   * a duplicate. The stale-clearing clause of addLine is deliberately ABSENT
+   * here: a stale line cannot reach the editor (its Edit is disabled), and a
+   * live line that stays live needs no mark cleared. The window law holds —
+   * a dead or locked window updates nothing. */
+  const updateLine = useCallback(
+    (oldKey: string, l: Omit<CartLine, 'key'>) => {
+      if (phase !== 'ready' || windowEnded) return;
+      const key = lineKey(l.item.id, l.variant?.id || null, l.addons.map((a) => a.id), l.notes);
+      setLines((prev) => {
+        const rest = prev.filter((x) => x.key !== oldKey);
+        return mergeLines(rest, [{ ...l, key }]);
+      });
+      setEditing(null);
+      setOpenItemId((prev) => (prev === l.item.id ? null : prev));
+    },
+    [phase, windowEnded],
+  );
+
+  /* Edit's front door (v5.271.0): close the drawer so the room is visible,
+   * open the dish's row, and remember which line is being re-said. The
+   * scroll effect below lands the guest in the dish's own space once React
+   * has committed the open row — no rAF race against the re-render. */
+  const beginEdit = useCallback((l: CartLine) => {
+    setEditing(l);
+    setDrawerOpen(false);
+    setOpenItemId(l.item.id);
+  }, []);
+
+  const cancelEdit = useCallback(() => {
+    setEditing(null);
+    setOpenItemId(null);
+  }, []);
+
+  useEffect(() => {
+    if (!editing) return;
+    // the row's customizer carries the anchor id once the open row renders
+    const t = window.setTimeout(() => {
+      document.getElementById('customizer-editing')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 60);
+    return () => window.clearTimeout(t);
+  }, [editing]);
 
   /* Café logo (migration 024): the owner-set URL rides the menu payload. A
      URL that fails to load hides its own tile (never a broken-image glyph) —
@@ -1491,12 +1602,28 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
             <div className="overflow-hidden rounded-3xl border border-[#E3E7E0] bg-white shadow-sm">
               {cat.items.map((item, i) => {
                 const open = openItemId === item.id;
+                /* v5.271.0 — the room holds the line: when this row's dish is
+                   the one being edited, the customizer mounts in edit mode
+                   (prefilled, bannered, Update CTA). The KEY carries the
+                   editing line's key so a room that was already open in add
+                   mode remounts into edit mode — useState initializers only
+                   run on mount, and Edit must never meet a room that kept
+                   someone else's half-choices. Closing the edited row
+                   cancels the edit (no dangling room). */
+                const editingHere = editing?.item.id === item.id;
                 return (
                   <div key={item.id} className={i > 0 ? 'border-t border-[#F0F2EE]' : ''}>
                     <button
                       type="button"
                       aria-expanded={open}
-                      onClick={() => setOpenItemId(open ? null : item.id)}
+                      onClick={() => {
+                        if (open) {
+                          setOpenItemId(null);
+                          if (editingHere) setEditing(null); // the room closed — the edit walks back with it
+                        } else {
+                          setOpenItemId(item.id);
+                        }
+                      }}
                       className="group flex w-full items-start gap-3 px-4 py-3.5 text-left transition-colors hover:bg-[#FBFBF9] focus-visible:outline focus-visible:outline-2 focus-visible:outline-inset focus-visible:outline-[#B88E2F]"
                     >
                       <span
@@ -1531,7 +1658,26 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
                     </button>
                     {open && (
                       <div className="px-4 pb-4">
-                        <Customizer item={item} onAdd={addLine} locked={phase !== 'ready' || windowEnded} lockedLabel={windowEnded ? t('windowEndedCta') : undefined} />
+                        <Customizer
+                          key={editingHere ? `edit-${editing!.key}` : 'add'}
+                          item={item}
+                          onAdd={addLine}
+                          locked={phase !== 'ready' || windowEnded}
+                          lockedLabel={windowEnded ? t('windowEndedCta') : undefined}
+                          initial={
+                            editingHere
+                              ? {
+                                  variantId: editing!.variant?.id ?? null,
+                                  addonIds: editing!.addons.map((a) => a.id),
+                                  notes: editing!.notes,
+                                  qty: editing!.qty,
+                                }
+                              : undefined
+                          }
+                          editing={editingHere}
+                          onUpdate={editingHere && editing ? (l) => updateLine(editing.key, l) : undefined}
+                          onCancelEdit={editingHere ? cancelEdit : undefined}
+                        />
                       </div>
                     )}
                   </div>
@@ -1697,6 +1843,27 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
                               <Plus size={15} aria-hidden />
                             </button>
                           </div>
+                          {/* v5.271.0 — the line's third verb: Edit reopens the
+                              dish's own customizer pre-filled with what the
+                              guest already chose (variant, add-ons, note,
+                              quantity) — no more tearing a line out and
+                              re-answering it from scratch. The teal ink reads
+                              "make it right" beside Remove's red "make it
+                              gone". A stale line cannot open the room: its
+                              dish is no longer on the menu, and editing could
+                              only grow a line the house will not serve (308's
+                              law, one verb later) — the 309 disabled grammar
+                              carries. */}
+                          <button
+                            type="button"
+                            disabled={stale}
+                            onClick={() => beginEdit(l)}
+                            aria-label={t('editLineAria', { name: l.item.name })}
+                            className="flex items-center gap-1 text-[11.5px] font-semibold text-[#0F3D3E] hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#967221] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:no-underline"
+                          >
+                            <Pencil size={11} aria-hidden />
+                            {t('editLine')}
+                          </button>
                           <button
                             type="button"
                             onClick={() => setLines((prev) => prev.filter((x) => x.key !== l.key))}
