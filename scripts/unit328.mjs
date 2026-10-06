@@ -132,5 +132,8 @@ test('unit328 · the version law — version.ts and sw.js carry the same word', 
   assert.ok(v, 'version.ts must speak APP_VERSION');
   assert.ok(s, 'sw.js must bake the cache word');
   assert.equal(v[1], s[1], 'the two words must agree');
-  assert.equal(v[1], '5.289.0');
+  /* the agreement shape (the unit308 precedent): the literal relaxes each
+   * round — 320 → … → 328 → 329 — the chain carries forward; the WORD
+   * itself is unit329's law now. */
+  assert.equal(v[1], '5.290.0');
 });
