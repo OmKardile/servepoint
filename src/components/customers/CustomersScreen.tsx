@@ -59,7 +59,7 @@ import { round2, moneyBare } from '../../lib/money';
 import { offerBadgeLabel } from '../../lib/offerLabel';
 import { downloadCsv } from '../../lib/csv';
 import { dayTime, usedAgo } from '../../lib/day';
-import { appStampLabel, appTodayIso, appFormatters, appTzTag, lastNDaysMs } from '../../lib/appday';
+import { appStampLabel, appTodayIso, appFormatters, appTzTag, deviceClockWord, deviceDayTag, lastNDaysMs } from '../../lib/appday';
 import { bookingSlotLabel, bookingDayKey, bookingTodayKey, bookingTzIsForeign } from '../../lib/bookingday';
 import { useTenant } from '../../lib/tenant';
 import { computeUsual, isPaidTicket, USUAL_WINDOW } from '../../lib/usual';
@@ -654,10 +654,10 @@ function fmtWhen(ts: string | null): string {
   const dayMs = 86_400_000;
   const midnight = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
   const days = Math.round((midnight(today) - midnight(d)) / dayMs);
-  if (days <= 0) return `today ${d.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' })}`;
+  if (days <= 0) return `today ${deviceClockWord(ts)}`;
   if (days === 1) return 'yesterday';
   if (days < 7) return `${days}d ago`;
-  return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+  return deviceDayTag(ts);
 }
 
 function orderStatusTone(s: string): string {
@@ -1596,7 +1596,7 @@ const GuestsTab: React.FC<{
                     </div>
                     <div className="hidden w-24 text-right lg:block">
                       <p className="text-[10.5px] font-semibold uppercase tracking-wide text-[#969696]">Last ticket</p>
-                      <p className="text-[12.5px] font-semibold text-[#1A1A1A]">{fmtWhen(s?.last_visit_at ?? null)}</p>
+                      <p className="text-[12.5px] font-semibold tabular-nums text-[#1A1A1A]">{fmtWhen(s?.last_visit_at ?? null)}</p>
                     </div>
                   </div>
                   <div className="flex shrink-0 items-center gap-1.5">
@@ -2653,7 +2653,7 @@ const GuestDetailDrawer: React.FC<{
                   <p className="mt-1 line-clamp-2 text-[12px] text-[#6B6B6B]">
                     {(o.items || []).map((it) => `${it.qty}× ${it.name}`).join(', ') || '—'}
                   </p>
-                  <div className="mt-1.5 flex items-center justify-between text-[11.5px] text-[#969696]">
+                  <div className="mt-1.5 flex items-center justify-between text-[11.5px] tabular-nums text-[#969696]">
                     <span>
                       {fmtWhen(o.created_at)} ·{' '}
                       <span

@@ -41,6 +41,10 @@
  *   was a shift from an earlier day wearing today's clock.
  */
 
+/* v5.283.0 — the local day-month spelling rides appday's deviceDayTag
+ * (the ONE device-day voice); see dayLabel's local branch below. */
+import { deviceDayTag } from './appday';
+
 /** Zoned wall-clock parts, cached per zone — the tz engine behind the
  *  optional `tz` path. Returns null for an unreadable timestamp. */
 interface ZonedParts {
@@ -147,7 +151,10 @@ export function dayLabel(iso: string, tz?: string, nowMs: number = Date.now()): 
   if (Number.isNaN(d.getTime())) return '';
   if (isSameLocalDayAs(iso, nowMs)) return '';
   if (isYesterdayAs(iso, nowMs)) return 'Yesterday';
-  return new Intl.DateTimeFormat('en-IN', { day: 'numeric', month: 'short' }).format(d);
+  /* v5.283.0 — the local branch rides appday's deviceDayTag: the same
+   * device-day voice the shelf, the book and the messages speak — one
+   * spelling of the day-month shape across both day libs. */
+  return deviceDayTag(iso);
 }
 
 /** The day-aware clock a row speaks: "17:28" today, "Yesterday 17:28",

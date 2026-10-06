@@ -59,7 +59,7 @@ import { downloadCsv } from '../../lib/csv';
 import { CsvExportButton } from '../common/CsvExportButton';
 import { useExportFlash } from '../../lib/useExportFlash';
 import { useCopyAck, ackWord } from '../../lib/useCopyAck';
-import { appTodayIso, appFormatters, appTzTag } from '../../lib/appday';
+import { appTodayIso, appFormatters, appTzTag, deviceDayTag } from '../../lib/appday';
 import { useDialogA11y } from '../../lib/useDialogA11y';
 import { useTenant } from '../../lib/tenant';
 import { bookingDayKey, bookingTodayKey, bookingClockLabel, bookingDayTag } from '../../lib/bookingday';
@@ -2663,7 +2663,7 @@ const StocktakeDialog: React.FC<{
     if (corrections.length === 0 || !validCounts) return;
     setSending(true);
     setErr(null);
-    const batchNote = note.trim() || `Stocktake — ${new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}`;
+    const batchNote = note.trim() || `Stocktake — ${deviceDayTag(new Date().toISOString())}`;
     const applied: string[] = [];
     try {
       for (const r of corrections) {
@@ -2738,7 +2738,7 @@ const StocktakeDialog: React.FC<{
             value={note}
             onChange={(e) => setNote(e.target.value)}
             maxLength={280}
-            placeholder={`Stocktake — ${new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}`}
+            placeholder={`Stocktake — ${deviceDayTag(new Date().toISOString())}`}
             className="h-11 w-full rounded-xl border border-[#E3E7E0] bg-white px-3.5 text-[13px] text-[#1A1A1A] placeholder:text-[#B9C4BE] focus:border-[#B88E2F] focus:outline-none focus:ring-2 focus:ring-[#B88E2F]/25"
           />
         </label>

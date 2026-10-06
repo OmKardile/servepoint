@@ -30,6 +30,7 @@ import {
   type TeamMemberRow,
 } from '../../lib/api';
 import { dbErrorHint } from '../../lib/dbErrors';
+import { deviceClockWord, deviceDayFullTag, deviceDayTag } from '../../lib/appday';
 import { ageLong } from '../../lib/age';
 import { useSession, useUi } from '../../store/session';
 import { useChatUnread } from '../../store/chatUnread';
@@ -108,11 +109,10 @@ const dayLabel = (iso: string): string => {
   const same = (a: Date, b: Date) => a.toDateString() === b.toDateString();
   if (same(d, today)) return 'Today';
   if (same(d, yesterday)) return 'Yesterday';
-  return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+  return deviceDayFullTag(iso);
 };
 
-const clockLabel = (iso: string): string =>
-  new Date(iso).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit', hour12: true });
+const clockLabel = (iso: string): string => deviceClockWord(iso);
 
 /* v5.112.0 — the full stamp for the bubble tooltip: the clock alone can't
  * say which day a line landed on; a hover that says "Today at 4:47 pm"
@@ -127,7 +127,7 @@ const fullStamp = (iso: string): string => {
       ? 'Today'
       : d.toDateString() === yesterday.toDateString()
         ? 'Yesterday'
-        : d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+        : deviceDayTag(iso);
   return `${day} at ${clockLabel(iso)}`;
 };
 

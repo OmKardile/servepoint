@@ -317,6 +317,10 @@ export interface AppFormatters {
   /** "06 Oct 2026, 14:32" — the EXPORT stamp (v5.274.0): the day AND the
    *  time in one stable word for data leaving the house (CSV cells). */
   stamp: Intl.DateTimeFormat;
+  /** "Oct 2026" — the tenure voice (v5.283.0): the team card's since.
+   *  Rides the REPORTING day — a DB enrollment instant named by its
+   *  month on the house's own clock, not the reading device's. */
+  monthYear: Intl.DateTimeFormat;
 }
 
 let fmtTz = '';
@@ -367,6 +371,11 @@ export function appFormatters(tz: string = appTimezone()): AppFormatters {
       minute: '2-digit',
       hour12: false,
     }),
+    monthYear: new Intl.DateTimeFormat('en-IN', {
+      timeZone: tz,
+      month: 'short',
+      year: 'numeric',
+    }),
   };
   fmtTz = tz;
   return fmtCache;
@@ -386,4 +395,48 @@ export function appFormatters(tz: string = appTimezone()): AppFormatters {
  * rows, exported from any device in the house, now read back byte-equal. */
 export function appStampLabel(iso: string, tz: string = appTimezone()): string {
   return appFormatters(tz).stamp.format(new Date(iso));
+}
+
+/* ── The device-day shape voices (v5.283.0) ─────────────────────────────
+ * The SHAPE is the house's (en-IN); the CLOCK belongs to the surface's own
+ * doctrine. Bills, KDS, the counter, messages and the customers book ride
+ * the DEVICE's wall clock deliberately ("a cashier's wall clock belongs to
+ * the device they hold") — so these voices pin the locale and the options
+ * and pin NO timeZone. Handing one a timezone here would silently move a
+ * device-day surface onto the reporting day's clock: a divider could
+ * disagree with the bubbles' own day grouping on any device outside the
+ * house's tz — the diary's one-clock lesson (v5.266.0) from the other
+ * side. Six render sites across four files (the food shelf's last-seen,
+ * the guests book's when-words, the messages dividers and full stamp, the
+ * stocktake note's default name) spelled the same option objects by hand;
+ * one typo in one file would have made one surface speak a different
+ * shape. The grammar has ONE spelling now; the clock stays where the
+ * doctrine put it. */
+
+/** "6 Oct" — the device-day tag: the shelf's last-seen, the guests book's
+ *  when-words, the stocktake note's name. Device day, house shape. */
+export function deviceDayTag(iso: string): string {
+  return new Intl.DateTimeFormat('en-IN', { day: 'numeric', month: 'short' }).format(new Date(iso));
+}
+
+/** "6 Oct 2026" — the device-day tag with its year: the messages day
+ *  dividers' full voice, where a divider may name any day of the year. */
+export function deviceDayFullTag(iso: string): string {
+  return new Intl.DateTimeFormat('en-IN', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  }).format(new Date(iso));
+}
+
+/** "2:45 pm" — the device-day clock word, hour12 EXPLICIT. The guests
+ *  book's today-branch spelled the options without hour12 and let the
+ *  ICU default answer for it; the house says the word out loud (the
+ *  messages bubble clock already did — one spelling now). */
+export function deviceClockWord(iso: string): string {
+  return new Intl.DateTimeFormat('en-IN', {
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  }).format(new Date(iso));
 }

@@ -32,6 +32,7 @@ import { CounterInbox } from './CounterInbox';
 import { useTenant } from '../../lib/tenant';
 import { useDialogA11y } from '../../lib/useDialogA11y';
 import { formatMoney } from '../../lib/prefs';
+import { deviceDayTag } from '../../lib/appday';
 /* v5.280.0 — the tax rides the ONE rate (lib/tax: gstTax + the derived
  * percent words) and the rounding rides money.ts's round2 (the ONE
  * arithmetic home — the local def retired). */
@@ -250,7 +251,7 @@ function fmtLastSeen(iso: string): string {
   const yest = new Date(now);
   yest.setDate(now.getDate() - 1);
   if (d.toDateString() === yest.toDateString()) return 'yesterday';
-  return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+  return deviceDayTag(iso);
 }
 
 /** Teal strip bound to cart.tableId (v5.18.0): which table this cart is
@@ -827,7 +828,7 @@ const OrderDrawer: React.FC<{
                   {regCrmName || 'Known phone'}
                 </p>
                 {regHistory ? (
-                  <p className="mt-0.5 text-[11.5px] text-[#6B6B6B]">
+                  <p className="mt-0.5 text-[11.5px] tabular-nums text-[#6B6B6B]">
                     {regHistory.visits > 0
                       ? `${regHistory.visits} ${regHistory.visits === 1 ? 'visit' : 'visits'}`
                       : `${regHistory.orders_placed} ${regHistory.orders_placed === 1 ? 'order' : 'orders'}`}

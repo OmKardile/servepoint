@@ -1,5 +1,5 @@
 import { supabase, isSupabaseConfigured } from './supabase';
-import { appTodayIso, appDayKey, appDayBoundsIso, appHour, lastNDaysMs, lastNDayKeys, offTodayBoundsIso } from './appday';
+import { appTodayIso, appDayKey, appDayBoundsIso, appHour, appFormatters, lastNDaysMs, lastNDayKeys, offTodayBoundsIso } from './appday';
 import { moverWindow } from './movers';
 /* v5.280.0 — the written order's tax rides the ONE rate (lib/tax) and the
  * ONE rounding (lib/money's round2): the staff cart's preview and the
@@ -1458,7 +1458,7 @@ export async function fetchDashboard(tenantId: string): Promise<DashboardData> {
           ? 'Owner'
           : String(e.role || 'staff').replace(/\b\w/g, (c: string) => c.toUpperCase()),
       since: e.created_at
-        ? new Date(e.created_at).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' })
+        ? appFormatters().monthYear.format(new Date(e.created_at))
         : null,
     }));
 
