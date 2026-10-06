@@ -57,6 +57,8 @@ import { useTenant } from '../../lib/tenant';
 import { formatMoney } from '../../lib/prefs';
 import { downloadCsv } from '../../lib/csv';
 import { useExportFlash } from '../../lib/useExportFlash';
+import { useTransientFlag } from '../../lib/useTransientFlag';
+import { copyText } from '../../lib/clipboard';
 import { CsvExportButton } from '../common/CsvExportButton';
 import { useDialogA11y } from '../../lib/useDialogA11y';
 import { MarkHit } from '../shell/MarkHit';
@@ -98,21 +100,6 @@ import type { MenuItem } from '../../types';
  */
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
-
-/** Timed confirmation flag ("Saved", "Added") with cleanup — mirrors Settings. */
-function useTransientFlag(ms: number): [boolean, () => void] {
-  const [on, setOn] = useState(false);
-  const timer = useRef<number | null>(null);
-  const fire = useCallback(() => {
-    setOn(true);
-    if (timer.current) window.clearTimeout(timer.current);
-    timer.current = window.setTimeout(() => setOn(false), ms);
-  }, [ms]);
-  useEffect(() => () => {
-    if (timer.current) window.clearTimeout(timer.current);
-  }, []);
-  return [on, fire];
-}
 
 const VegDot: React.FC<{ veg: boolean }> = ({ veg }) => (
   <span
@@ -1015,8 +1002,7 @@ export function MenuScreen(): React.ReactElement {
   const [menuCopyState, setMenuCopyState] = useState<'idle' | 'ok' | 'fail'>('idle');
   const copyMenu = async () => {
     try {
-      if (!navigator.clipboard?.writeText) throw new Error('clipboard unavailable');
-      await navigator.clipboard.writeText(menuText);
+      if (!(await copyText(menuText))) throw new Error('clipboard unavailable');
       setMenuCopyState('ok');
     } catch {
       setMenuCopyState('fail');

@@ -58,6 +58,7 @@ import { daySpan, dayTime } from '../../lib/day';
 import { isOnRail } from '../kitchen/KitchenScreen';
 import { printHiddenFrame } from '../../lib/printFrame';
 import { downloadCsv } from '../../lib/csv';
+import { copyText } from '../../lib/clipboard';
 import { useExportFlash } from '../../lib/useExportFlash';
 import { CsvExportButton } from '../common/CsvExportButton';
 import { useDialogA11y } from '../../lib/useDialogA11y';
@@ -1837,8 +1838,7 @@ const EodScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
   const [zCopyState, setZCopyState] = useState<'idle' | 'ok' | 'fail'>('idle');
   const copyZReport = async () => {
     try {
-      if (!navigator.clipboard?.writeText) throw new Error('clipboard unavailable');
-      await navigator.clipboard.writeText(buildZReportText(buildZOpts()));
+      if (!(await copyText(buildZReportText(buildZOpts())))) throw new Error('clipboard unavailable');
       setZCopyState('ok');
     } catch {
       setZCopyState('fail');

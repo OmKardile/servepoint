@@ -86,6 +86,7 @@ import {
   subscribePrefs,
 } from '../../lib/prefs';
 import { downloadCsv } from '../../lib/csv';
+import { copyText } from '../../lib/clipboard';
 import { useExportFlash } from '../../lib/useExportFlash';
 import { CsvExportButton } from '../common/CsvExportButton';
 import { printHiddenFrame } from '../../lib/printFrame';
@@ -1931,8 +1932,7 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
   const [topCopyState, setTopCopyState] = useState<'idle' | 'ok' | 'fail'>('idle');
   const copyTop = async () => {
     try {
-      if (!navigator.clipboard?.writeText) throw new Error('clipboard unavailable');
-      await navigator.clipboard.writeText(topText);
+      if (!(await copyText(topText))) throw new Error('clipboard unavailable');
       setTopCopyState('ok');
     } catch {
       setTopCopyState('fail');
@@ -2005,8 +2005,7 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
   const [ratingsCopyState, setRatingsCopyState] = useState<'idle' | 'ok' | 'fail'>('idle');
   const copyRatings = async () => {
     try {
-      if (!navigator.clipboard?.writeText) throw new Error('clipboard unavailable');
-      await navigator.clipboard.writeText(ratingsText);
+      if (!(await copyText(ratingsText))) throw new Error('clipboard unavailable');
       setRatingsCopyState('ok');
     } catch {
       setRatingsCopyState('fail');
@@ -2207,8 +2206,7 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
   const [scoreCopyState, setScoreCopyState] = useState<'idle' | 'ok' | 'fail'>('idle');
   const copyScore = async () => {
     try {
-      if (!navigator.clipboard?.writeText) throw new Error('clipboard unavailable');
-      await navigator.clipboard.writeText(offerScoreText);
+      if (!(await copyText(offerScoreText))) throw new Error('clipboard unavailable');
       setScoreCopyState('ok');
     } catch {
       setScoreCopyState('fail');
@@ -2391,8 +2389,7 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
   const [kitchenCopyState, setKitchenCopyState] = useState<'idle' | 'ok' | 'fail'>('idle');
   const copyKitchenSpeed = async () => {
     try {
-      if (!navigator.clipboard?.writeText) throw new Error('clipboard unavailable');
-      await navigator.clipboard.writeText(kitchenSpeedText);
+      if (!(await copyText(kitchenSpeedText))) throw new Error('clipboard unavailable');
       setKitchenCopyState('ok');
     } catch {
       setKitchenCopyState('fail');
@@ -2456,8 +2453,7 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
   const [drawerCopyState, setDrawerCopyState] = useState<'idle' | 'ok' | 'fail'>('idle');
   const copyDrawer = async () => {
     try {
-      if (!navigator.clipboard?.writeText) throw new Error('clipboard unavailable');
-      await navigator.clipboard.writeText(drawerText);
+      if (!(await copyText(drawerText))) throw new Error('clipboard unavailable');
       setDrawerCopyState('ok');
     } catch {
       setDrawerCopyState('fail');
@@ -2599,8 +2595,7 @@ const ReportsInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry }
   const [repCopyState, setRepCopyState] = useState<'idle' | 'ok' | 'fail'>('idle');
   const copyReport = async () => {
     try {
-      if (!navigator.clipboard?.writeText) throw new Error('clipboard unavailable');
-      await navigator.clipboard.writeText(buildReportText(buildRepOpts()));
+      if (!(await copyText(buildReportText(buildRepOpts())))) throw new Error('clipboard unavailable');
       setRepCopyState('ok');
     } catch {
       setRepCopyState('fail');

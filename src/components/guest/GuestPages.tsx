@@ -83,6 +83,7 @@ import { offerDiscount } from '../../store/cart';
    dialects). The bar's own total already includes the discount when one
    is applied — '₹40.00 off applied' explains why the number moved. */
 import { offerFit, offerFitVoice } from '../../lib/offerFit';
+import { copyText } from '../../lib/clipboard';
 import { appTimezone, formatWindowLeft, WARM_WINDOW_MS } from '../../lib/appday';
 
 /**
@@ -2731,8 +2732,12 @@ export function GuestTrackPage({ orderId }: { orderId: string }): React.ReactEle
               <button
                 type="button"
                 onClick={() => {
-                  void navigator.clipboard?.writeText(window.location.href);
-                  setCopied(true);
+                  /* v5.276.0 — the lie is gone: the old optional-chain fired
+                   * and forgot, so the button said "Copied" even where the
+                   * Clipboard API is absent (a plain-HTTP tablet). The lib's
+                   * honest boolean decides — Copied only when the copy
+                   * happened; a refusal keeps the link's own word. */
+                  void copyText(window.location.href).then(setCopied);
                   window.setTimeout(() => setCopied(false), 1600);
                 }}
                 className="inline-flex items-center gap-1.5 rounded-full border border-[#E3E7E0] bg-white px-3 py-1.5 font-medium hover:border-[#B88E2F]"

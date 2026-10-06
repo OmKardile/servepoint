@@ -40,6 +40,7 @@ import { buildReceiptText, printReceipt, type ReceiptOpts } from './ReceiptPrint
 import { preloadPrintImage } from '../../lib/printFrame';
 import { formatMoney, getPrefs } from '../../lib/prefs';
 import { downloadCsv } from '../../lib/csv';
+import { copyText } from '../../lib/clipboard';
 import { appStampLabel, appTodayIso, appFormatters, appTzTag, isSameAppDay, isSameAppDayAs } from '../../lib/appday';
 import { useExportFlash } from '../../lib/useExportFlash';
 import { CsvExportButton } from '../common/CsvExportButton';
@@ -872,15 +873,14 @@ const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRet
   const [chaseCopyState, setChaseCopyState] = useState<'idle' | 'ok' | 'fail'>('idle');
   const copyChase = async () => {
     try {
-      if (!navigator.clipboard?.writeText) throw new Error('clipboard unavailable');
-      await navigator.clipboard.writeText(
+      if (!(await copyText(
         buildChaseText({
           storeName: tenant?.name || 'ServePoint store',
           tickets: chaseTickets,
           total: chaseTotal,
           oldestAge: chaseOldest?.age ?? null,
         })
-      );
+      ))) throw new Error('clipboard unavailable');
       setChaseCopyState('ok');
     } catch {
       setChaseCopyState('fail');
@@ -968,8 +968,7 @@ const BillsScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRet
     const opts = receiptOpts();
     if (!opts) return;
     try {
-      if (!navigator.clipboard?.writeText) throw new Error('clipboard unavailable');
-      await navigator.clipboard.writeText(buildReceiptText(opts));
+      if (!(await copyText(buildReceiptText(opts)))) throw new Error('clipboard unavailable');
       setBillCopyState('ok');
     } catch {
       setBillCopyState('fail');

@@ -66,6 +66,7 @@ import { computeUsual, isPaidTicket, USUAL_WINDOW } from '../../lib/usual';
 import { guestVoice } from '../../lib/verdict';
 import { useDialogA11y } from '../../lib/useDialogA11y';
 import { useExportFlash } from '../../lib/useExportFlash';
+import { copyText } from '../../lib/clipboard';
 import { CsvExportButton } from '../common/CsvExportButton';
 import { useCart } from '../../store/cart';
 import { useUi } from '../../store/session';
@@ -1672,10 +1673,10 @@ const OffersTab: React.FC<{
   };
   const copyOffer = async (o: Offer) => {
     try {
-      if (!navigator.clipboard?.writeText) throw new Error('clipboard unavailable');
-      await navigator.clipboard.writeText(
+      const ok = await copyText(
         buildOfferText(o, storeName, lastUsed?.get(o.id) ?? null, Date.now(), givenAway?.get(o.id) ?? null)
       );
+      if (!ok) throw new Error('clipboard unavailable');
       setOfferCopy({ id: o.id, ok: true });
     } catch {
       setOfferCopy({ id: o.id, ok: false });

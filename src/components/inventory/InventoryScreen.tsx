@@ -53,6 +53,7 @@ import { computePaceByItem, computeTopMovers, MOVER_WINDOW_DAYS, type Mover } fr
 import { formatMoney } from '../../lib/prefs';
 import { LOW_COVER, computeBurnByIngredient, shelfCoverage, shelfDays, shelfDaysClause, shelfTouch } from '../../lib/shelf';
 import { downloadCsv } from '../../lib/csv';
+import { copyText } from '../../lib/clipboard';
 import { useExportFlash } from '../../lib/useExportFlash';
 import { CsvExportButton } from '../common/CsvExportButton';
 import { appTodayIso, appFormatters, appTzTag } from '../../lib/appday';
@@ -1738,8 +1739,7 @@ const RecipeBoard: React.FC<{
   );
   const copySheet = async () => {
     try {
-      if (!navigator.clipboard?.writeText) throw new Error('clipboard unavailable');
-      await navigator.clipboard.writeText(buildProductionSheetText(sheetOpts));
+      if (!(await copyText(buildProductionSheetText(sheetOpts)))) throw new Error('clipboard unavailable');
       setCopyState('ok');
     } catch {
       setCopyState('fail');
@@ -2936,8 +2936,7 @@ const ReorderBoard: React.FC<{
 
   const copyList = async () => {
     try {
-      if (!navigator.clipboard?.writeText) throw new Error('clipboard unavailable');
-      await navigator.clipboard.writeText(buildReorderText(buildOpts()));
+      if (!(await copyText(buildReorderText(buildOpts())))) throw new Error('clipboard unavailable');
       setCopyState('ok');
     } catch {
       setCopyState('fail');

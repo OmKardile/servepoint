@@ -21,6 +21,7 @@ import { fetchAuditLogs, fetchSubscriptions, fetchTenants } from '../../lib/api'
 import { planLabel, subscriptionWords } from '../../lib/billing';
 import { formatBillingDate as formatDate } from '../../lib/billing';
 import { isSupabaseConfigured } from '../../lib/supabase';
+import { copyText } from '../../lib/clipboard';
 import { authService } from '../../lib/authService';
 import { formatMoney, timeAgo } from '../../lib/prefs';
 import { dayTime } from '../../lib/day';
@@ -68,30 +69,10 @@ function shortId(id: string): string {
 /* v5.124.0 — the panel's IDs leave whole. The details panel truncates long
  * values for layout; the clipboard always receives the full string. One tap,
  * a two-second checkmark, and the operator never re-derives a UUID by hand. */
-async function copyPlain(text: string): Promise<boolean> {
-  try {
-    if (navigator.clipboard && window.isSecureContext) {
-      await navigator.clipboard.writeText(text);
-      return true;
-    }
-  } catch {
-    /* fall through to the legacy path */
-  }
-  try {
-    const ta = document.createElement('textarea');
-    ta.value = text;
-    ta.style.position = 'fixed';
-    ta.style.opacity = '0';
-    document.body.appendChild(ta);
-    ta.focus();
-    ta.select();
-    const ok = document.execCommand('copy');
-    document.body.removeChild(ta);
-    return ok;
-  } catch {
-    return false;
-  }
-}
+/* v5.276.0 — the page's copy verbs ride the house's ONE door
+ * (lib/clipboard); the local copyPlain — a byte-sibling of the wizard's
+ * own local copyText — is retired with the other three hand-rolled
+ * clipboard helpers. */
 
 const CopyValueButton: React.FC<{ value: string; label: string }> = ({ value, label }) => {
   const [copied, setCopied] = useState(false);
@@ -103,7 +84,7 @@ const CopyValueButton: React.FC<{ value: string; label: string }> = ({ value, la
     <button
       type="button"
       onClick={async () => {
-        const ok = await copyPlain(value);
+        const ok = await copyText(value);
         if (!ok) return;
         setCopied(true);
         if (timer.current !== null) window.clearTimeout(timer.current);

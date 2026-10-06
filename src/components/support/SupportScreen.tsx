@@ -15,6 +15,7 @@ import {
   Send,
 } from 'lucide-react';
 import { useTenant } from '../../lib/tenant';
+import { copyText } from '../../lib/clipboard';
 import { useSession, useUi } from '../../store/session';
 
 /**
@@ -37,29 +38,13 @@ import { useSession, useUi } from '../../store/session';
 
 const SUPPORT_EMAIL = 'support@servepoint.app';
 
-/* Shared clipboard helper — the page's two copy affordances (email, report)
- * ride the same path: async Clipboard API when present, execCommand
- * fallback for non-secure contexts, and a settled callback either way. */
-const copyText = (text: string, onDone: () => void): void => {
-  if (navigator.clipboard?.writeText) {
-    navigator.clipboard.writeText(text).then(onDone).catch(onDone);
-  } else {
-    const el = document.createElement('textarea');
-    el.value = text;
-    el.setAttribute('readonly', '');
-    el.style.position = 'fixed';
-    el.style.opacity = '0';
-    document.body.appendChild(el);
-    el.select();
-    try {
-      document.execCommand('copy');
-    } catch {
-      /* the callback still fires — the button says what actually happened */
-    }
-    document.body.removeChild(el);
-    onDone();
-  }
-};
+/* v5.276.0 — the page's two copy affordances (email, report) ride the
+ * house's ONE door (lib/clipboard — the async API when the origin is
+ * secure, the legacy fallback when it is not). The old local helper
+ * fired its callback EITHER way, so the button said "Copied" even when
+ * both doors refused; the lib's honest boolean now decides — Copied only
+ * when the copy happened (the email and the report text are on-screen
+ * anyway — a refused copy never becomes an invented word). */
 
 /* ── Honest error card ───────────────────────────────────────────────── */
 
@@ -162,7 +147,8 @@ const ReportForm: React.FC = () => {
 
   const onCopyReport = () => {
     if (!submitted) return;
-    copyText(`Subject: ${submitted.subject}\n\n${submitted.message}`, () => {
+    void copyText(`Subject: ${submitted.subject}\n\n${submitted.message}`).then((ok) => {
+      if (!ok) return;
       setCopied(true);
       window.setTimeout(() => setCopied(false), 2000);
     });
@@ -307,22 +293,9 @@ const SupportContent: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
       setCopied(true);
       window.setTimeout(() => setCopied(false), 2000);
     };
-    if (navigator.clipboard?.writeText) {
-      navigator.clipboard.writeText(SUPPORT_EMAIL).then(finish).catch(finish);
-    } else {
-      // Fallback for non-secure contexts: select-like copy via execCommand.
-      const el = document.createElement('textarea');
-      el.value = SUPPORT_EMAIL;
-      document.body.appendChild(el);
-      el.select();
-      try {
-        document.execCommand('copy');
-        finish();
-      } catch {
-        finish();
-      }
-      document.body.removeChild(el);
-    }
+    void copyText(SUPPORT_EMAIL).then((ok) => {
+      if (ok) finish();
+    });
   };
 
   if (tenant.loading) {

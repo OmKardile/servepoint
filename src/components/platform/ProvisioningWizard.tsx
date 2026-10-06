@@ -13,6 +13,7 @@ import { provisionBusiness } from '../../lib/api';
 import { authService } from '../../lib/authService';
 import { supabase } from '../../lib/supabase';
 import { formatMoney } from '../../lib/prefs';
+import { copyText } from '../../lib/clipboard';
 import { useDialogA11y } from '../../lib/useDialogA11y';
 import type { Tenant } from '../../types';
 
@@ -96,30 +97,10 @@ function slugify(name: string): string {
     .replace(/^-+|-+$/g, '');
 }
 
-async function copyText(text: string): Promise<boolean> {
-  try {
-    if (navigator.clipboard && window.isSecureContext) {
-      await navigator.clipboard.writeText(text);
-      return true;
-    }
-  } catch {
-    /* fall through to the legacy path */
-  }
-  try {
-    const ta = document.createElement('textarea');
-    ta.value = text;
-    ta.style.position = 'fixed';
-    ta.style.opacity = '0';
-    document.body.appendChild(ta);
-    ta.focus();
-    ta.select();
-    const ok = document.execCommand('copy');
-    document.body.removeChild(ta);
-    return ok;
-  } catch {
-    return false;
-  }
-}
+/* v5.276.0 — the wizard's copy verbs ride the house's ONE door
+ * (lib/clipboard); the local copyText — a byte-sibling of the platform
+ * page's own copyPlain — is retired with the other hand-rolled clipboard
+ * helpers. The call sites keep their name: the lib word IS copyText. */
 
 function freshForm(): WizardForm {
   return {

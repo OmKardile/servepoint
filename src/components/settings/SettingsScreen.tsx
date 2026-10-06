@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Armchair,
   Bell,
@@ -33,6 +33,8 @@ import { canPerformAction, getRoleMeta } from '../../lib/rbac';
 import { getPrefs, inQuietWindowAt, setPrefs, subscribePrefs } from '../../lib/prefs';
 import type { SpPrefs } from '../../lib/prefs';
 import { useTenant } from '../../lib/tenant';
+import { useTransientFlag } from '../../lib/useTransientFlag';
+import { copyText } from '../../lib/clipboard';
 import { useSession, useUi } from '../../store/session';
 import { useCart } from '../../store/cart';
 import { BillingSection } from './BillingSection';
@@ -80,49 +82,6 @@ const SECTION_TITLES: Record<SettingsSection, string> = {
   staff: 'Staff accounts',
   billing: 'Plan & billing',
 };
-
-/** Timed confirmation flag ("Saved", "Cleared", "Copied") with cleanup. */
-function useTransientFlag(durationMs = 2400): [boolean, () => void] {
-  const [on, setOn] = useState(false);
-  const timer = useRef<number | null>(null);
-  useEffect(
-    () => () => {
-      if (timer.current !== null) window.clearTimeout(timer.current);
-    },
-    []
-  );
-  const fire = () => {
-    setOn(true);
-    if (timer.current !== null) window.clearTimeout(timer.current);
-    timer.current = window.setTimeout(() => setOn(false), durationMs);
-  };
-  return [on, fire];
-}
-
-async function copyToClipboard(text: string): Promise<boolean> {
-  try {
-    if (navigator.clipboard && window.isSecureContext) {
-      await navigator.clipboard.writeText(text);
-      return true;
-    }
-  } catch {
-    /* fall through to legacy path */
-  }
-  try {
-    const ta = document.createElement('textarea');
-    ta.value = text;
-    ta.setAttribute('readonly', '');
-    ta.style.position = 'fixed';
-    ta.style.opacity = '0';
-    document.body.appendChild(ta);
-    ta.select();
-    const ok = document.execCommand('copy');
-    document.body.removeChild(ta);
-    return ok;
-  } catch {
-    return false;
-  }
-}
 
 /** ServePoint toggle — sage track, white knob, gold when checked. */
 const SPToggle: React.FC<{
@@ -242,7 +201,7 @@ const Note: React.FC<{ tone: 'amber' | 'error' | 'success'; children: React.Reac
 const CopyButton: React.FC<{ value: string; label: string }> = ({ value, label }) => {
   const [copied, fireCopied] = useTransientFlag(1600);
   const onCopy = async () => {
-    const ok = await copyToClipboard(value);
+    const ok = await copyText(value);
     if (ok) fireCopied();
   };
   return (

@@ -66,6 +66,7 @@ import {
 } from '../../lib/api';
 import { useTenant } from '../../lib/tenant';
 import { printHiddenFrame, preloadPrintImage } from '../../lib/printFrame';
+import { copyText } from '../../lib/clipboard';
 import { formatMoney, subscribePrefs, getPrefs, DEFAULT_TURN_AFTER_MIN } from '../../lib/prefs';
 import { CHART_TOOLTIP_LABEL, CHART_TOOLTIP_STYLE } from '../../lib/chartvoice';
 import { useDialogA11y } from '../../lib/useDialogA11y';
@@ -1127,13 +1128,10 @@ function TableDrill({
   }, [url]);
 
   const copy = useCallback(async (text: string, kind: 'link' | 'token') => {
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopied(kind);
-      window.setTimeout(() => setCopied(null), 2000);
-    } catch {
-      /* clipboard unavailable — the raw text is visible on screen anyway */
-    }
+    if (!(await copyText(text))) return;
+    /* a refused copy stays silent — the raw link/token is visible on screen anyway */
+    setCopied(kind);
+    window.setTimeout(() => setCopied(null), 2000);
   }, []);
 
   const items = order?.items || [];
@@ -1957,6 +1955,10 @@ export function FloorScreen(): React.ReactElement {
   const [cutBusyId, setCutBusyId] = useState<string | null>(null);
   const [bulkCutBusy, setBulkCutBusy] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  /* the raw-token copy's OWN word — sharing copiedId would flip the LINK
+   * button's word when the TOKEN was the thing copied (a lie); its own
+   * breath keeps each verb honest about what IT said. */
+  const [copiedTokenId, setCopiedTokenId] = useState<string | null>(null);
   const [drillId, setDrillId] = useState<string | null>(null);
   const [filter, setFilter] = useState<TableStatus | null>(null);
   /* v5.128.0 — the floor joins the shell-search contract: the box says what
@@ -2197,13 +2199,12 @@ export function FloorScreen(): React.ReactElement {
   );
 
   const copyLink = useCallback(async (t: DiningTable) => {
-    try {
-      await navigator.clipboard.writeText(guestUrlOf(t));
-      setCopiedId(t.id);
-      window.setTimeout(() => setCopiedId((c) => (c === t.id ? null : c)), 2000);
-    } catch {
+    if (!(await copyText(guestUrlOf(t)))) {
       setActionError('Copy failed — long-press the link text instead.');
+      return;
     }
+    setCopiedId(t.id);
+    window.setTimeout(() => setCopiedId((c) => (c === t.id ? null : c)), 2000);
   }, []);
 
   /** Render every table's QR into one A4 cut-line sheet (hidden-iframe print). */
@@ -3640,14 +3641,17 @@ export function FloorScreen(): React.ReactElement {
                     </button>
                     <button
                       type="button"
-                      onClick={(e) => {
+                      onClick={async (e) => {
                         e.stopPropagation();
-                        void navigator.clipboard?.writeText(t.qr_token);
+                        if (!(await copyText(t.qr_token))) return;
+                        setCopiedTokenId(t.id);
+                        window.setTimeout(() => setCopiedTokenId((c) => (c === t.id ? null : c)), 2000);
                       }}
                       className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[#6B6B6B] hover:bg-[#F1F4F1]"
-                      aria-label={`Copy raw QR token for table ${t.table_number}`}
+                      aria-label={copiedTokenId === t.id ? `QR token for table ${t.table_number} copied` : `Copy raw QR token for table ${t.table_number}`}
+                      title={copiedTokenId === t.id ? 'The raw token is on your clipboard' : 'Copy the raw QR token'}
                     >
-                      <Copy size={13} aria-hidden />
+                      {copiedTokenId === t.id ? <BadgeCheck size={13} className="text-[#2E7D32]" aria-hidden /> : <Copy size={13} aria-hidden />}
                     </button>
                   </div>
 
