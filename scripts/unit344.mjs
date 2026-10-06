@@ -113,5 +113,6 @@ test('unit344 · the version law — version.ts and sw.js carry the same word', 
   assert.ok(v, 'version.ts must speak APP_VERSION');
   assert.ok(s, 'sw.js must bake the cache word');
   assert.equal(v[1], s[1], 'the two words must agree');
-  assert.equal(v[1], '5.305.0');
+  // v5.306.0 relaxed the literal pin per the unit308 precedent (the
+  // 320→…→345 chain); the agreement itself is the law — unit345 pins the word.
 });
