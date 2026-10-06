@@ -111,6 +111,11 @@ const EN: Dict = {
   close: 'Close',
   emptyCart: 'Your order is empty — pick something from the menu.',
   remove: 'Remove',
+  // v5.270.0 — the drawer's steppers speak the staff cart's own words
+  // ("Reduce {name} / Add one more {name}"), carried into the guest's
+  // three tongues; the count pill's number is the line's own voice.
+  qtyDec: 'Reduce {name}',
+  qtyInc: 'Add one more {name}',
   justSoldOut: 'Just sold out',
   nameLabel: 'Your name (so we can find you) — optional',
   namePh: 'e.g. Aarav',
@@ -279,6 +284,8 @@ const HI: Dict = {
   close: 'बंद करें',
   emptyCart: 'आपका ऑर्डर खाली है — मेन्यू से कुछ चुनें।',
   remove: 'हटाएँ',
+  qtyDec: '{name} कम करें',
+  qtyInc: 'एक और {name} जोड़ें',
   justSoldOut: 'अभी समाप्त हो गया',
   nameLabel: 'आपका नाम (ताकि हम आपको ढूँढ सकें) — वैकल्पिक',
   namePh: 'जैसे आरव',
@@ -444,6 +451,8 @@ const KN: Dict = {
   close: 'ಮುಚ್ಚಿ',
   emptyCart: 'ನಿಮ್ಮ ಆರ್ಡರ್ ಖಾಲಿಯಾಗಿದೆ — ಮೆನುವಿನಿಂದ ಏನನ್ನಾದರೂ ಆರಿಸಿ.',
   remove: 'ತೆಗೆದುಹಾಕಿ',
+  qtyDec: '{name} ಕಡಿಮೆ ಮಾಡಿ',
+  qtyInc: 'ಇನ್ನೊಂದು {name} ಸೇರಿಸಿ',
   justSoldOut: 'ಈಗ ಇಲ್ಲ',
   nameLabel: 'ನಿಮ್ಮ ಹೆಸರು (ನಿಮ್ಮನ್ನು ಹುಡುಕಲು) — ಐಚ್ಛಿಕ',
   namePh: 'ಉದಾ. ಆರವ್',

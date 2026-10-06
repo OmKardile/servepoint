@@ -563,6 +563,14 @@ function Customizer({ item, onAdd, locked, lockedLabel }: { item: GuestMenuItem;
   return (
     <div className="mt-3 rounded-2xl border border-[#E3E7E0] bg-[#FBFBF9] p-3">
       {item.image_url && <DishPhoto url={item.image_url} alt={item.name} shape="banner" />}
+      {/* v5.270.0 — the dish speaks its WHOLE description. The row keeps its
+          one-line truncate (a menu stays scannable), but the open card was
+          where the full word belonged and it never arrived — a long
+          description was unreadable everywhere on the surface. The customizer
+          is the dish's own room; the whole word lives here. */}
+      {item.description && (
+        <p className="mb-3 text-[12.5px] leading-relaxed text-[#6B6B6B]">{item.description}</p>
+      )}
       {item.variants.length > 0 && (
         <fieldset className="mb-3">
           <legend className="mb-1.5 text-[11.5px] font-semibold uppercase tracking-wide text-[#6B6B6B]">{t('chooseOne')}</legend>
@@ -1626,7 +1634,7 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <p className={`text-[14px] font-semibold ${stale ? 'text-[#6B6B6B]' : 'text-[#1A1A1A]'}`}>
-                          {l.qty} × {l.item.name}
+                          {l.item.name}
                         </p>
                         {stale && (
                           <p className="mt-1 inline-flex items-center gap-1 rounded-full bg-white px-2 py-0.5 text-[10px] font-bold tracking-[0.06em] text-[#B4483C]">
@@ -1637,16 +1645,69 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
                         {l.variant && <p className="text-[12.5px] text-[#6B6B6B]">{l.variant.name}</p>}
                         {l.addons.length > 0 && <p className="text-[12.5px] text-[#6B6B6B]">+ {l.addons.map((a) => a.name).join(', ')}</p>}
                         {l.notes && <p className="mt-0.5 text-[12px] italic text-[#8A5A16]">↳ {l.notes}</p>}
+                        {/* v5.270.0 — the drawer's line learns to count. Until
+                            now the only verb a line had was remove — to take
+                            one plate off a triple the guest tore the whole
+                            line out and re-customized it from scratch, and
+                            "the same plate twice" became two lines that
+                            agreed by luck. The steppers speak the cart's OWN
+                            laws, verbatim: minus walks the staff cart's own
+                            decrement (one less, and at one the line leaves —
+                            src/store/cart.ts's filter), plus rides the
+                            guest cap's own number (50 — mergeLines' own
+                            Math.min), the pill wears the customizer's qty
+                            grammar, and the number holds still (tabular-nums,
+                            aria-live) while the money moves. THE STALE LINE
+                            CANNOT GROW: a sold-out dish may be taken OFF the
+                            order, never added back (the house does not
+                            substitute — 308's own law, one drawer later).
+                            The labels carry the dish's name — the staff
+                            cart's "Reduce {name} / Add one more {name}"
+                            precedent, spoken in the guest's three tongues. */}
+                        <div className="mt-2 flex items-center gap-2.5">
+                          <div className="flex items-center gap-1 rounded-full border border-[#E3E7E0] bg-white p-1">
+                            <button
+                              type="button"
+                              aria-label={t('qtyDec', { name: l.item.name })}
+                              onClick={() =>
+                                setLines((prev) =>
+                                  prev
+                                    .map((x) => (x.key === l.key ? { ...x, qty: x.qty - 1 } : x))
+                                    .filter((x) => x.qty > 0),
+                                )
+                              }
+                              className="flex h-9 w-9 items-center justify-center rounded-full text-[#6B6B6B] transition-colors hover:bg-[#F6F5F2] hover:text-[#1A1A1A] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#0F3D3E]"
+                            >
+                              <Minus size={15} aria-hidden />
+                            </button>
+                            <span className="min-w-6 text-center text-[13.5px] font-bold tabular-nums" aria-live="polite">
+                              {l.qty}
+                            </span>
+                            <button
+                              type="button"
+                              disabled={stale}
+                              aria-label={t('qtyInc', { name: l.item.name })}
+                              onClick={() =>
+                                setLines((prev) =>
+                                  prev.map((x) => (x.key === l.key ? { ...x, qty: Math.min(50, x.qty + 1) } : x)),
+                                )
+                              }
+                              className="flex h-9 w-9 items-center justify-center rounded-full text-[#6B6B6B] transition-colors hover:bg-[#F6F5F2] hover:text-[#1A1A1A] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#0F3D3E] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
+                            >
+                              <Plus size={15} aria-hidden />
+                            </button>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setLines((prev) => prev.filter((x) => x.key !== l.key))}
+                            className={`text-[11.5px] font-medium hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#967221] ${stale ? 'font-bold text-[#B4483C]' : 'text-[#B4483C]'}`}
+                          >
+                            {t('remove')}
+                          </button>
+                        </div>
                       </div>
                       <div className="shrink-0 text-right">
                         <p className={`text-[14px] font-bold ${stale ? 'text-[#969696]' : 'text-[#1A1A1A]'}`}>{money(lineUnit(l) * l.qty)}</p>
-                        <button
-                          type="button"
-                          onClick={() => setLines((prev) => prev.filter((x) => x.key !== l.key))}
-                          className={`mt-1 text-[11.5px] font-medium hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#967221] ${stale ? 'font-bold text-[#B4483C]' : 'text-[#B4483C]'}`}
-                        >
-                          {t('remove')}
-                        </button>
                       </div>
                     </div>
                   </div>
