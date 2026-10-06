@@ -57,6 +57,11 @@ import { AGE_SLA_MIN } from '../../lib/age';
  * voice speaks them, round2-true, always two decimals. */
 import { round2, moneyBare } from '../../lib/money';
 import { guestVoice } from '../../lib/verdict';
+/* v5.303.0 — the delta chip rides the ONE lib composer (DELTA_SKIN +
+   DeltaChip moved out of Reports this round): the day book's comparison
+   speaks the same dialect the owner's KPI report speaks — one skin, one
+   voice, one home. */
+import { DeltaChip } from '../../lib/delta';
 import {
   appTimezone,
   appTodayIso,
@@ -1286,6 +1291,12 @@ const EodScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
    * The rows carry only what the voice needs (rating) — the ONE tone law in
    * lib/verdict does the talking. */
   const [voiceRows, setVoiceRows] = useState<{ rating: number }[] | null>(null);
+  /* v5.303.0 — the day before's own rows, the delta strip's raw material:
+   * null = the read never landed (the waste law — the strip stays off, the
+   * close never claims a comparison it didn't verify); [] = the read landed
+   * and the earlier day held none (the chip's own honest "new" voice). Slim
+   * on purpose — the strip speaks direction, never the plates. */
+  const [prevRows, setPrevRows] = useState<{ status: string; total: number }[] | null>(null);
   const [cogsRows, setCogsRows] = useState<DayCogs[]>([]);
   const [sectionRows, setSectionRows] = useState<DaySectionRow[]>([]);
   /** The day's bin (v5.79.0): null = not read yet, [] = the shelf's honest
@@ -1328,9 +1339,13 @@ const EodScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
     setLoading(true);
     setError(null);
     setVoiceRows(null); // a day switch never shows yesterday's voice while loading
+    setPrevRows(null); // a day switch never shows the last window's deltas while loading
     try {
       const { startIso, endIso } = istDayBounds(dateIso);
-      const [oRes, pRes, cRes, vRes] = await Promise.all([
+      /* v5.303.0 — one window back, the SAME istDayBounds arithmetic (the
+       * shiftDay noon anchor keeps the ±1 step on the reporting calendar). */
+      const prevBounds = istDayBounds(shiftDay(dateIso, -1));
+      const [oRes, pRes, cRes, vRes, yRes] = await Promise.all([
         supabase
           .from('orders')
           .select(
@@ -1363,12 +1378,24 @@ const EodScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
           .eq('tenant_id', tenantId)
           .gte('created_at', startIso)
           .lt('created_at', endIso),
+        /* v5.303.0 — the day before rides the SAME load cycle: slim columns
+         * (status, total) — the strip speaks gross/tickets/avg, never the
+         * plates; no join, no second read of rows the block never shows. */
+        supabase
+          .from('orders')
+          .select('status, total')
+          .eq('tenant_id', tenantId)
+          .gte('created_at', prevBounds.startIso)
+          .lt('created_at', prevBounds.endIso),
       ]);
       if (oRes.error) throw oRes.error;
       if (pRes.error) throw pRes.error;
       /* the voice read answers for itself — a refusal here dims the block,
        * never the close-out (the screen's try/catch is for the money reads) */
       setVoiceRows(vRes.error ? null : ((vRes.data || []) as { rating: number }[]));
+      /* v5.303.0 — the delta read answers for itself, the voice's own
+       * fail-soft contract: a refusal dims the strip, never the close. */
+      setPrevRows(yRes.error ? null : ((yRes.data || []) as { status: string; total: number }[]));
       // v5.83.0 — the table embed resolves table_id → table_number in the SAME
       // read (the fetchOrders boundary pattern); the floor strip names tables,
       // never raw uuids.
@@ -1668,6 +1695,41 @@ const EodScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
       offerTickets,
     };
   }, [orders, payments, cogsRows]);
+
+  /* v5.303.0 — the day before, under the SAME counting law as the summary's
+   * own agg (live = a cancelled ticket never happened; avg = gross ÷ live).
+   * Two days computed by two laws would be two lies wearing one strip. */
+  const prevAgg = useMemo(() => {
+    if (!prevRows) return null;
+    const live = prevRows.filter((o) => o.status !== 'cancelled');
+    const gross = live.reduce((s, o) => s + Number(o.total || 0), 0);
+    const count = live.length;
+    return { gross, count, avg: count > 0 ? gross / count : 0 };
+  }, [prevRows]);
+
+  /* v5.303.0 — the comparison's baseline word: "yesterday" only when the
+   * browsed day IS today — a past day's strip names the date it compares
+   * against (the day lib's own honesty: a word that means one thing can
+   * never mean another). The noon anchor keeps the label on the reporting
+   * calendar (the shiftDay lesson). */
+  const prevBaseline =
+    dateIso === istTodayIso()
+      ? 'yesterday'
+      : appFormatters().dayLabel.format(new Date(`${shiftDay(dateIso, -1)}T12:00:00Z`));
+
+  /* v5.303.0 — the three comparisons the strip speaks (gross, tickets, avg
+   * ticket), each filtered by the chip's OWN null law (prior 0 AND current 0
+   * = the chip stays home) so a silent chip never leaves a bare label. The
+   * label rides the chip so the eye reads "what" and "by how much" in one
+   * glance. */
+  const dayDeltas = useMemo(() => {
+    if (!prevAgg) return [];
+    return [
+      { key: 'gross', label: 'Gross', current: agg.gross, prior: prevAgg.gross, fmt: formatMoney, emptyWord: 'no sales' },
+      { key: 'tickets', label: 'Tickets', current: agg.live.length, prior: prevAgg.count, fmt: (n: number) => String(n), emptyWord: 'no tickets' },
+      { key: 'avg', label: 'Avg ticket', current: agg.avg, prior: prevAgg.avg, fmt: formatMoney, emptyWord: 'no tickets' },
+    ].filter((d) => !(d.prior === 0 && d.current === 0));
+  }, [agg, prevAgg]);
 
   /* ── the bin (v5.79.0): the day's waste in rupees, the 5.77 truth ──
    *  Same honesty as Reports' bin's bill: value = |qty| × cost on file; a
@@ -2322,6 +2384,36 @@ const EodScreenInner: React.FC<{ onTenantRetry: () => void }> = ({ onTenantRetry
               />
             )}
           </section>
+
+          {dayDeltas.length > 0 && (
+            /* v5.303.0 — the day vs the day before: the Reports KPI's own
+               delta chip (the ONE lib composer) speaking the day book's
+               three headline numbers against the previous day. Both days
+               empty = silence (a comparison of two nothings is not news);
+               the chips carry the figures in their own tooltips + aria, the
+               label carries the counting law. The stagger is the 301/302
+               grammar's own walk — spFadeIn 240ms, 40ms steps, zero new
+               colors (the chip's four skins are the app's existing hexes). */
+            <div
+              aria-label="Day over day"
+              className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5 rounded-2xl border border-[#E3E7E0] bg-white px-4 py-2.5"
+              title="Both days counted the same way — a cancelled ticket never happened"
+            >
+              <span className="text-[10.5px] font-extrabold uppercase tracking-[0.06em] text-[#8A938C]">
+                vs {prevBaseline}
+              </span>
+              {dayDeltas.map((d, i) => (
+                <span
+                  key={d.key}
+                  className="inline-flex items-center gap-1.5"
+                  style={{ animation: 'spFadeIn 240ms ease-out both', animationDelay: `${i * 40}ms` }}
+                >
+                  <span className="text-[10.5px] font-bold text-[#5F6B63]">{d.label}</span>
+                  <DeltaChip current={d.current} prior={d.prior} baseline={prevBaseline} fmt={d.fmt} emptyWord={d.emptyWord} />
+                </span>
+              ))}
+            </div>
+          )}
 
           {/* ── cost & margin: what the shelf burned vs what the cafe keeps ── */}
           <section
