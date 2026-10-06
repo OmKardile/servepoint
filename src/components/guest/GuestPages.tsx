@@ -445,6 +445,23 @@ function readGuestName(token: string): string {
   }
   return '';
 }
+/* v5.300.0 — the menu remembers the guest's veg lens: the language and the
+ * chime each found their per-device home, but the veg filter — the FSSAI
+ * square-and-dot's own lens — reset on every visit, so a veg-preferring
+ * guest re-toggled it every time. The lens persists per DEVICE (the
+ * language pill's own law, not the cart's per-tab law — a preference is the
+ * guest's, not the session's), read at mount, written on every toggle;
+ * private mode just keeps a session-only lens. */
+const VEG_KEY = 'sp.guest.veg';
+
+function readVegOnly(): boolean {
+  try {
+    return localStorage.getItem(VEG_KEY) === 'on';
+  } catch {
+    /* private mode — the lens starts fresh */
+  }
+  return false;
+}
 /* v5.253.0 — the ticket's word reaches the menu: the loop 5.252.0 opened
  * (ticket → "Order more" → menu) closes here. The menu page remembers the
  * guest's latest ticket FROM THEIR OWN CHECKOUT (the id + number the server
@@ -880,7 +897,10 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
   /* Veg-only (v5.53.0) — India's dietary identity is a filter, not a footnote.
      Guests scanning the table QR decide with it; the mark grammar below is
      the same square-and-dot the rows already speak. */
-  const [vegOnly, setVegOnly] = useState(false);
+  /* v5.300.0 — the veg lens reads its per-device home at mount (the
+   * language pill's own law): a returning guest sees the menu through the
+   * lens they left it with. */
+  const [vegOnly, setVegOnly] = useState(readVegOnly);
   const [openItemId, setOpenItemId] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   /* v5.271.0 — the line remembers its choices: Edit on a drawer line reopens
@@ -1505,10 +1525,18 @@ export function GuestMenuPage({ qrToken }: { qrToken: string }): React.ReactElem
               kitchen actually marked veg. */}
           <button
             type="button"
-            onClick={() => setVegOnly((v) => !v)}
+            onClick={() => {
+              const next = !vegOnly;
+              setVegOnly(next);
+              try {
+                localStorage.setItem(VEG_KEY, next ? 'on' : 'off'); // the device remembers
+              } catch {
+                /* private mode — session-only lens */
+              }
+            }}
             aria-pressed={vegOnly}
             aria-label={t('vegOnlyAria')}
-            title={t('vegOnlyAria')}
+            title={t('vegWhisper')}
             className={`flex h-12 shrink-0 items-center gap-2 rounded-full border bg-white pl-3 pr-3.5 text-[13px] font-semibold shadow-sm transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[#B88E2F] ${
               vegOnly
                 ? 'border-[#2E7D32] text-[#1F5C26]'
