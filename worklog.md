@@ -9400,3 +9400,21 @@ Work Log:
 
 Stage Summary:
 - Work committed and gated (battery 153/153, tsc, build, the conversion proven live at ₹9,998 with the census restored) but NOT on origin — the push ran twice and failed for lack of credentials, not for lack of trying. The honesty rule holds: no push claimed that did not run.
+
+---
+Task ID: 350
+Agent: glm-5.3 (manual round — owner-directed audit, no code changes)
+Task: STEP-0 product/UX audit per the owner's 10-area brief. AUDIT ONLY — the owner gated all coding on approval of the P0/P1 list. No product files touched; no commits.
+
+Work Log:
+- ENVIRONMENT INCIDENT at round open: the sandbox had been rolled back to a task-162-era snapshot (v5.123.0; src/version.ts absent; Task 347–349 objects missing from .git; HEAD ceb8cd1 diverged). Verified via ls-remote that GitHub main = f52de8d (5.308.1, what Render serves). Branch backup-task162-snapshot kept for insurance, then `git reset --hard f52de8d` restored the true current code. Dev server restarted clean (HTTP 200).
+- LOSS recorded: Task 349's hunt feature (v5.309.0, commits 9988bae/65c7d71/115946f/d49c957) existed only in the wiped sandbox and was never pushed — it is gone from everywhere. Rebuildable in one round if the owner wants it.
+- Repo inventory via deep doc/code sweep: all 10 brief areas mapped (exists/partial/missing + file evidence) — see chat audit.
+- LIVE WALK (local 5.308.1 = same commit as Render): superadmin Platform console; provisioned throwaway tenant "Audit Walk Cafe" (Trial) → walked OWNER app end to end: Menu (category+item create), POS billing flow (shelf → select → Add ×2 → Review drawer: order types, table/walk-in, CRM phone, kitchen note, GST 5% CGST+SGST split, ₹84 total → placed #138), Bills (CSV export, detail pane, settle sheet: One payment/Split 2/3, Cash/Card/UPI — UPI has NO dynamic QR, no tendered-cash/change field; cash charge completed; WhatsApp share), KDS (ticket live, timer, Mark ready → Complete; no recall), Settings (11 panes; staff pane read). Mobile 390×844 spot-check. Console CLEAN throughout.
+- BUG evidence: wizard-backdrop one-off leak (observed once post-wizard-close on /businesses, blocked all clicks until reload; two deterministic repros — backdrop-close and fresh flow — closed cleanly; needs focused repro before a fix is coded). Census chips measure 32px tall on mobile — below the house's own 44px touch law.
+- CLEANUP: qa-cleanup pattern (adapted from qa347-cleanup.mjs, script removed after run) deleted the audit tenant's rows; post-cleanup census = [CheeseBurg, QR Flow Cafe], subs [active ₹4,999, trialing ₹0] — pristine. New auth-user orphan: asha.auditor@auditwalk.in (pooler-password class, owner action item).
+- Push: attempted at round open (standing law) — no token in env, failed; remote stays f52de8d.
+
+Stage Summary:
+- AUDIT DELIVERED (chat report): 3×P0 (GST hardcoded 5% with no inclusive/exclusive or per-tenant config; no offline order queue behind a POS that claims offline-first; live superadmin credentials committed in a public repo + localStorage credential fallback), 8×P1, remainder P2/P3 with fix + effort each. AWAITING OWNER OK on the P0/P1 list before any coding (the owner's own gate).
+- Roles model fact for the owner: the app has superadmin/owner/staff only — the brief's manager/cashier fold into staff; server-side RLS is membership-scoped, not role-scoped.
