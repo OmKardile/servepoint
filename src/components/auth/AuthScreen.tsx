@@ -20,6 +20,9 @@ import loginIllustration from '../../assets/login-illustration.png';
  *           (password eye toggle per frame) + full-width gold "Sign in".
  * Functionality unchanged (ADR-0010): email + password sign-in only;
  * accounts are provisioned by the platform superadmin, never self-registered.
+ * v5.310.0 — the screen also shows the owner-directed DEMO credentials in a
+ * minimal dashed strip under the form; one tap fills both fields so a
+ * reviewer can walk the app without asking an administrator for a key.
  */
 
 const SLIDES = [
@@ -27,6 +30,15 @@ const SLIDES = [
   'Run your café from a single point of sale',
   'Track bills, staff and business insights live',
 ] as const;
+
+// v5.310.0 — owner-directed demo credentials (2026-10-07): the demo tenant
+// owner's sign-in, displayed on the gate so reviewers can walk the app
+// unaided. Exposure acknowledged by the owner (the 5.309 audit already
+// carries the credentials-in-source P0 as a standing owner decision).
+const DEMO_CREDENTIALS = {
+  email: 'CheeseBurg@gmail.com',
+  password: 'iV4Bc@5#dHWdp!Mu',
+} as const;
 
 interface AuthScreenProps {
   onSuccess: (session: AuthUserSession) => void;
@@ -206,6 +218,35 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onSuccess }) => {
                 )}
               </button>
             </form>
+
+            {/* v5.310.0 — the demo strip: a minimal dashed card that shows the
+                owner-directed demo credentials and fills both fields on one
+                tap. Sits OUTSIDE the form so it can never submit it. */}
+            <button
+              type="button"
+              onClick={() => {
+                setEmail(DEMO_CREDENTIALS.email);
+                setPassword(DEMO_CREDENTIALS.password);
+                setError(null);
+              }}
+              aria-label="Fill the form with the demo account credentials"
+              className="mt-4 flex w-full items-center justify-between gap-3 rounded-xl border border-dashed border-[#C9CFC9] bg-white/60 px-4 py-3 text-left transition-colors duration-150 hover:bg-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[#B88E2F]"
+            >
+              <span className="min-w-0">
+                <span className="block text-[11px] font-semibold uppercase tracking-wide text-[#969696]">
+                  Demo credentials
+                </span>
+                <span className="mt-1 block truncate font-mono text-xs leading-relaxed text-[#1A1A1A]">
+                  {DEMO_CREDENTIALS.email}
+                </span>
+                <span className="block truncate font-mono text-xs leading-relaxed text-[#1A1A1A]">
+                  {DEMO_CREDENTIALS.password}
+                </span>
+              </span>
+              <span className="shrink-0 text-[11px] font-semibold text-[#967221]">
+                Tap to fill
+              </span>
+            </button>
 
             {/* Provisioned-accounts note — honest replacement for the
                 frame's social-login row (no OAuth providers configured) */}
