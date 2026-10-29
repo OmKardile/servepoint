@@ -4,6 +4,7 @@ import {
   Bell,
   BookOpenText,
   ChefHat,
+  CircleHelp,
   CookingPot,
   Headphones,
   LayoutGrid,
@@ -23,6 +24,12 @@ import { useStockUnread } from '../../store/stockUnread';
 import { getPrefs, subscribePrefs } from '../../lib/prefs';
 import { useTenant } from '../../lib/tenant';
 import { APP_VERSION } from '../../version';
+import {
+  DemoTour,
+  isDemoSession,
+  markTourDone,
+  wasTourDone,
+} from './DemoTour';
 import brandMark from '../../assets/brand/mark.png';
 
 const NAV: { id: Section; label: string; icon: React.ElementType }[] = [
@@ -110,6 +117,21 @@ export const Sidebar: React.FC = () => {
     return () => useStockUnread.getState().release();
   }, [tenantId]);
   const stockLow = useStockUnread((s) => s.value);
+
+  /* v5.311.0 — the demo tour: the demo account greets its reviewer with a
+   * one-time guided walk (localStorage remembers the visit); the sidebar's
+   * own button relaunches it. Every other account never sees a byte. */
+  const isDemo = isDemoSession(session?.email);
+  const [tourOpen, setTourOpen] = useState(false);
+  useEffect(() => {
+    if (!isDemo || wasTourDone()) return;
+    const t = window.setTimeout(() => setTourOpen(true), 900);
+    return () => window.clearTimeout(t);
+  }, [isDemo]);
+  const closeTour = () => {
+    markTourDone();
+    setTourOpen(false);
+  };
 
   /* v5.111.0 — the rail speaks its changes. One polite live region announces
    * unread deltas for ears that can't watch two badges: skips the state you
@@ -262,6 +284,17 @@ export const Sidebar: React.FC = () => {
           <UserRound size={15} className="md:hidden" aria-hidden />
           <span className="hidden md:inline">Open Profile</span>
         </button>
+        {isDemo && (
+          <button
+            onClick={() => setTourOpen(true)}
+            aria-label="Start the demo tour"
+            className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-lg border border-white/15 py-2 text-[12px] font-medium text-white/80 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[#B88E2F]"
+          >
+            <CircleHelp size={14} aria-hidden />
+            <span className="hidden md:inline">Demo tour</span>
+            <span className="md:hidden">Tour</span>
+          </button>
+        )}
       </div>
 
       {/* v5.235.0 — the build word: the rail answers "which build?" in the
@@ -271,6 +304,10 @@ export const Sidebar: React.FC = () => {
         © 2026 ServePoint · smartPOS ·{' '}
         <span title={`Build servepoint-v${APP_VERSION}-r1`}>v{APP_VERSION}</span>
       </p>
+
+      {/* v5.311.0 — the demo tour overlay lives here, inside the rail's own
+          component, so it exists ONLY where the rail exists (the cafe shell). */}
+      <DemoTour open={tourOpen} onClose={closeTour} />
     </aside>
   );
 };
