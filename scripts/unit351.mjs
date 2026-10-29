@@ -115,6 +115,6 @@ test('unit351 · the version law — the two words agree at 5.310.0', () => {
   assert.ok(v, 'version.ts must speak APP_VERSION');
   assert.ok(s, 'sw.js must bake the cache word');
   assert.equal(v[1], s[1], 'the two words must agree');
-  assert.equal(v[1], '5.310.0', 'the round word');
+  assert.equal(v[1], '5.311.0', 'the round word');
   assert.ok(auth.includes('v5.310.0'), 'the screen names its round');
 });

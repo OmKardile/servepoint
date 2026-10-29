@@ -39,14 +39,27 @@ let n = 0;
 const ok = (name) => console.log(`  ok ${++n} - ${name}`);
 const strip = (p) => readFileSync(new URL(p, import.meta.url), 'utf8');
 
-/* ── 1–4: the shared clock's contract, unchanged (billing.ts untouched) ── */
+/* ── 1–4: the shared clock's contract, unchanged (billing.ts untouched) ──
+ * v5.311.0 — the fixture learned the clock: a HARDCODED trial_end is a time
+ * bomb (the calendar crossed 16 Oct 2026 between rounds and the pin died).
+ * The fixture now rides a RELATIVE date — six days out speaks the live
+ * tense, two days past speaks the 5.307 past tense — the unit tests the
+ * law, never the calendar. */
 
-const trialLike = { status: 'trialing', trial_end: '2026-10-16T00:00:00Z' };
+const trialLike = {
+  status: 'trialing',
+  trial_end: new Date(Date.now() + 6 * 86400000).toISOString(),
+};
 const words = subscriptionWords(trialLike);
-assert.match(words.primary, /Trial ends 16 Oct 2026/);
+assert.match(words.primary, /Trial ends/);
 assert.match(words.secondary ?? '', /days left · no charge yet/);
 assert.equal(words.urgent, false);
-ok("the clock's words: 'Trial ends 16 Oct 2026 · N days left · no charge yet' (calm bucket)");
+const pastLike = {
+  status: 'trialing',
+  trial_end: new Date(Date.now() - 2 * 86400000).toISOString(),
+};
+assert.match(subscriptionWords(pastLike).primary, /Trial ended/, 'the 5.307 tense law: a passed window reads past tense');
+ok("the clock's words: 'Trial ends <soon> · N days left · no charge yet' (calm bucket) — and a passed window reads 'Trial ended'");
 
 assert.equal(subscriptionWords({ status: 'trialing' }).primary, '—', 'no invented dates');
 assert.equal(planLabel('growth'), 'Growth');

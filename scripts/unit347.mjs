@@ -130,5 +130,5 @@ test('unit347 · the feature names itself and the version law holds', () => {
   assert.ok(v, 'version.ts must speak APP_VERSION');
   assert.ok(s, 'sw.js must bake the cache word');
   assert.equal(v[1], s[1], 'the two words must agree');
-  assert.equal(v[1], '5.310.0');
+  assert.equal(v[1], '5.311.0');
 });
